@@ -5,8 +5,20 @@
 ```text
 phoenix-os-config/
   configuration.nix
-  hardware-configuration.nix
   README.md
+  hosts/
+    vm/
+      configuration.nix
+      hardware-configuration.nix
+      vm.nix
+    metal/
+      configuration.nix
+      hardware-configuration.nix
+      metal.nix
+  modules/
+    default.nix
+    base.nix
+    desktop.nix
   docs/
 ```
 
@@ -14,8 +26,20 @@ phoenix-os-config/
 
 | File | Purpose |
 | --- | --- |
-| `configuration.nix` | Main NixOS system configuration and desired machine behavior |
-| `hardware-configuration.nix` | Hardware-specific generated config: filesystems, boot devices, detected hardware |
+| `flake.nix` | Defines NixOS host targets |
+| `hosts/vm/configuration.nix` | VM host entrypoint |
+| `hosts/vm/hardware-configuration.nix` | Generated VM hardware config |
+| `hosts/vm/vm.nix` | VM-only options |
+| `hosts/metal/configuration.nix` | Bare-metal host entrypoint |
+| `hosts/metal/hardware-configuration.nix` | Generated bare-metal hardware config, added when available |
+| `hosts/metal/metal.nix` | Metal-only options |
+| `modules/default.nix` | Shared module bundle imported by hosts |
+| `modules/base.nix` | Shared baseline system config |
+| `modules/desktop.nix` | Shared desktop config |
+| `modules/codex.nix` | Shared Codex-related config |
+| `bin/phoenix-target` | Detects the intended flake target |
+| `bin/phoenix-rebuild` | Runs `nixos-rebuild` with an explicit target |
+| `shell/phoenix-aliases.sh` | Defines interactive helper functions |
 | `docs/SPEC.md` | What the project must do |
 | `docs/ARCHITECTURE.md` | How the repo is structured |
 | `docs/RECOVERY_RUNBOOK.md` | Fresh-install/recovery execution guide |
@@ -36,26 +60,27 @@ phoenix-os-config/
 
 Start simple. Split only when it improves local reasoning.
 
-Good future module boundaries:
+Current module boundaries:
 
-- `modules/system/` for boot, networking, locale, nix settings
-- `modules/desktop/` for GUI/session/display manager config
-- `modules/dev/` for developer tools
-- `modules/services/` for enabled services
-- `hosts/<hostname>/` if multiple machines appear
+- `modules/default.nix` bundles shared modules; hosts import it as `../../modules`
+- `modules/base.nix` for shared boot, networking, locale, users, and Nix settings
+- `modules/desktop.nix` for GUI/session/display manager config
+- `modules/codex.nix` for Codex-related system integration
+- `hosts/<target>/` for host-local configuration and generated hardware config
 
-Avoid abstraction until more than one host or repeated responsibility justifies it.
+Avoid further abstraction until repeated responsibility justifies it.
 
 ## Rebuild Model
 
 Primary feedback loop:
 
 ```bash
-sudo nixos-rebuild test
-sudo nixos-rebuild switch
+phoenix-test
+phoenix-switch
 ```
 
 Use `test` for low-risk validation before committing to the boot profile. Use `switch` once behavior is acceptable.
+Explicit flake targets, such as `sudo nixos-rebuild switch --flake .#vm`, are the fallback when helpers are not loaded.
 
 ## Recovery Model
 

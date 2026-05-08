@@ -22,8 +22,9 @@ Project PhoeNix OS must provide a reproducible NixOS workstation configuration w
 
 ## Requirements
 
-- `configuration.nix` remains rebuildable on the target machine.
-- `hardware-configuration.nix` remains hardware-specific and generated/curated carefully.
+- Host entrypoints under `hosts/` remain rebuildable on the target machine.
+- Each host `hardware-configuration.nix` remains hardware-specific and generated/curated carefully.
+- Helper scripts select `vm` or `metal` without requiring tracked file edits.
 - Secrets are referenced through a safe external/encrypted mechanism before automation is added.
 - Manual steps are tracked in `docs/MANUAL_STEPS.md`.
 - Recovery instructions are concrete enough to use after a fresh NixOS install.

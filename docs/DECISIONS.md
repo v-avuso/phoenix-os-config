@@ -6,11 +6,11 @@
 - **Reason**: The repository exists to define and rebuild the NixOS system.
 - **Consequence**: Windows bootstrap/recovery scaffolding does not belong here.
 
-## 2026-05-08 - Keep Current Layout Simple
+## 2026-05-08 - Use Explicit Flake Host Targets
 
-- **Decision**: Start with `configuration.nix` and `hardware-configuration.nix`; modularize later when useful.
-- **Reason**: Small config is easier to understand in one place.
-- **Consequence**: Add modules only when responsibilities become hard to review.
+- **Decision**: Use `hosts/vm` and `hosts/metal`, with shared config in `modules/`.
+- **Reason**: VM and bare-metal installs need different hardware and host-local config.
+- **Consequence**: Rebuild with explicit targets such as `.#vm` or `.#metal`; metal is the default target.
 
 ## 2026-05-08 - Secrets Stay Out Of Plaintext Repo
 
