@@ -4,7 +4,7 @@
 
 ```text
 phoenix-os-config/
-  configuration.nix
+  flake.nix
   README.md
   hosts/
     vm/
@@ -13,12 +13,17 @@ phoenix-os-config/
       vm.nix
     metal/
       configuration.nix
-      hardware-configuration.nix
       metal.nix
   modules/
     default.nix
     base.nix
     desktop.nix
+    shell.nix
+  bin/
+    phoenix-target
+    phoenix-rebuild
+  shell/
+    phoenix-aliases.sh
   docs/
 ```
 
@@ -35,8 +40,8 @@ phoenix-os-config/
 | `hosts/metal/metal.nix` | Metal-only options |
 | `modules/default.nix` | Shared module bundle imported by hosts |
 | `modules/base.nix` | Shared baseline system config |
-| `modules/desktop.nix` | Shared desktop config |
-| `modules/codex.nix` | Shared Codex-related config |
+| `modules/desktop.nix` | Shared desktop/fallback GUI config |
+| `modules/shell.nix` | Installs Bash helper functions for interactive shells |
 | `bin/phoenix-target` | Detects the intended flake target |
 | `bin/phoenix-rebuild` | Runs `nixos-rebuild` with an explicit target |
 | `shell/phoenix-aliases.sh` | Defines interactive helper functions |
@@ -46,15 +51,21 @@ phoenix-os-config/
 | `docs/MANUAL_STEPS.md` | Manual setup still outside declarative config |
 | `docs/DECISIONS.md` | Lightweight decision log |
 
-## Separation Model
+## State Boundary Model
 
 | Class | Belongs In Repo? | Examples |
 | --- | --- | --- |
 | Declarative system config | Yes | packages, services, users, shell defaults, desktop config |
 | Hardware config | Yes, but carefully | filesystems, bootloader device, kernel modules |
-| User state | No | browser profiles, editor state, synced folders |
-| Secrets | No plaintext | SSH private keys, tokens, passwords |
+| Public recovery docs/scripts | Yes | runbooks, helper commands, non-secret bootstrap notes |
+| Private bootstrap material | No | SSH private keys, Git signing keys, Syncthing identity |
+| User state | No | browser profiles, editor state, synced folders, KeePass databases, notes |
+| Secrets | No plaintext | tokens, passwords, service credentials |
 | Disposable data | No | caches, build output, logs |
+
+The repository describes the desired public system layer. It must be enough to
+rebuild the workstation shape, but not enough to impersonate the user or restore
+private data by itself.
 
 ## Modularization Model
 
@@ -65,10 +76,20 @@ Current module boundaries:
 - `modules/default.nix` bundles shared modules; hosts import it as `../../modules`
 - `modules/base.nix` for shared boot, networking, locale, users, and Nix settings
 - `modules/desktop.nix` for GUI/session/display manager config
-- `modules/codex.nix` for Codex-related system integration
 - `hosts/<target>/` for host-local configuration and generated hardware config
 
 Avoid further abstraction until repeated responsibility justifies it.
+
+## Desktop Model
+
+Target direction:
+
+- Hyprland/Caelestia-style Wayland desktop is the intended primary workstation
+  experience.
+- KDE Plasma is intentionally kept as a comfortable fallback and repair
+  environment.
+- Current implementation is still Plasma-only in `modules/desktop.nix`; target
+  desktop docs may lead implementation while this migration is early-stage.
 
 ## Rebuild Model
 
@@ -82,6 +103,12 @@ phoenix-switch
 Use `test` for low-risk validation before committing to the boot profile. Use `switch` once behavior is acceptable.
 Explicit flake targets, such as `sudo nixos-rebuild switch --flake .#vm`, are the fallback when helpers are not loaded.
 
+`modules/shell.nix` declares `PHOENIX_REPO_ROOT` for interactive Bash shells.
+The default is `$HOME/repos/code/phoenix-os-config`; machines with a different
+checkout location should override that environment variable in the user shell
+profile. The helper functions source the live checkout when available so helper
+changes are picked up without baking a stale repo path into the Nix store.
+
 ## Recovery Model
 
 Recovery means:
@@ -89,6 +116,7 @@ Recovery means:
 1. Install NixOS.
 2. Restore/clone this repo.
 3. Place hardware config appropriately, reviewing disk-specific values.
-4. Run `nixos-rebuild`.
-5. Restore user state and secrets from separate trusted sources.
-6. Verify the system.
+4. Apply the pinned flake target with an explicit `vm` or `metal` selection.
+5. Restore secrets, bootstrap material, and user state from separate trusted
+   sources.
+6. Re-clone work repositories and verify the system.
