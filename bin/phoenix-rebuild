@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage:
+  phoenix-rebuild [--print] <switch|test|boot|build|dry-build> [nixos-rebuild args...]
+
+Runs nixos-rebuild against the auto-selected PhoeNix OS flake target.
+Set PHOENIX_TARGET=vm or PHOENIX_TARGET=metal to override detection.
+EOF
+}
+
+print_only=false
+
+case "${1:-}" in
+  --print)
+    print_only=true
+    shift
+    ;;
+  -h|--help|"")
+    usage
+    exit 0
+    ;;
+esac
+
+action="${1:-}"
+shift || true
+
+case "$action" in
+  switch|test|boot|build|dry-build)
+    ;;
+  "")
+    usage >&2
+    exit 2
+    ;;
+  *)
+    printf 'phoenix-rebuild: unsupported action: %s\n' "$action" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
+
+script_dir="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(CDPATH= cd -- "$script_dir/.." && pwd)"
+target="$(bash "$script_dir/phoenix-target")"
+flake_ref="${repo_root}#${target}"
+
+cmd=(nixos-rebuild "$action" --flake "$flake_ref" "$@")
+
+case "$action" in
+  switch|test|boot)
+    cmd=(sudo "${cmd[@]}")
+    ;;
+esac
+
+print_command() {
+  local arg
+  for arg in "$@"; do
+    printf '%q ' "$arg"
+  done
+  printf '\n'
+}
+
+if [ "$print_only" = true ]; then
+  print_command "${cmd[@]}"
+  exit 0
+fi
+
+case "$action" in
+  build|dry-build)
+    work_dir="${TMPDIR:-/tmp}/phoenix-rebuild"
+    mkdir -p "$work_dir"
+    cd "$work_dir"
+    ;;
+esac
+
+exec "${cmd[@]}"

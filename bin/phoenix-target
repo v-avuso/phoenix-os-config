@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage:
+  phoenix-target [--info|--source]
+
+Prints the selected PhoeNix OS flake target.
+
+Resolution order:
+  1. PHOENIX_TARGET when set
+  2. vm when systemd-detect-virt detects a VM
+  3. metal fallback
+EOF
+}
+
+mode="target"
+
+case "${1:-}" in
+  "")
+    ;;
+  --info)
+    mode="info"
+    ;;
+  --source)
+    mode="source"
+    ;;
+  -h|--help)
+    usage
+    exit 0
+    ;;
+  *)
+    printf 'phoenix-target: unknown option: %s\n' "$1" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
+
+if [ -n "${PHOENIX_TARGET:-}" ]; then
+  target="$PHOENIX_TARGET"
+  source="env:PHOENIX_TARGET"
+elif command -v systemd-detect-virt >/dev/null 2>&1 && systemd-detect-virt --quiet --vm; then
+  target="vm"
+  source="systemd-detect-virt"
+else
+  target="metal"
+  source="fallback"
+fi
+
+case "$target" in
+  vm|metal)
+    ;;
+  *)
+    printf 'phoenix-target: invalid PHOENIX_TARGET=%s; expected vm or metal\n' "$target" >&2
+    exit 2
+    ;;
+esac
+
+case "$mode" in
+  target)
+    printf '%s\n' "$target"
+    ;;
+  source)
+    printf '%s\n' "$source"
+    ;;
+  info)
+    printf 'target=%s source=%s\n' "$target" "$source"
+    ;;
+esac
