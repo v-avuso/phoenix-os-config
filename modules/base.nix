@@ -34,6 +34,7 @@
   nixpkgs.config.allowUnfree = true;
 
   environment.systemPackages = with pkgs; [
+    git
   ];
 
   system.stateVersion = "25.11";
