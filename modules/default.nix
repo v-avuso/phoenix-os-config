@@ -1,6 +1,6 @@
 {
   imports = [
-    ./apps.nix
+    ./apps
     ./base.nix
     ./desktop.nix
     ./shell.nix
