@@ -22,6 +22,11 @@
     LC_TIME = "de_DE.UTF-8";
   };
 
+  nix.settings.experimental-features = [
+    "nix-command"
+    "flakes"
+  ];
+
   users.users.v = {
     isNormalUser = true;
     description = "V";
