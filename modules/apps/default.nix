@@ -2,7 +2,7 @@
 
 {
   imports = [
-    ./codex.nix
+    # ./codex.nix  # Commented out due to hash mismatch. Try again later.
   ];
 
   programs.firefox.enable = true;

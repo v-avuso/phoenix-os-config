@@ -1,11 +1,15 @@
 {
   description = "PhoeNix OS configuration";
 
-  inputs =
-    {
-      nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
-    }
-    // (import ./modules/apps/codex-flake.nix);
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+
+    # Codex Desktop is not available from the standard NixOS package set here.
+    # This upstream Linux port exposes a Nix flake package for the desktop app.
+    codex-desktop-linux = {
+      url = "github:ilysenko/codex-desktop-linux";
+    };
+  };
 
   outputs = inputs@{ nixpkgs, ... }:
     let
