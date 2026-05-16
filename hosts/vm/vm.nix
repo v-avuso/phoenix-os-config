@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ pkgs, user, ... }:
 
 {
   # VM-specific options belong here, including explicit shared-folder setup.
@@ -36,5 +36,8 @@
   # guest -> host clipboard did not work reliably. Plasma X11 provides working
   # bidirectional clipboard integration, so use it for this VM setup phase.
   services.displayManager.defaultSession = "plasmax11";
-}
 
+  # Plasma already registers KDE's polkit agent in this VM session. Keep
+  # Caelestia from also starting polkit-gnome while Plasma is the default.
+  home-manager.users.${user.name}.programs.caelestia-dots.hypr.services.polkitGnome.enable = false;
+}
