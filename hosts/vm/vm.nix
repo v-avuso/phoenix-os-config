@@ -42,11 +42,15 @@
     # Caelestia from also starting polkit-gnome while Plasma is the default.
     hypr.services.polkitGnome.enable = false;
 
-    # VMware's virtual GPU can fail to provide a usable accelerated EGL surface
-    # for Qt Quick on Wayland. Keep this rendering workaround scoped to the VM.
+    # VMware's virtual GPU can fail to provide a usable accelerated EGL surface,
+    # but Caelestia uses custom Qt scene graph materials that need the normal
+    # OpenGL-backed Qt Quick path. Keep this rendering workaround scoped to the VM.
     caelestia.shell.launch.environment = [
-      "QT_QUICK_BACKEND=software"
-      "QSG_RHI_BACKEND=software"
+      "QSG_RHI_BACKEND=opengl"
+      "QSG_RENDER_LOOP=basic"
+      "LIBGL_ALWAYS_SOFTWARE=1"
+      "MESA_LOADER_DRIVER_OVERRIDE=llvmpipe"
+      "QSG_INFO=1"
     ];
   };
 }
