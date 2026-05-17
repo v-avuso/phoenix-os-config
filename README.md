@@ -90,6 +90,8 @@ phoenix-switch
 phoenix-boot
 phoenix-build
 phoenix-dry-build
+phoenix-test-caelestia-local
+phoenix-switch-caelestia-local
 ```
 
 The shell integration points at the live checkout so helper updates take effect

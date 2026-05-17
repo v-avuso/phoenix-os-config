@@ -75,5 +75,21 @@ phoenix-dry-build() {
   phoenix-rebuild dry-build "$@"
 }
 
+_phoenix_rebuild_caelestia_local() {
+  _phoenix_require_repo || return
+  (
+    cd "$PHOENIX_REPO_ROOT" || exit
+    sudo nixos-rebuild "$1" --flake .#vm --override-input caelestianix path:../caelestia-nixos "${@:2}"
+  )
+}
+
+phoenix-test-caelestia-local() {
+  _phoenix_rebuild_caelestia_local test "$@"
+}
+
+phoenix-switch-caelestia-local() {
+  _phoenix_rebuild_caelestia_local switch "$@"
+}
+
 unset _phoenix_alias_file
 unset _phoenix_shell_dir
