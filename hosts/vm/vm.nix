@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ pkgs, user, ... }:
 
 {
   # VM-specific options belong here, including explicit shared-folder setup.
@@ -36,5 +36,21 @@
   # guest -> host clipboard did not work reliably. Plasma X11 provides working
   # bidirectional clipboard integration, so use it for this VM setup phase.
   services.displayManager.defaultSession = "plasmax11";
-}
 
+  home-manager.users.${user.name}.programs.caelestia-dots = {
+    # Plasma already registers KDE's polkit agent in this VM session. Keep
+    # Caelestia from also starting polkit-gnome while Plasma is the default.
+    hypr.services.polkitGnome.enable = false;
+
+    # VMware's virtual GPU can fail to provide a usable accelerated EGL surface,
+    # but Caelestia uses custom Qt scene graph materials that need the normal
+    # OpenGL-backed Qt Quick path. Keep this rendering workaround scoped to the VM.
+    caelestia.shell.launch.environment = [
+      "QSG_RHI_BACKEND=opengl"
+      "QSG_RENDER_LOOP=basic"
+      "LIBGL_ALWAYS_SOFTWARE=1"
+      "MESA_LOADER_DRIVER_OVERRIDE=llvmpipe"
+      "QSG_INFO=1"
+    ];
+  };
+}

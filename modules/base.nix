@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ pkgs, user, ... }:
 
 {
   boot.loader.systemd-boot.enable = true;
@@ -27,9 +27,9 @@
     "flakes"
   ];
 
-  users.users.v = {
+  users.users.${user.name} = {
     isNormalUser = true;
-    description = "V";
+    description = user.description;
     extraGroups = [ "networkmanager" "wheel" ];
   };
 
