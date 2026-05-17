@@ -1,4 +1,8 @@
-{ inputs, ... }:
+{ inputs, pkgs, ... }:
+
+let
+  hyprlandPackages = inputs.hyprland.packages.${pkgs.stdenv.hostPlatform.system};
+in
 
 {
   imports = [
@@ -6,7 +10,10 @@
   ];
 
   # CaelestiaNix's Hypr module asserts that Home Manager Hyprland is enabled.
-  wayland.windowManager.hyprland.enable = true;
+  wayland.windowManager.hyprland = {
+    enable = true;
+    package = hyprlandPackages.hyprland;
+  };
 
   programs.caelestia-dots = {
     enable = true;

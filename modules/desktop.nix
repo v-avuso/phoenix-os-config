@@ -1,4 +1,8 @@
-{ ... }:
+{ inputs, pkgs, ... }:
+
+let
+  hyprlandPackages = inputs.hyprland.packages.${pkgs.stdenv.hostPlatform.system};
+in
 
 {
   services.xserver.enable = true;
@@ -8,6 +12,8 @@
 
   programs.hyprland = {
     enable = true;
+    package = hyprlandPackages.hyprland;
+    portalPackage = hyprlandPackages.xdg-desktop-portal-hyprland;
     xwayland.enable = true;
   };
 
