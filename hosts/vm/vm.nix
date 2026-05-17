@@ -37,14 +37,16 @@
   # bidirectional clipboard integration, so use it for this VM setup phase.
   services.displayManager.defaultSession = "plasmax11";
 
-  # Plasma already registers KDE's polkit agent in this VM session. Keep
-  # Caelestia from also starting polkit-gnome while Plasma is the default.
-  home-manager.users.${user.name}.programs.caelestia-dots.hypr.services.polkitGnome.enable = false;
+  home-manager.users.${user.name}.programs.caelestia-dots = {
+    # Plasma already registers KDE's polkit agent in this VM session. Keep
+    # Caelestia from also starting polkit-gnome while Plasma is the default.
+    hypr.services.polkitGnome.enable = false;
 
-  # VMware's virtual GPU can fail to provide a usable accelerated EGL surface
-  # for Qt Quick on Wayland. Keep this rendering workaround scoped to the VM.
-  home-manager.users.${user.name}.programs.caelestia-dots.caelestia.shell.launch.environment = [
-    "QT_QUICK_BACKEND=software"
-    "QSG_RHI_BACKEND=software"
-  ];
+    # VMware's virtual GPU can fail to provide a usable accelerated EGL surface
+    # for Qt Quick on Wayland. Keep this rendering workaround scoped to the VM.
+    caelestia.shell.launch.environment = [
+      "QT_QUICK_BACKEND=software"
+      "QSG_RHI_BACKEND=software"
+    ];
+  };
 }
