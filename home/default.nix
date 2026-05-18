@@ -3,6 +3,7 @@
 {
   imports = [
     ./caelestia.nix
+    ./mimeapps.nix
   ];
 
   home = {
