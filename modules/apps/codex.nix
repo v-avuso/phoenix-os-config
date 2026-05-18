@@ -2,10 +2,14 @@
 
 let
   system = pkgs.stdenv.hostPlatform.system;
+
+  unstable = import inputs.nixpkgs-unstable {
+    inherit system;
+  };
 in
 {
   environment.systemPackages = [
-    pkgs.codex
     inputs.codex-desktop-linux.packages.${system}.codex-desktop
+    unstable.codex
   ];
 }

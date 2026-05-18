@@ -22,9 +22,7 @@
 
     # Codex Desktop is not available from the standard NixOS package set here.
     # This upstream Linux port exposes a Nix flake package for the desktop app.
-    codex-desktop-linux = {
-      url = "github:ilysenko/codex-desktop-linux";
-    };
+    codex-desktop-linux.url = "github:ilysenko/codex-desktop-linux";
   };
 
   outputs = inputs@{ nixpkgs, ... }:
