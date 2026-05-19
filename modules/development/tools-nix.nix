@@ -2,8 +2,14 @@
 
 {
   environment.systemPackages = with pkgs; [
-    # Formatter for .nix files; keeps config diffs clean.
+    # Nix language server used by jnoortheen.nix-ide for completions, diagnostics, and navigation.
+    nixd
+
+    # Standard Nix formatter; provides the `nixfmt` binary used by nixd formatting.
     nixfmt-rfc-style
+
+    # TOML formatter/linter/LSP CLI; useful for shell checks even though Even Better TOML also provides editor support.
+    taplo
   ];
 
   # direnv: auto-loads project-local environments from .envrc.

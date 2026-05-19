@@ -4,6 +4,7 @@
   imports = [
     ./caelestia.nix
     ./mimeapps.nix
+    ./vscodium.nix
   ];
 
   home = {

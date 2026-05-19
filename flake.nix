@@ -16,9 +16,9 @@
       inputs.nixpkgs.follows = "nixpkgs-unstable";
     };
 
-    caelestianix = {
-      url = "github:v-avuso/caelestia-nixos";
-    };
+    caelestianix.url = "github:v-avuso/caelestia-nixos";
+
+    nix-vscode-extensions.url = "github:nix-community/nix-vscode-extensions";
 
     # Codex Desktop is not available from the standard NixOS package set here.
     # This upstream Linux port exposes a Nix flake package for the desktop app.
