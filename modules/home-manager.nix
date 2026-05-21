@@ -12,6 +12,9 @@
     extraSpecialArgs = {
       inherit inputs user;
     };
+    sharedModules = [
+      inputs.arkenfox-nixos.hmModules.arkenfox
+    ];
 
     users.${user.name} = import ../home;
   };

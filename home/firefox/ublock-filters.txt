@@ -1,0 +1,26 @@
+! 23 Dec 2025 https://the-decoder.com
+the-decoder.com##.desktop-view > .ad-padding-wrapper
+the-decoder.com##section.relative.card:nth-of-type(4)
+the-decoder.com##section.relative.card:nth-of-type(2)
+the-decoder.com##.items-center.justify-between.flex-row.lg\:flex.hidden > .rounded-xl.py-2\.25.px-4.gap-4.items-center.flex.nav
+the-decoder.com##.text-white.px-2.py-8.max-w-5xl.w-full.mx-auto.lg\:gap-4.gap-8.grid.grid-item-wrapper
+the-decoder.com##.not-prose.rounded-lg.text-white.bg-\(--decoder-highlight\).p-5.mb-4.mt-8
+the-decoder.com##section.relative.card:nth-of-type(2)
+the-decoder.com##section.relative.card:nth-of-type(4)
+the-decoder.com###post-30256 > .px-5.entry-footer > .p-3.bg-\(--gray-form-field\).items-center.justify-between.flex-col.flex
+the-decoder.com###post-30256 > .prose-a\:text-primary.max-w-none.prose-neutral.prose.relative.py-1.px-5.entry-content > .gap-4.mb-4.mt-2.items-center.justify-between.flex > .transition-all.hover\:\!no-underline.rounded.py-1.px-2.no-underline.z-20.relative.gap-1.items-center.flex.font-semibold.text-xs.text-\(--heise-primary\).hover\:bg-gray-200.bg-gray-100.not-prose
+the-decoder.com##.gap-4.items-start.justify-between.rounded-t-xl.flex-col.flex.bg-white.p-5
+
+! 29 Dec 2025 https://the-decoder.com
+the-decoder.com##.py-11.px-5.items-end.flex.h-full.content
+the-decoder.com##div.background:nth-of-type(3)
+the-decoder.com##section.paywall-content
+the-decoder.com##.paywall-hidden-content
+
+! 11 May 2026 https://app.daily.dev
+app.daily.dev##.Card-module__aSh5rq__card:not(.Card-module__aSh5rq__post)
+
+! 14 May 2026 Vivid Money: simple reminder to be careful logging in from a browser with strict settings ant anti fingerprinting measures, as it could trigger an account block (not verified, but suspected)
+||vivid.money^$all
+||app.vivid.money^$all
+||business.vivid.money^$all

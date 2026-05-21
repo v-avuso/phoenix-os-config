@@ -3,6 +3,7 @@
 {
   imports = [
     ./caelestia.nix
+    ./firefox
     ./mimeapps.nix
     ./vscodium.nix
   ];

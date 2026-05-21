@@ -18,6 +18,15 @@
 
     caelestianix.url = "github:v-avuso/caelestia-nixos";
 
+    firefox-addons = {
+      url = "gitlab:rycee/nur-expressions?dir=pkgs/firefox-addons";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    arkenfox-nixos = {
+      url = "github:dwarfmaster/arkenfox-nixos";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     nix-vscode-extensions.url = "github:nix-community/nix-vscode-extensions";
 
     # Codex Desktop is not available from the standard NixOS package set here.

@@ -1,0 +1,102 @@
+/*
+   Personal browser readability overrides:
+   typography, contrast, spacing, dark-mode tweaks, and distraction reduction.
+   Note: settings for the-decoder aren't sufficient, and currently work in combination with ublock filters for optimal results.
+*/
+@-moz-document domain("the-decoder.com") {
+    .prose strong,
+    h2.inline {
+        display: block !important;
+        font-size: 2rem !important;
+        line-height: 1.05 !important;
+    }
+
+    .prose strong::after {
+        content: "\A" !important;
+        white-space: pre !important;
+        display: inline-block !important;
+        height: 2.5rem !important;
+        /* gap size */
+        line-height: 0 !important;
+    }
+
+    h2.inline {
+        margin-bottom: 0 !important;
+    }
+
+    h2.card-header {
+        margin-bottom: 1rem !important;
+    }
+
+    :root {
+        --de_gradient-1-start: #000 !important;
+        --de_gradient-1-end: #000 !important;
+    }
+
+    .sticky-the-decoder {
+        visibility: hidden !important;
+    }
+
+    body.post-template-default {
+        background-color: #000 !important;
+    }
+
+    #colophon.the-decoder {
+        --de-footer-start: #000 !important;
+        --de-footer-end: #000 !important;
+    }
+
+    .card-body {
+        background: #ddd !important;
+        color: #000 !important;
+    }
+
+    .card-body .text-white {
+        color: #000 !important;
+    }
+
+    article {
+        background: #ddd !important;
+        margin-bottom: 2.5rem !important;
+        border-radius: 2rem !important;
+    }
+
+    /* Footer that allows to load more content. */
+    .px-5.py-7.bg-white.rounded-b-xl {
+        background: #000 !important;
+    }
+
+    .not-prose {
+        visibility: hidden !important;
+    }
+
+    .card-summary {
+        visibility: visible !important;
+    }
+
+    .grid-author .block,
+    header:nth-child(1)
+        > div:nth-child(1)
+        > div:nth-child(1)
+        > div:nth-child(2)
+        > div:nth-child(1) {
+        visibility: hidden !important;
+        height: 0 !important;
+    }
+
+    header:nth-child(1)
+        > div:nth-child(1)
+        > div:nth-child(1)
+        > div:nth-child(2)
+        > span:nth-child(2) {
+        font-weight: 900 !important;
+    }
+
+    article header .grid-icons,
+    article header .grid-,
+    article footer,
+    article .flex.items-center.mt-2.gap-4 {
+        visibility: hidden !important;
+        height: 0 !important;
+    }
+}
