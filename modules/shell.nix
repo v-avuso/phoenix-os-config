@@ -1,6 +1,8 @@
+{ user, ... }:
+
 {
   programs.bash.interactiveShellInit = ''
-    export PHOENIX_REPO_ROOT="''${PHOENIX_REPO_ROOT:-$HOME/repos/code/phoenix-os-config}"
+    export PHOENIX_REPO_ROOT="''${PHOENIX_REPO_ROOT:-${user.repoDirectory}}"
     if [ -r "$PHOENIX_REPO_ROOT/shell/phoenix-aliases.sh" ]; then
       source "$PHOENIX_REPO_ROOT/shell/phoenix-aliases.sh"
     else

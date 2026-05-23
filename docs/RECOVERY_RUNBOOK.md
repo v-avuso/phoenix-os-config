@@ -14,19 +14,21 @@ secrets, Syncthing state, and user data come from separate trusted sources.
 
 ## 2. Restore This Repo
 
-Clone or copy `phoenix-os-config` onto the machine.
+Clone or copy `phoenix-os-config` onto the machine. Use the checkout path
+configured as `repoDirectory` in `config/user.nix`; forks and machines with a
+different local layout should change that file before applying the config.
 
 Example:
 
 ```bash
-mkdir -p ~/repos/code
-git clone <repo-url> ~/repos/code/phoenix-os-config
-cd ~/repos/code/phoenix-os-config
+repo_root=/path/to/phoenix-os-config
+git clone <repo-url> "$repo_root"
+cd "$repo_root"
 ```
 
 If Git is not available yet, copy the repo from external media. The installed
-helper commands expect this default path unless `PHOENIX_REPO_ROOT` is set to a
-different checkout location.
+helper commands use `config/user.nix` as their configured default path unless
+`PHOENIX_REPO_ROOT` is set to a different checkout location.
 
 ## 3. Review Hardware Config
 

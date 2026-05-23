@@ -34,8 +34,8 @@ Expected:
   \$PHOENIX_REPO_ROOT/bin/phoenix-target
   \$PHOENIX_REPO_ROOT/bin/phoenix-rebuild
 
-Set PHOENIX_REPO_ROOT to your checkout, or clone the repo to:
-  ~/repos/code/phoenix-os-config
+Set PHOENIX_REPO_ROOT to your checkout, or update repoDirectory in config/user.nix
+and apply the shell module again.
 EOF
   return 127
 }

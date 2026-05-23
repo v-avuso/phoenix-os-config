@@ -103,11 +103,13 @@ phoenix-switch
 Use `test` for low-risk validation before committing to the boot profile. Use `switch` once behavior is acceptable.
 Explicit flake targets, such as `sudo nixos-rebuild switch --flake .#vm`, are the fallback when helpers are not loaded.
 
-`modules/shell.nix` declares `PHOENIX_REPO_ROOT` for interactive Bash shells.
-The default is `$HOME/repos/code/phoenix-os-config`; machines with a different
-checkout location should override that environment variable in the user shell
-profile. The helper functions source the live checkout when available so helper
-changes are picked up without baking a stale repo path into the Nix store.
+`config/user.nix` defines the local checkout path as `repoDirectory`.
+`modules/shell.nix` uses that value as the default `PHOENIX_REPO_ROOT` for
+interactive Bash shells. Machines with a different checkout location should
+change `repoDirectory` in `config/user.nix`; one-off sessions can still override
+`PHOENIX_REPO_ROOT` in the shell profile. The helper functions source the live
+checkout when available so helper changes are picked up without baking a stale
+repo path into the Nix store.
 
 ## Recovery Model
 

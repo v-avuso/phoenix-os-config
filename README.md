@@ -95,15 +95,12 @@ phoenix-switch-caelestia-local
 ```
 
 The shell integration points at the live checkout so helper updates take effect
-without rebuilding the helper scripts into `/nix/store`. By default it expects
-the repo at:
+without rebuilding the helper scripts into `/nix/store`. The default checkout
+path is defined as `repoDirectory` in `config/user.nix`; forks and machines with
+different local paths should change it there.
 
-```sh
-~/repos/code/phoenix-os-config
-```
-
-If the checkout lives somewhere else, set `PHOENIX_REPO_ROOT` before starting
-the shell, for example in `~/.bashrc` or another user profile file:
+For a temporary override, set `PHOENIX_REPO_ROOT` before starting the shell, for
+example in `~/.bashrc` or another user profile file:
 
 ```sh
 export PHOENIX_REPO_ROOT=/path/to/phoenix-os-config

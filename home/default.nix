@@ -5,6 +5,7 @@
     ./caelestia.nix
     ./firefox
     ./mimeapps.nix
+    ./security
     ./vscodium.nix
   ];
 

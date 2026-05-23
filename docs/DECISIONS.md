@@ -32,15 +32,17 @@
 - **Reason**: This keeps flake evaluation pure while avoiding per-machine tracked file edits.
 - **Consequence**: Use `phoenix-switch`/`phoenix-test` for normal work; keep explicit `.#vm`/`.#metal` as fallback.
 
-## 2026-05-14 - Use A Conventional Live Checkout Path For Helpers
+## 2026-05-14 - Configure The Live Checkout Path In User Config
 
-- **Decision**: Interactive helper functions default `PHOENIX_REPO_ROOT` to
-  `$HOME/repos/code/phoenix-os-config`, while allowing explicit override.
+- **Decision**: `config/user.nix` owns the local checkout path as
+  `repoDirectory`; interactive helper functions use it as the default
+  `PHOENIX_REPO_ROOT`, while allowing explicit override.
 - **Reason**: Nix flake evaluation sees a `/nix/store` copy, not the mutable
-  checkout path passed to `nixos-rebuild --flake`.
+  checkout path passed to `nixos-rebuild --flake`. Keeping the path in one user
+  config file makes forks and per-machine path changes explicit.
 - **Consequence**: `phoenix-switch` works from any directory when the repo uses
-  the conventional path. Machines with a different checkout location must set
-  `PHOENIX_REPO_ROOT`.
+  the configured path. Machines with a different checkout location should update
+  `config/user.nix`; temporary sessions can set `PHOENIX_REPO_ROOT`.
 
 ## 2026-05-08 - Agents Do Not Activate The Live System
 

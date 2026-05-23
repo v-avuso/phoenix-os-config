@@ -1,0 +1,5 @@
+{
+  imports = [
+    ./opensnitch-ui.nix
+  ];
+}
