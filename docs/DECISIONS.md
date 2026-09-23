@@ -61,3 +61,24 @@
   when compositor, shell, theme, or display configuration breaks.
 - **Consequence**: Desktop docs must distinguish current implementation from
   intended target state until Hyprland/Caelestia modules exist.
+
+## 2026-09-23 - OpenSnitch Learns Before Enforcing
+
+- **Decision**: Keep OpenSnitch in default-allow learning mode for roughly one
+  month, with connection prompts disabled and structured connection events sent
+  to the local system log.
+- **Reason**: During the Windows-to-NixOS migration, first observe normal
+  application traffic without interrupting work or breaking connectivity.
+- **Consequence**: Preserve the declarative allowlist as a future baseline.
+  After the learning period, review the collected data with Codex, group normal
+  traffic by application/process and destination, then generate and refine
+  allow rules. Consider default-deny only after reviewing the resulting rules
+  and confirming essential workflows. OpenSnitch event data includes useful
+  process and network attribution: executable/process arguments, destination
+  hostname when available, destination IP, port, protocol, and a record for
+  each observed event. Timestamps use UTC with microsecond precision, allowing
+  connection frequency to be derived from repeated records. Events are sent
+  through the local syslog logger to journald, whose existing retention is
+  capped at 30 days and 1 GB, so high event volume can shorten the available
+  history. Review/export the local journal before its retention window expires,
+  for example with `journalctl -t opensnitchd --since '30 days ago' -o cat`.

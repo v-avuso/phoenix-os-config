@@ -69,11 +69,20 @@
     };
 
     settings = {
-      # Strict mode: deny unknown traffic by default; use declarative baseline rules
-      # plus the UI for interactive discovery.
-      DefaultAction = "deny";
-      DefaultDuration = "once";
+      # Learning mode: allow outbound traffic and record it for later review.
+      # The allow rules remain available as a future default-deny baseline.
+      DefaultAction = "allow";
       InterceptUnknown = true;
+      LogUTC = true;
+      LogMicro = true;
+      Server.Loggers = [
+        {
+          Name = "syslog";
+          Server = "";
+          Format = "json";
+          Tag = "opensnitchd";
+        }
+      ];
 
       # Avoid opensnitch_ebpf kernel-module builds. eBPF is faster/more reliable
       # when it builds, but it is coupled to kernel internals and currently fails
