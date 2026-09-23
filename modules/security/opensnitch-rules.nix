@@ -32,6 +32,15 @@ let
     data = cidr;
   };
 
+  networkList = cidrs: {
+    type = "lists";
+    operand = "lists.nets";
+    data = "${
+      pkgs.writeTextDir "opensnitch-networks.list"
+        (lib.concatStringsSep "\n" cidrs + "\n")
+    }";
+  };
+
   processRegex = pattern: {
     type = "regexp";
     operand = "process.path";
@@ -106,5 +115,96 @@ in
           operand = "dest.port";
           data = "123";
         }
+      ];
+
+    "100-allow-codex-desktop-quic" =
+    allowAll "100-allow-codex-desktop-quic"
+      "Allow Codex Desktop's Electron network service to use QUIC/HTTP3 over UDP 443."
+      [
+        (processRegex "^/nix/store/[^/]+-codex-desktop-[^/]+/opt/codex-desktop/electron$")
+        {
+          type = "simple";
+          operand = "protocol";
+          data = "UDP";
+        }
+        {
+          type = "simple";
+          operand = "dest.port";
+          data = "443";
+        }
+      ];
+
+  "101-allow-codex-desktop-https" =
+    allowAll "101-allow-codex-desktop-https"
+      "Allow Codex Desktop's Electron network service to use HTTPS over TCP 443."
+      [
+        (processRegex "^/nix/store/[^/]+-codex-desktop-[^/]+/opt/codex-desktop/electron$")
+        {
+          type = "simple";
+          operand = "protocol";
+          data = "TCP";
+        }
+        {
+          type = "simple";
+          operand = "dest.port";
+          data = "443";
+        }
+      ];
+
+  "102-allow-codex-app-server-https" =
+    allowAll "102-allow-codex-app-server-https"
+      "Allow the Codex CLI app-server used by Codex Desktop to connect to backend services over HTTPS."
+      [
+        (processRegex "^/nix/store/[^/]+-codex-[^/]+/bin/\\.codex-wrapped$")
+        {
+          type = "simple";
+          operand = "protocol";
+          data = "TCP";
+        }
+        {
+          type = "simple";
+          operand = "dest.port";
+          data = "443";
+        }
+      ];
+
+  "103-allow-codex-desktop-dns-cloudflare" =
+    allowAll "103-allow-codex-desktop-dns-cloudflare"
+      "Allow Codex Desktop's Electron process to resolve hostnames via the configured Cloudflare DNS resolver."
+      [
+        (processRegex "^/nix/store/[^/]+-codex-desktop-[^/]+/opt/codex-desktop/electron$")
+        {
+          type = "simple";
+          operand = "protocol";
+          data = "UDP";
+        }
+        {
+          type = "simple";
+          operand = "dest.port";
+          data = "53";
+        }
+        (network "1.1.1.1/32")
+      ];
+
+  "110-allow-vscodium-github-cdn-https" =
+    allowAll "110-allow-vscodium-github-cdn-https"
+      "Allow VSCodium to fetch GitHub-hosted extension, update, and webview resources over HTTPS from GitHub CDN."
+      [
+        (processRegex "^/nix/store/[^/]+-vscodium-[^/]+/lib/vscode/codium$")
+        {
+          type = "simple";
+          operand = "protocol";
+          data = "TCP";
+        }
+        {
+          type = "simple";
+          operand = "dest.port";
+          data = "443";
+        }
+        (networkList [
+          "185.199.108.133/32"
+          "185.199.110.133/32"
+          "185.199.111.133/32"
+        ])
       ];
 }
