@@ -39,6 +39,20 @@ it at the host path below when that host config imports it:
 - `hosts/vm/hardware-configuration.nix`
 - `hosts/metal/hardware-configuration.nix`
 
+Git-based flake evaluation only includes files known to Git. Before building a
+host, temporarily register its local hardware file in the index without staging
+its contents. After the Nix command finishes, remove that index entry; the file
+remains on disk and ignored:
+
+```bash
+git add --intent-to-add --force hosts/metal/hardware-configuration.nix
+sudo nixos-rebuild test --flake .#metal
+git reset -- hosts/metal/hardware-configuration.nix
+```
+
+Use `hosts/vm/hardware-configuration.nix` and `.#vm` for the VM target. Do not
+commit the generated file.
+
 Check carefully:
 
 - filesystem UUIDs
