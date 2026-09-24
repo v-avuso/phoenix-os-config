@@ -1,0 +1,169 @@
+@-moz-document url-prefix("https://chatgpt.com/") {
+    /* ============================================================
+       ChatGPT — High Readability / Low Cognitive Load
+       ============================================================ */
+
+
+    /* ---------- Main reading area ---------- */
+
+    [data-message-author-role="assistant"] .markdown {
+        line-height: 1.6 !important;
+        max-width: 72ch;
+    }
+
+
+    /* ============================================================
+       RESET HEADING DECORATION
+       Removes remnants of earlier experiments
+       ============================================================ */
+
+    [data-message-author-role="assistant"] .markdown h2,
+    [data-message-author-role="assistant"] .markdown h3 {
+        position: relative !important;
+
+        /* Undo previous flex-based heading experiment */
+        display: block !important;
+
+        border: none !important;
+    }
+
+    [data-message-author-role="assistant"] .markdown h2::before,
+    [data-message-author-role="assistant"] .markdown h2::after,
+    [data-message-author-role="assistant"] .markdown h3::before,
+    [data-message-author-role="assistant"] .markdown h3::after {
+        content: none !important;
+        display: none !important;
+    }
+
+
+    /* ============================================================
+       H2 — Major sections
+       ============================================================ */
+
+    [data-message-author-role="assistant"] .markdown h2 {
+        /* Large whitespace between major conceptual sections */
+        margin-top: 3.25rem !important;
+
+        /* Keep heading attached to its content */
+        margin-bottom: 0.85rem !important;
+
+        padding-top: 0 !important;
+        padding-bottom: 0.55rem !important;
+
+        /* Stronger/brighter major-section underline */
+        border-bottom: 2px solid color-mix(
+            in srgb,
+            currentColor 42%,
+            transparent
+        ) !important;
+    }
+
+
+    /* First major section needs less space above */
+    [data-message-author-role="assistant"] .markdown h2:first-of-type {
+        margin-top: 1rem !important;
+    }
+
+
+    /* H2 double vertical marker
+       Absolutely positioned → DOES NOT move heading text */
+    [data-message-author-role="assistant"] .markdown h2::before {
+        content: "" !important;
+        display: block !important;
+
+        position: absolute !important;
+
+        /* Place completely to the left of the heading */
+        left: -0.9rem !important;
+
+        /* Extend approximately the full height of the heading */
+        top: 0.1rem !important;
+
+        /* Makes the bars touch the bottom underline */
+        bottom: -2px !important;
+
+        width: 6px !important;
+
+        /* Two parallel vertical borders */
+        border-left: 2px solid color-mix(
+            in srgb,
+            currentColor 42%,
+            transparent
+        ) !important;
+
+        border-right: 2px solid color-mix(
+            in srgb,
+            currentColor 42%,
+            transparent
+        ) !important;
+    }
+
+
+    /* ============================================================
+       H3 — Subsections
+       ============================================================ */
+
+    [data-message-author-role="assistant"] .markdown h3 {
+        margin-top: 2rem !important;
+        margin-bottom: 0.65rem !important;
+
+        padding-top: 0 !important;
+        padding-bottom: 0.45rem !important;
+
+        /* Approximately the OLD H2 line:
+           visibly dimmer than H2, but still readable */
+        border-bottom: 2px solid color-mix(
+            in srgb,
+            currentColor 22%,
+            transparent
+        ) !important;
+    }
+
+
+    /* ============================================================
+       Paragraphs
+       ============================================================ */
+
+    [data-message-author-role="assistant"] .markdown p {
+        margin-top: 0 !important;
+        margin-bottom: 0.9em !important;
+    }
+
+
+    /* ============================================================
+       Lists
+       ============================================================ */
+
+    [data-message-author-role="assistant"] .markdown ul,
+    [data-message-author-role="assistant"] .markdown ol {
+        margin-top: 0.7em !important;
+        margin-bottom: 1.1em !important;
+    }
+
+
+    /* Lines WITHIN one bullet stay closely grouped */
+    [data-message-author-role="assistant"] .markdown li {
+        line-height: 1.6 !important;
+    }
+
+
+    /* Separate bullets receive a little extra whitespace */
+    [data-message-author-role="assistant"] .markdown li + li {
+        margin-top: 0.48em !important;
+    }
+
+
+    /* Don't let ChatGPT's paragraph margin inflate every bullet */
+    [data-message-author-role="assistant"] .markdown li > p {
+        margin-bottom: 0 !important;
+    }
+
+
+    /* But preserve spacing for genuinely separate paragraphs
+       inside one bullet */
+    [data-message-author-role="assistant"] .markdown li > p + p {
+        margin-top: 0.7em !important;
+    }
+
+
+}

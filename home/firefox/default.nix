@@ -61,8 +61,11 @@ let
 
   compatExtensions = hardenedExtensions;
 
-  # Keep custom site CSS next to this module: home/firefox/userContent.css
-  userContentCss = builtins.readFile ./user-content.css;
+  # Keep site-specific styles in separate files, then combine them for Firefox.
+  userContentCss = builtins.concatStringsSep "\n" (map builtins.readFile [
+    ./the-decoder.css
+    ./chatgpt.css
+  ]);
 
   safeBrowsingSettings = {
     "browser.safebrowsing.malware.enabled" = lib.mkForce true;
