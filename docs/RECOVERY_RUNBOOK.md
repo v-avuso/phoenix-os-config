@@ -32,8 +32,9 @@ helper commands use `config/user.nix` as their configured default path unless
 
 ## 3. Review Hardware Config
 
-Compare generated hardware config with the target host file when one already
-exists:
+Generate hardware config locally for the target machine. The generated file is
+ignored by Git because it contains machine-specific device identifiers. Place
+it at the host path below when that host config imports it:
 
 - `hosts/vm/hardware-configuration.nix`
 - `hosts/metal/hardware-configuration.nix`
