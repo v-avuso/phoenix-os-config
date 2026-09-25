@@ -2,14 +2,16 @@
   description = "PhoeNix OS configuration";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
 
     nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
 
     home-manager = {
-      url = "github:nix-community/home-manager/release-25.11";
+      url = "github:nix-community/home-manager/release-26.05";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    codex.url = "github:openai/codex/rust-v0.157.0";
 
     hyprland = {
       url = "github:hyprwm/Hyprland";
@@ -29,8 +31,7 @@
 
     nix-vscode-extensions.url = "github:nix-community/nix-vscode-extensions";
 
-    # Codex Desktop is not available from the standard NixOS package set here.
-    # This upstream Linux port exposes a Nix flake package for the desktop app.
+    # The upstream Linux port wraps OpenAI's signed Linux desktop payload.
     codex-desktop-linux.url = "github:ilysenko/codex-desktop-linux";
   };
 
