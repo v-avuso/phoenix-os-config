@@ -14,6 +14,7 @@ phoenix-os-config/
     metal/
       configuration.nix
       metal.nix
+      fan-control.nix
   modules/
     default.nix
     base.nix
@@ -38,6 +39,7 @@ phoenix-os-config/
 | `hosts/metal/configuration.nix` | Bare-metal host entrypoint |
 | `hosts/metal/hardware-configuration.nix` | Ignored, machine-local bare-metal hardware config |
 | `hosts/metal/metal.nix` | Metal-only options |
+| `hosts/metal/fan-control.nix` | Metal-only CoolerControl, sensor tooling, and NCT6687D driver setup |
 | `modules/default.nix` | Shared module bundle imported by hosts |
 | `modules/base.nix` | Shared baseline system config |
 | `modules/desktop.nix` | Shared desktop/fallback GUI config |
@@ -50,6 +52,7 @@ phoenix-os-config/
 | `docs/RECOVERY_RUNBOOK.md` | Fresh-install/recovery execution guide |
 | `docs/MANUAL_STEPS.md` | Manual setup still outside declarative config |
 | `docs/DECISIONS.md` | Lightweight decision log |
+| `docs/FAN_CONTROL.md` | Bare-metal fan policy, Windows reference mapping, and Linux discovery procedure |
 
 ## State Boundary Model
 

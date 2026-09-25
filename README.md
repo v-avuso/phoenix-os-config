@@ -170,6 +170,9 @@ clear evaluation error instead of silently omitting hardware settings.
 This file can expose machine-identifying details such as filesystem UUIDs,
 partition layout, and hardware hints, so keep it local to its machine.
 
+Bare-metal fan-control setup and the post-install sensor/channel discovery
+procedure are documented in [docs/FAN_CONTROL.md](docs/FAN_CONTROL.md).
+
 ## Mount Pollution
 
 `nixos-generate-config` records filesystems that are mounted when it runs.
