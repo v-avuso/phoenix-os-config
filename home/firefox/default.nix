@@ -39,13 +39,14 @@ let
     privateDefault = "ddg";
   };
 
-  # Best-effort managed defaults. Dark Reader may still require one manual check
-  # because extension-managed settings are less stable than Firefox prefs.
+  # Home Manager writes extension settings to local storage; keep Dark Reader
+  # off its separate sync settings store so these declarations take effect.
   darkReaderSettings = {
-    enabled = false; # whitelist-only behavior: off globally
+    enabled = true;
     enabledByDefault = false;
     enabledFor = [ ];
     disabledFor = [ ];
+    syncSettings = false;
   };
 
   # Keep this small. Every extension adds privileged code + fingerprint surface.
