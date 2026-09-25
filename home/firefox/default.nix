@@ -105,6 +105,11 @@ let
     "extensions.autoDisableScopes" = 0;
   };
 
+  appearanceSettings = {
+    # Use Firefox's built-in dark theme for the browser UI.
+    "extensions.activeThemeID" = "firefox-compact-dark@mozilla.org";
+  };
+
   userContentSettings = {
     # Required for userContent.css / userChrome.css customizations.
     "toolkit.legacyUserProfileCustomizations.stylesheets" = true;
@@ -135,6 +140,7 @@ let
 
   commonSettings =
     autoEnableExtensionSettings
+    // appearanceSettings
     // safeBrowsingSettings
     // noSaveSettings
     // noOnboardingSettings;
