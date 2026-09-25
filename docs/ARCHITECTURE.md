@@ -33,10 +33,10 @@ phoenix-os-config/
 | --- | --- |
 | `flake.nix` | Defines NixOS host targets |
 | `hosts/vm/configuration.nix` | VM host entrypoint |
-| `hosts/vm/hardware-configuration.nix` | Generated VM hardware config |
+| `hosts/vm/hardware-configuration.nix` | Ignored, machine-local VM hardware config |
 | `hosts/vm/vm.nix` | VM-only options |
 | `hosts/metal/configuration.nix` | Bare-metal host entrypoint |
-| `hosts/metal/hardware-configuration.nix` | Generated bare-metal hardware config, added when available |
+| `hosts/metal/hardware-configuration.nix` | Ignored, machine-local bare-metal hardware config |
 | `hosts/metal/metal.nix` | Metal-only options |
 | `modules/default.nix` | Shared module bundle imported by hosts |
 | `modules/base.nix` | Shared baseline system config |
@@ -56,7 +56,7 @@ phoenix-os-config/
 | Class | Belongs In Repo? | Examples |
 | --- | --- | --- |
 | Declarative system config | Yes | packages, services, users, shell defaults, desktop config |
-| Hardware config | Yes, but carefully | filesystems, bootloader device, kernel modules |
+| Hardware config | No, machine-local | filesystem UUIDs, bootloader device, kernel modules |
 | Public recovery docs/scripts | Yes | runbooks, helper commands, non-secret bootstrap notes |
 | Private bootstrap material | No | SSH private keys, Git signing keys, Syncthing identity |
 | User state | No | browser profiles, editor state, synced folders, KeePass databases, notes |
@@ -101,7 +101,7 @@ phoenix-switch
 ```
 
 Use `test` for low-risk validation before committing to the boot profile. Use `switch` once behavior is acceptable.
-Explicit flake targets, such as `sudo nixos-rebuild switch --flake .#vm`, are the fallback when helpers are not loaded.
+Explicit path flake targets, such as `sudo nixos-rebuild switch --flake path:.#vm`, are the fallback when helpers are not loaded and the host hardware file is already present.
 
 `config/user.nix` defines the local checkout path as `repoDirectory`.
 `modules/shell.nix` uses that value as the default `PHOENIX_REPO_ROOT` for

@@ -79,7 +79,8 @@ _phoenix_rebuild_caelestia_local() {
   _phoenix_require_repo || return
   (
     cd "$PHOENIX_REPO_ROOT" || exit
-    sudo nixos-rebuild "$1" --flake .#vm --override-input caelestianix path:../caelestia-nixos "${@:2}"
+    bash "$PHOENIX_REPO_ROOT/bin/phoenix-rebuild" "$1" \
+      --override-input caelestianix path:../caelestia-nixos "${@:2}"
   )
 }
 

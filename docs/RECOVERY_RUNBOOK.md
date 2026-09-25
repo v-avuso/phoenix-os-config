@@ -39,19 +39,10 @@ it at the host path below when that host config imports it:
 - `hosts/vm/hardware-configuration.nix`
 - `hosts/metal/hardware-configuration.nix`
 
-Git-based flake evaluation only includes files known to Git. Before building a
-host, temporarily register its local hardware file in the index without staging
-its contents. After the Nix command finishes, remove that index entry; the file
-remains on disk and ignored:
-
-```bash
-git add --intent-to-add --force hosts/metal/hardware-configuration.nix
-sudo nixos-rebuild test --flake .#metal
-git reset -- hosts/metal/hardware-configuration.nix
-```
-
-Use `hosts/vm/hardware-configuration.nix` and `.#vm` for the VM target. Do not
-commit the generated file.
+Phoenix rebuild helpers copy `/etc/nixos/hardware-configuration.nix` into the
+selected host directory when its local file is missing. If the source file is
+unavailable, generate a hardware config and place it at the selected host path.
+The host files are ignored by Git and must not be committed.
 
 Check carefully:
 
@@ -81,11 +72,14 @@ phoenix-switch
 Explicit fallback:
 
 ```bash
-sudo nixos-rebuild test --flake .#vm
-sudo nixos-rebuild switch --flake .#vm
-sudo nixos-rebuild test --flake .#metal
-sudo nixos-rebuild switch --flake .#metal
+sudo nixos-rebuild test --flake path:.#vm
+sudo nixos-rebuild switch --flake path:.#vm
+sudo nixos-rebuild test --flake path:.#metal
+sudo nixos-rebuild switch --flake path:.#metal
 ```
+
+Direct commands require the selected host's hardware file to exist already;
+the Phoenix helpers perform the bootstrap check automatically.
 
 If `test` fails, fix the config before running `switch`.
 

@@ -39,7 +39,9 @@ personal data are restored separately.
 ## Requirements
 
 - Host entrypoints under `hosts/` remain rebuildable on the target machine.
-- Each host `hardware-configuration.nix` remains hardware-specific and generated/curated carefully.
+- Each host imports its machine-local `hardware-configuration.nix` unconditionally; those files stay ignored by Git.
+- Rebuild helpers bootstrap a missing host file from `/etc/nixos/hardware-configuration.nix` without overwriting an existing file.
+- Rebuild helpers evaluate the local checkout as a `path:` flake so ignored hardware files are included.
 - Helper scripts select `vm` or `metal` without requiring tracked file edits.
 - Secrets are referenced through a safe external/encrypted mechanism before automation is added.
 - Private bootstrap material and user data have documented restore paths outside

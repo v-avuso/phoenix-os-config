@@ -119,32 +119,40 @@ PHOENIX_TARGET=vm phoenix-switch
 PHOENIX_TARGET=metal phoenix-switch
 ```
 
-The helpers pass an explicit flake target to Nix, so flake evaluation stays pure.
+The helpers select a target, prepare its local hardware config if needed, then
+pass the checkout as a `path:` flake. This includes ignored host hardware files
+without adding them to Git's index.
 
 ## Direct Rebuilds
 
 Direct commands still work and are useful when debugging:
 
 ```sh
-sudo nixos-rebuild switch --flake .#vm
-sudo nixos-rebuild switch --flake .#metal
+# Run from the checkout root; choose the explicit target to inspect.
+sudo nixos-rebuild switch --flake path:.#vm
+sudo nixos-rebuild switch --flake path:.#metal
 ```
 
 `#vm` and `#metal` select different NixOS configurations from `flake.nix`.
-Prefer helpers or explicit targets. Plain `nixos-rebuild --flake .` can be
-surprising because NixOS may select a configuration by hostname.
+These direct commands are useful for debugging when the selected host already
+has its local hardware file. Use `phoenix-switch` or another Phoenix helper for
+normal rebuilds; it checks or bootstraps that file first. Plain
+`nixos-rebuild --flake .` can be surprising because NixOS may select a
+configuration by hostname.
 
 ## Hardware Configuration
 
-Each host needs its own `hardware-configuration.nix`. The VM hardware config is
-committed now; the metal hardware config should be generated on the target
-machine when the bare-metal install exists.
+Each host needs its own local `hardware-configuration.nix`. Both files are
+ignored by Git because they contain machine-specific hardware and filesystem
+identifiers; do not commit them. On a normal NixOS install, the rebuild helper
+copies `/etc/nixos/hardware-configuration.nix` to the selected host directory
+the first time it is needed. It never replaces an existing host file.
 
-Generate it on the target machine:
+If that bootstrap source is unavailable, generate a file for the selected host:
 
 ```sh
-sudo nixos-generate-config --show-hardware-config > hosts/vm/hardware-configuration.nix
-sudo nixos-generate-config --show-hardware-config > hosts/metal/hardware-configuration.nix
+target=vm # Set to metal for the bare-metal host.
+sudo nixos-generate-config --show-hardware-config > "hosts/$target/hardware-configuration.nix"
 ```
 
 Treat this file as host-local hardware and storage config:
@@ -152,15 +160,15 @@ Treat this file as host-local hardware and storage config:
 - generated per machine by `nixos-generate-config`
 - usually changed only when storage or boot-relevant hardware changes
 - not meant for casual manual editing
-- reviewed before committing, especially the `fileSystems` section
+- review the `fileSystems` section before relying on it in a rebuild
 
-The VM hardware config is committed for now. Flakes can have trouble with ignored
-or untracked imported files, and tracking the real generated file avoids dirty or
-missing-file evaluation problems.
+The Phoenix helpers evaluate the checkout through a `path:` flake reference so
+these ignored files are included without Git index workarounds. The host
+configuration imports the file unconditionally, so a missing file produces a
+clear evaluation error instead of silently omitting hardware settings.
 
-This file can expose minor machine-identifying details, such as filesystem UUIDs,
-partition layout, and VM or metal hardware hints. It is not a secret like an API
-key, `.env` file, SSH key, password hash, or token.
+This file can expose machine-identifying details such as filesystem UUIDs,
+partition layout, and hardware hints, so keep it local to its machine.
 
 ## Mount Pollution
 
@@ -202,7 +210,8 @@ Usually do not add these to hardware config:
 2. Put shared behavior in `modules/`.
 3. Put host-only behavior in `hosts/vm/vm.nix` or `hosts/metal/metal.nix`.
 4. Regenerate hardware config only for real hardware/storage changes.
-5. Rebuild with `phoenix-switch`, or use explicit `.#vm` / `.#metal` targets.
+5. Rebuild with `phoenix-switch` or another Phoenix helper; use explicit
+   `path:.#vm` / `path:.#metal` targets for debugging.
 
 Agents may propose and edit configuration in this repo, but they should not
 directly mutate the live system. Activation stays manual: review the diff, run

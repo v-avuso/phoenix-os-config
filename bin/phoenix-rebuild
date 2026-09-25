@@ -8,6 +8,7 @@ Usage:
 
 Runs nixos-rebuild against the auto-selected PhoeNix OS flake target.
 Set PHOENIX_TARGET=vm or PHOENIX_TARGET=metal to override detection.
+Missing host hardware config is bootstrapped from /etc/nixos when available.
 EOF
 }
 
@@ -44,7 +45,41 @@ esac
 script_dir="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(CDPATH= cd -- "$script_dir/.." && pwd)"
 target="$(bash "$script_dir/phoenix-target")"
-flake_ref="${repo_root}#${target}"
+
+if [ "$print_only" != true ]; then
+  hardware_config="$repo_root/hosts/$target/hardware-configuration.nix"
+  if [ ! -f "$hardware_config" ]; then
+    if [ -e "$hardware_config" ] || [ -L "$hardware_config" ]; then
+      printf 'phoenix-rebuild: hardware configuration path exists but is not a regular file: %s\n' "$hardware_config" >&2
+      exit 1
+    fi
+
+    bootstrap_source=/etc/nixos/hardware-configuration.nix
+    if [ -f "$bootstrap_source" ]; then
+      if ! cp --no-clobber -- "$bootstrap_source" "$hardware_config"; then
+        printf 'phoenix-rebuild: could not copy bootstrap hardware configuration from %s to %s\n' "$bootstrap_source" "$hardware_config" >&2
+        exit 1
+      fi
+      if [ ! -f "$hardware_config" ]; then
+        printf 'phoenix-rebuild: hardware configuration was not created at %s\n' "$hardware_config" >&2
+        exit 1
+      fi
+      printf 'phoenix-rebuild: bootstrapped %s from %s\n' "$hardware_config" "$bootstrap_source" >&2
+    else
+      cat >&2 <<EOF
+phoenix-rebuild: missing hardware configuration for target '$target':
+  $hardware_config
+
+No bootstrap file was found at $bootstrap_source. Generate a hardware config
+on this machine and provide it at the target path, then run the rebuild again:
+  sudo nixos-generate-config --show-hardware-config > "$hardware_config"
+EOF
+      exit 1
+    fi
+  fi
+fi
+
+flake_ref="path:${repo_root}#${target}"
 
 cmd=(nixos-rebuild "$action" --flake "$flake_ref" "$@")
 

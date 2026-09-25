@@ -30,7 +30,7 @@
 
 - **Decision**: Helper scripts detect `vm` vs `metal` before calling Nix with an explicit target.
 - **Reason**: This keeps flake evaluation pure while avoiding per-machine tracked file edits.
-- **Consequence**: Use `phoenix-switch`/`phoenix-test` for normal work; keep explicit `.#vm`/`.#metal` as fallback.
+- **Consequence**: Use `phoenix-switch`/`phoenix-test` for normal work; keep explicit `path:.#vm`/`path:.#metal` targets for debugging.
 
 ## 2026-05-14 - Configure The Live Checkout Path In User Config
 
