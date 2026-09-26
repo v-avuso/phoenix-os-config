@@ -1,4 +1,9 @@
-{ pkgs, user, ... }:
+{
+  config,
+  pkgs,
+  user,
+  ...
+}:
 
 let
   # Physical left-to-right facts, also suitable for reuse by Hyprland later.
@@ -35,6 +40,30 @@ in
   ];
 
   # Bare-metal desktop options belong here.
+
+  services.xserver.videoDrivers = [ "nvidia" ];
+
+  hardware.graphics.enable = true;
+
+  hardware.nvidia = {
+    # NVIDIA 595.99.02 production from the locked nixpkgs-unstable input.
+    # Build its kernel module through the selected 7.2.7 kernel package set.
+    package = config.boot.kernelPackages.nvidiaPackages.mkDriver {
+      version = "595.99.02";
+      sha256_64bit = "sha256-6HR3lYv3YwcFSTJL1a1slI66btIQ5EAFs+/4SUD24ew=";
+      sha256_aarch64 = "sha256-CCqHZTN2KNOZ4yZp2rDcuRJp9pHfRw47k4m4dWnS/2w=";
+      openSha256 = "sha256-T36x/jx8yQ8l3LFp1rZIrTfcSwbGy8YSAvXOUSptpb4=";
+      settingsSha256 = "sha256-GYCcnxfKPrTCrsmd25sMyzfC5cqJQJx0c31haooyTYM=";
+      persistencedSha256 = "sha256-VyKtF/HdHPQrHHK6opSO69M72LmnGZtauuchj9uuje8=";
+    };
+    open = true;
+    modesetting.enable = true;
+  };
+
+  nixpkgs.config.allowUnfreePackages = [
+    "nvidia-x11"
+    "nvidia-settings"
+  ];
 
   environment.systemPackages = [
     monitorLayoutReflow

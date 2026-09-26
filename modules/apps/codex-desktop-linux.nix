@@ -8,7 +8,9 @@ in
     inputs.codex-desktop-linux.nixosModules.default
   ];
 
-  phoenix.allowUnfreePackages = [ "codex-desktop" ];
+  nixpkgs.config.allowUnfreePackages = [
+    "codex-desktop"
+  ];
 
   programs.codexDesktopLinux = {
     enable = true;
