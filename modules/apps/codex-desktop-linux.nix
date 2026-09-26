@@ -8,6 +8,8 @@ in
     inputs.codex-desktop-linux.nixosModules.default
   ];
 
+  phoenix.allowUnfreePackages = [ "codex-desktop" ];
+
   programs.codexDesktopLinux = {
     enable = true;
     cliPackage = inputs.codex.packages.${system}.default;
