@@ -14,6 +14,7 @@
     };
     sharedModules = [
       inputs.arkenfox-nixos.hmModules.arkenfox
+      inputs.plasma-manager.homeModules.plasma-manager
     ];
 
     users.${user.name} = import ../home;
