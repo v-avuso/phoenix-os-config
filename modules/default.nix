@@ -8,5 +8,6 @@
     ./home-manager.nix
     ./security
     ./shell.nix
+    ./services
   ];
 }
