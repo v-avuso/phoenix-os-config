@@ -7,6 +7,11 @@ let
   alUrlShortener =
     "https://raw.githubusercontent.com/DandelionSprout/adfilt/master/LegitimateURLShortener.txt";
 
+  trustedOrigins = [
+    "https://chatgpt.com"
+    "https://web.whatsapp.com"
+  ];
+
   uboUserFilters = builtins.readFile ./ublock-filters.txt;
 
   uboSettings = {
@@ -99,6 +104,7 @@ let
 
   sessionRestoreSettings = {
     "browser.startup.page" = lib.mkForce 3;
+    "privacy.clearOnShutdown_v2.browsingHistoryAndDownloads" = lib.mkForce false;
   };
 
   autoEnableExtensionSettings = {
@@ -143,6 +149,8 @@ let
     {
       "middlemouse.paste" = false;
       "browser.tabs.opentabfor.middleclick" = true;
+      "sidebar.revamp" = true;
+      "sidebar.verticalTabs" = true;
     }
     // autoEnableExtensionSettings
     // appearanceSettings
@@ -208,6 +216,22 @@ in
       AutofillCreditCardEnabled = false;
       OverrideFirstRunPage = "";
       OverridePostUpdatePage = "";
+
+      Permissions.Microphone.Allow = trustedOrigins;
+
+      # Firefox 156 uses Cookies.Allow as the origin exception for shutdown
+      # data clearing. TODO: migrate to ClearOnShutdown.Exceptions on Firefox >=158.
+      Cookies.Allow = trustedOrigins;
+
+      ExtensionSettings = {
+        "keepassxc-browser@keepassxc.org".default_area = "navbar";
+        "uBlock0@raymondhill.net".default_area = "navbar";
+        "addon@darkreader.org".default_area = "menupanel";
+        "sponsorBlocker@ajay.app".default_area = "menupanel";
+        "{21f1ba12-47e1-4a9b-ad4e-3a0260bbeb26}".default_area = "menupanel";
+        "{f209234a-76f0-4735-9920-eb62507a54cd}".default_area = "menupanel";
+        "gdpr@cavi.au.dk".default_area = "menupanel";
+      };
 
       # uBO reads this managed setting on startup and imports it as a backup-shaped config.
       # More reliable for declarative My filters than profile extension local storage.
