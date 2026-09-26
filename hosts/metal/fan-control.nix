@@ -146,6 +146,12 @@ let
       --sysfs-root /sys/class/hwmon \
       --nvidia-smi ${config.hardware.nvidia.package.bin}/bin/nvidia-smi
   '';
+  watchdogKeeper = pkgs.writeShellScript "phoenix-nct6687-watchdog" ''
+    exec ${pkgs.python3}/bin/python3 ${./nct6687-watchdog.py} \
+      --policy ${policyFile} \
+      --config /etc/coolercontrol/config.toml \
+      --sysfs-root /sys/class/hwmon
+  '';
 
   upstreamNct6687d = config.boot.kernelPackages.nct6687d.overrideAttrs (_old: {
     version = "0-unstable-2026-09-03";
@@ -174,6 +180,27 @@ in
     systemd.services.coolercontrold.preStart = ''
       ${provisionPolicy}
     '';
+
+    boot.blacklistedKernelModules = [ "nct6683" ];
+    boot.extraModprobeConfig = ''
+      options nct6687 msi_fan_brute_force=1
+    '';
+
+    systemd.services.phoenix-nct6687-watchdog = {
+      description = "Refresh the NCT6687D MSI fan-control safety lease";
+      wantedBy = [ "multi-user.target" ];
+      requires = [ "coolercontrold.service" ];
+      bindsTo = [ "coolercontrold.service" ];
+      partOf = [ "coolercontrold.service" ];
+      after = [ "coolercontrold.service" ];
+      path = [ pkgs.systemd ];
+      serviceConfig = {
+        Type = "simple";
+        User = "root";
+        ExecStart = "${watchdogKeeper}";
+        Restart = "no";
+      };
+    };
 
     environment.systemPackages = [ pkgs.lm_sensors ];
 

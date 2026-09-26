@@ -12,10 +12,19 @@ that kernel.
 built for the active kernel. When changing to an unstable kernel package set,
 the default follows that set's `nct6687d` package automatically.
 
-The module sets no driver parameters, register layouts, or ACPI resource
-overrides. In particular, it does not set `acpi_enforce_resources=lax`, force a
-register layout, or enable `msi_fan_brute_force`. CoolerControl profile settings
-are reconciled separately as described below.
+The module does not set `acpi_enforce_resources=lax` or force a register
+layout. It blacklists `nct6683` and loads `nct6687` with
+`msi_fan_brute_force=1`; the driver applies this option at module load, so it
+takes effect after reboot. On this board, that mode writes each SYS_FAN duty
+to all seven firmware curve points, which makes the channels obey manual PWM
+requests.
+
+A root `phoenix-nct6687-watchdog.service` waits for CoolerControl's current
+startup invocation to confirm all six Phoenix assignments, validates the live
+hwmon labels and policy, then arms `fan_control_watchdog` for 30 seconds and
+refreshes it every 10 seconds. It never disarms the watchdog on stop or error;
+without refreshes, the kernel restores the saved firmware curves and control
+modes. Fan policy assignments remain as described below.
 
 ## Intended Fan Policy
 
