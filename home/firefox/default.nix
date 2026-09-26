@@ -140,7 +140,11 @@ let
   };
 
   commonSettings =
-    autoEnableExtensionSettings
+    {
+      "middlemouse.paste" = false;
+      "browser.tabs.opentabfor.middleclick" = true;
+    }
+    // autoEnableExtensionSettings
     // appearanceSettings
     // safeBrowsingSettings
     // noSaveSettings
