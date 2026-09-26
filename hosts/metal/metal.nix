@@ -11,14 +11,32 @@ let
     {
       connector = "DP-1";
       edid = "GSM 23450 479236 10 2020 0";
+      preferredMode = {
+        width = 3840;
+        height = 2160;
+        refreshRate = 144;
+      };
+      scale = 1.7;
     }
     {
       connector = "HDMI-A-2";
       edid = "DEL 41607 809583187 29 2025 0";
+      preferredMode = {
+        width = 3840;
+        height = 2160;
+        refreshRate = 240;
+      };
+      scale = 1.7;
     }
     {
       connector = "DP-2";
       edid = "GSM 23639 372162 9 2023 0";
+      preferredMode = {
+        width = 3840;
+        height = 2160;
+        refreshRate = 144.05;
+      };
+      scale = 1.7;
     }
   ];
 
