@@ -1,13 +1,24 @@
 { config, lib, pkgs, ... }:
 
+let
+  upstreamNct6687d =
+    config.boot.kernelPackages.nct6687d.overrideAttrs (_old: {
+      version = "0-unstable-2026-09-03";
+      src = pkgs.fetchFromGitHub {
+        owner = "Fred78290";
+        repo = "nct6687d";
+        rev = "33d7bde2fcd7fd922baebadd30337b8d58b8ee7b";
+        hash = "sha256-pqH62197Vkf5/DI0QgVJO6DAcrT2uzs+RrCD+vC/pUg=";
+      };
+    });
+in
 {
   options.phoenix.hardware.fanControl.nct6687dPackage = lib.mkOption {
     type = lib.types.package;
-    default = config.boot.kernelPackages.nct6687d;
-    defaultText = lib.literalExpression "config.boot.kernelPackages.nct6687d";
+    default = upstreamNct6687d;
     description = ''
-      Kernel-matched NCT6687D driver package. Override this together with
-      boot.kernelPackages when using a different kernel package set.
+      Kernel-matched NCT6687D driver at a pinned upstream revision with
+      Linux 7.2 compatibility fixes.
     '';
   };
 
@@ -21,6 +32,7 @@
     boot.extraModulePackages = [
       config.phoenix.hardware.fanControl.nct6687dPackage
     ];
+
     boot.kernelModules = [ "nct6687" ];
   };
 }
