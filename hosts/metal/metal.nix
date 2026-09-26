@@ -100,6 +100,15 @@ in
       turnOffDisplay.idleTimeout = "never";
     };
 
+    # Plasma Manager's typed option has no "never" value for the locked
+    # timeout, so set PowerDevil's documented -1 sentinel in powerdevilrc.
+    programs.plasma.configFile.powerdevilrc."AC/Display".TurnOffDisplayIdleTimeoutWhenLockedSec = -1;
+
+    programs.plasma.kscreenlocker = {
+      autoLock = true;
+      timeout = 60;
+    };
+
     systemd.user.services.phoenix-monitor-layout-enable = {
       Unit = {
         Description = "Enable phoenix monitor reflow in KWin";
