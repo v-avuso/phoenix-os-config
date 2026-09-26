@@ -91,6 +91,15 @@ in
   services.displayManager.defaultSession = "hyprland";
 
   home-manager.users.${user.name} = {
+    programs.plasma.powerdevil.AC = {
+      dimDisplay = {
+        enable = true;
+        idleTimeout = 180;
+      };
+
+      turnOffDisplay.idleTimeout = "never";
+    };
+
     systemd.user.services.phoenix-monitor-layout-enable = {
       Unit = {
         Description = "Enable phoenix monitor reflow in KWin";
