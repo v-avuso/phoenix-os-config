@@ -207,4 +207,8 @@ in
           "185.199.111.133/32"
         ])
       ];
+  "999-allow-all-learning-mode" =
+    allow "999-allow-all-learning-mode"
+      "Temporary learning-mode catch-all: allow outbound connections without interactive prompts."
+      (processRegex ".*");
 }

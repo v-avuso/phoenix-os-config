@@ -72,7 +72,7 @@
       # Learning mode: allow outbound traffic and record it for later review.
       # The allow rules remain available as a future default-deny baseline.
       DefaultAction = "allow";
-      InterceptUnknown = true;
+      InterceptUnknown = false;
       LogUTC = true;
       LogMicro = true;
       Server.Loggers = [
