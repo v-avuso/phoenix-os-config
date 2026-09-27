@@ -76,6 +76,10 @@ in
     };
     open = true;
     modesetting.enable = true;
+    powerManagement = {
+      enable = true;
+      kernelSuspendNotifier = true;
+    };
   };
 
   nixpkgs.config.allowUnfreePackages = [
