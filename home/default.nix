@@ -15,4 +15,10 @@
     homeDirectory = user.homeDirectory;
     stateVersion = "25.11";
   };
+
+  programs.git = {
+    enable = true;
+    userName = "V";
+    userEmail = "12031173+v-avuso@users.noreply.github.com";
+  };
 }
