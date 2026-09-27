@@ -19,16 +19,32 @@ takes effect after reboot. On this board, that mode writes each SYS_FAN duty
 to all seven firmware curve points, which makes the channels obey manual PWM
 requests.
 
+CoolerControl is pinned to upstream release 4.3.1 using the locked Nixpkgs
+build recipes; the NixOS stable input still carries 4.3.0 and the unstable input
+is on 5.x. The package pin updates the UI data, daemon, and GUI from the same
+4.3.1 source tag.
+
 A root `phoenix-nct6687-watchdog.service` waits for CoolerControl's current
 startup invocation to confirm all six Phoenix assignments, validates the live
-hwmon labels and policy, then arms `fan_control_watchdog` for 30 seconds and
-refreshes it every 10 seconds. It never disarms the watchdog on stop or error;
-without refreshes, the kernel restores the saved firmware curves and control
-modes. Fan policy assignments remain as described below.
+hwmon labels, manual modes, and commanded PWM outputs, then arms
+`fan_control_watchdog` for 30 seconds and refreshes it every 10 seconds.
+
+A required `phoenix-nct6687-sleep.service` runs before `sleep.target`. It stops
+the keeper, requests a one-second kernel-watchdog expiry, waits for the driver
+value to transition from 1 to 0, and verifies that fan1-fan6 returned to
+firmware mode. The driver restores the saved PWM settings/curves as part of
+that expiry. If fallback cannot be confirmed, the required unit fails and
+blocks suspend/hibernate. This leaves no old lease to expire after resume.
+
+When sleep ends, the lifecycle unit queues a non-blocking keeper start. The
+keeper waits for CoolerControl to reapply the configured profiles and validates
+all six live modes and PWM targets before arming a fresh lease. If post-resume
+validation fails, it leaves the watchdog disarmed so firmware control remains
+active. Fan policy assignments remain as described below.
 
 ## Intended Fan Policy
 
-The metal host declares these CoolerControl 4.3.0 profiles in
+The metal host declares these CoolerControl 4.3.1 profiles in
 `hosts/metal/fan-control.nix`. A pre-start reconciler validates the NCT device
 and all eight hwmon fan labels, then merges only the Phoenix-owned profiles and
 fan assignments into CoolerControl's writable `/etc/coolercontrol/config.toml`.

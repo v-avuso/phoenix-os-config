@@ -135,6 +135,54 @@ let
       fan6 = "phoenix-bottom-stopped-v1";
     };
   };
+  # nixos-26.05 still packages 4.3.0 and nixpkgs-unstable has moved to 5.x.
+  # Reuse the locked nixpkgs build recipes and pin only CoolerControl's 4.3.1
+  # source/dependency hashes, keeping the rest of the system inputs unchanged.
+  coolerControl431Overlay = final: prev:
+    let
+      version = "4.3.1";
+      src = final.fetchFromGitLab {
+        owner = "coolercontrol";
+        repo = "coolercontrol";
+        tag = version;
+        hash = "sha256-nFlaiQtc4r3FBmdhErUAucG3SQ1GWQX9ClnZXGVWjbc=";
+      };
+      packageRoot = prev.path + "/pkgs/applications/system/coolercontrol";
+      meta = prev.coolercontrol.coolercontrold.meta // {
+        description = "Monitor and control your cooling devices";
+      };
+      # These hashes are consumed while the Nixpkgs build functions are
+      # evaluated, so replace the 4.3.0 literals before calling those functions.
+      uiPackage = builtins.toFile "coolercontrol-ui-data-4.3.1.nix" (
+        builtins.replaceStrings
+          [ "sha256-fWsksBQCwHHWYE82NG0Vf/f+Hk02YMCUaGMHFGhGx2U=" ]
+          [ "sha256-zolbx5ROiFzNhPGcOnJjEiY3W2IXI24wLKPj3wRSLXU=" ]
+          (builtins.readFile (packageRoot + "/coolercontrol-ui-data.nix"))
+      );
+      daemonPackage = builtins.toFile "coolercontrold-4.3.1.nix" (
+        builtins.replaceStrings
+          [ "sha256-f0SsTwriUo2rD97L+Z/bq7UahOSLjYjH8bbXg/Hx5qE=" ]
+          [ "sha256-DE1m/odw90epyR8U9H1pxyJXariIHLXwk+mVYi8cu5A=" ]
+          (builtins.readFile (packageRoot + "/coolercontrold.nix"))
+      );
+      packages = rec {
+        coolercontrol-ui-data = (final.callPackage uiPackage { }) {
+          inherit version src meta;
+        };
+        coolercontrold = (final.callPackage daemonPackage {
+          coolercontrol = packages;
+        }) {
+          inherit version src meta;
+        };
+        coolercontrol-gui = (final.callPackage (packageRoot + "/coolercontrol-gui.nix") { }) {
+          inherit version src meta;
+        };
+      };
+    in
+    {
+      coolercontrol = packages;
+    };
+
   policyFile = pkgs.writeText "phoenix-coolercontrol-policy.json" (
     builtins.toJSON coolerControlPolicy
   );
@@ -150,7 +198,17 @@ let
     exec ${pkgs.python3}/bin/python3 ${./nct6687-watchdog.py} \
       --policy ${policyFile} \
       --config /etc/coolercontrol/config.toml \
-      --sysfs-root /sys/class/hwmon
+      --sysfs-root /sys/class/hwmon \
+      --nvidia-smi ${config.hardware.nvidia.package.bin}/bin/nvidia-smi
+  '';
+
+  watchdogSleepPrepare = pkgs.writeShellScript "phoenix-nct6687-watchdog-sleep-prepare" ''
+    exec ${pkgs.python3}/bin/python3 ${./nct6687-watchdog.py} \
+      --policy ${policyFile} \
+      --config /etc/coolercontrol/config.toml \
+      --sysfs-root /sys/class/hwmon \
+      --nvidia-smi ${config.hardware.nvidia.package.bin}/bin/nvidia-smi \
+      --prepare-sleep
   '';
 
   upstreamNct6687d = config.boot.kernelPackages.nct6687d.overrideAttrs (_old: {
@@ -176,6 +234,7 @@ in
   config = {
     # The reconciler verifies the live device UID and fan labels before changing
     # the mutable CoolerControl config; coolercontrold applies settings on boot.
+    nixpkgs.overlays = [ coolerControl431Overlay ];
     programs.coolercontrol.enable = true;
     systemd.services.coolercontrold.preStart = ''
       ${provisionPolicy}
@@ -185,6 +244,23 @@ in
     boot.extraModprobeConfig = ''
       options nct6687 msi_fan_brute_force=1
     '';
+
+    # Require a verified firmware fallback before any sleep action. On the
+    # return path ExecStop queues the keeper without blocking CoolerControl's
+    # logind wake notification; the keeper waits for live profiles before arming.
+    systemd.services.phoenix-nct6687-sleep = {
+      description = "Restore NCT6687 firmware fan control around system sleep";
+      requiredBy = [ "sleep.target" ];
+      before = [ "sleep.target" ];
+      partOf = [ "sleep.target" ];
+      path = [ pkgs.systemd ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = "${watchdogSleepPrepare}";
+        ExecStop = "${pkgs.systemd}/bin/systemctl --no-block start phoenix-nct6687-watchdog.service";
+      };
+    };
 
     systemd.services.phoenix-nct6687-watchdog = {
       description = "Refresh the NCT6687D MSI fan-control safety lease";
