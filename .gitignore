@@ -5,6 +5,3 @@
 # Local development shells
 /.direnv/
 /direnvrc
-
-# Machine-generated device and filesystem configuration
-hardware-configuration.nix
