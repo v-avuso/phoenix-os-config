@@ -217,10 +217,42 @@ in
       OverrideFirstRunPage = "";
       OverridePostUpdatePage = "";
 
+      # TODO: migrate to ClearOnShutdown.Exceptions when targeting Firefox 158 or newer.
+      SanitizeOnShutdown = {
+        Cache = true;
+        Cookies = true;
+        Downloads = false;
+        FormData = true;
+        History = false;
+        Sessions = false;
+        SiteSettings = false;
+        OfflineApps = false;
+        Locked = false;
+        Exceptions = [
+          # AI / productivity
+          "https://chatgpt.com"
+          "https://todoist.com"
+
+          # Google / video
+          "https://google.com"
+          "https://youtube.com"
+
+          # Social media
+          "https://instagram.com"
+          "https://x.com"
+
+          # Messaging
+          "https://web.whatsapp.com"
+          "https://discord.com"
+
+          # Email
+          "https://proton.me"
+        ];
+      };
+
       Permissions.Microphone.Allow = trustedOrigins;
 
-      # Firefox 156 uses Cookies.Allow as the origin exception for shutdown
-      # data clearing. TODO: migrate to ClearOnShutdown.Exceptions on Firefox >=158.
+      # Retain the existing cookie permission allowlist independently of shutdown clearing.
       Cookies.Allow = trustedOrigins;
 
       ExtensionSettings = {
