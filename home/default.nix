@@ -4,6 +4,7 @@
   imports = [
     ./caelestia.nix
     ./firefox
+    ./input.nix
     ./mimeapps.nix
     ./plasma.nix
     ./security
