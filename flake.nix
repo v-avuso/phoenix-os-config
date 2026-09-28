@@ -17,8 +17,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    codex.url = "github:openai/codex/rust-v0.157.0";
-
     hyprland = {
       url = "github:hyprwm/Hyprland";
       inputs.nixpkgs.follows = "nixpkgs-unstable";

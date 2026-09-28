@@ -1,8 +1,5 @@
-{ inputs, pkgs, user, ... }:
+{ codexCliPackage, inputs, user, ... }:
 
-let
-  system = pkgs.stdenv.hostPlatform.system;
-in
 {
   imports = [
     inputs.codex-desktop-linux.nixosModules.default
@@ -14,7 +11,7 @@ in
 
   programs.codexDesktopLinux = {
     enable = true;
-    cliPackage = inputs.codex.packages.${system}.default;
+    cliPackage = codexCliPackage;
   };
 
   home-manager.users.${user.name}.xdg.configFile."codex-desktop/electron-flags.conf".text = ''
