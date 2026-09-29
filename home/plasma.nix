@@ -28,6 +28,7 @@
     # Keep the existing panel and its widgets intact. The typed panels option
     # regenerates plasma-org.kde.plasma.desktop-appletsrc on activation.
     configFile = {
+      "katerc".General."Startup Session" = "last";
       "dolphinrc".General.ShowHiddenFiles = true;
       "plasmaparc".General.AudioFeedback = false;
       "plasmashellrc"."PlasmaViews/Panel 4".panelVisibility = 2;

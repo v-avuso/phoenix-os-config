@@ -282,7 +282,9 @@ in
         id = 0;
         name = "hardened";
         isDefault = true;
-        settings = sessionRestoreSettings;
+        settings = sessionRestoreSettings // {
+          "browser.sessionstore.max_windows_undo" = 10;
+        };
       };
 
       compat = mkArkenfoxProfile {
