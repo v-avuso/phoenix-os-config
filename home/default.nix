@@ -19,7 +19,17 @@
 
   programs.git = {
     enable = true;
-    userName = "V";
-    userEmail = "12031173+v-avuso@users.noreply.github.com";
+    settings = {
+      user = {
+        name = "V";
+        email = "12031173+v-avuso@users.noreply.github.com";
+      };
+
+      credential = {
+        helper = "manager";
+        credentialStore = "secretservice";
+        gitHubAuthModes = "browser";
+      };
+    };
   };
 }
