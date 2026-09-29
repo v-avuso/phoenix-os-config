@@ -3,15 +3,15 @@
 let
   # The upstream Codex Nix package currently fails because Git Cargo
   # dependencies such as appcontainer_common lack required outputHashes.
-  # Temporarily use the official 0.159.0-alpha.9 prebuilt, which contains the
+  # Temporarily use the official 0.159.0 prebuilt, which contains the
   # Btrfs sandbox fix (openai/codex#47968). Remove this when nixpkgs/upstream
   # provides a normally packaged release with the fix that builds correctly.
-  version = "0.159.0-alpha.9";
+  version = "0.159.0";
 
   codexPrebuilt = pkgs.runCommand "codex-${version}" {
     src = pkgs.fetchurl {
       url = "https://github.com/openai/codex/releases/download/rust-v${version}/codex-package-x86_64-unknown-linux-musl.tar.gz";
-      hash = "sha256-IbLR5QwEsxFKgAHir+q9VhULaEduZs+7diVc2LXQA50=";
+      hash = "sha256-Ndpl1+hkTijqCk1OPYwVtAxrSSNW1M8hmGx+NB+Dok4=";
     };
 
     nativeBuildInputs = [
