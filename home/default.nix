@@ -8,6 +8,7 @@
     ./mimeapps.nix
     ./plasma.nix
     ./security
+    ./shell-aliases.nix
     ./vscodium.nix
   ];
 

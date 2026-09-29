@@ -92,5 +92,11 @@ phoenix-switch-caelestia-local() {
   _phoenix_rebuild_caelestia_local switch "$@"
 }
 
+_phoenix_generated_aliases="${XDG_CONFIG_HOME:-$HOME/.config}/phoenix/shell-aliases.sh"
+if [ -r "$_phoenix_generated_aliases" ]; then
+  . "$_phoenix_generated_aliases"
+fi
+
 unset _phoenix_alias_file
 unset _phoenix_shell_dir
+unset _phoenix_generated_aliases

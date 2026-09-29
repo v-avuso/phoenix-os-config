@@ -96,6 +96,8 @@ in
 
   home-manager.users.${user.name} = {
     programs.plasma.powerdevil.AC = {
+      autoSuspend.idleTimeout = 1800;
+
       dimDisplay = {
         enable = true;
         idleTimeout = 180;
