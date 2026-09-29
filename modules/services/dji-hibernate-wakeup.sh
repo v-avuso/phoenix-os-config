@@ -63,9 +63,10 @@ restore_saved_controllers() {
 }
 
 sleep_action=${SYSTEMD_SLEEP_ACTION:-${2:-}}
-if [[ "$sleep_action" != hibernate ]]; then
-  exit 0
-fi
+case "$sleep_action" in
+  suspend|hibernate|hybrid-sleep|suspend-then-hibernate|suspend-after-failed-hibernate) ;;
+  *) exit 0 ;;
+esac
 
 exec 9>"$LOCK_FILE"
 if ! flock -n 9; then
@@ -148,7 +149,7 @@ case "$phase" in
     if [[ -f "$STATE_FILE" ]]; then
       restore_saved_controllers || fail "one or more controller wake settings could not be restored"
     else
-      log "hibernate post phase; no controller wake state needs restoration"
+      log "$sleep_action post phase; no controller wake state needs restoration"
     fi
     ;;
 

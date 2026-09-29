@@ -14,10 +14,13 @@ in
   # during hibernation. The failure followed the receiver across at least two
   # AMD xHCI controllers. Linux USB_QUIRK_DISCONNECT_SUSPEND was tested and did
   # not solve it; temporarily disabling wake on its owning PCI xHCI controller
-  # allowed successful hibernation. The exact kernel/device root cause remains
-  # unresolved. This is an intentionally narrow workaround; remove and retest
-  # it if DJI firmware or Linux USB/xHCI/HCD wake handling changes so hibernation
-  # succeeds with controller wake enabled.
+  # allowed successful hibernation. On 2026-09-29, a failed suspend involved
+  # the same controller that owned the receiver, but the logs do not prove the
+  # receiver caused that failure. Apply the same temporary workaround for
+  # suspend and hibernation-family transitions. The exact kernel/device root
+  # cause remains unresolved; remove and retest it if DJI firmware or Linux
+  # USB/xHCI/HCD wake handling changes so these transitions succeed with
+  # controller wake enabled.
   environment.etc."systemd/system-sleep/50-phoenix-dji-hibernate-wakeup".source =
     "${hook}/bin/phoenix-dji-hibernate-wakeup";
 }
