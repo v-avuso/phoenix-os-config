@@ -29,6 +29,7 @@
     # regenerates plasma-org.kde.plasma.desktop-appletsrc on activation.
     configFile = {
       "dolphinrc".General.ShowHiddenFiles = true;
+      "plasmaparc".General.AudioFeedback = false;
       "plasmashellrc"."PlasmaViews/Panel 4".panelVisibility = 2;
       "inputdevicesrc"."Libinput/Razer Razer Viper V2 Pro".MouseButtonScrollingEnabled = true;
     };
