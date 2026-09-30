@@ -61,6 +61,10 @@ in
 
   services.xserver.videoDrivers = [ "nvidia" ];
 
+  # AusweisApp discovers a paired smartphone card reader through UDP broadcast
+  # on port 24727. Its eID activation endpoint is localhost-only.
+  networking.firewall.allowedUDPPorts = [ 24727 ];
+
   hardware.graphics.enable = true;
 
   hardware.nvidia = {
