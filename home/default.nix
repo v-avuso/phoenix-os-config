@@ -2,7 +2,6 @@
 
 {
   imports = [
-    ./caelestia.nix
     ./firefox
     ./input.nix
     ./mimeapps.nix
