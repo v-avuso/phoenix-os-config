@@ -63,14 +63,11 @@
 
   services.opensnitch = {
     enable = true;
-  
-    rules = import ./opensnitch-rules.nix {
-      inherit config lib pkgs;
-    };
+
+    rules = import ./opensnitch-rules.nix;
 
     settings = {
-      # Learning mode: allow outbound traffic and record it for later review.
-      # The allow rules remain available as a future default-deny baseline.
+      # Observation mode: record outbound traffic without enforcing a policy.
       DefaultAction = "allow";
       InterceptUnknown = false;
       LogUTC = true;
@@ -151,12 +148,47 @@
 
   # First-run robustness: clamd cannot start before freshclam has created
   # /var/lib/clamav/*.cvd/*.cld signature databases. Keep the switch from
-  # failing if the database is not present yet, and make clamonacc wait for clamd.
+  # failing if databases are absent, then recover both services after a
+  # successful update. The recovery unit runs as root because freshclam itself
+  # runs as clamav and must not receive systemctl privileges.
   systemd.services.clamav-daemon.unitConfig.ConditionPathExistsGlob = "/var/lib/clamav/*.c[vl]d";
   systemd.services.clamav-clamonacc = {
-    wants = [ "clamav-daemon.service" "clamav-freshclam.service" ];
+    wants = [ "clamav-daemon.service" ];
     after = [ "clamav-daemon.service" "clamav-freshclam.service" ];
     unitConfig.ConditionPathExistsGlob = "/var/lib/clamav/*.c[vl]d";
+  };
+
+  systemd.services.clamav-freshclam = {
+    # The timer handles later checks; this also requests the first update during
+    # boot, independently of clamd/scanner recovery starts.
+    wantedBy = [ "multi-user.target" ];
+    unitConfig.OnSuccess = [ "clamav-db-recovery.service" ];
+  };
+
+  # The pinned NixOS module makes clamd Want freshclam. Keep its After ordering,
+  # but remove that Want so recovery starts cannot enqueue the updater again.
+  systemd.services.clamav-daemon.wants = lib.mkForce [ ];
+
+  systemd.services.clamav-db-recovery = {
+    description = "Start ClamAV scanning after signature databases become available";
+    after = [ "clamav-freshclam.service" ];
+    unitConfig.ConditionPathExistsGlob = "/var/lib/clamav/*.c[vl]d";
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = pkgs.writeShellScript "clamav-db-recovery" ''
+        set -euo pipefail
+
+        systemctl=${pkgs.systemd}/bin/systemctl
+
+        # Skip active units so recovery leaves healthy services undisturbed.
+        if ! "$systemctl" is-active --quiet clamav-daemon.service; then
+          "$systemctl" start clamav-daemon.service
+        fi
+        if ! "$systemctl" is-active --quiet clamav-clamonacc.service; then
+          "$systemctl" start clamav-clamonacc.service
+        fi
+      '';
+    };
   };
 
   # ---------------------------------------------------------------------------
@@ -208,21 +240,6 @@
     # SDDM's PAM stack includes the `login` service.
     login.u2f.enable = true;
 
-    # Plasma 6.6 lacks KScreenLocker's native `kde-u2f` authenticator. Use its
-    # non-interactive fingerprint PAM channel for U2F so successful Bio
-    # verification dismisses the lock screen immediately. Remove this
-    # workaround when Phoenix uses native `kde-u2f` support or no longer uses
-    # Plasma.
-    kde.u2f.enable = false;
-    "kde-fingerprint" = {
-      u2f = {
-        enable = true;
-        control = "sufficient";
-      };
-      fprintAuth = false;
-      p11Auth = false;
-    };
-
     # sudo-rs provides separate PAM services for regular and login shells.
     sudo.u2f.enable = true;
     sudo-i.u2f.enable = true;
@@ -232,6 +249,18 @@
 
     # Polkit inherits U2F from the global setting; NixOS also adjusts its
     # socket-activated helper sandbox for HID access and read-only home access.
+  } // lib.optionalAttrs config.services.desktopManager.plasma6.enable {
+    # Plasma 6.6 lacks KScreenLocker's native `kde-u2f` authenticator. Use its
+    # non-interactive fingerprint PAM channel only on hosts with Plasma enabled.
+    kde.u2f.enable = false;
+    "kde-fingerprint" = {
+      u2f = {
+        enable = true;
+        control = "sufficient";
+      };
+      fprintAuth = false;
+      p11Auth = false;
+    };
   };
 
   security.polkit.enable = true;
