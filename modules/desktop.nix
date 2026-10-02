@@ -4,7 +4,11 @@
   services.xserver.enable = true;
 
   services.displayManager.sddm.enable = true;
-  services.desktopManager.plasma6.enable = true;
+
+  # Caelestia consumes UPower and PowerProfiles directly; these are shared
+  # desktop services rather than implicit dependencies of the VM's Plasma.
+  services.upower.enable = true;
+  services.power-profiles-daemon.enable = true;
 
   services.xserver.xkb = {
     layout = "us";

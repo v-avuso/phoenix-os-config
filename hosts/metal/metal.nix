@@ -31,52 +31,6 @@ let
         filterHyprlandSession (package.override { inherit enableXWayland; });
     };
   hyprlandPhoenix = filterHyprlandSession hyprlandPackages.hyprland;
-
-  # Physical left-to-right facts, also suitable for reuse by Hyprland later.
-  monitorLayout = [
-    {
-      connector = "DP-1";
-      edid = "GSM 23450 479236 10 2020 0";
-      preferredMode = {
-        width = 3840;
-        height = 2160;
-        refreshRate = 144;
-      };
-      scale = 1.7;
-    }
-    {
-      connector = "HDMI-A-2";
-      edid = "DEL 41607 809583187 29 2025 0";
-      preferredMode = {
-        width = 3840;
-        height = 2160;
-        refreshRate = 240;
-      };
-      scale = 1.7;
-    }
-    {
-      connector = "DP-2";
-      edid = "GSM 23639 372162 9 2023 0";
-      preferredMode = {
-        width = 3840;
-        height = 2160;
-        refreshRate = 144.05;
-      };
-      scale = 1.7;
-    }
-  ];
-
-  monitorLayoutData = pkgs.writeText "phoenix-monitor-layout.json" (builtins.toJSON monitorLayout);
-
-  monitorLayoutReflow = pkgs.writeShellScriptBin "phoenix-monitor-layout" ''
-    exec ${pkgs.python3}/bin/python3 ${./monitor-layout.py} ${monitorLayoutData} ${pkgs.kdePackages.libkscreen}/bin/kscreen-doctor
-  '';
-
-  kwinMonitorLayoutScript = pkgs.runCommand "phoenix-kwin-monitor-layout" { } ''
-    install -D ${./kwin-script/metadata.json} $out/share/kwin/scripts/phoenix-monitor-layout/metadata.json
-    install -D ${./kwin-script/contents/code/main.js} $out/share/kwin/scripts/phoenix-monitor-layout/contents/code/main.js
-  '';
-
 in
 
 {
@@ -85,7 +39,6 @@ in
   ];
 
   # Bare-metal desktop options belong here.
-
 
   services.xserver.videoDrivers = [ "nvidia" ];
 
@@ -152,11 +105,6 @@ in
     "nvidia-settings"
   ];
 
-  environment.systemPackages = [
-    monitorLayoutReflow
-    kwinMonitorLayoutScript
-  ];
-
   services.displayManager.defaultSession = "hyprland";
 
   # Preserve existing Home Manager backup files, choosing a numbered suffix
@@ -192,59 +140,5 @@ in
 
   home-manager.users.${user.name} = {
     imports = [ ../../home/caelestia.nix ];
-
-    programs.plasma.powerdevil.AC = {
-      autoSuspend.idleTimeout = 1800;
-
-      dimDisplay = {
-        enable = true;
-        idleTimeout = 180;
-      };
-
-      turnOffDisplay.idleTimeout = "never";
-    };
-
-    # Plasma Manager's typed option has no "never" value for the locked
-    # timeout, so set PowerDevil's documented -1 sentinel in powerdevilrc.
-    programs.plasma.configFile.powerdevilrc."AC/Display".TurnOffDisplayIdleTimeoutWhenLockedSec = -1;
-
-    programs.plasma.kscreenlocker = {
-      autoLock = false;
-    };
-
-    systemd.user.services.phoenix-monitor-layout-enable = {
-      Unit = {
-        Description = "Enable phoenix monitor reflow in KWin";
-        After = [ "plasma-workspace.target" ];
-        PartOf = [ "plasma-workspace.target" ];
-      };
-
-      Service = {
-        Type = "oneshot";
-        ExecStart = "${pkgs.kdePackages.kconfig}/bin/kwriteconfig6 --file kwinrc --group Plugins --key phoenix-monitor-layoutEnabled true";
-        ExecStartPost = "${pkgs.systemd}/bin/busctl --user call org.kde.KWin /KWin org.kde.KWin reconfigure";
-      };
-
-      Install.WantedBy = [ "plasma-workspace.target" ];
-    };
-
-    systemd.user.services.phoenix-monitor-layout = {
-      Unit = {
-        Description = "Reflow available phoenix monitors in physical order";
-        After = [
-          "plasma-workspace.target"
-          "phoenix-monitor-layout-enable.service"
-        ];
-        Requires = [ "phoenix-monitor-layout-enable.service" ];
-        PartOf = [ "plasma-workspace.target" ];
-      };
-
-      Service = {
-        Type = "oneshot";
-        ExecStart = "${monitorLayoutReflow}/bin/phoenix-monitor-layout";
-      };
-
-      Install.WantedBy = [ "plasma-workspace.target" ];
-    };
   };
 }

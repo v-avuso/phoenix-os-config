@@ -1,7 +1,7 @@
-{ ... }:
+{ lib, nixosConfig, ... }:
 
 {
-  programs.plasma = {
+  programs.plasma = lib.mkIf nixosConfig.services.desktopManager.plasma6.enable {
     enable = true;
 
     input.mice = [

@@ -35,6 +35,7 @@
   # Plasma Wayland allowed host -> guest clipboard in VMware Workstation, but
   # guest -> host clipboard did not work reliably. Plasma X11 provides working
   # bidirectional clipboard integration, so use it for this VM setup phase.
+  services.desktopManager.plasma6.enable = true;
   services.displayManager.defaultSession = "plasmax11";
 
 }
