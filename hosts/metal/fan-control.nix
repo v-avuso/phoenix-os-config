@@ -138,7 +138,8 @@ let
   # nixos-26.05 still packages 4.3.0 and nixpkgs-unstable has moved to 5.x.
   # Reuse the locked nixpkgs build recipes and pin only CoolerControl's 4.3.1
   # source/dependency hashes, keeping the rest of the system inputs unchanged.
-  coolerControl431Overlay = final: prev:
+  coolerControl431Overlay =
+    final: prev:
     let
       version = "4.3.1";
       src = final.fetchFromGitLab {
@@ -169,11 +170,13 @@ let
         coolercontrol-ui-data = (final.callPackage uiPackage { }) {
           inherit version src meta;
         };
-        coolercontrold = (final.callPackage daemonPackage {
-          coolercontrol = packages;
-        }) {
-          inherit version src meta;
-        };
+        coolercontrold =
+          (final.callPackage daemonPackage {
+            coolercontrol = packages;
+          })
+            {
+              inherit version src meta;
+            };
         coolercontrol-gui = (final.callPackage (packageRoot + "/coolercontrol-gui.nix") { }) {
           inherit version src meta;
         };
@@ -196,18 +199,12 @@ let
   '';
   watchdogKeeper = pkgs.writeShellScript "phoenix-nct6687-watchdog" ''
     exec ${pkgs.python3}/bin/python3 ${./nct6687-watchdog.py} \
-      --policy ${policyFile} \
-      --config /etc/coolercontrol/config.toml \
-      --sysfs-root /sys/class/hwmon \
-      --nvidia-smi ${config.hardware.nvidia.package.bin}/bin/nvidia-smi
+      --sysfs-root /sys/class/hwmon
   '';
 
   watchdogSleepPrepare = pkgs.writeShellScript "phoenix-nct6687-watchdog-sleep-prepare" ''
     exec ${pkgs.python3}/bin/python3 ${./nct6687-watchdog.py} \
-      --policy ${policyFile} \
-      --config /etc/coolercontrol/config.toml \
       --sysfs-root /sys/class/hwmon \
-      --nvidia-smi ${config.hardware.nvidia.package.bin}/bin/nvidia-smi \
       --prepare-sleep
   '';
 
@@ -240,6 +237,26 @@ in
       ${provisionPolicy}
     '';
 
+    # A running daemon does not reread its mutable config when NixOS activation
+    # changes it. Reconcile in coolercontrold.preStart, then restart only at a
+    # system switch/test so the declared baseline is reapplied without tying
+    # cooling to desktop-session lifecycle or continuously overwriting UI edits.
+    system.activationScripts.phoenixCoolerControlBaseline = {
+      deps = [ "etc" ];
+      text = ''
+        case "''${NIXOS_ACTION:-}" in
+          switch|test)
+            ${pkgs.systemd}/bin/systemctl daemon-reload
+            if ${pkgs.systemd}/bin/systemctl is-active --quiet coolercontrold.service; then
+              ${pkgs.systemd}/bin/systemctl stop phoenix-nct6687-watchdog.service
+              ${pkgs.systemd}/bin/systemctl restart coolercontrold.service
+              ${pkgs.systemd}/bin/systemctl start phoenix-nct6687-watchdog.service
+            fi
+            ;;
+        esac
+      '';
+    };
+
     boot.blacklistedKernelModules = [ "nct6683" ];
     boot.extraModprobeConfig = ''
       options nct6687 msi_fan_brute_force=1
@@ -265,9 +282,9 @@ in
     systemd.services.phoenix-nct6687-watchdog = {
       description = "Refresh the NCT6687D MSI fan-control safety lease";
       wantedBy = [ "multi-user.target" ];
-      requires = [ "coolercontrold.service" ];
-      bindsTo = [ "coolercontrold.service" ];
-      partOf = [ "coolercontrold.service" ];
+      # Run independently as the recovery supervisor. It stops renewing on a
+      # failure, confirms firmware fallback, then restarts CoolerControl so
+      # apply_on_boot reclaims channels before a new lease is issued.
       after = [ "coolercontrold.service" ];
       path = [ pkgs.systemd ];
       serviceConfig = {

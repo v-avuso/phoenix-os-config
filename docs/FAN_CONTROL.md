@@ -24,10 +24,27 @@ build recipes; the NixOS stable input still carries 4.3.0 and the unstable input
 is on 5.x. The package pin updates the UI data, daemon, and GUI from the same
 4.3.1 source tag.
 
-A root `phoenix-nct6687-watchdog.service` waits for CoolerControl's current
-startup invocation to confirm all six Phoenix assignments, validates the live
-hwmon labels, manual modes, and commanded PWM outputs, then arms
-`fan_control_watchdog` for 30 seconds and refreshes it every 10 seconds.
+A root `phoenix-nct6687-watchdog.service` validates the NCT6687 identity and
+channel labels, CoolerControl's active invocation and responding local API,
+fan1-fan6 userspace/manual modes, fan7-fan8 firmware modes, and broad
+channel-specific safe PWM bounds. It then arms `fan_control_watchdog` for 30
+seconds and refreshes it every 10 seconds. It does not inspect profile,
+function, fixed-duty, curve, or pump configuration, nor compare PWM with an
+instantaneous profile output.
+
+Ownership has four parts: Nix declares the CoolerControl baseline;
+`phoenix-switch`/NixOS activation reconciles it and restarts `coolercontrold`
+so `apply_on_boot` applies it; CoolerControl UI changes are temporary runtime
+overrides until the next activation/restart; and the NCT6687 firmware curves
+are the fallback when the safety lease expires. Configuration drift alone is
+not a watchdog failure and is never continuously overwritten while the system
+is running. CoolerControl remains the only userspace fan-speed writer.
+
+If a safety/liveness check fails, the watchdog stops renewing the lease,
+confirms the driver's firmware fallback, restarts `coolercontrold` through its
+supported `apply_on_boot` path, verifies fresh manual ownership and safe PWM,
+then rearms the lease. If recovery cannot be verified, the lease stays
+disarmed and firmware retains control.
 
 A required `phoenix-nct6687-sleep.service` runs before `sleep.target`. It stops
 the keeper, requests a one-second kernel-watchdog expiry, waits for the driver
@@ -36,11 +53,12 @@ firmware mode. The driver restores the saved PWM settings/curves as part of
 that expiry. If fallback cannot be confirmed, the required unit fails and
 blocks suspend/hibernate. This leaves no old lease to expire after resume.
 
-When sleep ends, the lifecycle unit queues a non-blocking keeper start. The
-keeper waits for CoolerControl to reapply the configured profiles and validates
-all six live modes and PWM targets before arming a fresh lease. If post-resume
-validation fails, it leaves the watchdog disarmed so firmware control remains
-active. Fan policy assignments remain as described below.
+When sleep ends, the lifecycle unit queues a non-blocking keeper start.
+CoolerControl 4.3.1 normally reinitializes devices and reapplies saved settings
+on resume when `apply_on_boot` is enabled. The keeper verifies the resulting
+ownership; if firmware mode remains, it confirms fallback and invokes the same
+controlled CoolerControl restart/recovery path before arming a fresh lease.
+Fan policy assignments remain as described below.
 
 ## Intended Fan Policy
 
