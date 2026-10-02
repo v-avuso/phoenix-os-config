@@ -11,14 +11,21 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    codex.url = "github:openai/codex/rust-v0.157.0";
+    plasma-manager = {
+      url = "github:nix-community/plasma-manager";
+      inputs.home-manager.follows = "home-manager";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
 
-    hyprland = {
-      url = "github:hyprwm/Hyprland";
+    caelestia-shell = {
+      url = "github:caelestia-dots/shell";
       inputs.nixpkgs.follows = "nixpkgs-unstable";
     };
 
-    caelestianix.url = "github:v-avuso/caelestia-nixos";
+    caelestia-dots = {
+      url = "github:caelestia-dots/caelestia";
+      flake = false;
+    };
 
     firefox-addons = {
       url = "gitlab:rycee/nur-expressions?dir=pkgs/firefox-addons";
@@ -35,12 +42,14 @@
     codex-desktop-linux.url = "github:ilysenko/codex-desktop-linux";
   };
 
-  outputs = inputs@{ nixpkgs, ... }:
+  outputs =
+    inputs@{ nixpkgs, ... }:
     let
       system = "x86_64-linux";
       lib = nixpkgs.lib;
       user = import ./config/user.nix { inherit lib; };
-      mkHost = hostPath:
+      mkHost =
+        hostPath:
         lib.nixosSystem {
           inherit system;
           specialArgs = { inherit inputs user; };

@@ -6,7 +6,7 @@
 
     /* ---------- Main reading area ---------- */
 
-    [data-message-author-role="assistant"] .markdown {
+    [data-markdown-text-style="assistant-message"] {
         line-height: 1.6 !important;
         max-width: 72ch;
     }
@@ -17,8 +17,8 @@
        Removes remnants of earlier experiments
        ============================================================ */
 
-    [data-message-author-role="assistant"] .markdown h2,
-    [data-message-author-role="assistant"] .markdown h3 {
+    [data-markdown-text-style="assistant-message"] h2,
+    [data-markdown-text-style="assistant-message"] h3 {
         position: relative !important;
 
         /* Undo previous flex-based heading experiment */
@@ -27,10 +27,10 @@
         border: none !important;
     }
 
-    [data-message-author-role="assistant"] .markdown h2::before,
-    [data-message-author-role="assistant"] .markdown h2::after,
-    [data-message-author-role="assistant"] .markdown h3::before,
-    [data-message-author-role="assistant"] .markdown h3::after {
+    [data-markdown-text-style="assistant-message"] h2::before,
+    [data-markdown-text-style="assistant-message"] h2::after,
+    [data-markdown-text-style="assistant-message"] h3::before,
+    [data-markdown-text-style="assistant-message"] h3::after {
         content: none !important;
         display: none !important;
     }
@@ -40,7 +40,7 @@
        H2 — Major sections
        ============================================================ */
 
-    [data-message-author-role="assistant"] .markdown h2 {
+    [data-markdown-text-style="assistant-message"] h2 {
         /* Large whitespace between major conceptual sections */
         margin-top: 3.25rem !important;
 
@@ -60,14 +60,14 @@
 
 
     /* First major section needs less space above */
-    [data-message-author-role="assistant"] .markdown h2:first-of-type {
+    [data-markdown-text-style="assistant-message"] h2:first-of-type {
         margin-top: 1rem !important;
     }
 
 
     /* H2 double vertical marker
        Absolutely positioned → DOES NOT move heading text */
-    [data-message-author-role="assistant"] .markdown h2::before {
+    [data-markdown-text-style="assistant-message"] h2::before {
         content: "" !important;
         display: block !important;
 
@@ -103,7 +103,7 @@
        H3 — Subsections
        ============================================================ */
 
-    [data-message-author-role="assistant"] .markdown h3 {
+    [data-markdown-text-style="assistant-message"] h3 {
         margin-top: 2rem !important;
         margin-bottom: 0.65rem !important;
 
@@ -124,7 +124,7 @@
        Paragraphs
        ============================================================ */
 
-    [data-message-author-role="assistant"] .markdown p {
+    [data-markdown-text-style="assistant-message"] p {
         margin-top: 0 !important;
         margin-bottom: 0.9em !important;
     }
@@ -134,34 +134,34 @@
        Lists
        ============================================================ */
 
-    [data-message-author-role="assistant"] .markdown ul,
-    [data-message-author-role="assistant"] .markdown ol {
+    [data-markdown-text-style="assistant-message"] ul,
+    [data-markdown-text-style="assistant-message"] ol {
         margin-top: 0.7em !important;
         margin-bottom: 1.1em !important;
     }
 
 
     /* Lines WITHIN one bullet stay closely grouped */
-    [data-message-author-role="assistant"] .markdown li {
+    [data-markdown-text-style="assistant-message"] li {
         line-height: 1.6 !important;
     }
 
 
     /* Separate bullets receive a little extra whitespace */
-    [data-message-author-role="assistant"] .markdown li + li {
+    [data-markdown-text-style="assistant-message"] li + li {
         margin-top: 0.48em !important;
     }
 
 
     /* Don't let ChatGPT's paragraph margin inflate every bullet */
-    [data-message-author-role="assistant"] .markdown li > p {
+    [data-markdown-text-style="assistant-message"] li > p {
         margin-bottom: 0 !important;
     }
 
 
     /* But preserve spacing for genuinely separate paragraphs
        inside one bullet */
-    [data-message-author-role="assistant"] .markdown li > p + p {
+    [data-markdown-text-style="assistant-message"] li > p + p {
         margin-top: 0.7em !important;
     }
 

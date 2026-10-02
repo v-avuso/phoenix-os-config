@@ -72,7 +72,7 @@
       # Learning mode: allow outbound traffic and record it for later review.
       # The allow rules remain available as a future default-deny baseline.
       DefaultAction = "allow";
-      InterceptUnknown = true;
+      InterceptUnknown = false;
       LogUTC = true;
       LogMicro = true;
       Server.Loggers = [
@@ -186,6 +186,52 @@
     extraConfig = ''
       Defaults env_keep += "SSH_AUTH_SOCK TERM DISPLAY WAYLAND_DISPLAY XAUTHORITY"
     '';
+  };
+
+  # Use FIDO2 user verification so a YubiKey Bio requires an enrolled
+  # fingerprint. `sufficient` keeps the Unix password as the fallback when
+  # the key is absent or verification fails.
+  security.pam.u2f = {
+    enable = true;
+    control = "sufficient";
+    settings = {
+      cue = true;
+      userverification = 1;
+    };
+  };
+
+  security.pam.services = {
+    # The global enable makes U2F the default for PAM services. Keep remote
+    # SSH authentication password-based; the Bio key is for local prompts.
+    sshd.u2f.enable = lib.mkForce false;
+
+    # SDDM's PAM stack includes the `login` service.
+    login.u2f.enable = true;
+
+    # Plasma 6.6 lacks KScreenLocker's native `kde-u2f` authenticator. Use its
+    # non-interactive fingerprint PAM channel for U2F so successful Bio
+    # verification dismisses the lock screen immediately. Remove this
+    # workaround when Phoenix uses native `kde-u2f` support or no longer uses
+    # Plasma.
+    kde.u2f.enable = false;
+    "kde-fingerprint" = {
+      u2f = {
+        enable = true;
+        control = "sufficient";
+      };
+      fprintAuth = false;
+      p11Auth = false;
+    };
+
+    # sudo-rs provides separate PAM services for regular and login shells.
+    sudo.u2f.enable = true;
+    sudo-i.u2f.enable = true;
+
+    su.u2f.enable = true;
+    su-l.u2f.enable = true;
+
+    # Polkit inherits U2F from the global setting; NixOS also adjusts its
+    # socket-activated helper sandbox for HID access and read-only home access.
   };
 
   security.polkit.enable = true;

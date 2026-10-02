@@ -7,6 +7,11 @@ let
   alUrlShortener =
     "https://raw.githubusercontent.com/DandelionSprout/adfilt/master/LegitimateURLShortener.txt";
 
+  trustedOrigins = [
+    "https://chatgpt.com"
+    "https://web.whatsapp.com"
+  ];
+
   uboUserFilters = builtins.readFile ./ublock-filters.txt;
 
   uboSettings = {
@@ -39,13 +44,14 @@ let
     privateDefault = "ddg";
   };
 
-  # Best-effort managed defaults. Dark Reader may still require one manual check
-  # because extension-managed settings are less stable than Firefox prefs.
+  # Home Manager writes extension settings to local storage; keep Dark Reader
+  # off its separate sync settings store so these declarations take effect.
   darkReaderSettings = {
-    enabled = false; # whitelist-only behavior: off globally
+    enabled = true;
     enabledByDefault = false;
     enabledFor = [ ];
     disabledFor = [ ];
+    syncSettings = false;
   };
 
   # Keep this small. Every extension adds privileged code + fingerprint surface.
@@ -98,11 +104,17 @@ let
 
   sessionRestoreSettings = {
     "browser.startup.page" = lib.mkForce 3;
+    "privacy.clearOnShutdown_v2.browsingHistoryAndDownloads" = lib.mkForce false;
   };
 
   autoEnableExtensionSettings = {
     # Avoid HM-installed extensions starting disabled in fresh profiles.
     "extensions.autoDisableScopes" = 0;
+  };
+
+  appearanceSettings = {
+    # Use Firefox's built-in dark theme for the browser UI.
+    "extensions.activeThemeID" = "firefox-compact-dark@mozilla.org";
   };
 
   userContentSettings = {
@@ -134,7 +146,14 @@ let
   };
 
   commonSettings =
-    autoEnableExtensionSettings
+    {
+      "middlemouse.paste" = false;
+      "browser.tabs.opentabfor.middleclick" = true;
+      "sidebar.revamp" = true;
+      "sidebar.verticalTabs" = true;
+    }
+    // autoEnableExtensionSettings
+    // appearanceSettings
     // safeBrowsingSettings
     // noSaveSettings
     // noOnboardingSettings;
@@ -198,6 +217,54 @@ in
       OverrideFirstRunPage = "";
       OverridePostUpdatePage = "";
 
+      # TODO: migrate to ClearOnShutdown.Exceptions when targeting Firefox 158 or newer.
+      SanitizeOnShutdown = {
+        Cache = true;
+        Cookies = true;
+        Downloads = false;
+        FormData = true;
+        History = false;
+        Sessions = false;
+        SiteSettings = false;
+        OfflineApps = false;
+        Locked = false;
+        Exceptions = [
+          # AI / productivity
+          "https://chatgpt.com"
+          "https://todoist.com"
+
+          # Google / video
+          "https://google.com"
+          "https://youtube.com"
+
+          # Social media
+          "https://instagram.com"
+          "https://x.com"
+
+          # Messaging
+          "https://web.whatsapp.com"
+          "https://discord.com"
+
+          # Email
+          "https://proton.me"
+        ];
+      };
+
+      Permissions.Microphone.Allow = trustedOrigins;
+
+      # Retain the existing cookie permission allowlist independently of shutdown clearing.
+      Cookies.Allow = trustedOrigins;
+
+      ExtensionSettings = {
+        "keepassxc-browser@keepassxc.org".default_area = "navbar";
+        "uBlock0@raymondhill.net".default_area = "navbar";
+        "addon@darkreader.org".default_area = "menupanel";
+        "sponsorBlocker@ajay.app".default_area = "menupanel";
+        "{21f1ba12-47e1-4a9b-ad4e-3a0260bbeb26}".default_area = "menupanel";
+        "{f209234a-76f0-4735-9920-eb62507a54cd}".default_area = "menupanel";
+        "gdpr@cavi.au.dk".default_area = "menupanel";
+      };
+
       # uBO reads this managed setting on startup and imports it as a backup-shaped config.
       # More reliable for declarative My filters than profile extension local storage.
       "3rdparty".Extensions."uBlock0@raymondhill.net" = {
@@ -215,7 +282,9 @@ in
         id = 0;
         name = "hardened";
         isDefault = true;
-        settings = sessionRestoreSettings;
+        settings = sessionRestoreSettings // {
+          "browser.sessionstore.max_windows_undo" = 10;
+        };
       };
 
       compat = mkArkenfoxProfile {

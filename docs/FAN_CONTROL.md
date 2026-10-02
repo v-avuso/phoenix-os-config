@@ -12,34 +12,104 @@ that kernel.
 built for the active kernel. When changing to an unstable kernel package set,
 the default follows that set's `nct6687d` package automatically.
 
-The module deliberately sets no driver parameters, register layouts, ACPI
-resource overrides, or PWM profiles. In particular, it does not set
-`acpi_enforce_resources=lax`, force a register layout, or enable
-`msi_fan_brute_force`.
+The module does not set `acpi_enforce_resources=lax` or force a register
+layout. It blacklists `nct6683` and loads `nct6687` with
+`msi_fan_brute_force=1`; the driver applies this option at module load, so it
+takes effect after reboot. On this board, that mode writes each SYS_FAN duty
+to all seven firmware curve points, which makes the channels obey manual PWM
+requests.
+
+CoolerControl is pinned to upstream release 4.3.1 using the locked Nixpkgs
+build recipes; the NixOS stable input still carries 4.3.0 and the unstable input
+is on 5.x. The package pin updates the UI data, daemon, and GUI from the same
+4.3.1 source tag.
+
+A root `phoenix-nct6687-watchdog.service` validates the NCT6687 identity and
+channel labels, CoolerControl's active invocation and responding local API,
+fan1-fan6 userspace/manual modes, fan7-fan8 firmware modes, and broad
+channel-specific safe PWM bounds. It then arms `fan_control_watchdog` for 30
+seconds and refreshes it every 10 seconds. It does not inspect profile,
+function, fixed-duty, curve, or pump configuration, nor compare PWM with an
+instantaneous profile output.
+
+Ownership has four parts: Nix declares the CoolerControl baseline;
+`phoenix-switch`/NixOS activation reconciles it and restarts `coolercontrold`
+so `apply_on_boot` applies it; CoolerControl UI changes are temporary runtime
+overrides until the next activation/restart; and the NCT6687 firmware curves
+are the fallback when the safety lease expires. Configuration drift alone is
+not a watchdog failure and is never continuously overwritten while the system
+is running. CoolerControl remains the only userspace fan-speed writer.
+
+If a safety/liveness check fails, the watchdog stops renewing the lease,
+confirms the driver's firmware fallback, restarts `coolercontrold` through its
+supported `apply_on_boot` path, verifies fresh manual ownership and safe PWM,
+then rearms the lease. If recovery cannot be verified, the lease stays
+disarmed and firmware retains control.
+
+A required `phoenix-nct6687-sleep.service` runs before `sleep.target`. It stops
+the keeper, requests a one-second kernel-watchdog expiry, waits for the driver
+value to transition from 1 to 0, and verifies that fan1-fan6 returned to
+firmware mode. The driver restores the saved PWM settings/curves as part of
+that expiry. If fallback cannot be confirmed, the required unit fails and
+blocks suspend/hibernate. This leaves no old lease to expire after resume.
+
+When sleep ends, the lifecycle unit queues a non-blocking keeper start.
+CoolerControl 4.3.1 normally reinitializes devices and reapplies saved settings
+on resume when `apply_on_boot` is enabled. The keeper verifies the resulting
+ownership; if firmware mode remains, it confirms fallback and invokes the same
+controlled CoolerControl restart/recovery path before arming a fresh lease.
+Fan policy assignments remain as described below.
 
 ## Intended Fan Policy
 
-These are the intended target curves, recorded before the Linux sensors and
-fan channels are known. Configure them in CoolerControl only after discovery
-and physical channel identification on the bare-metal machine.
+The metal host declares these CoolerControl 4.3.1 profiles in
+`hosts/metal/fan-control.nix`. A pre-start reconciler validates the NCT device
+and all eight hwmon fan labels, then merges only Phoenix-owned profiles and
+assignments into writable `/etc/coolercontrol/config.toml`. It also reconciles
+Phoenix-owned per-channel `userName` fields in CoolerControl 4.3.1's
+`/etc/coolercontrol/config-ui.json`, leaving other UI settings and channels
+alone. CoolerControl 4.3.1 has no daemon-owned `overrides.toml` naming file.
+The daemon applies saved settings through its normal `apply_on_boot` behavior.
+Both files must remain writable; neither is an immutable Nix symlink.
 
-| Curve | Temperature | Fan output |
-| --- | --- | ---: |
-| GPU | `<= 60.0 °C` | 0% |
-| GPU | `60.1–70.0 °C` | 40% |
-| GPU | `70.1–80.0 °C` | 60% |
-| GPU | `> 80.0 °C` | 80% |
-| CPU | `<= 69.9 °C` | 0% |
-| CPU | approximately `70.2–85.0 °C` | 50% |
-| CPU | `> 85 °C` | approximately 81% |
+| Profile | Temperature/output points |
+| --- | --- |
+| CPU case staircase | `(20.0,20)`, `(69.9,20)`, `(70.2,50)`, `(85.0,50)`, `(85.1,81)`, `(120,81)` |
+| GPU case staircase | `(20,20)`, `(60.0,20)`, `(60.1,40)`, `(70.0,40)`, `(70.1,60)`, `(80.0,60)`, `(80.1,80)`, `(120,80)` |
+| CPU/GPU mix | CoolerControl `Max` of the CPU and GPU case profiles |
+| Response | Standard function; 2°C deviance, 1-second response delay, threshold hopping enabled |
 
-Use approximately `2 °C` hysteresis for both curves. The case-fan policy is
-`max(CPU curve, GPU curve, 25%)`. The GPU's own three fans use the GPU curve.
-The pump is fixed at 50%, the chipset fan at 80%, and the EZ-Connect fan at
-80%. Remaining case fans use the mixed CPU/GPU policy; the Windows aliases
-expected to represent those case fans are `top`, `bottom`, `side`, `rear`,
-`unclear_1`, `system_fan_5`, and `system_fan_6`. Confirm each physical fan
-before attaching its policy.
+The tightly spaced points intentionally preserve staircase plateaus and sharp
+steps to avoid known undesirable Arctic P14 RPM/noise bands. The 2°C deviance
+and threshold hopping are CoolerControl's closest supported equivalents to the
+requested hysteresis/threshold behavior; they do not smooth the curve.
+
+| Linux channel | hwmon label → CoolerControl label | Historical Windows control / identity | Policy |
+| --- | --- | --- | --- |
+| `fan1` | `CPU Fan` → `Top` | 0 / Top (CPU header/radiator channel) | CPU/GPU `Max` |
+| `fan2` | `Pump Fan` → `Pump` | 1 / Pump | Fixed 100% |
+| `fan3` | `System Fan #1` → `Unclear 1` | 10 / Unclear 1 | CPU/GPU `Max` |
+| `fan4` | `System Fan #2` → `Rear` | 11 / Rear | CPU/GPU `Max` |
+| `fan5` | `System Fan #3` → `Side` | 12 / Side | CPU/GPU `Max` |
+| `fan6` | `System Fan #4` → `Bottom` | 13 / Bottom | CPU/GPU `Max` |
+| `fan7` | `System Fan #5` (unchanged) | 14 / unidentified | Unmanaged |
+| `fan8` | `System Fan #6` (unchanged) | 15 / unidentified | Unmanaged |
+
+The label `Top` identifies the CPU-header/radiator-fan channel; the physical
+placement of those fans as a top radiator bank has not been independently
+confirmed. Linux exposes `fan1` through `fan8`; it does not expose Linux
+`fan11`, `fan12`, `fan13`, `fan14`, `fan15`, or `fan16` on this device.
+
+The policy uses the CPU's `temp1` source (`k10temp` Tctl) and CoolerControl's
+NVIDIA `GPU Temp` source. Before writing profiles, startup also requires a
+numeric `nvidia-smi` GPU temperature for exactly the configured RTX 5090,
+checks that CoolerControl has not disabled its `GPU Temp` channel, and checks
+that the `Max` mix includes both graph profiles. CoolerControl 4.3.0
+uses a 100°C emergency temperature when a profile source is missing, which
+keeps the GPU curve at 80% instead of dropping to CPU-only behavior. The policy
+does not assign any profile to NVIDIA GPU fan channels or change physical
+airflow direction. Startup fails closed if the NCT UID, expected labels, CPU
+sensor, GPU sensor, or mix dependencies differ.
 
 ## Windows Reference Fingerprint
 
@@ -61,9 +131,14 @@ be copied into Linux hwmon mappings.
 | `system_fan_5` (`System Fan #5`) | `/lpc/nct6687dr/control/14` | `/lpc/nct6687dr/fan/14` | Not recorded |
 | `system_fan_6` (`System Fan #6`) | `/lpc/nct6687dr/control/15` | `/lpc/nct6687dr/fan/15` | Not recorded |
 
-The aliases are not yet bound to Linux channels. Confirm the physical fan
-connected to each channel before assigning its permanent Phoenix alias or
-policy.
+This is the historical Windows-side fingerprint; its NCT indices are not
+Linux hwmon channel numbers. The Linux `fan3` channel historically maps to
+Windows `Unclear 1` (control 10), not to Windows `Chipset` (control 2).
+Windows `Chipset` and `EZ-Connect` (controls 2 and 3) are not exposed as
+corresponding Linux fan channels and receive no Linux policy. Linux `fan7` and
+`fan8` remain unidentified and unmanaged; their generic `System Fan #5` and
+`System Fan #6` labels are retained. Their Windows reference controls 14 and
+15 do not prove connected hardware identity.
 
 ## First-Boot Discovery
 
@@ -103,11 +178,7 @@ fingerprint above. Temperature `*_input` files report millidegrees Celsius;
 fan `*_input` files report RPM. `/sys/class/hwmon/hwmonN` numbering can change,
 so retain the device name/path and channel filename as well.
 
-Identify physical fan destinations on the bare-metal machine one PWM channel
-at a time, with temperatures and cooling monitored and a clear way to restore
-firmware control. Do not infer the destination from a matching-looking Linux
-number or sensor label. Once each channel is positively identified, bind the
-permanent Phoenix aliases (`top`, `bottom`, `side`, `rear`, `pump`, and others)
-to the discovered Linux device/channel and then create the CoolerControl
-profiles described above. No mapping or profile is activated by this initial
-foundation.
+The current Phoenix aliases and assignments are listed in Intended Fan
+Policy. If any expected sysfs channel label changes, the startup reconciler
+stops before writing policy configuration; verify the physical connection and
+update the mapping intentionally before restarting CoolerControl.

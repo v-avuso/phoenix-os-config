@@ -27,8 +27,8 @@ sources.
 
 ## Current Direction
 
-The VM target is the current working host. The metal target is the intended
-default target for a future desktop install.
+The `vm` target is selected when running inside a virtual machine. The `metal`
+target is the fallback for this bare-metal workstation.
 
 The desktop direction is a polished Wayland workstation based on
 Hyprland/Caelestia-style configuration, with KDE Plasma kept as an intentional
@@ -76,102 +76,56 @@ Host files are the entrypoints:
 
 ## Helper Commands
 
-The repo includes small shell helpers so rebuilds can use the right host target
-without editing tracked files.
+After applying the NixOS configuration and opening a new Bash terminal, the
+shell module makes these functions available from any directory. It loads the
+scripts from `repoDirectory` in `config/user.nix`; set `PHOENIX_REPO_ROOT` to
+your checkout if it lives elsewhere.
 
-The NixOS config installs the Bash shell functions through `modules/shell.nix`.
-After applying the config and opening a new terminal, these commands should be
-available from any directory:
+- `phoenix-target` prints the selected target; `phoenix-target-info` explains
+  how it was selected.
+- `phoenix-switch`, `phoenix-test`, and `phoenix-boot` run the matching
+  `nixos-rebuild` action with `sudo`.
+- `phoenix-build` and `phoenix-dry-build` build without activating the system.
+- `phoenix-rebuild <action>` is the underlying command dispatcher.
+- `phoenix-test-caelestia-local` and `phoenix-switch-caelestia-local` use a
+  local `../caelestia-nixos` input override for development.
 
-```sh
-phoenix-target-info
-phoenix-test
-phoenix-switch
-phoenix-boot
-phoenix-build
-phoenix-dry-build
-phoenix-test-caelestia-local
-phoenix-switch-caelestia-local
-```
-
-The shell integration points at the live checkout so helper updates take effect
-without rebuilding the helper scripts into `/nix/store`. The default checkout
-path is defined as `repoDirectory` in `config/user.nix`; forks and machines with
-different local paths should change it there.
-
-For a temporary override, set `PHOENIX_REPO_ROOT` before starting the shell, for
-example in `~/.bashrc` or another user profile file:
-
-```sh
-export PHOENIX_REPO_ROOT=/path/to/phoenix-os-config
-```
-
-Target selection:
-
-- `PHOENIX_TARGET=vm` or `PHOENIX_TARGET=metal` wins when set.
-- otherwise, `systemd-detect-virt --vm` selects `vm` inside a VM.
-- otherwise, the fallback target is `metal`.
-
-Temporary override examples:
-
-```sh
-PHOENIX_TARGET=vm phoenix-switch
-PHOENIX_TARGET=metal phoenix-switch
-```
-
-The helpers select a target, prepare its local hardware config if needed, then
-pass the checkout as a `path:` flake. This includes ignored host hardware files
-without adding them to Git's index.
+Target selection uses `PHOENIX_TARGET` when set, detects a VM with
+`systemd-detect-virt` otherwise, and falls back to `metal`. For example,
+`PHOENIX_TARGET=metal phoenix-build` explicitly builds the metal configuration.
 
 ## Direct Rebuilds
 
-Direct commands still work and are useful when debugging:
+Use explicit targets from the checkout when debugging or overriding automatic
+target selection:
 
 ```sh
-# Run from the checkout root; choose the explicit target to inspect.
-sudo nixos-rebuild switch --flake path:.#vm
-sudo nixos-rebuild switch --flake path:.#metal
+sudo nixos-rebuild switch --flake .#vm
+sudo nixos-rebuild switch --flake .#metal
 ```
 
-`#vm` and `#metal` select different NixOS configurations from `flake.nix`.
-These direct commands are useful for debugging when the selected host already
-has its local hardware file. Use `phoenix-switch` or another Phoenix helper for
-normal rebuilds; it checks or bootstraps that file first. Plain
-`nixos-rebuild --flake .` can be surprising because NixOS may select a
-configuration by hostname.
+For routine work, use `phoenix-switch`; it detects the target and evaluates the
+normal Git checkout flake. Use `phoenix-build` to build without activation.
 
 ## Hardware Configuration
 
-Each host needs its own local `hardware-configuration.nix`. Both files are
-ignored by Git because they contain machine-specific hardware and filesystem
-identifiers; do not commit them. On a normal NixOS install, the rebuild helper
-copies `/etc/nixos/hardware-configuration.nix` to the selected host directory
-the first time it is needed. It never replaces an existing host file.
+`hosts/metal/hardware-configuration.nix` is the generated hardware snapshot for
+the current Phoenix installation and is tracked with the flake. It contains
+filesystem UUIDs and ordinary hardware details, not credentials or encryption
+keys. On a reinstall or storage-layout change, regenerate it for that
+installation, review the diff (especially `fileSystems`), and commit the
+updated generated snapshot. Do not hand-maintain generated hardware settings.
 
-If that bootstrap source is unavailable, generate a file for the selected host:
+For example, after installing or changing storage on the metal host:
 
 ```sh
-target=vm # Set to metal for the bare-metal host.
-sudo nixos-generate-config --show-hardware-config > "hosts/$target/hardware-configuration.nix"
+sudo nixos-generate-config --show-hardware-config > \
+  hosts/metal/hardware-configuration.nix
 ```
 
-Treat this file as host-local hardware and storage config:
-
-- generated per machine by `nixos-generate-config`
-- usually changed only when storage or boot-relevant hardware changes
-- not meant for casual manual editing
-- review the `fileSystems` section before relying on it in a rebuild
-
-The Phoenix helpers evaluate the checkout through a `path:` flake reference so
-these ignored files are included without Git index workarounds. The host
-configuration imports the file unconditionally, so a missing file produces a
-clear evaluation error instead of silently omitting hardware settings.
-
-This file can expose machine-identifying details such as filesystem UUIDs,
-partition layout, and hardware hints, so keep it local to its machine.
-
-Bare-metal fan-control setup and the post-install sensor/channel discovery
-procedure are documented in [docs/FAN_CONTROL.md](docs/FAN_CONTROL.md).
+The host imports this file directly. Phoenix helpers use the Git flake rooted
+at the repository, so the generated file is included through normal Git flake
+evaluation.
 
 ## Mount Pollution
 
@@ -209,12 +163,12 @@ Usually do not add these to hardware config:
 
 ## Workflow
 
-1. Pick the target: `vm` for the current VM, `metal` for the future desktop.
+1. Let the helpers detect `vm` or `metal`; set `PHOENIX_TARGET` only to override.
 2. Put shared behavior in `modules/`.
 3. Put host-only behavior in `hosts/vm/vm.nix` or `hosts/metal/metal.nix`.
 4. Regenerate hardware config only for real hardware/storage changes.
-5. Rebuild with `phoenix-switch` or another Phoenix helper; use explicit
-   `path:.#vm` / `path:.#metal` targets for debugging.
+5. Rebuild with `phoenix-switch`; use explicit `.#vm` / `.#metal` targets only
+   for debugging or an override.
 
 Agents may propose and edit configuration in this repo, but they should not
 directly mutate the live system. Activation stays manual: review the diff, run

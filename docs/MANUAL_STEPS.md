@@ -11,6 +11,7 @@ Manual setup not yet represented in NixOS config.
 | User state | Restore selected app profiles, private notes, and data | Not system config | Separate backup or Syncthing process |
 | Repositories | Re-clone working code repositories | Project repos are external state | Git remotes plus restored SSH/auth |
 | Accounts | Sign into browser/password manager/cloud services | Requires user auth | Keep manual unless safe automation exists |
+| Authentication | Enroll YubiKey Bio fingerprints and create the local `pam_u2f` mapping | Device credentials and user-specific mapping do not belong in the system repository | [YubiKey PAM guide](YUBIKEY_PAM.md) |
 
 ## TODO
 
