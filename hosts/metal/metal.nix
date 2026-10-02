@@ -77,39 +77,6 @@ let
     install -D ${./kwin-script/contents/code/main.js} $out/share/kwin/scripts/phoenix-monitor-layout/contents/code/main.js
   '';
 
-  caelestiaShellBaseline =
-    config.home-manager.users.${user.name}.xdg.dataFile."caelestia/shell.json.nix-baseline".source;
-  reassertCaelestiaShell = pkgs.writeShellScript "phoenix-reassert-caelestia-shell" ''
-    set -euo pipefail
-
-    target=${user.homeDirectory}/.config/caelestia/shell.json
-    baseline=${caelestiaShellBaseline}
-
-    if [ -L "$target" ] || [ ! -f "$target" ]; then
-      echo "Caelestia shell settings must be a regular runtime file: $target" >&2
-      exit 1
-    fi
-    if [ ! -O "$target" ]; then
-      echo "Caelestia shell settings are not owned by ${user.name}: $target" >&2
-      exit 1
-    fi
-    if [ ! -w "$target" ]; then
-      ${pkgs.coreutils}/bin/chmod u+rw "$target"
-    fi
-
-    runtime_json="$(${pkgs.coreutils}/bin/mktemp)"
-    baseline_json="$(${pkgs.coreutils}/bin/mktemp)"
-    trap '${pkgs.coreutils}/bin/rm -f "$runtime_json" "$baseline_json"' EXIT
-    if ${pkgs.jq}/bin/jq -S . "$target" > "$runtime_json" 2>/dev/null \
-      && ${pkgs.jq}/bin/jq -S . "$baseline" > "$baseline_json" \
-      && ${pkgs.diffutils}/bin/cmp -s "$runtime_json" "$baseline_json"; then
-      exit 0
-    fi
-
-    # Write as user ${user.name} to the existing inode so Caelestia's watcher
-    # reloads the baseline without losing its writable runtime-file semantics.
-    ${pkgs.coreutils}/bin/cat "$baseline" > "$target"
-  '';
 in
 
 {
@@ -119,22 +86,6 @@ in
 
   # Bare-metal desktop options belong here.
 
-  # Reassert only Caelestia's writable runtime file on active system switch/test.
-  # Boot skips this hook so runtime experiments survive logout and reboot.
-  system.activationScripts.caelestiaShellBaseline = {
-    deps = [ "users" ];
-    text = ''
-      case "''${NIXOS_ACTION:-}" in
-        switch|test)
-          ${pkgs.util-linux}/bin/runuser -u ${user.name} -- ${reassertCaelestiaShell}
-          ;;
-      esac
-    '';
-  };
-
-  # The NixOS-managed HM oneshot runs during boot. It must not erase writable
-  # Caelestia experiments there; NixOS switch/test has its own explicit hook.
-  systemd.services."home-manager-${user.name}".environment.PHOENIX_SKIP_CAELESTIA_BASELINE = "1";
 
   services.xserver.videoDrivers = [ "nvidia" ];
 

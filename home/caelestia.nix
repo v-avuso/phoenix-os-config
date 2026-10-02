@@ -1,4 +1,5 @@
 {
+  config,
   inputs,
   lib,
   pkgs,
@@ -36,38 +37,8 @@ let
   caelestiaShellBaseline = pkgs.writeText "caelestia-shell-baseline.json" (
     builtins.toJSON caelestiaSettings + "\n"
   );
-  caelestiaShellReassert = pkgs.writeShellScript "phoenix-caelestia-shell-reassert" ''
-    set -euo pipefail
-
-    target="$HOME/.config/caelestia/shell.json"
-    baseline="${caelestiaShellBaseline}"
-    ${pkgs.coreutils}/bin/mkdir -p "$HOME/.config/caelestia"
-
-    if [ -L "$target" ] || [ ! -e "$target" ]; then
-      tmp="$(${pkgs.coreutils}/bin/mktemp "$HOME/.config/caelestia/.shell.json.XXXXXXXX")"
-      ${pkgs.coreutils}/bin/install -m 0644 "$baseline" "$tmp"
-      ${pkgs.coreutils}/bin/mv -f "$tmp" "$target"
-    elif [ -f "$target" ]; then
-      if [ ! -w "$target" ]; then
-        ${pkgs.coreutils}/bin/chmod u+rw "$target"
-      fi
-      runtime_json="$(${pkgs.coreutils}/bin/mktemp)"
-      baseline_json="$(${pkgs.coreutils}/bin/mktemp)"
-      trap '${pkgs.coreutils}/bin/rm -f "$runtime_json" "$baseline_json"' EXIT
-      if ${pkgs.jq}/bin/jq -S . "$target" > "$runtime_json" 2>/dev/null \
-        && ${pkgs.jq}/bin/jq -S . "$baseline" > "$baseline_json" \
-        && ${pkgs.diffutils}/bin/cmp -s "$runtime_json" "$baseline_json"; then
-        :
-      else
-        ${pkgs.coreutils}/bin/cat "$baseline" > "$target"
-      fi
-    else
-      echo "Caelestia shell settings path is not a regular file: $target" >&2
-      exit 1
-    fi
-  '';
-  # The upstream Arch-oriented autostart uses two FHS executable paths.
-  # Substitute only those paths; all ordinary commands are provided on PATH.
+  caelestiaSettingsWriter = import ./mutable-json-settings.nix { inherit pkgs; };
+  # NixOS owns the GeoClue user agent; retain only upstream's polkit path fix.
   caelestiaDots = pkgs.stdenvNoCC.mkDerivation {
     pname = "caelestia-dots-phoenix";
     version = inputs.caelestia-dots.lastModifiedDate or "locked";
@@ -77,7 +48,7 @@ let
     postPatch = ''
       substituteInPlace hypr/hyprland/execs.lua \
         --replace-fail '"/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1"' '"${pkgs.polkit_gnome}/libexec/polkit-gnome-authentication-agent-1"' \
-        --replace-fail '"/usr/lib/geoclue-2.0/demos/agent"' '"${pkgs.geoclue2-with-demo-agent}/libexec/geoclue-2.0/demos/agent"' \
+        --replace-fail 'hl.exec_cmd("/usr/lib/geoclue-2.0/demos/agent")' '-- GeoClue agent is managed by NixOS.' \
         --replace-fail 'hl.exec_cmd("caelestia shell -d")' 'hl.exec_cmd("${pkgs.dbus}/bin/dbus-update-activation-environment --systemd DISPLAY HYPRLAND_INSTANCE_SIGNATURE WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE && ${pkgs.systemd}/bin/systemctl --user stop hyprland-session.target && ${pkgs.systemd}/bin/systemctl --user start hyprland-session.target && caelestia shell -d")'
     '';
 
@@ -184,13 +155,14 @@ in
   # file so Caelestia's Settings UI and file watcher can operate on it.
   xdg.dataFile."caelestia/shell.json.nix-baseline".source = caelestiaShellBaseline;
 
-  # Direct Home Manager switches reassert the baseline. The systemd Home
-  # Manager service skips this at boot so runtime experiments survive reboot;
-  # NixOS switch/test invokes this same writer explicitly from the host hook.
+  # Boot initializes missing files but keeps experiments. Direct HM activation
+  # and NixOS switch/test reassert the complete baseline with the same writer.
   home.activation.caelestiaShellSettings = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    if [ "''${PHOENIX_SKIP_CAELESTIA_BASELINE:-0}" != 1 ]; then
-      ${caelestiaShellReassert}
+    mode=reassert
+    if [ "''${PHOENIX_PRESERVE_MUTABLE_BASELINES:-0}" = 1 ]; then
+      mode=preserve
     fi
+    run ${caelestiaSettingsWriter} "$mode" ${caelestiaShellBaseline} ${lib.escapeShellArg "${config.xdg.configHome}/caelestia/shell.json"} object
   '';
 
   # Deploy upstream dotfiles as static, store-backed files. Home Manager's
@@ -246,7 +218,6 @@ in
     fish
     foot
     gammastep
-    geoclue2-with-demo-agent
     glib
     gnome-keyring
     hyprpicker

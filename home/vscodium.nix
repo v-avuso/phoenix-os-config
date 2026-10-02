@@ -1,16 +1,27 @@
-{ pkgs, inputs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  inputs,
+  ...
+}:
 
 let
   extensions = inputs.nix-vscode-extensions.extensions.${pkgs.system};
 
   # Spyglass is currently outdated on Open VSX, so use Marketplace release.
   marketplace = extensions.vscode-marketplace-release;
+  settingsPath = "${config.xdg.configHome}/VSCodium/User/settings.json";
+  keybindingsPath = "${config.xdg.configHome}/VSCodium/User/keybindings.json";
+  settingsBaseline = config.home.file.${settingsPath}.source;
+  keybindingsBaseline = config.home.file.${keybindingsPath}.source;
+  settingsWriter = import ./mutable-json-settings.nix { inherit pkgs; };
 in
 {
-  programs.vscode = {
+  programs.vscodium = {
     enable = true;
 
-    # Home Manager's module is named `vscode`, but we point it at VSCodium.
+    # Dedicated module owns VSCodium paths, including .vscode-oss extensions.
     package = pkgs.vscodium;
 
     # Keep extensions declarative. GUI-installed extensions will not be persistent.
@@ -120,4 +131,21 @@ in
       ];
     };
   };
+
+  # Keep HM's generated JSON as the canonical baseline, but deploy only these
+  # preferences as writable files. Profile/storage/session data remain separate.
+  home.file.${settingsPath}.enable = lib.mkForce false;
+  home.file.${keybindingsPath}.enable = lib.mkForce false;
+  xdg.dataFile."vscodium/settings.json.nix-baseline".source = settingsBaseline;
+  xdg.dataFile."vscodium/keybindings.json.nix-baseline".source = keybindingsBaseline;
+
+  home.activation.vscodiumMutableSettings = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    mode=reassert
+    if [ "''${PHOENIX_PRESERVE_MUTABLE_BASELINES:-0}" = 1 ]; then
+      mode=preserve
+    fi
+    run ${settingsWriter} "$mode" ${settingsBaseline} ${lib.escapeShellArg settingsPath} object
+    run ${settingsWriter} "$mode" ${keybindingsBaseline} ${lib.escapeShellArg keybindingsPath} array
+  '';
+
 }
