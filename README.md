@@ -1,201 +1,107 @@
 # Project PhoeNix OS
 
-Reproducible NixOS configuration for a personal workstation.
+A personal NixOS workstation configuration. Nix files describe the current
+system; this README provides orientation, not a second specification. Private
+data and credentials are restored separately. This is a reference configuration
+for one workstation, not a general-purpose distribution.
 
-Project PhoeNix OS treats the workstation as code: reproducible, auditable,
-rollbackable, and recoverable. It is a personal NixOS configuration built around
-my workflow, hardware, recovery model, and interest in AI-assisted system
-management. It is not intended to become a general-purpose NixOS distribution.
+## Current system
 
-The repository is public because the system layer should be inspectable,
-versioned, and useful as a reference. Private data does not belong here.
-Secrets, SSH keys, Syncthing state, browser profiles, KeePass databases,
-private notes, and user data are intentionally restored from separate trusted
-sources.
+- **Metal:** Hyprland/Caelestia on Wayland, SDDM login, NVIDIA graphics, and
+  CoolerControl with a kernel-backed firmware fan fallback. Plasma is retained
+  only on the VM target.
+- **VM:** historical Plasma/X11 setup, currently untested. Its tracked hardware
+  file is a structural placeholder: evaluation can succeed, but deployment
+  requires a real generated hardware snapshot.
+- **Home Manager:** integrated into NixOS; owns user packages and selected
+  settings. Some settings permit live experiments; see
+  [configuration and state](docs/CONFIGURATION_STATE.md).
+- **Security:** inbound firewall, AppArmor, and ClamAV scanning of Downloads.
+  OpenSnitch currently allows outbound connections and records them for review;
+  it does **not** enforce an outbound allowlist. Audit/auditd are disabled.
 
-## Goals
+## Where changes belong
 
-- Define the workstation through NixOS config instead of manual drift.
-- Make rebuilds, experiments, rollback, and recovery routine.
-- Make meaningful system changes visible as diffs and commits.
-- Reduce long-term OS entropy from installers, GUI mutations, forgotten tweaks,
-  and leftover system state.
-- Keep system intent readable for future maintenance.
-- Keep private state, secrets, app data, and caches out of the repo.
-- Keep coding-agent changes reviewable: agents edit config and run checks;
-  humans control activation, secrets, and publishing.
+| Path | Responsibility |
+| --- | --- |
+| `flake.nix`, `flake.lock` | Host outputs and pinned dependencies; `default` aliases `metal` |
+| `config/` | Shared user identity, canonical checkout path, and shared facts |
+| `hosts/metal/`, `hosts/vm/` | Host entrypoints, hardware snapshots, host-specific behavior |
+| `modules/` | Shared system services and policies |
+| `home/` | User packages, desktop integration, and application settings |
+| `commands/`, `home/commands.nix` | Packaged executables and user PATH registration |
+| `patches/` | Targeted compatibility fixes; keep their removal conditions nearby |
 
-## Current Direction
+Keep modules small enough to understand; introduce abstractions when actual
+repetition warrants them. Comments and commit bodies preserve local rationale;
+there is no exhaustive decision ledger to maintain.
 
-The `vm` target is selected when running inside a virtual machine. The `metal`
-target is the fallback for this bare-metal workstation.
+## Everyday commands
 
-The desktop direction is a polished Wayland workstation based on
-Hyprland/Caelestia-style configuration, with KDE Plasma kept as an intentional
-fallback and repair environment. The repository is still early-stage, so some
-target-state documentation is ahead of the implemented modules.
+Home Manager installs commands on the user's PATH for Bash, Fish, agents,
+scripts, and keybinds. `config/user.nix` defines `repoDirectory`; override the
+checkout temporarily with `PHOENIX_REPO_ROOT`. `phoenix-target --info` explains
+automatic selection; `PHOENIX_TARGET=metal` or `vm` overrides it.
+Command implementations are packaged with the system generation; rebuilds use
+the selected live checkout as their flake source.
 
-NixOS is also useful below the operating-system layer. Project-specific
-development shells and future container images should make tools explicit,
-disposable, and reproducible instead of permanently installing every experiment
-globally.
+| Command | Effect |
+| --- | --- |
+| `phoenix-dry-build` | Evaluate the build plan without building or activating |
+| `phoenix-build` | Build the system without activation |
+| `phoenix-test` | Build and activate now; leave the next-boot generation unchanged |
+| `phoenix-switch` | Build, activate now, and select the generation for next boot |
+| `phoenix-boot` | Build and select the generation for next boot; leave the running system unchanged |
+| `insomnia` | Inhibit sleep until interrupted |
+| `phoenix-logout` | Leave the supported active desktop session |
 
-## Repository Layout
-
-```text
-phoenix-os-config/
-  flake.nix
-  hosts/
-    vm/
-      configuration.nix
-      hardware-configuration.nix
-      vm.nix
-    metal/
-      configuration.nix
-      metal.nix
-  modules/
-    default.nix
-    base.nix
-    desktop.nix
-  commands/
-    default.nix
-    phoenix-target
-    phoenix-rebuild
-    insomnia
-    phoenix-logout
-    # action wrappers are generated by default.nix
-  home/
-    commands.nix
-  docs/
-```
-
-Host files are the entrypoints:
-
-- `hosts/vm/configuration.nix` imports VM-specific config.
-- `hosts/metal/configuration.nix` imports bare-metal-specific config.
-- `modules/default.nix` bundles shared modules for host imports.
-- `modules/` holds shared config used by more than one host.
-- `hosts/*/*.nix` holds config that belongs only to that host type.
-
-## Helper Commands
-
-After applying the configuration and starting a new session, Home Manager
-installs these executables on the user's normal `PATH`, independent of shell or
-terminal. The rebuild commands use `repoDirectory` from `config/user.nix` as
-their default mutable checkout; set `PHOENIX_REPO_ROOT` to override it.
-
-- `phoenix-target` prints the selected target; `phoenix-target --info`
-  explains how it was selected.
-- `phoenix-switch`, `phoenix-test`, and `phoenix-boot` evaluate and build as the
-  user, then use `nixos-rebuild --sudo` for privileged activation.
-- `phoenix-build` and `phoenix-dry-build` build without activating the system.
-- `phoenix-rebuild <action>` is the underlying command dispatcher.
-- `insomnia` inhibits system sleep until interrupted.
-- `phoenix-logout` exits the active Hyprland or KDE Plasma session.
-
-Target selection uses `PHOENIX_TARGET` when set, detects a VM with
-`systemd-detect-virt` otherwise, and falls back to `metal`. For example,
-`PHOENIX_TARGET=metal phoenix-build` explicitly builds the metal configuration.
-
-## Direct Rebuilds
-
-Use explicit targets from the checkout when debugging or overriding automatic
-target selection:
+`phoenix-rebuild <action>` is the dispatcher. For example:
 
 ```sh
-sudo nixos-rebuild switch --flake .#vm
-sudo nixos-rebuild switch --flake .#metal
+PHOENIX_TARGET=metal phoenix-build
+phoenix-rebuild --print switch
 ```
 
-For routine work, use `phoenix-switch`; it detects the target and evaluates the
-configured live Git checkout flake. Use `phoenix-build` to build without activation.
+`test` changes the live system; it is not an evaluation check. Activation needs
+authorization and interactive authentication where required. Agent workflow and
+privilege rules are in [AGENTS.md](AGENTS.md).
 
-## Hardware Configuration
+## Hardware and recovery
 
-`hosts/metal/hardware-configuration.nix` is the generated hardware snapshot for
-the current Phoenix installation and is tracked with the flake. It contains
-filesystem UUIDs and ordinary hardware details, not credentials or encryption
-keys. On a reinstall or storage-layout change, regenerate it for that
-installation, review the diff (especially `fileSystems`), and commit the
-updated generated snapshot. Do not hand-maintain generated hardware settings.
+Hardware snapshots are intentionally tracked. After reinstalling or changing
+storage, generate a snapshot for that installation, review filesystem UUIDs,
+boot devices, encryption and swap, then include it in Git. Temporary USB,
+bind, network, and VM shared-folder mounts must not accidentally become boot
+requirements. Helpers do not bootstrap missing hardware files.
 
-For example, after installing or changing storage on the metal host:
+See the [recovery runbook](docs/RECOVERY_RUNBOOK.md) for generation rollback,
+fresh installation, and private-state restoration. A NixOS rollback restores
+system configuration; it does not restore documents, databases, credentials,
+or all mutable settings.
 
-```sh
-sudo nixos-generate-config --show-hardware-config > \
-  hosts/metal/hardware-configuration.nix
-```
+## Operational guides
 
-The host imports this file directly. Phoenix helpers use the Git flake rooted
-at the repository, so the generated file is included through normal Git flake
-evaluation.
+- [Fan control](docs/FAN_CONTROL.md): safety ownership, hardware discovery,
+  reconciliation, and fallback checks.
+- [YubiKey PAM](docs/YUBIKEY_PAM.md): enrollment, local authentication, and
+  password fallback.
+- [Configuration and state](docs/CONFIGURATION_STATE.md): declarative baselines,
+  live experiments, and settings persistence.
+- [Validation](docs/VALIDATION.md): build checks and one combined manual
+  acceptance pass after authorized activation.
 
-## Mount Pollution
+OpenSnitch observation is deliberately permissive to avoid repeated connection
+prompts. Review local events with
+`journalctl -t opensnitchd --since '30 days ago' --all -o json`. Journald's
+`MESSAGE` may be a byte array; JSON output preserves its bytes for CLI analysis.
+Logs contain private process/network information. Retention is capped at
+30 days and 1 GB,
+so volume can shorten the available history. Review traffic and test essential
+workflows before designing enforcement rules.
 
-`nixos-generate-config` records filesystems that are mounted when it runs.
-Temporary mounts can accidentally become permanent boot/system mounts.
+## Why Phoenix?
 
-Review generated `fileSystems` entries and remove things that should not be
-managed by NixOS, for example:
-
-- temporary USB sticks
-- temporary bind mounts
-- host-shared VM folders
-- ad-hoc network mounts
-
-VM shared folders should be configured explicitly in `hosts/vm/vm.nix`, not
-accidentally carried in `hardware-configuration.nix`.
-
-## When To Regenerate Hardware Config
-
-Regenerate or review hardware config after real storage or boot changes:
-
-- new root or boot partition
-- new permanent internal disk or partition
-- swap changes
-- LUKS/encryption changes
-- filesystem UUID or layout changes
-- boot-relevant hardware changes
-
-Usually do not add these to hardware config:
-
-- temporary USB stick
-- temporary bind mount
-- host-shared VM folder
-- ad-hoc network mount
-
-## Workflow
-
-1. Let the helpers detect `vm` or `metal`; set `PHOENIX_TARGET` only to override.
-2. Put shared behavior in `modules/`.
-3. Put host-only behavior in `hosts/vm/vm.nix` or `hosts/metal/metal.nix`.
-4. Regenerate hardware config only for real hardware/storage changes.
-5. Rebuild with `phoenix-switch`; use explicit `.#vm` / `.#metal` targets only
-   for debugging or an override.
-
-Agents may propose and edit configuration in this repo, but they should not
-directly mutate the live system. Activation stays manual: review the diff, run
-the relevant rebuild command, then use NixOS generations and Git history as the
-rollback path.
-
-## Recovery Model
-
-The recovery target is simple first:
-
-1. Boot or install a minimal NixOS environment.
-2. Clone this public system configuration.
-3. Apply the pinned flake target.
-4. Restore private bootstrap material separately.
-5. Rehydrate selected user data from Syncthing or another backup path.
-6. Re-clone code repositories from Git remotes.
-7. Verify the system and document any manual gaps.
-
-A custom recovery image with preinstalled tools or cached packages may be useful
-later, but it is not required for the first reliable recovery path.
-
-## Notes
-
-- Secrets need a dedicated encrypted secrets workflow before they belong here.
-- Manual setup gaps should be documented in `docs/MANUAL_STEPS.md`.
-- Keep changes small and rebuildable; split modules when a file becomes hard to
-  reason about, not just for neatness.
+The long-term aim is a secure, recoverable workstation with explicit ownership,
+backups, and stronger application isolation. Those are goals, not claims that
+all are implemented. [Vision](docs/VISION.md) keeps future direction separate
+from current operation; move concrete work into the backlog when ready.

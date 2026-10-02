@@ -1,119 +1,81 @@
-# Recovery Runbook
+# Recovery runbook
 
-Use this after a broken system, fresh install, or disk replacement.
+This restores the system configuration. Private keys, credentials, Syncthing
+identity, application databases, and personal files require separate trusted
+restore sources. The repository is not their backup.
 
-This runbook restores the public system layer. Private bootstrap material,
-secrets, Syncthing state, and user data come from separate trusted sources.
+## Recover an existing installation first
 
-## 1. Install NixOS
+- At boot, choose a known-good NixOS generation if a newer one fails to boot or
+  log in. Metal uses Hyprland only; use a working boot generation or TTY for
+  repair. VM retains Plasma/X11.
+- From a working session or TTY, inspect the relevant service journal and Git
+  diff, correct the configuration, then build before authorizing activation.
+- An older system generation does not undo arbitrary application writes,
+  firmware changes, or private-state loss. Restore damaged data from backups.
 
-- Boot the NixOS installer or another minimal/recovery NixOS environment.
-- Partition and mount disks.
-- Generate hardware config with `nixos-generate-config`.
-- Confirm filesystems and bootloader target match the machine.
+## Fresh installation or disk replacement
 
-## 2. Restore This Repo
+1. Boot the NixOS installer, partition and mount the intended disks under
+   `/mnt`, and generate the installation configuration. Review the disk layout
+   before any destructive operation.
+2. Clone or copy this repository to the path configured as `repoDirectory` in
+   `config/user.nix`, or update that setting for the new machine. Review user
+   identity, host-specific assumptions, and the selected `metal` or `vm` target.
+3. Copy the newly generated hardware snapshot into
+   `hosts/<target>/hardware-configuration.nix`. For an installer mounting the
+   target at `/mnt`, the source is normally
+   `/mnt/etc/nixos/hardware-configuration.nix`; for a running installation,
+   generate a fresh snapshot with `nixos-generate-config --show-hardware-config`.
+4. Review filesystem UUIDs, boot devices, encryption, swap, and kernel modules.
+   Remove temporary mounts. These files are **tracked**, not ignored; include
+   new files in the Git index so Git-flake evaluation sees them, then commit the
+   reviewed snapshot. Helpers do not copy or generate hardware files.
+5. Build/install the explicit target. From the mounted installer environment:
 
-Clone or copy `phoenix-os-config` onto the machine. Use the checkout path
-configured as `repoDirectory` in `config/user.nix`; forks and machines with a
-different local layout should change that file before applying the config.
+   ```sh
+   sudo nixos-install --root /mnt --flake /path/to/phoenix-os-config#metal
+   ```
 
-Example:
+   Substitute the actual checkout path and target. The VM placeholder must be
+   replaced before using `#vm`; evaluation alone does not make it bootable.
+6. Reboot into the installation. Once helper commands are available, use
+   `phoenix-build` for builds and authorized `phoenix-test`/`phoenix-switch` for
+   live activation. Until then, an explicit rebuild from the checkout is:
 
-```bash
-repo_root=/path/to/phoenix-os-config
-git clone <repo-url> "$repo_root"
-cd "$repo_root"
-```
+   ```sh
+   nixos-rebuild build --flake .#metal
+   sudo nixos-rebuild test --flake .#metal
+   sudo nixos-rebuild switch --flake .#metal
+   ```
 
-If Git is not available yet, copy the repo from external media. The installed
-helper commands use `config/user.nix` as their configured default path unless
-`PHOENIX_REPO_ROOT` is set to a different checkout location.
+   These sudo examples are for a human-operated terminal. Agents must follow
+   the graphical authentication flow in [AGENTS.md](../AGENTS.md).
 
-## 3. Review Hardware Config
+`test` activates immediately without changing the next-boot generation;
+`switch` activates immediately and updates it. Neither is a harmless check.
+Do not activate after a failed build or against stale disk identifiers.
 
-Generate hardware config locally for the target machine. The generated file is
-ignored by Git because it contains machine-specific device identifiers. Place
-it at the host path below when that host config imports it:
+## Restore private material and user state
 
-- `hosts/vm/hardware-configuration.nix`
-- `hosts/metal/hardware-configuration.nix`
+- Restore SSH/Git signing keys, service tokens, and password-manager access
+  from trusted encrypted sources; never put their contents in Git or chat.
+- Restore or re-pair Syncthing identity, then restore selected files and
+  application profiles. Syncthing synchronization is not an independent backup
+  against deletion or corruption.
+- Re-clone code repositories; sign into accounts as needed. Skip disposable
+  caches/build outputs. Review restored files that conflict with managed config.
+- Enroll YubiKey fingerprints and create the local PAM mapping using the
+  [YubiKey guide](YUBIKEY_PAM.md). Keep password fallback usable.
 
-Phoenix rebuild helpers copy `/etc/nixos/hardware-configuration.nix` into the
-selected host directory when its local file is missing. If the source file is
-unavailable, generate a hardware config and place it at the selected host path.
-The host files are ignored by Git and must not be committed.
+## Verify before calling recovery complete
 
-Check carefully:
+- Boot and log in; check network, displays, desktop logout, and password fallback.
+- Check important services and ClamAV database/scanner readiness; configured
+  scanning does not guarantee signatures were downloaded successfully.
+- Verify firmware fan fallback and cooling using [fan control](FAN_CONTROL.md).
+- Verify Git/SSH, restored data, and synchronization without exposing secrets.
 
-- filesystem UUIDs
-- boot device
-- encrypted disk setup, if any
-- swap devices
-- GPU/kernel modules
-
-Do not blindly reuse stale hardware config on changed disks.
-
-## 4. Apply Configuration
-
-Use the helper commands when installed. They detect VM vs metal and pass an
-explicit flake target to Nix. The commands are Home Manager executables on the
-user's normal `PATH`, available in any shell after applying the configuration.
-
-During first recovery, use explicit flake targets until the configured command
-package has been installed.
-
-Explicit fallback:
-
-```bash
-sudo nixos-rebuild test --flake path:.#vm
-sudo nixos-rebuild switch --flake path:.#vm
-sudo nixos-rebuild test --flake path:.#metal
-sudo nixos-rebuild switch --flake path:.#metal
-```
-
-Direct commands require the selected host's hardware file to exist already.
-
-If `test` fails, fix the config before running `switch`.
-
-## 5. Restore Private Bootstrap Material
-
-Restore secrets and bootstrap material only from trusted encrypted sources.
-
-Examples:
-
-- SSH private keys
-- Git signing keys
-- Syncthing device identity, if restored instead of re-paired
-- service tokens
-- password manager access
-
-Never paste secrets into committed Nix files.
-
-## 6. Restore User State
-
-Restore personal data and application state from Syncthing or the backup system
-chosen outside this repo.
-
-Typical restore targets:
-
-- selected files and user data
-- safe application profiles
-- private knowledge bases
-- code repositories re-cloned from Git remotes
-
-Skip caches and build outputs.
-
-## 7. Verify
-
-Minimum checks:
-
-- system boots
-- network works
-- user can log in
-- expected desktop/shell works
-- expected packages exist
-- important services run
-- Git/SSH work
-
-Record any manual fixes in `docs/MANUAL_STEPS.md`.
+Keep any newly discovered, actionable manual recovery gap here. Broader backup,
+secrets automation, and recovery-image proposals belong in
+[the vision](VISION.md) or the task backlog until implemented.
