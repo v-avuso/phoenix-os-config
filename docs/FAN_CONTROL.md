@@ -64,10 +64,13 @@ Fan policy assignments remain as described below.
 
 The metal host declares these CoolerControl 4.3.1 profiles in
 `hosts/metal/fan-control.nix`. A pre-start reconciler validates the NCT device
-and all eight hwmon fan labels, then merges only the Phoenix-owned profiles and
-fan assignments into CoolerControl's writable `/etc/coolercontrol/config.toml`.
+and all eight hwmon fan labels, then merges only Phoenix-owned profiles and
+assignments into writable `/etc/coolercontrol/config.toml`. It also reconciles
+Phoenix-owned per-channel `userName` fields in CoolerControl 4.3.1's
+`/etc/coolercontrol/config-ui.json`, leaving other UI settings and channels
+alone. CoolerControl 4.3.1 has no daemon-owned `overrides.toml` naming file.
 The daemon applies saved settings through its normal `apply_on_boot` behavior.
-The config file must remain writable; it is not an immutable Nix symlink.
+Both files must remain writable; neither is an immutable Nix symlink.
 
 | Profile | Temperature/output points |
 | --- | --- |
@@ -81,15 +84,21 @@ steps to avoid known undesirable Arctic P14 RPM/noise bands. The 2°C deviance
 and threshold hopping are CoolerControl's closest supported equivalents to the
 requested hysteresis/threshold behavior; they do not smooth the curve.
 
-| Linux channel | Phoenix function | Policy |
-| --- | --- | --- |
-| `fan1` | Top / CPU header / radiator fans | CPU/GPU `Max` |
-| `fan2` | Pump | Fixed 80% |
-| `fan3` | `unclear_1` | CPU/GPU `Max` |
-| `fan4` | Rear | CPU/GPU `Max` |
-| `fan5` | Side | CPU/GPU `Max` |
-| `fan6` | Bottom | Fixed 0% while its fan rubs the bracket |
-| `fan7`, `fan8` | Unused | Unmanaged |
+| Linux channel | hwmon label → CoolerControl label | Historical Windows control / identity | Policy |
+| --- | --- | --- | --- |
+| `fan1` | `CPU Fan` → `Top` | 0 / Top (CPU header/radiator channel) | CPU/GPU `Max` |
+| `fan2` | `Pump Fan` → `Pump` | 1 / Pump | Fixed 100% |
+| `fan3` | `System Fan #1` → `Unclear 1` | 10 / Unclear 1 | CPU/GPU `Max` |
+| `fan4` | `System Fan #2` → `Rear` | 11 / Rear | CPU/GPU `Max` |
+| `fan5` | `System Fan #3` → `Side` | 12 / Side | CPU/GPU `Max` |
+| `fan6` | `System Fan #4` → `Bottom` | 13 / Bottom | CPU/GPU `Max` |
+| `fan7` | `System Fan #5` (unchanged) | 14 / unidentified | Unmanaged |
+| `fan8` | `System Fan #6` (unchanged) | 15 / unidentified | Unmanaged |
+
+The label `Top` identifies the CPU-header/radiator-fan channel; the physical
+placement of those fans as a top radiator bank has not been independently
+confirmed. Linux exposes `fan1` through `fan8`; it does not expose Linux
+`fan11`, `fan12`, `fan13`, `fan14`, `fan15`, or `fan16` on this device.
 
 The policy uses the CPU's `temp1` source (`k10temp` Tctl) and CoolerControl's
 NVIDIA `GPU Temp` source. Before writing profiles, startup also requires a
@@ -123,10 +132,13 @@ be copied into Linux hwmon mappings.
 | `system_fan_6` (`System Fan #6`) | `/lpc/nct6687dr/control/15` | `/lpc/nct6687dr/fan/15` | Not recorded |
 
 This is the historical Windows-side fingerprint; its NCT indices are not
-Linux hwmon channel numbers. The Linux channel labels and Phoenix aliases used
-by the active policy are listed separately above. Windows NCT indices 2
-(`Chipset`) and 3 (`EZ-Connect`) are not exposed in Linux's `msi_alt1` fan
-channel set and are therefore not assigned Linux policies.
+Linux hwmon channel numbers. The Linux `fan3` channel historically maps to
+Windows `Unclear 1` (control 10), not to Windows `Chipset` (control 2).
+Windows `Chipset` and `EZ-Connect` (controls 2 and 3) are not exposed as
+corresponding Linux fan channels and receive no Linux policy. Linux `fan7` and
+`fan8` remain unidentified and unmanaged; their generic `System Fan #5` and
+`System Fan #6` labels are retained. Their Windows reference controls 14 and
+15 do not prove connected hardware identity.
 
 ## First-Boot Discovery
 

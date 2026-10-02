@@ -113,6 +113,54 @@ def replace_owned_table(array, wanted: dict, section: str) -> None:
         array.append(table)
 
 
+def remove_owned_entry(array, uid: str, section: str) -> None:
+    entries = [entry for entry in array if entry.get("uid") == uid]
+    if len(entries) > 1:
+        raise ProvisionError(f"duplicate {section} UID {uid!r}")
+    if entries:
+        array.remove(entries[0])
+
+
+def reconcile_ui_names(document, policy: dict, nct_uid: str) -> None:
+    """Apply only Phoenix-owned 4.3.1 per-channel userName fields."""
+    names = policy.get("uiChannelNames", {})
+    if not isinstance(names, dict):
+        raise ProvisionError("Phoenix UI channel names must be an object")
+    if not names:
+        return
+
+    devices = document.get("devices")
+    device_settings = document.get("deviceSettings")
+    # config-ui.json stores per-device UI settings in arrays parallel to its
+    # device UID list; channel settings are parallel to each device's names.
+    if not isinstance(devices, list) or not isinstance(device_settings, list):
+        raise ProvisionError("CoolerControl config-ui.json devices/deviceSettings arrays are invalid")
+    if len(devices) != len(device_settings):
+        raise ProvisionError("CoolerControl config-ui.json device arrays have different lengths")
+    matching = [index for index, uid in enumerate(devices) if uid == nct_uid]
+    if len(matching) != 1:
+        raise ProvisionError(f"expected one NCT device in config-ui.json; found {len(matching)}")
+
+    device = device_settings[matching[0]]
+    channel_names = device.get("names") if isinstance(device, dict) else None
+    channel_settings = device.get("sensorAndChannelSettings") if isinstance(device, dict) else None
+    if not isinstance(channel_names, list) or not isinstance(channel_settings, list):
+        raise ProvisionError("CoolerControl NCT config-ui.json channel arrays are invalid")
+    if len(channel_names) != len(channel_settings):
+        raise ProvisionError("CoolerControl NCT config-ui.json channel arrays have different lengths")
+
+    for channel, label in names.items():
+        if channel not in policy["channels"]:
+            raise ProvisionError(f"UI label channel {channel!r} has no validated hwmon label")
+        indexes = [index for index, value in enumerate(channel_names) if value == channel]
+        if len(indexes) != 1:
+            raise ProvisionError(f"expected one {channel!r} entry in config-ui.json; found {len(indexes)}")
+        channel_setting = channel_settings[indexes[0]]
+        if not isinstance(channel_setting, dict):
+            raise ProvisionError(f"CoolerControl config-ui.json settings for {channel!r} are invalid")
+        channel_setting["userName"] = label
+
+
 def validate_gpu_sensor(document, gpu_uid: str, policy: dict, nvidia_smi: Path) -> None:
     """Require CoolerControl to expose a live GPU Temp source for the expected GPU."""
     settings = document.get("settings")
@@ -198,11 +246,11 @@ def validate_gpu_mix(policy: dict, cpu_uid: str, gpu_uid: str) -> None:
         raise ProvisionError("Phoenix GPU graph must use CoolerControl's NVIDIA 'GPU Temp' channel")
     if not cpu_uid or not gpu_uid:
         raise ProvisionError("Phoenix CPU/GPU graph profiles require validated device UIDs")
-    if any(policy["assignments"].get(channel) != mix["uid"] for channel in ("fan1", "fan3", "fan4", "fan5")):
+    if any(policy["assignments"].get(channel) != mix["uid"] for channel in ("fan1", "fan3", "fan4", "fan5", "fan6")):
         raise ProvisionError("all curve-controlled case fans must use the validated CPU/GPU Maximum mix")
 
 
-def apply_policy(document, policy: dict, sysfs_root: Path, nvidia_smi: Path) -> None:
+def apply_policy(document, policy: dict, sysfs_root: Path, nvidia_smi: Path) -> str:
     devices = document.get("devices")
     if devices is None or not isinstance(devices, dict):
         raise ProvisionError("CoolerControl [devices] table is absent; start the daemon once, then restart it to provision")
@@ -256,6 +304,7 @@ def apply_policy(document, policy: dict, sysfs_root: Path, nvidia_smi: Path) -> 
         raise ProvisionError("CoolerControl profiles setting is not an array of tables")
     for spec in policy["profiles"]:
         replace_owned_table(profiles, profile_table(spec, cpu_uid, gpu_uid, policy), "profile")
+    remove_owned_entry(profiles, "phoenix-bottom-stopped-v1", "profile")
 
     settings = document.get("settings")
     if settings is None or settings.get("apply_on_boot") is not True:
@@ -282,6 +331,7 @@ def apply_policy(document, policy: dict, sysfs_root: Path, nvidia_smi: Path) -> 
     # state and prevents a stale persisted profile from being reapplied.
     for channel in ("fan7", "fan8"):
         channels.pop(channel, None)
+    return nct_uid
 
 
 def atomic_write(path: Path, data: str, reference: Path | None = None) -> None:
@@ -309,9 +359,11 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--policy", type=Path, required=True)
     parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument("--ui-config", type=Path, required=True)
     parser.add_argument("--sysfs-root", type=Path, required=True)
     parser.add_argument("--nvidia-smi", type=Path, required=True)
     parser.add_argument("--output", type=Path, help="write rendered config here instead of changing --config")
+    parser.add_argument("--ui-output", type=Path, help="write rendered UI config here instead of changing --ui-config")
     args = parser.parse_args()
 
     try:
@@ -323,13 +375,34 @@ def main() -> int:
             raise ProvisionError("refusing to modify a symlinked CoolerControl config.toml")
         original = args.config.read_text(encoding="utf-8")
         document = tomlkit.parse(original)
-        apply_policy(document, policy, args.sysfs_root, args.nvidia_smi)
+        nct_uid = apply_policy(document, policy, args.sysfs_root, args.nvidia_smi)
         rendered = document.as_string()
         destination = args.output or args.config
+
+        ui_original = None
+        ui_rendered = None
+        ui_destination = args.ui_output or args.ui_config
+        if args.ui_config.exists():
+            if args.ui_config.is_symlink():
+                raise ProvisionError("refusing to modify a symlinked CoolerControl config-ui.json")
+            ui_original = args.ui_config.read_text(encoding="utf-8")
+            ui_document = json.loads(ui_original)
+            reconcile_ui_names(ui_document, policy, nct_uid)
+            ui_rendered = json.dumps(ui_document, separators=(",", ":"), ensure_ascii=False)
+            if ui_original.endswith("\n"):
+                ui_rendered += "\n"
+        elif policy.get("uiChannelNames"):
+            print("CoolerControl UI config not initialized; skipping Phoenix UI channel names", file=sys.stderr)
+
         if rendered != original:
             atomic_write(destination, rendered, args.config)
         elif args.output and destination != args.config:
             atomic_write(destination, rendered, args.config)
+        if ui_rendered is not None:
+            if ui_rendered != ui_original:
+                atomic_write(ui_destination, ui_rendered, args.ui_config)
+            elif args.ui_output and ui_destination != args.ui_config:
+                atomic_write(ui_destination, ui_rendered, args.ui_config)
         print(
             "Phoenix CoolerControl profiles reconciled for "
             f"{policy['nctDeviceName']} at {args.sysfs_root}"

@@ -19,6 +19,14 @@ let
       fan7 = "System Fan #5";
       fan8 = "System Fan #6";
     };
+    uiChannelNames = {
+      fan1 = "Top";
+      fan2 = "Pump";
+      fan3 = "Unclear 1";
+      fan4 = "Rear";
+      fan5 = "Side";
+      fan6 = "Bottom";
+    };
     cpuDeviceName = "AMD Ryzen 9 9950X3D 16-Core Processor";
     cpuTempName = "temp1";
     gpuDeviceName = "NVIDIA GeForce RTX 5090";
@@ -115,15 +123,9 @@ let
       }
       {
         uid = "phoenix-pump-fixed-v1";
-        name = "Phoenix pump fixed 80%";
+        name = "Phoenix pump fixed 100%";
         p_type = "Fixed";
-        speed_fixed = 80;
-      }
-      {
-        uid = "phoenix-bottom-stopped-v1";
-        name = "Phoenix bottom fan stopped temporarily";
-        p_type = "Fixed";
-        speed_fixed = 0;
+        speed_fixed = 100;
       }
     ];
     assignments = {
@@ -132,7 +134,7 @@ let
       fan3 = "phoenix-case-maximum-v1";
       fan4 = "phoenix-case-maximum-v1";
       fan5 = "phoenix-case-maximum-v1";
-      fan6 = "phoenix-bottom-stopped-v1";
+      fan6 = "phoenix-case-maximum-v1";
     };
   };
   # nixos-26.05 still packages 4.3.0 and nixpkgs-unstable has moved to 5.x.
@@ -194,6 +196,7 @@ let
     exec ${policyPython}/bin/python3 ${./coolercontrol-policy.py} \
       --policy ${policyFile} \
       --config /etc/coolercontrol/config.toml \
+      --ui-config /etc/coolercontrol/config-ui.json \
       --sysfs-root /sys/class/hwmon \
       --nvidia-smi ${config.hardware.nvidia.package.bin}/bin/nvidia-smi
   '';
