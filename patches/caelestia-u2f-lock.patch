@@ -5,16 +5,16 @@
      readonly property alias fprint: fprint
      readonly property alias howdy: howdy
 +    readonly property alias u2f: u2f
- 
+
      property string lockMessage
 +    property bool u2fFailureVisible
      property int state
      property string buffer
- 
+
 @@ -67,8 +69,16 @@
              fprint.abort();
      }
- 
+
 +    function restartU2f(): void {
 +        u2f.reset();
 +        if (u2f.canAttempt)
@@ -32,7 +32,7 @@
 @@ -122,6 +132,13 @@
          }
      }
- 
+
 +    Timer {
 +        id: u2fFailureReset
 +
@@ -42,11 +42,11 @@
 +
      ManualPamContext {
          id: fprint
- 
+
 @@ -142,6 +159,23 @@
          maxTries: GlobalConfig.lock.maxHowdyTries
      }
- 
+
 +    ManualPamContext {
 +        id: u2f
 +
@@ -87,7 +87,7 @@
 +            root.u2fFailureVisible = false;
              passwd.abort();
          }
- 
+
 --- a/modules/lock/center/StateMessage.qml
 +++ b/modules/lock/center/StateMessage.qml
 @@ -20,6 +20,8 @@
@@ -96,19 +96,19 @@
              return Tr.tr("PW ERROR: %1").arg(pam.passwd.message);
 +        if (pam.u2fFailureVisible)
 +            return Tr.tr("Security key verification failed. Try again.");
- 
+
          // Fprint/howdy fail
          if (pam.state !== Pam.MaxTries) {
 @@ -90,6 +92,9 @@
          if (Hypr.numLock)
              return Tr.tr("Num lock is ON.");
- 
+
 +        if (pam.u2f.active)
 +            return Tr.tr("Touch your security key or enter password.");
 +
          return "";
      }
- 
+
 --- /dev/null
 +++ b/assets/pam.d/u2f
 @@ -0,0 +1,3 @@
