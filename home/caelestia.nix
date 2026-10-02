@@ -10,6 +10,13 @@ let
   system = pkgs.stdenv.hostPlatform.system;
   hyprlandPackages = inputs.nixpkgs-unstable.legacyPackages.${system};
   desktopScale = import ../config/desktop-scale.nix;
+  caelestiaShell = inputs.caelestia-shell.packages.${system}.with-cli.overrideAttrs (old: {
+    patches = (old.patches or [ ]) ++ [ ../patches/caelestia-u2f-lock.patch ];
+    postPatch = (old.postPatch or "") + ''
+      substituteInPlace assets/pam.d/u2f \
+        --replace-fail '@PAM_U2F_SO@' '${pkgs.pam_u2f}/lib/security/pam_u2f.so'
+    '';
+  });
 
   caelestiaSettings = {
     # Caelestia's upstream idle defaults lock after 180 seconds. Phoenix
@@ -165,6 +172,7 @@ in
 
   programs.caelestia = {
     enable = true;
+    package = caelestiaShell;
     # Upstream Hyprland dots start the shell with `caelestia shell -d`.
     # Keep lifecycle ownership there so Home Manager config changes can be
     # handled by Caelestia's in-process settings watcher.

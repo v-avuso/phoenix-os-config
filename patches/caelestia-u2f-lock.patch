@@ -1,0 +1,117 @@
+--- a/modules/lock/Pam.qml
++++ b/modules/lock/Pam.qml
+@@ -23,8 +23,10 @@
+     readonly property alias passwd: passwd
+     readonly property alias fprint: fprint
+     readonly property alias howdy: howdy
++    readonly property alias u2f: u2f
+ 
+     property string lockMessage
++    property bool u2fFailureVisible
+     property int state
+     property string buffer
+ 
+@@ -67,8 +69,16 @@
+             fprint.abort();
+     }
+ 
++    function restartU2f(): void {
++        u2f.reset();
++        if (u2f.canAttempt)
++            u2f.start();
++        else
++            u2f.abort();
++    }
++
+     function clearTransientState(): void {
+-        for (const obj of [root, fprint, howdy])
++        for (const obj of [root, fprint, howdy, u2f])
+             if (obj.state !== Pam.MaxTries)
+                 obj.state = Pam.None;
+     }
+@@ -122,6 +132,13 @@
+         }
+     }
+ 
++    Timer {
++        id: u2fFailureReset
++
++        interval: 2500
++        onTriggered: root.u2fFailureVisible = false
++    }
++
+     ManualPamContext {
+         id: fprint
+ 
+@@ -142,6 +159,23 @@
+         maxTries: GlobalConfig.lock.maxHowdyTries
+     }
+ 
++    ManualPamContext {
++        id: u2f
++
++        config: "u2f"
++        availCommand: ["sh", "-c", "test -r \"$HOME/.config/Yubico/u2f_keys\""]
++        retryOnFail: true
++        enabled: true
++        maxTries: 9999
++        onAvailProcExited: root.restartU2f()
++        onStateChanged: {
++            if (u2f.state === Pam.Failed || u2f.state === Pam.Error) {
++                root.u2fFailureVisible = true;
++                u2fFailureReset.restart();
++            }
++        }
++    }
++
+     Connections {
+         function onResumed(): void {
+             if (howdy.canAttempt && !howdy.active && GlobalConfig.lock.triggerHowdyOnWake)
+@@ -156,8 +190,11 @@
+             if (root.lock.secure) {
+                 fprint.checkAvailable();
+                 howdy.checkAvailable();
++                u2f.checkAvailable();
+                 fprint.reset();
+                 howdy.reset();
++                u2f.reset();
++                root.u2fFailureVisible = false;
+                 root.buffer = "";
+                 root.state = Pam.None;
+                 root.lockMessage = "";
+@@ -167,6 +204,8 @@
+         function onUnlock(): void {
+             fprint.abort();
+             howdy.abort();
++            u2f.abort();
++            root.u2fFailureVisible = false;
+             passwd.abort();
+         }
+ 
+--- a/modules/lock/center/StateMessage.qml
++++ b/modules/lock/center/StateMessage.qml
+@@ -20,6 +20,8 @@
+             return Tr.tr("FACE ERROR: %1").arg(pam.howdy.message);
+         if (pam.state === Pam.Error)
+             return Tr.tr("PW ERROR: %1").arg(pam.passwd.message);
++        if (pam.u2fFailureVisible)
++            return Tr.tr("Security key verification failed. Try again.");
+ 
+         // Fprint/howdy fail
+         if (pam.state !== Pam.MaxTries) {
+@@ -90,6 +92,9 @@
+         if (Hypr.numLock)
+             return Tr.tr("Num lock is ON.");
+ 
++        if (pam.u2f.active)
++            return Tr.tr("Touch your security key or enter password.");
++
+         return "";
+     }
+ 
+--- /dev/null
++++ b/assets/pam.d/u2f
+@@ -0,0 +1,3 @@
++#%PAM-1.0
++
++auth    required    @PAM_U2F_SO@    cue userverification=1

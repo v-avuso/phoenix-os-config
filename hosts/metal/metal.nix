@@ -208,9 +208,20 @@ in
 
   services.displayManager.defaultSession = "hyprland";
 
-  # Preserve the existing gtk.css.backup file instead of letting this
-  # generation's Home Manager backup collide with it.
+  # Preserve existing Home Manager backup files, choosing a numbered suffix
+  # when the configured backup name is already occupied.
   home-manager.backupFileExtension = lib.mkForce "backup-20260930";
+  home-manager.backupCommand = pkgs.writeShellScript "phoenix-home-manager-backup" ''
+    target="$1"
+    extension="''${HOME_MANAGER_BACKUP_EXT:-backup}"
+    backup="$target.$extension"
+    suffix=1
+    while [ -e "$backup" ] || [ -L "$backup" ]; do
+      backup="$target.$extension.$suffix"
+      suffix=$((suffix + 1))
+    done
+    exec ${pkgs.coreutils}/bin/mv -- "$target" "$backup"
+  '';
 
   # hyprshutdown --vt 1 needs a privileged VT return for NVIDIA + SDDM; keep
   # authorization to this user's chvt 1 command only. Remove if display-manager

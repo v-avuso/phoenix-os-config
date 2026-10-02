@@ -54,3 +54,11 @@ home access for the mapping and HID access for the key.
 No graphical cue shim is installed. A PAM frontend that does not render
 `PAM_TEXT_INFO` can still authenticate with the key; it simply will not show
 the “touch your device” text.
+
+Caelestia's lock uses a separate U2F PAM context alongside password
+authentication. Failed key verification is reported as a generic PAM
+authentication failure and retried; the Quickshell PAM result API does not
+provide a structured signal for a Bio fingerprint-lockout state. The lock UI
+therefore shows generic security-key failure feedback rather than guessing
+from error text or device-specific behavior. A blocked Bio can still be
+recovered with the authenticator's FIDO2 PIN.
