@@ -1,6 +1,8 @@
 {
   pkgs,
   user,
+  nixosRebuild ? pkgs.nixos-rebuild-ng,
+  hyprlandPackage ? pkgs.hyprland,
 }:
 
 let
@@ -15,12 +17,15 @@ let
     runtimeInputs = [
       pkgs.bash
       pkgs.nix
+      pkgs.coreutils
+      nixosRebuild
       phoenixTarget
     ];
     text = ''
-      export PHOENIX_REPO_ROOT="''${PHOENIX_REPO_ROOT:-${user.repoDirectory}}"
-      exec bash "$PHOENIX_REPO_ROOT/commands/phoenix-rebuild" "$@"
-    '';
+      if [ -z "''${PHOENIX_REPO_ROOT:-}" ]; then
+        export PHOENIX_REPO_ROOT=${pkgs.lib.escapeShellArg user.repoDirectory}
+      fi
+    '' + builtins.readFile ./phoenix-rebuild;
   };
 
   rebuildAction =
@@ -40,10 +45,13 @@ let
   phoenixLogout = pkgs.writeShellApplication {
     name = "phoenix-logout";
     runtimeInputs = [
-      pkgs.hyprland
+      hyprlandPackage
+      pkgs.hyprshutdown
       pkgs.kdePackages.qttools
     ];
-    text = builtins.readFile ./phoenix-logout;
+    text = ''
+      phoenix_hyprshutdown=${pkgs.lib.escapeShellArg "${pkgs.hyprshutdown}/bin/hyprshutdown"}
+    '' + builtins.readFile ./phoenix-logout;
   };
 in
 pkgs.symlinkJoin {

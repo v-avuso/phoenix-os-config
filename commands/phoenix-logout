@@ -6,7 +6,10 @@ session="${XDG_CURRENT_DESKTOP:-}:${XDG_SESSION_DESKTOP:-}"
 if [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] \
   || [[ "$session" == *Hyprland* ]] \
   || [[ "$session" == *hyprland* ]]; then
-  exec hyprctl dispatch exit
+  # Match Caelestia's tested graceful logout and SDDM greeter VT handoff.
+  # Dispatch inside Hyprland so shutdown is owned by the compositor session.
+  phoenix_hyprshutdown="${phoenix_hyprshutdown:-$(command -v hyprshutdown)}"
+  exec hyprctl dispatch "hl.dsp.exec_cmd('${phoenix_hyprshutdown} --vt 1')"
 fi
 
 # KDE Plasma
