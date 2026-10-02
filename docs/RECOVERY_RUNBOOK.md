@@ -56,18 +56,12 @@ Do not blindly reuse stale hardware config on changed disks.
 
 ## 4. Apply Configuration
 
-Use the helper commands when available. They detect VM vs metal and pass an
-explicit flake target to Nix.
+Use the helper commands when installed. They detect VM vs metal and pass an
+explicit flake target to Nix. The commands are Home Manager executables on the
+user's normal `PATH`, available in any shell after applying the configuration.
 
-During first recovery, source the helpers from the checkout or use explicit
-flake targets. After the config has been applied and a new terminal is opened,
-`modules/shell.nix` loads the helpers automatically.
-
-```bash
-source ./shell/phoenix-aliases.sh
-phoenix-test
-phoenix-switch
-```
+During first recovery, use explicit flake targets until the configured command
+package has been installed.
 
 Explicit fallback:
 
@@ -78,8 +72,7 @@ sudo nixos-rebuild test --flake path:.#metal
 sudo nixos-rebuild switch --flake path:.#metal
 ```
 
-Direct commands require the selected host's hardware file to exist already;
-the Phoenix helpers perform the bootstrap check automatically.
+Direct commands require the selected host's hardware file to exist already.
 
 If `test` fails, fix the config before running `switch`.
 

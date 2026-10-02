@@ -35,8 +35,8 @@
 ## 2026-05-14 - Configure The Live Checkout Path In User Config
 
 - **Decision**: `config/user.nix` owns the local checkout path as
-  `repoDirectory`; interactive helper functions use it as the default
-  `PHOENIX_REPO_ROOT`, while allowing explicit override.
+  `repoDirectory`; the installed `phoenix-rebuild` executable uses it as the
+  default `PHOENIX_REPO_ROOT`, while allowing explicit override.
 - **Reason**: Nix flake evaluation sees a `/nix/store` copy, not the mutable
   checkout path passed to `nixos-rebuild --flake`. Keeping the path in one user
   config file makes forks and per-machine path changes explicit.
@@ -81,4 +81,16 @@
   through the local syslog logger to journald, whose existing retention is
   capped at 30 days and 1 GB, so high event volume can shorten the available
   history. Review/export the local journal before its retention window expires,
-  for example with `journalctl -t opensnitchd --since '30 days ago' -o cat`.
+for example with `journalctl -t opensnitchd --since '30 days ago' -o cat`.
+
+## 2026-10-02 - Install Reusable User Commands As Executables
+
+- **Decision**: Keep user command implementations and their package set under
+  `commands/`, then install the set through `home/commands.nix` so commands are
+  available on the user's `PATH` independent of shell startup files.
+- **Reason**: Reusable actions should work from interactive shells, terminals,
+  scripts, keybinds, and subprocesses without duplicating behavior for Bash and
+  Fish. Shell aliases remain for genuinely shell-specific conveniences.
+- **Consequence**: `phoenix-rebuild` uses `repoDirectory` as its default live
+  checkout through `PHOENIX_REPO_ROOT`; commands that need no mutable checkout
+  are packaged directly from their source files.

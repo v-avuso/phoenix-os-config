@@ -41,19 +41,26 @@ case "$action" in
     ;;
 esac
 
-script_dir="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-repo_root="$(CDPATH= cd -- "$script_dir/.." && pwd)"
-target="$(bash "$script_dir/phoenix-target")"
+repo_root="${PHOENIX_REPO_ROOT:-}"
+if [ -z "$repo_root" ] || [ ! -f "$repo_root/flake.nix" ]; then
+  printf 'phoenix-rebuild: configured Phoenix checkout is unavailable: %s\n' "${repo_root:-<unset>}" >&2
+  printf 'Set PHOENIX_REPO_ROOT or update repoDirectory in config/user.nix.\n' >&2
+  exit 127
+fi
+
+target="$(phoenix-target)"
 
 flake_ref="${repo_root}#${target}"
 
-cmd=(nixos-rebuild "$action" --flake "$flake_ref" "$@")
+cmd=(nixos-rebuild)
 
 case "$action" in
   switch|test|boot)
-    cmd=(sudo "${cmd[@]}")
+    cmd+=(--sudo)
     ;;
 esac
+
+cmd+=("$action" --flake "$flake_ref" "$@")
 
 print_command() {
   local arg

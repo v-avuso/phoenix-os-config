@@ -2,12 +2,12 @@
 
 {
   imports = [
+    ./commands.nix
     ./firefox
     ./input.nix
     ./mimeapps.nix
     ./plasma.nix
     ./security
-    ./shell-aliases.nix
     ./vscodium.nix
   ];
 
