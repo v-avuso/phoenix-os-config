@@ -7,7 +7,7 @@
 }:
 
 let
-  extensions = inputs.nix-vscode-extensions.extensions.${pkgs.system};
+  extensions = inputs.nix-vscode-extensions.extensions.${pkgs.stdenv.hostPlatform.system};
 
   # Spyglass is currently outdated on Open VSX, so use Marketplace release.
   marketplace = extensions.vscode-marketplace-release;

@@ -1,11 +1,14 @@
-
-{ pkgs, lib, inputs, ... }:
+{
+  pkgs,
+  lib,
+  inputs,
+  ...
+}:
 
 let
-  addons = inputs.firefox-addons.packages.${pkgs.system};
+  addons = inputs.firefox-addons.packages.${pkgs.stdenv.hostPlatform.system};
 
-  alUrlShortener =
-    "https://raw.githubusercontent.com/DandelionSprout/adfilt/master/LegitimateURLShortener.txt";
+  alUrlShortener = "https://raw.githubusercontent.com/DandelionSprout/adfilt/master/LegitimateURLShortener.txt";
 
   trustedOrigins = [
     "https://chatgpt.com"
@@ -68,10 +71,12 @@ let
   compatExtensions = hardenedExtensions;
 
   # Keep site-specific styles in separate files, then combine them for Firefox.
-  userContentCss = builtins.concatStringsSep "\n" (map builtins.readFile [
-    ./the-decoder.css
-    ./chatgpt.css
-  ]);
+  userContentCss = builtins.concatStringsSep "\n" (
+    map builtins.readFile [
+      ./the-decoder.css
+      ./chatgpt.css
+    ]
+  );
 
   safeBrowsingSettings = {
     "browser.safebrowsing.malware.enabled" = lib.mkForce true;
@@ -145,18 +150,17 @@ let
     "media.gmp-widevinecdm.enabled" = lib.mkForce true;
   };
 
-  commonSettings =
-    {
-      "middlemouse.paste" = false;
-      "browser.tabs.opentabfor.middleclick" = true;
-      "sidebar.revamp" = true;
-      "sidebar.verticalTabs" = true;
-    }
-    // autoEnableExtensionSettings
-    // appearanceSettings
-    // safeBrowsingSettings
-    // noSaveSettings
-    // noOnboardingSettings;
+  commonSettings = {
+    "middlemouse.paste" = false;
+    "browser.tabs.opentabfor.middleclick" = true;
+    "sidebar.revamp" = true;
+    "sidebar.verticalTabs" = true;
+  }
+  // autoEnableExtensionSettings
+  // appearanceSettings
+  // safeBrowsingSettings
+  // noSaveSettings
+  // noOnboardingSettings;
 
   mkArkenfoxProfile =
     {
@@ -209,6 +213,7 @@ in
 {
   programs.firefox = {
     enable = true;
+    configPath = ".mozilla/firefox";
 
     policies = {
       OfferToSaveLogins = false;

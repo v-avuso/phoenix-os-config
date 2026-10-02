@@ -6,7 +6,7 @@
     nixd
 
     # Standard Nix formatter; provides the `nixfmt` binary used by nixd formatting.
-    nixfmt-rfc-style
+    nixfmt
 
     # TOML formatter/linter/LSP CLI; useful for shell checks even though Even Better TOML also provides editor support.
     taplo
