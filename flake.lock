@@ -307,6 +307,22 @@
         "type": "github"
       }
     },
+    "nixpkgs_4": {
+      "locked": {
+        "lastModified": 1790185690,
+        "narHash": "sha256-xJ+X4hBtOcAFGBOe5nAMyMUeF9foJBmIOu3NjBqBycU=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "4975466d324710c576dc11ad614684e6bd8cad8e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
     "plasma-manager": {
       "inputs": {
         "home-manager": [
@@ -356,6 +372,25 @@
         "type": "github"
       }
     },
+    "psysonic": {
+      "inputs": {
+        "nixpkgs": "nixpkgs_4"
+      },
+      "locked": {
+        "lastModified": 1790283286,
+        "narHash": "sha256-Wsus0USgYV9NUsuxiM3u37RjnG1nQzWoTHO1PY3zuXQ=",
+        "owner": "Psysonic",
+        "repo": "psysonic",
+        "rev": "bd6c320d4b2761a98a197d509830de5ca3987448",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Psysonic",
+        "ref": "release",
+        "repo": "psysonic",
+        "type": "github"
+      }
+    },
     "quickshell": {
       "inputs": {
         "nixpkgs": [
@@ -388,7 +423,8 @@
         "nix-vscode-extensions": "nix-vscode-extensions",
         "nixpkgs": "nixpkgs_3",
         "nixpkgs-unstable": "nixpkgs-unstable",
-        "plasma-manager": "plasma-manager"
+        "plasma-manager": "plasma-manager",
+        "psysonic": "psysonic"
       }
     },
     "systems": {

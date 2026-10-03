@@ -40,6 +40,9 @@
 
     # The upstream Linux port wraps OpenAI's signed Linux desktop payload.
     codex-desktop-linux.url = "github:ilysenko/codex-desktop-linux";
+
+    # Stable Psysonic channel; flake.lock pins the release branch revision.
+    psysonic.url = "github:Psysonic/psysonic?ref=release";
   };
 
   outputs =
