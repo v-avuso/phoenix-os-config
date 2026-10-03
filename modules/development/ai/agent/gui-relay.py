@@ -3,11 +3,14 @@ import os
 import base64
 import json
 from pathlib import Path
+import select
 import subprocess
 import sys
 import threading
 import time
 import uuid
+
+MAX_RPC_FRAME = 16 * 1024 * 1024
 
 
 def desktop_identity(account, profile, selected=None):
@@ -88,21 +91,69 @@ def relay(config):
 
     pending = {}
     pending_lock = threading.Lock()
+    oversized_frame = threading.Event()
     account = None
     routing = None
     profile = None
     selected = None
 
+    def stop_for_oversized_frame():
+        if not oversized_frame.is_set():
+            oversized_frame.set()
+            print("Sandbox desktop RPC frame exceeds 16 MiB limit", file=sys.stderr, flush=True)
+        if process.poll() is None:
+            process.kill()
+
+    def write_client_frame(line):
+        view = memoryview(line)
+        offset = 0
+        while offset < len(view):
+            if oversized_frame.is_set():
+                return False
+            _, writable, _ = select.select([], [1], [], 0.05)
+            if not writable:
+                continue
+            try:
+                written = os.write(1, view[offset:offset + 65536])
+            except BlockingIOError:
+                continue
+            if not written:
+                return False
+            offset += written
+        return True
+
     def input_stream():
         try:
-            buffer = b""
+            buffer = bytearray()
             # Raw fd reads avoid a daemon thread retaining Python's buffered
             # stdin lock when an app-server exits before the GUI disconnects.
-            while chunk := os.read(0, 65536):
-                buffer += chunk
-                while b"\n" in buffer:
-                    line, buffer = buffer.split(b"\n", 1)
-                    line += b"\n"
+            # systemd duplicates one accepted socket onto both descriptors;
+            # nonblocking output consequently makes input nonblocking too.
+            while not oversized_frame.is_set():
+                if not select.select([0], [], [], 0.05)[0]:
+                    if process.poll() is not None:
+                        break
+                    continue
+                try:
+                    chunk = os.read(0, 65536)
+                except BlockingIOError:
+                    continue
+                if not chunk:
+                    break
+                buffer.extend(chunk)
+                while True:
+                    end = buffer.find(b"\n")
+                    if end < 0:
+                        # A complete frame needs one byte for its newline.
+                        if len(buffer) >= MAX_RPC_FRAME:
+                            stop_for_oversized_frame()
+                            return
+                        break
+                    if end + 1 > MAX_RPC_FRAME:
+                        stop_for_oversized_frame()
+                        return
+                    line = bytes(buffer[:end + 1])
+                    del buffer[:end + 1]
                     try:
                         request = json.loads(line)
                         if request.get("method") in {"account/read", "getAuthStatus"} and "id" in request:
@@ -112,18 +163,28 @@ def relay(config):
                             if isinstance(request.get("params"), dict):
                                 request["params"]["refreshToken"] = False
                                 line = json.dumps(request).encode() + b"\n"
-                    except (ValueError, TypeError):
+                                if len(line) > MAX_RPC_FRAME:
+                                    stop_for_oversized_frame()
+                                    return
+                    except (ValueError, TypeError, AttributeError):
                         pass
                     process.stdin.write(line)
                     process.stdin.flush()
         except (BrokenPipeError, OSError):
             pass
         finally:
-            process.stdin.close()
+            try:
+                process.stdin.close()
+            except OSError:
+                pass
 
     threading.Thread(target=input_stream, daemon=True).start()
+    os.set_blocking(1, False)
     try:
-        for line in process.stdout:
+        while line := process.stdout.readline(MAX_RPC_FRAME + 1):
+            if len(line) > MAX_RPC_FRAME:
+                stop_for_oversized_frame()
+                break
             method = None
             response = {}
             try:
@@ -158,8 +219,11 @@ def relay(config):
                 if method:
                     line = json.dumps({"id": response.get("id"), "error": {
                         "code": -32000, "message": "Sandbox desktop routing unavailable; retained login was preserved"}}).encode() + b"\n"
-            sys.stdout.buffer.write(line)
-            sys.stdout.buffer.flush()
+            if len(line) > MAX_RPC_FRAME:
+                stop_for_oversized_frame()
+                break
+            if not write_client_frame(line):
+                break
     except (BrokenPipeError, OSError):
         pass
     finally:
@@ -169,9 +233,10 @@ def relay(config):
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait()
+    return 1 if oversized_frame.is_set() else 0
 
 
 if __name__ == "__main__":
     import json
     with open(sys.argv[1]) as stream:
-        relay(json.load(stream))
+        raise SystemExit(relay(json.load(stream)))

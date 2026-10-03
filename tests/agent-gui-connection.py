@@ -9,11 +9,14 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 AGENT = ROOT / "modules/development/ai/agent"
 ACCOUNT = "11111111-1111-4111-8111-111111111111"
+MAX_RPC_FRAME = 16 * 1024 * 1024
 
 
 class Connections(unittest.TestCase):
@@ -27,6 +30,48 @@ class Connections(unittest.TestCase):
             "launcher_config": str(path / "launcher.json"), "workdir": directory,
             "home": directory, "path": "/unused"}))
         return config
+
+    def start_stdio_relay(self, config):
+        parent, child = socket.socketpair()
+        process = subprocess.Popen(
+            [sys.executable, "-I", str(AGENT / "gui-relay.py"), str(config)],
+            stdin=child, stdout=child, stderr=subprocess.PIPE,
+        )
+        child.close()
+        parent.settimeout(5)
+        return parent, process
+
+    def wait_for_file(self, path):
+        deadline = time.monotonic() + 3
+        while not path.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertTrue(path.exists(), f"fixture did not start: {path}")
+
+    def send_repeated(self, sock, size, suffix=b""):
+        chunk = b"x" * 65536
+        while size:
+            current = min(size, len(chunk))
+            sock.sendall(chunk[:current])
+            size -= current
+        if suffix:
+            sock.sendall(suffix)
+
+    def receive_to_eof(self, sock):
+        received = bytearray()
+        while True:
+            try:
+                chunk = sock.recv(65536)
+            except ConnectionResetError:
+                break
+            if not chunk:
+                break
+            received.extend(chunk)
+        return bytes(received)
+
+    def assert_child_reaped(self, pid_file):
+        pid = int(pid_file.read_text())
+        with self.assertRaises(ProcessLookupError):
+            os.kill(pid, 0)
 
     def test_protocol_identity_routing_and_refresh_owner(self):
         source = '''import base64,json,sys
@@ -115,6 +160,228 @@ time.sleep(30)
                     process.wait()
                 process.stdout.close()
                 process.stderr.close()
+
+    def test_shared_socket_keeps_input_open_between_requests(self):
+        source = "import sys\nfor line in sys.stdin.buffer:\n sys.stdout.buffer.write(line);sys.stdout.buffer.flush()\n"
+        with tempfile.TemporaryDirectory() as directory:
+            config = self.config(directory, source)
+            parent, relay = self.start_stdio_relay(config)
+            try:
+                for index in range(3):
+                    # The idle gap must not be mistaken for EOF/EAGAIN: stdin
+                    # and stdout share the same nonblocking socket description.
+                    time.sleep(0.1)
+                    frame = json.dumps({"id": index, "method": "initialize"}).encode() + b"\n"
+                    parent.sendall(frame)
+                    received = b""
+                    while len(received) < len(frame):
+                        chunk = parent.recv(65536)
+                        self.assertTrue(chunk, "relay closed between requests")
+                        received += chunk
+                    self.assertEqual(received, frame)
+                    self.assertIsNone(relay.poll())
+                parent.shutdown(socket.SHUT_WR)
+                self.assertEqual(relay.wait(timeout=5), 0)
+                self.assertEqual(relay.stderr.read(), b"")
+            finally:
+                parent.close()
+                if relay.poll() is None:
+                    relay.kill()
+                    relay.wait()
+                relay.stderr.close()
+
+    def test_oversized_inbound_frames_terminate_child_without_forwarding(self):
+        self.assertEqual(MAX_RPC_FRAME, 16 * 1024 * 1024)
+        for newline in (False, True):
+            with self.subTest(newline=newline), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory)
+                launcher = path / "launcher.py"
+                launcher.write_text(
+                    "import os,pathlib,sys\n"
+                    "assert sys.argv[2:]==['app-server','--analytics-default-enabled']\n"
+                    "pathlib.Path('child.pid').write_text(str(os.getpid()))\n"
+                    "data=os.read(0,65536)\n"
+                    "pathlib.Path('received.bin').write_bytes(data)\n"
+                    "os.write(1,b'{\"result\":{}}\\n')\n"
+                )
+                config = self.config(directory, launcher.read_text())
+                parent, relay = self.start_stdio_relay(config)
+                sender_error = []
+                try:
+                    pid_file = path / "child.pid"
+                    self.wait_for_file(pid_file)
+
+                    def send_oversize():
+                        try:
+                            # A newline-terminated frame is MAX+1 bytes; the
+                            # unterminated case reaches the cap without it.
+                            self.send_repeated(parent, MAX_RPC_FRAME,
+                                               b"\n" if newline else b"")
+                        except OSError as error:
+                            sender_error.append(error)
+
+                    sender = threading.Thread(target=send_oversize, daemon=True)
+                    sender.start()
+                    relay.wait(timeout=5)
+                    sender.join(timeout=2)
+                    self.assertFalse(sender.is_alive(), "oversize sender remained blocked")
+                    self.assertEqual(relay.returncode, 1)
+                    self.assert_child_reaped(pid_file)
+                    self.assertEqual((path / "received.bin").read_bytes() if (path / "received.bin").exists() else b"", b"")
+                    self.assertEqual(self.receive_to_eof(parent), b"")
+                    self.assertEqual(relay.stderr.read(), b"Sandbox desktop RPC frame exceeds 16 MiB limit\n")
+                finally:
+                    parent.close()
+                    relay.stderr.close()
+                    if relay.poll() is None:
+                        relay.kill()
+                        relay.wait()
+
+    def test_oversized_backend_frame_is_bounded_and_not_forwarded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            launcher = path / "launcher.py"
+            launcher.write_text(
+                "import os,pathlib,sys\n"
+                "assert sys.argv[2:]==['app-server','--analytics-default-enabled']\n"
+                "pathlib.Path('child.pid').write_text(str(os.getpid()))\n"
+                "remaining=16*1024*1024+1\n"
+                "chunk=b'x'*65536\n"
+                "while remaining:\n"
+                " n=min(remaining,len(chunk));os.write(1,chunk[:n]);remaining-=n\n"
+            )
+            config = self.config(directory, launcher.read_text())
+            parent, relay = self.start_stdio_relay(config)
+            try:
+                pid_file = path / "child.pid"
+                self.wait_for_file(pid_file)
+                relay.wait(timeout=5)
+                self.assertEqual(relay.returncode, 1)
+                self.assert_child_reaped(pid_file)
+                self.assertEqual(self.receive_to_eof(parent), b"")
+                self.assertEqual(relay.stderr.read(), b"Sandbox desktop RPC frame exceeds 16 MiB limit\n")
+            finally:
+                parent.close()
+                relay.stderr.close()
+                if relay.poll() is None:
+                    relay.kill()
+                    relay.wait()
+
+    def test_auth_refresh_rewrite_cannot_exceed_frame_limit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            launcher = path / "launcher.py"
+            launcher.write_text(
+                "import os,pathlib,sys\n"
+                "assert sys.argv[2:]==['app-server','--analytics-default-enabled']\n"
+                "pathlib.Path('child.pid').write_text(str(os.getpid()))\n"
+                "data=os.read(0,65536)\n"
+                "pathlib.Path('received.bin').write_bytes(data)\n"
+            )
+            config = self.config(directory, launcher.read_text())
+            parent, relay = self.start_stdio_relay(config)
+            try:
+                pid_file = path / "child.pid"
+                self.wait_for_file(pid_file)
+                prefix = b'{"id":1,"method":"getAuthStatus","params":{"refreshToken":true,"p":"'
+                suffix = b'"}}\n'
+                padding = MAX_RPC_FRAME - len(prefix) - len(suffix)
+                parent.sendall(prefix)
+                self.send_repeated(parent, padding)
+                parent.sendall(suffix)
+                self.assertEqual(relay.wait(timeout=5), 1)
+                self.assert_child_reaped(pid_file)
+                self.assertEqual((path / "received.bin").read_bytes() if (path / "received.bin").exists() else b"", b"")
+                self.assertEqual(self.receive_to_eof(parent), b"")
+                self.assertEqual(relay.stderr.read(), b"Sandbox desktop RPC frame exceeds 16 MiB limit\n")
+            finally:
+                parent.close()
+                relay.stderr.close()
+                if relay.poll() is None:
+                    relay.kill()
+                    relay.wait()
+
+    def test_oversized_input_interrupts_a_blocked_client_write(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            launcher = path / "launcher.py"
+            launcher.write_text(
+                "import os,pathlib,sys\n"
+                "assert sys.argv[2:]==['app-server','--analytics-default-enabled']\n"
+                "pathlib.Path('child.pid').write_text(str(os.getpid()))\n"
+                "line=b'{\\\"id\\\":1,\\\"result\\\":{\\\"padding\\\":\\\"'+b'x'*(8*1024*1024)+b'\\\"}}\\n'\n"
+                "view=memoryview(line);offset=0\n"
+                "while offset<len(view): offset+=os.write(1,view[offset:])\n"
+                "data=os.read(0,65536)\n"
+                "pathlib.Path('received.bin').write_bytes(data)\n"
+            )
+            config = self.config(directory, launcher.read_text())
+            parent, relay = self.start_stdio_relay(config)
+            parent.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4096)
+            sender_error = []
+            try:
+                pid_file = path / "child.pid"
+                self.wait_for_file(pid_file)
+                self.assertTrue(select.select([parent], [], [], 3)[0], "backend response did not reach client socket")
+                time.sleep(0.1)  # Let the small receive buffer hold the relay's write open.
+
+                def send_oversize():
+                    try:
+                        self.send_repeated(parent, MAX_RPC_FRAME)
+                    except OSError as error:
+                        sender_error.append(error)
+
+                sender = threading.Thread(target=send_oversize, daemon=True)
+                sender.start()
+                started = time.monotonic()
+                relay.wait(timeout=3)
+                self.assertLess(time.monotonic() - started, 3)
+                sender.join(timeout=2)
+                self.assertFalse(sender.is_alive(), "oversize sender remained blocked")
+                self.assertEqual(relay.returncode, 1)
+                self.assert_child_reaped(pid_file)
+                self.assertEqual((path / "received.bin").read_bytes() if (path / "received.bin").exists() else b"", b"")
+                output = self.receive_to_eof(parent)
+                self.assertLess(len(output), 8 * 1024 * 1024 + 64)
+                self.assertEqual(relay.stderr.read(), b"Sandbox desktop RPC frame exceeds 16 MiB limit\n")
+            finally:
+                parent.close()
+                relay.stderr.close()
+                if relay.poll() is None:
+                    relay.kill()
+                    relay.wait()
+
+    def test_maximum_sized_json_rpc_frame_round_trips(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            launcher = path / "launcher.py"
+            launcher.write_text(
+                "import json,sys\n"
+                "assert sys.argv[2:]==['app-server','--analytics-default-enabled']\n"
+                "for line in sys.stdin.buffer:\n"
+                " json.loads(line)\n"
+                " print('{\"id\":1,\"result\":{\"ok\":true}}',flush=True)\n"
+            )
+            config = self.config(directory, launcher.read_text())
+            parent, relay = self.start_stdio_relay(config)
+            try:
+                prefix = b'{"id":1,"method":"initialize","params":{"p":"'
+                suffix = b'"}}\n'
+                padding = MAX_RPC_FRAME - len(prefix) - len(suffix)
+                self.assertGreater(padding, 0)
+                parent.sendall(prefix)
+                self.send_repeated(parent, padding)
+                parent.sendall(suffix)
+                self.assertEqual(parent.recv(128), b'{"id":1,"result":{"ok":true}}\n')
+                parent.shutdown(socket.SHUT_WR)
+                self.assertEqual(relay.wait(timeout=5), 0)
+                self.assertEqual(relay.stderr.read(), b"")
+            finally:
+                parent.close()
+                relay.stderr.close()
+                if relay.poll() is None:
+                    relay.kill()
+                    relay.wait()
 
 
 if __name__ == "__main__":

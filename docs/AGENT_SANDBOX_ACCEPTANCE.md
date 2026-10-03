@@ -66,6 +66,12 @@ duplication in every future bounded review. Reports never authorize deployment.
 The local desktop task queue remains private, ignored state; the committed
 snapshot excludes it. Native credentials/profile and prior work were preserved.
 
+## Unattended follow-up
+
+Post-acceptance relay hardening is committed but not activated. Its temporary
+fixtures pass; [overnight notes](OVERNIGHT_VALIDATION.md) list next-day checks.
+The installed source/runtime above still describes the accepted first iteration.
+
 ## Later work
 
 The required installed workflow passed. Final documentation follows the approved

@@ -96,6 +96,11 @@ time the GUI starts an app-server, not continuously synchronized while it runs.
 - **Development:** Nix uses an isolated store/database without the host daemon.
   Preinstalled tools are root-owned; added build outputs are writable.
 
+GUI app-server relay frames are capped at 16 MiB including the newline, before
+forwarding in either direction. Oversized frames close the connection and fixed
+child with a generic diagnostic; login state is preserved. This protects against
+unbounded individual frames, not every possible resource-exhaustion pattern.
+
 The Python interpreter can use authenticated desktop API namespaces too; this
 is endpoint-limited authority, not proof that a particular script is calling.
 Exact workspace/destination/capability lists are in the module. Policy changes
