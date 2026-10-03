@@ -26,7 +26,10 @@ class LauncherFixture(unittest.TestCase):
 
     @staticmethod
     def success(command, **kwargs):
-        output = b'[{"name":"openshell"}]' if "list" in command else b'{}'
+        if command[1:4] == ["--color=never", "provider", "list"]:
+            output = b'phoenix-codex\n'
+        else:
+            output = b'[{"name":"openshell"}]' if "list" in command else b'{}'
         return subprocess.CompletedProcess(command, 0, stdout=output, stderr=b'')
 
     def test_app_server_keeps_stdio_and_never_falls_back_native(self):
@@ -48,14 +51,27 @@ class LauncherFixture(unittest.TestCase):
 
     def test_missing_login_fails_before_starting_app_server(self):
         def missing(command, **kwargs):
-            if command[1:4] == ["--color=never", "provider", "get"]:
-                return subprocess.CompletedProcess(command, 1, stdout=b'', stderr=b'')
+            if command[1:4] == ["--color=never", "provider", "list"]:
+                return subprocess.CompletedProcess(command, 0, stdout=b'', stderr=b'')
             return self.success(command, **kwargs)
         with mock.patch.object(launch.subprocess, "run", side_effect=missing), \
              mock.patch.object(launch.Path, "is_socket", return_value=True), \
              mock.patch.object(launch.os, "execve") as execute:
             with self.assertRaisesRegex(SystemExit, "codex-sandbox-login"):
                 launch.main(self.config, ["app-server"])
+        execute.assert_not_called()
+
+    def test_failed_lookup_does_not_start_another_login(self):
+        def failed(command, **kwargs):
+            if command[1:4] == ["--color=never", "provider", "list"]:
+                return subprocess.CompletedProcess(command, 1, stdout=b'', stderr=b'')
+            return self.success(command, **kwargs)
+        with mock.patch.object(launch.subprocess, "run", side_effect=failed) as run, \
+             mock.patch.object(launch.Path, "is_socket", return_value=True), \
+             mock.patch.object(launch.os, "execve") as execute:
+            with self.assertRaisesRegex(SystemExit, "setup failed"):
+                launch.main(self.config, [])
+        self.assertFalse(any("login" in call.args[0] for call in run.call_args_list))
         execute.assert_not_called()
 
     def test_setup_timeout_fails_closed_without_credential_output(self):

@@ -55,13 +55,18 @@ def main(config, args):
         if not Path("/run/phoenix-admin/socket").is_socket():
             raise SystemExit("Phoenix diagnostic socket is unavailable; Native Codex remains usable.")
 
-        provider = run(cli + ["provider", "get", "phoenix-codex", "--output", "json"], check=False)
+        # Pinned provider get has no --output flag. Query names instead, and
+        # distinguish lookup failure from an absent login before any OAuth flow.
+        providers = run(cli + ["provider", "list", "--names"])
+        provider_exists = "phoenix-codex" in providers.stdout.decode().splitlines()
         login_requested = args == ["--phoenix-login"]
-        if provider.returncode or login_requested:
-            if app_server:
-                raise SystemExit("Sandbox login is required; run codex-sandbox-login before starting the GUI.")
+        if not provider_exists and not login_requested:
+            raise SystemExit("Sandbox login is required; run codex-sandbox-login explicitly.")
+        if login_requested:
             print("One-time Codex sandbox sign-in; Native Codex keeps its separate login.", file=sys.stderr)
-            run(cli + ["provider", "profile", "import", "--file", config["profile"]])
+            profiles = run(cli + ["provider", "profile", "list", "--output", "json"])
+            if not any(item["id"] == "codex" for item in json.loads(profiles.stdout)):
+                run(cli + ["provider", "profile", "import", "--file", config["profile"]])
             # A separate OAuth session avoids two refresh owners invalidating the
             # existing Native login. The temporary host login is migrated exactly
             # once to OpenShell, then removed. It is never used as a second client.
@@ -72,7 +77,7 @@ def main(config, args):
                 required = ("access_token", "refresh_token", "account_id")
                 if not all(isinstance(tokens.get(key), str) and tokens[key] for key in required):
                     raise SystemExit("Sandbox sign-in did not return the required ChatGPT credentials.")
-                if not provider.returncode:
+                if provider_exists:
                     run(cli + ["provider", "delete", "phoenix-codex"])
                 run(cli + ["provider", "create", "--name", "phoenix-codex", "--type", "codex",
                            "--credential", "CODEX_AUTH_ACCESS_TOKEN", "--credential", "CODEX_AUTH_ACCOUNT_ID"],
