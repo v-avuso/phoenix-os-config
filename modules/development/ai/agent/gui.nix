@@ -40,6 +40,7 @@ let
       profile = "${user.homeDirectory}/.local/state/phoenix-agent-gui";
       workdir = user.repoDirectory;
       workspaces = cfg.workspaces;
+      ca_file = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
       bwrap = "${pkgs.bubblewrap}/bin/bwrap";
       proxy = "${pkgs.xdg-dbus-proxy}/bin/xdg-dbus-proxy";
       systemctl = "${pkgs.systemd}/bin/systemctl";

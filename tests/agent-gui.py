@@ -27,7 +27,7 @@ with tempfile.TemporaryDirectory() as directory:
     workspace = Path(directory) / "workspace"
     workspace.mkdir()
     config = {"home": "/home/example", "user": "example", "workspaces": [str(workspace)],
-              "workdir": str(workspace), "bwrap": "/bwrap", "client": "/client", "desktop": "/desktop", "path": "/tools"}
+              "workdir": str(workspace), "bwrap": "/bwrap", "ca_file": "/immutable-ca-bundle", "client": "/client", "desktop": "/desktop", "path": "/tools"}
     args = launch.command(config, {"XDG_RUNTIME_DIR": "/run/user/1000", "WAYLAND_DISPLAY": "wayland-1",
                                   "SECRET_TOKEN": "must-not-enter"}, Path(directory), Path(directory) / "bus")
     assert "--clearenv" in args and "SECRET_TOKEN" not in args
@@ -37,6 +37,11 @@ with tempfile.TemporaryDirectory() as directory:
     mounts = [args[i + 1:i + 3] for i, item in enumerate(args) if item in ("--bind", "--ro-bind", "--dev-bind")]
     assert ["/home/example", "/home/example"] not in mounts
     assert [str(workspace), str(workspace)] in mounts
+    for destination in ["/etc/ssl/certs/ca-certificates.crt", "/etc/ssl/certs/ca-bundle.crt"]:
+        assert ["/immutable-ca-bundle", destination] in mounts
+    assert ["/etc/ssl", "/etc/ssl"] not in mounts
+    assert not any(path.startswith("/etc/static") for pair in mounts for path in pair)
+    assert args[args.index("SSL_CERT_FILE") + 1] == "/etc/ssl/certs/ca-certificates.crt"
     assert not any("podman" in path or "phoenix-admin" in path for pair in mounts for path in pair)
     assert ["/run/user/1000/bus", "/run/user/1000/bus"] not in mounts
     try:

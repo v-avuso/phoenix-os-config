@@ -25,7 +25,11 @@ def command(config, env, profile, proxy):
         if not Path(path).is_dir() or str(Path(path).resolve()) != path:
             raise ValueError("Missing or aliased declared workspace: " + path)
         args += ["--bind", path, path]
-    for path in ["/etc/ssl", "/etc/fonts", "/etc/resolv.conf", "/etc/hosts", "/etc/passwd",
+    # NixOS /etc/ssl contains symlinks through /etc/static. Mount the
+    # immutable CA bundle directly rather than exposing that whole tree.
+    for destination in ["/etc/ssl/certs/ca-certificates.crt", "/etc/ssl/certs/ca-bundle.crt"]:
+        args += ["--ro-bind", config["ca_file"], destination]
+    for path in ["/etc/fonts", "/etc/resolv.conf", "/etc/hosts", "/etc/passwd",
                  "/etc/group", "/etc/nsswitch.conf", "/etc/os-release", "/etc/NIXOS", "/run/opengl-driver"]:
         if Path(path).exists():
             args += ["--ro-bind", path, path]
@@ -42,6 +46,7 @@ def command(config, env, profile, proxy):
     # our bridge; a missing bridge fails to spawn instead of launching Native.
     values = {"HOME": home, "USER": config["user"], "PATH": str(Path(config["client"]).parent) + ":" + config["path"],
               "XDG_RUNTIME_DIR": runtime, "WAYLAND_DISPLAY": wayland,
+              "SSL_CERT_FILE": "/etc/ssl/certs/ca-certificates.crt",
               "DBUS_SESSION_BUS_ADDRESS": "unix:path=" + runtime + "/bus",
               "XDG_CONFIG_HOME": home + "/.config", "XDG_STATE_HOME": home + "/.local/state",
               "XDG_CACHE_HOME": home + "/.cache", "XDG_DATA_HOME": home + "/.local/share",
