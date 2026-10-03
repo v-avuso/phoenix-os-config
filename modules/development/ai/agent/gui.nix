@@ -115,6 +115,7 @@ let
       # those broad mounts, then admit public runtime files and GPU devices.
       bwrap.additionalArgs = lib.mkAfter [
         "--tmpfs /.host-etc"
+        "--dir /.host-etc/fonts"
         "--dev /dev"
         "--tmpfs /tmp"
         "--cap-drop ALL"
