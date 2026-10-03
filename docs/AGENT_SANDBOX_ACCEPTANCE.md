@@ -1,65 +1,77 @@
 # Agent sandbox acceptance
 
-See [the operating guide](AGENT_SANDBOX.md) for lasting behavior and rationale.
+Last updated: 2026-10-03. See [the operating guide](AGENT_SANDBOX.md) for lasting
+behavior, boundaries and rationale.
 
-## Current status — 2026-10-03
+## Outcome
 
-**First iteration still requires live acceptance.** New committed adapters replace
-the custom GUI wrapper with pinned Nix-Bwrapper/Flatpak manifest import and add
-retained-authentication desktop routing plus independently reviewed unattended
-test/switch. Focused fixtures, combined metal/VM evaluation and a candidate build
-pass. These results do not establish interactive GUI or passwordless deployment.
-`main` music changes are merged into `codex/agent-sandbox-broker`; the currently
-installed runtime below is still the earlier temporary test generation.
+**CLI containment, bounded diagnostics and independently reviewed unattended
+activation work. GUI acceptance is still pending.** The corrected desktop account
+connection works, but its first interactive launch exposed profile contention
+and unwanted onboarding/maximized startup. Those are being corrected before
+calling the desktop usable. Native remains the everyday repair route.
+Work is paused at the user's compute-budget request; no new GUI or deployment
+trial should start until the user resumes.
 
-| Validation | Evidence |
+Music and general engineering guidance from `main` are merged into
+`codex/agent-sandbox-broker`. No previous work or native profile was discarded.
+
+## Installed evidence
+
+The latest independently approved persistent switch records source commit
+`7c169d7` in `/etc/phoenix-agent/activated-source`:
+
+- Source: `/nix/store/3ip2bx7a2jsq5k3gsh62sykrz6cxrc98-source`.
+- Runtime and system profile:
+  `/nix/store/yamlcrh41pagdr1bbjfc1rpr4kc56gg6-nixos-system-phoenix-26.05.20260924.c508844`.
+
+Later documentation commits do not change that recorded runtime source.
+
+| Check | Actual result |
 | --- | --- |
-| Metal/VM/default evaluation | Combined modules passed `nix flake check --no-build --no-write-lock-file path:.`; VM bootability not claimed |
-| Metal build | Clean committed Git flake built successfully; baseline matches all 100 tracked files with no Git metadata |
-| Diagnostic broker fixtures | 12 passed: fixed operations/argv, bounded time/output, argument/protocol rejection, xHCI checks, symlink rejection and audit privacy |
-| Launcher fixtures | 7 passed: saved-login reuse, routing selector, duplex transport, bounded setup, fail-closed lookup and no native fallback |
-| Deployment review fixtures | 7 passed: immutable CA mounts, source freezing, mode changes, activated diffs, dirty/unsupported source rejection, forged/stale/rejected verdicts, process bounds, Git helper suppression and audit safety |
-| GUI fixtures | Mount/argument checks and real fixed-command socket relay passed |
-| Actual OpenShell runtime | Strict Landlock, rootless UID 1000; workspace access and private-home/symlink exclusions passed in earlier credential-free prototype |
-| Network/runtime tools | Public Git fetch, Nix evaluation/cache/small build passed; unexpected destination and disallowed POST rejected in prototype |
-| Codex nested sandbox | Actual disposable probe: workspace-write rejected because Bubblewrap cannot create a namespace; explicit outer-only mode succeeds and still cannot write `/etc` |
-| Actual GUI namespace | Native auth, SSH/Pictures and host-control sockets absent; declared workspace and fixed relay socket visible |
-| Portal bus | Host systemd access rejected; real Settings.Read initially exposed missing Instance metadata, corrected using NixPak’s runtime contract; isolated method call now passes |
-| Native CLI protocol | Pinned app-server initialized in a disposable empty home; no authentication or model turn |
-| Broker root/runtime mutation | Installed service reads passed; unlisted service rejected; metal xHCI wakeup enabled→disabled→enabled round-trip restored original state and produced audit records |
-| Real reviewer/deployment | Retained login; GPT-6.1 Sol / medium approved committed source `55ac611` for `test`; helper built the exact frozen source and completed graphical Polkit activation |
-| GUI/backend end-to-end | Saved sandbox login reused; GPT-6 Luna / high model turn succeeded; full-duplex app-server initialization passed; sandboxed window opened; interactive GUI turn blocked by desktop routing/auth mediation gap |
-| Persistence/recovery | Pending login/reboot and installed rollback |
+| Evaluation/build | Metal/VM/default combined evaluation and committed metal system builds pass; VM bootability is not established |
+| Focused fixtures | Broker 12, launcher 10, preferences 4, deployment/reviewer 22, HTTP 10, socket connections 2; GUI concurrency/activation/boundary and Node streaming/cancellation fixtures pass |
+| Reviewer bootstrap | Retained authentication migrated once to the protected reviewer account; no repeated OAuth |
+| Unattended activation | Fresh protected `test` passed; real OpenShell worker requested fresh `switch`, which updated runtime and boot profile without Polkit |
+| Exact-source review | Controller built as a dedicated unprivileged user and reviewed frozen source, installed diff and resulting closure; journal records approved/activated stages |
+| Deployment denial | Actual worker's arbitrary-command request rejected before build/review/activation; malformed/stale/denied verdict and recovery branches covered by fixtures |
+| Real worker | Rootless UID 1000; approved repository visible, Native SSH/Pictures/auth omitted, `/etc` write denied, unexpected destination fails |
+| Diagnostics | Allowlisted cooler service state and xHCI wakeup read pass without authentication; unlisted service and arbitrary root operation denied |
+| GUI backend | Actual account/profile/routing lookup passes; exact relay model/tool task using GPT-6 Luna/high completed with expected shell output |
+| GUI isolation | Private home and declared workspaces; Native auth/SSH/Pictures and host control sockets omitted; actual portal Settings.Read passes and host systemd bus access is denied |
+| Interactive GUI | Corrected public identity makes account lookup authenticated; Work denial disappeared in controlled retry, but onboarding/window behavior and existing settings reuse still need acceptance |
+| Launcher | Sandboxed favourite set and Native not favourited in actual Caelestia settings; final fuzzy-search ordering needs user confirmation |
 
-Sandbox, reviewer and Native authentication remain separate. Sandbox refresh
-material is retained in the private gateway; reviewer authentication is retained
-in its dedicated private state. Neither runtime test required another browser
-sign-in. Ordinary sandbox launches never start OAuth; repeated sandbox login
-commands reuse existing state. Only the public workspace UUID is visible to the
-worker for Codex routing; bearer and refresh credentials remain hidden.
+The earlier generic deployment review failure did not activate. Its installed
+controller discarded the distinction between denial and API/schema failure.
+The current worker/controller distinguish bounded model denial from invocation,
+schema and binding errors; model text returns only to the requesting owner,
+never to the journal. A separate one-time review-only diagnostic could not activate.
 
-Currently installed test system (source commit `55ac611`):
-`/nix/store/hw6yd5czl1zg2hqabj4cv529n976vcb6-nixos-system-phoenix-26.05.20260924.c508844`.
-The source baseline is the reviewed frozen Git snapshot; later documentation-only
-commits do not change this recorded runtime result.
+## Remaining core acceptance
 
-## Remaining live acceptance
+The checkpoint contains selected preference migration, fixed scalar app-server
+overrides and tray-based single-instance activation, but these changes are **not
+installed**. Their fixtures pass. GUI trials and the temporary loopback debug
+endpoint are stopped; temporary user relay overrides were removed. Native and
+the retained gateway/reviewer login remain intact.
 
-1. Install a clean, freshly reviewed candidate with graphical Polkit, then run
-   one-time protected reviewer bootstrap using retained authentication. Confirm
-   migration and ordinary launches need no repeated OAuth.
-2. Verify real worker HTTP credential injection under the narrow Python API
-   policy, actual account/routing and interactive sandboxed GUI model/tool use.
-3. Verify the Nix-Bwrapper namespace, filtered bus, portal Settings.Read, profile
-   persistence, no native CLI fallback and launcher ordering. File selection
-   depends on upstream portal identity compatibility; test it separately.
-4. Request reviewed test and switch from the sandbox, prove no additional Polkit,
-   and verify source/closure binding, boot profile, bounded audit and recovery.
-5. Confirm service/session persistence; reboot and destructive rollback tests
-   require explicit scheduling, not assumed acceptance.
+1. Build and independently review/install the clean committed checkpoint. Reuse
+   selected existing nonsecret GUI/model/project preferences, open a normal
+   movable window without onboarding or profile warnings, and run a task through
+   the actual Codex GUI. No additional browser sign-in.
+2. Close/reopen that GUI and verify retained settings/login and safe single-instance
+   behavior; remove all temporary debug endpoints and test overrides.
+3. Update this report with the exact final installed source and user-visible result.
 
-Application-specific broker identity, complete command auditing and isolated
-GUI networking remain possible improvements, not implemented claims. Same-UID
-host callers can request the narrow broker/deployment operations, and model
-review is fallible. The user accepts that residual risk and authorizes task-related
-activation without reminders to save temporary desktop experiment settings.
+## Later checks and improvements
+
+Reboot, destructive rollback, portal file selection and long-build cancellation
+have not been runtime tested. Recovery branches pass fixtures; this does not prove
+transactional rollback. Do not reboot or induce a failure merely to claim acceptance.
+
+Application-specific caller identity, full command auditing, isolated GUI network
+and recovery of sessions retained in older sandbox instances are future work.
+Same-UID host programs can call fixed broker capabilities; Python has limited
+desktop API authority; permitted traffic can disclose accessible workspace data.
+Model review is fallible. The user accepts these stated limits.
