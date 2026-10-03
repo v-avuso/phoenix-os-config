@@ -36,6 +36,10 @@ Keep modules small enough to understand; introduce abstractions when actual
 repetition warrants them. Comments and commit bodies preserve local rationale;
 there is no exhaustive decision ledger to maintain.
 
+The [agent operating guide](docs/AGENT_SANDBOX.md) describes containment,
+launchers and reviewed deployment; [acceptance](docs/AGENT_SANDBOX_ACCEPTANCE.md)
+records installation and runtime status separately.
+
 ## Everyday commands
 
 Home Manager installs commands on the user's PATH for Bash, Fish, agents,
