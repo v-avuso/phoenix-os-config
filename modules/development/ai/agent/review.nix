@@ -15,7 +15,8 @@ let
       nix = "${pkgs.nix}/bin/nix";
       bwrap = "${pkgs.bubblewrap}/bin/bwrap";
       caBundle = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
-      pkexec = "${pkgs.polkit}/bin/pkexec";
+      # Nix store binaries are not setuid; NixOS owns the privileged wrapper.
+      pkexec = "/run/wrappers/bin/pkexec";
       policy = toString ./review-policy.md;
       model = "gpt-6.1-sol";
       effort = "medium";

@@ -297,7 +297,8 @@ def main():
             # Same invocation only. No saved approval input; normal Polkit still
             # authenticates this exact immutable system executable and action.
             try:
-                subprocess.run([config["pkexec"], closure + "/bin/switch-to-configuration", "test"], check=True)
+                subprocess.run([config["pkexec"], "--disable-internal-agent",
+                                closure + "/bin/switch-to-configuration", "test"], check=True)
             except (OSError, subprocess.SubprocessError):
                 audit(config, binding, "test-failed", verdict, closure)
                 raise
