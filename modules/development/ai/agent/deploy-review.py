@@ -127,15 +127,27 @@ def source_diff(before, after, before_modes=None, after_modes=None):
                    for name in sorted(before.keys() | after.keys()))
 
 
+class ReviewVerdictError(ValueError):
+    def __init__(self, code):
+        self.code = code
+        super().__init__(code)
+
+
+class ReviewDenied(ValueError):
+    def __init__(self, verdict):
+        self.verdict = verdict
+        super().__init__('model review denied')
+
+
 def validate_verdict(verdict, binding):
     if not isinstance(verdict, dict) or set(verdict) != {*binding, "approved", "summary"}:
-        raise ValueError("malformed review verdict")
+        raise ReviewVerdictError("schema-invalid")
     if any(verdict[key] != value for key, value in binding.items()):
-        raise ValueError("stale or mismatched review verdict")
+        raise ReviewVerdictError("binding-mismatch")
     if type(verdict["approved"]) is not bool or not isinstance(verdict["summary"], str):
-        raise ValueError("invalid review result types")
+        raise ReviewVerdictError("schema-invalid")
     if not verdict["approved"]:
-        raise ValueError("review rejected: " + verdict["summary"][:2000])
+        raise ReviewDenied(verdict)
 
 
 def review(config, binding, files, diff, temporary):
@@ -188,8 +200,11 @@ def review(config, binding, files, diff, temporary):
     run(command, data=instruction.encode(), timeout=600)
     verdict_path = work / "verdict.json"
     if verdict_path.is_symlink() or verdict_path.stat().st_size > 16384:
-        raise ValueError("invalid review output")
-    verdict = json.loads(verdict_path.read_text())
+        raise ReviewVerdictError("schema-invalid")
+    try:
+        verdict = json.loads(verdict_path.read_text())
+    except (json.JSONDecodeError, UnicodeError):
+        raise ReviewVerdictError("schema-invalid") from None
     validate_verdict(verdict, binding)
     return verdict
 
@@ -280,6 +295,8 @@ def main():
                     response.extend(block)
                 result = json.loads(response)
                 if not result.get("ok"):
+                    if result.get("code") == "model-denied":
+                        raise ValueError("Model review denied: " + json.dumps(result.get("summary", ""), ensure_ascii=True))
                     raise ValueError(result.get("error", "deployment rejected"))
                 print(json.dumps(result, indent=2))
             return

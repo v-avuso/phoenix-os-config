@@ -90,13 +90,42 @@ class DeploymentTests(unittest.TestCase):
                     verdict = dict(binding, approved=(mode != 'rejected'), summary='fixture')
                     if mode == 'forged':
                         verdict['nonce'] = 'wrong'
-                    return json.dumps(verdict).encode()
+                    return json.dumps(dict(status='verdict', verdict=verdict)).encode()
                 account = mock.Mock(pw_uid=os.getuid(), pw_gid=os.getgid())
                 with contextlib.redirect_stdout(io.StringIO()), mock.patch.object(deploy, 'load_review', return_value=review), mock.patch.object(deploy, 'as_user', side_effect=user_command), mock.patch.object(deploy, 'store_path'), mock.patch.object(deploy, 'activation_executable'), mock.patch.object(deploy.pwd, 'getpwnam', return_value=account):
                     with self.assertRaises(deploy.DeploymentFailure) as failure:
                         deploy.process(config, self.request(), os.getuid(), 22)
                 self.assertIn(failure.exception.stage, {'verdict', 'review', 'closure-binding'})
+                if mode == 'rejected':
+                    self.assertIsInstance(failure.exception, deploy.DeploymentDenied)
+                    self.assertEqual(failure.exception.summary, 'fixture')
+                    self.assertEqual(failure.exception.code, 'model-denied')
+                elif mode == 'forged':
+                    self.assertEqual(failure.exception.code, 'binding-mismatch')
                 self.assertFalse(any(call.args[0][0] == 'systemd-run' for call in review.run.call_args_list))
+
+    def test_worker_reports_denial_separately_from_native_or_schema_failure(self):
+        review = deploy.load_review({'reviewScript': str(Path(__file__).resolve().parents[1] / 'modules/development/ai/agent/deploy-review.py')})
+        verdict = dict(source='/nix/store/frozen', approved=False, summary='Unsafe recovery changes')
+        for error, expected in [
+            (review.ReviewDenied(verdict), {'status': 'verdict', 'verdict': verdict}),
+            (review.ReviewVerdictError('binding-mismatch'), {'status': 'error', 'code': 'binding-mismatch'}),
+            (review.ReviewVerdictError('schema-invalid'), {'status': 'error', 'code': 'schema-invalid'}),
+            (ValueError('API stderr contains SECRET credential'), {'status': 'error', 'code': 'reviewer-invocation-failed'}),
+        ]:
+            with self.subTest(error=type(error).__name__), tempfile.TemporaryDirectory() as directory:
+                output, stderr = io.StringIO(), io.StringIO()
+                payload = dict(binding={'source': '/nix/store/frozen'}, files={}, diff='')
+                with mock.patch.object(deploy, 'load_review', return_value=review), mock.patch.object(review, 'review', side_effect=error), mock.patch('sys.stdin', io.StringIO(json.dumps(payload))), contextlib.redirect_stdout(output), contextlib.redirect_stderr(stderr):
+                    deploy.worker({}, directory)
+                self.assertEqual(json.loads(output.getvalue()), expected)
+                self.assertNotIn('SECRET', output.getvalue() + stderr.getvalue())
+
+    def test_model_denial_summary_is_bounded_and_not_in_exception_text(self):
+        denial = deploy.DeploymentDenied('private task detail ' * 1000)
+        self.assertEqual(len(denial.summary), 1000)
+        self.assertNotIn('private task detail', str(denial))
+        self.assertEqual(denial.code, 'model-denied')
 
     def test_bootstrap_rejects_auth_links_and_atomically_replaces_destination(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -27,6 +27,12 @@ class DeploymentFailure(ValueError):
         super().__init__(stage + ': ' + code)
 
 
+class DeploymentDenied(DeploymentFailure):
+    def __init__(self, summary):
+        super().__init__('review', 'model-denied')
+        self.summary = summary[:1000]
+
+
 FIELDS = {'files', 'modes', 'commit', 'target', 'action', 'reason'}
 
 
@@ -214,8 +220,22 @@ def process_inner(config, request, uid, pid, state):
                          data=json.dumps(payload).encode(), timeout=700,
                          env={'HOME': config['reviewHome'], 'PATH': '/nonexistent'})
         state['stage'] = 'verdict'
-        verdict = json.loads(output)
-        review.validate_verdict(verdict, binding)
+        result = json.loads(output)
+        if not isinstance(result, dict) or result.get('status') not in {'verdict', 'error'}:
+            raise DeploymentFailure('verdict', 'worker-envelope-invalid')
+        if result['status'] == 'error':
+            # Only static worker classifications are allowed out of this boundary.
+            code = result.get('code')
+            if code not in {'reviewer-invocation-failed', 'schema-invalid', 'binding-mismatch'}:
+                code = 'worker-envelope-invalid'
+            raise DeploymentFailure('review', code)
+        verdict = result.get('verdict')
+        try:
+            review.validate_verdict(verdict, binding)
+        except review.ReviewDenied:
+            raise DeploymentDenied(verdict['summary']) from None
+        except review.ReviewVerdictError as error:
+            raise DeploymentFailure('verdict', error.code) from None
         state['stage'] = 'baseline-recheck'
         if str(Path(config['baseline']).resolve(strict=True)) != baseline:
             raise ValueError('activated baseline changed during review')
@@ -246,8 +266,17 @@ def worker(config, directory):
     temporary = Path(directory)
     # Source modes are read by the shared reviewer from this immutable link.
     (temporary / 'source').symlink_to(payload['binding']['source'], target_is_directory=True)
-    verdict = review.review(config, payload['binding'], payload['files'], payload['diff'], temporary)
-    print(json.dumps(verdict))
+    try:
+        verdict = review.review(config, payload['binding'], payload['files'], payload['diff'], temporary)
+        result = dict(status='verdict', verdict=verdict)
+    except review.ReviewDenied as error:
+        result = dict(status='verdict', verdict=error.verdict)
+    except review.ReviewVerdictError as error:
+        result = dict(status='error', code=error.code)
+    except Exception:
+        # Do not reflect native/API stderr, which may contain credentials.
+        result = dict(status='error', code='reviewer-invocation-failed')
+    print(json.dumps(result))
 
 
 def serve(config):
@@ -278,6 +307,8 @@ def serve(config):
             code = error.code if isinstance(error, DeploymentFailure) else 'invalid-or-denied'
             print(json.dumps(dict(event='failed', uid=uid, pid=pid, stage=stage, code=code)), flush=True)
             result = dict(ok=False, stage=stage, code=code, error='Deployment failed at ' + stage + ' (' + code + ').')
+            if isinstance(error, DeploymentDenied):
+                result['summary'] = error.summary
         try:
             connection.sendall(json.dumps(result).encode() + b'\n')
         except OSError:
