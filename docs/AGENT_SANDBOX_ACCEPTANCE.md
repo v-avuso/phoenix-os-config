@@ -26,7 +26,7 @@ The persistent boot profile still points to the previous known-good generation.
 | Portal bus | Host systemd access rejected; real Settings.Read initially exposed missing Instance metadata, corrected using NixPak’s runtime contract; isolated method call now passes |
 | Native CLI protocol | Pinned app-server initialized in a disposable empty home; no authentication or model turn |
 | Broker root/runtime mutation | Installed service reads passed; unlisted service rejected; metal xHCI wakeup enabled→disabled→enabled round-trip restored original state and produced audit records |
-| Real reviewer | Separate retained login; GPT-6.1 Sol / medium returned a valid bound approval for the installed committed source; no build or activation authorized by this review |
+| Real reviewer/deployment | Retained login; GPT-6.1 Sol / medium approved committed source `55ac611` for `test`; helper built the exact frozen source and completed graphical Polkit activation |
 | GUI/backend end-to-end | Saved sandbox login reused; GPT-6 Luna / high model turn succeeded; full-duplex app-server initialization passed; sandboxed window opened; interactive GUI turn blocked by desktop routing/auth mediation gap |
 | Persistence/recovery | Pending login/reboot and installed rollback |
 
@@ -37,35 +37,29 @@ sign-in. Ordinary sandbox launches never start OAuth; repeated sandbox login
 commands reuse existing state. Only the public workspace UUID is visible to the
 worker for Codex routing; bearer and refresh credentials remain hidden.
 
-Currently installed test system (source commit `6d4dc9e`):
-`/nix/store/qf9x83iblmkzpip91mqxyd5p5clb822s-nixos-system-phoenix-26.05.20260924.c508844`.
+Currently installed test system (source commit `55ac611`):
+`/nix/store/hw6yd5czl1zg2hqabj4cv529n976vcb6-nixos-system-phoenix-26.05.20260924.c508844`.
+The source baseline is the reviewed frozen Git snapshot; later documentation-only
+commits do not change this recorded runtime result.
 
 ## Remaining acceptance and integration
 
-1. Commit all intended source and build the clean Git flake. Never install a
-   `path:.` build as the review baseline: it can contain `.git` and ignored local
-   artifacts, which the review helper intentionally rejects. Keep an existing
-   known-good generation and use the available graphical Polkit flow.
-2. Install the reviewed system with temporary `test` first. Confirm socket
-   activation, bounded broker reads, rejected malformed requests and journal
-   metadata. Round-trip only metal's allowlisted `0000:10:00.4` wakeup setting,
-   restoring the original value even after failure. VM has no write allowlist.
-3. Reuse the saved sandbox login; verify refresh and
-   installed exclusions and CLI cancellation. Open **ChatGPT Community
-   (Sandboxed)** only after implementing the desktop routing/auth mediation.
-   Its current synthetic email is a placeholder, not a login failure. The GUI
-   requires a non-null `account/read.workspaceRouting` and performs authenticated
-   HTTP through Electron, outside the worker’s credential injection. Repeating
+1. Verify refresh, session/reboot persistence, large-build cancellation and
+   recovery before a persistent switch. The prior boot profile remains intact;
+   reboot acceptance is not claimed.
+2. Finish desktop routing/auth mediation before using the sandboxed GUI daily.
+   Its synthetic email is a placeholder, not the cause of the blocked mode
+   switch. The GUI needs non-null `account/read.workspaceRouting` and sends
+   authenticated Electron HTTP outside worker credential injection. Repeating
    OAuth or adding public identity fields alone does not resolve this. Preserve
-   the existing logins; do not copy Native profiles or expose worker tokens.
-   Then verify contained model/tool use, permissions and launcher ordering.
-4. Reuse the saved reviewer login; review a harmless committed change against
-   the installed baseline. Check rejection and immutable-source building, then
-   authenticated temporary activation. Source review is probabilistic and not closure analysis.
-5. Check session/reboot persistence and installed rollback before persistent
-   switch. Automatic root activation, application-specific broker identity,
-   complete process-command auditing and isolated GUI networking remain future
-   work, not capabilities of this version.
+   existing logins; do not copy Native profiles or expose worker tokens.
+3. Verify interactive GUI model/tool use, portal file selection, permission
+   defaults, private profiles and launcher ordering after that integration.
+   The isolated portal Settings.Read fix already passes; whole GUI acceptance
+   does not.
+4. Passwordless root activation, application-specific broker identity, complete
+   process-command auditing and isolated GUI networking remain future work.
+   Reviewed `test` uses normal graphical Polkit; persistent `switch` is absent.
 
 Temporary test activation, model/reviewer smoke processes and the blocked GUI
 probe finished. Saved state and the managed gateway remain for reuse.
