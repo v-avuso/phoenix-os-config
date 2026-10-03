@@ -152,11 +152,25 @@ let
       );
     };
     dbus.system.talks = lib.mkForce [ ];
+    # Chromium exports its maintained tray interface under a process name.
+    # Host activation additionally verifies this exact filtered proxy/socket.
+    dbus.session.owns = [ "org.freedesktop.StatusNotifierItem-*" ];
   };
   wrapped = bwrapper.mkBwrapper wrapperModule;
+  profileSeedConfig = pkgs.writeText "phoenix-agent-gui-profile.json" (builtins.toJSON {
+    source = "${user.homeDirectory}/.codex/.codex-global-state.json";
+    destination = "${profile}/home/.codex/.codex-global-state.json";
+    marker = "${profile}/preferences-seeded-v1";
+    launcherConfig = toString phoenixAgentLauncherConfig;
+    workspaces = cfg.workspaces;
+  });
   guiConfig = pkgs.writeText "phoenix-agent-gui.json" (
     builtins.toJSON {
       inherit profile;
+      profileSeed = [ python "-I" (toString ./gui-profile.py) (toString profileSeedConfig) ];
+      busctl = "${pkgs.systemd}/bin/busctl";
+      proxyExecutable = "${pkgs.xdg-dbus-proxy}/bin/xdg-dbus-proxy";
+      proxySocket = "${runtime}/app/io.phoenix.Codex/bus";
       wrapper = "${wrapped}/bin/${desktop.pname}";
       home = user.homeDirectory;
       workspaces = cfg.workspaces;

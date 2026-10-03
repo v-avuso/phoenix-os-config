@@ -182,6 +182,19 @@ def main(config, args):
         command = ["/bin/phoenix-sandbox-init", "/bin/codex"]
         if not app_server:
             command += ["--no-daemon"]
+        if app_server and config.get("appServerPreferences"):
+            # Immutable host adapter selects only public scalar preferences.
+            # Caller flags cannot choose the source or add host capabilities.
+            preferences = run(config["appServerPreferences"]).stdout
+            if len(preferences) > 4096:
+                raise SystemExit("Selected app-server preferences exceed bounded output")
+            preferences = json.loads(preferences)
+            allowed = {"model", "model_reasoning_effort", "service_tier", "desktop.followUpQueueMode",
+                       "desktop.conversationDetailMode", "desktop.appearanceTheme", "desktop.ambient-suggestions-enabled"}
+            if not isinstance(preferences, dict) or not preferences.keys() <= allowed or any(type(v) not in (str, bool) for v in preferences.values()):
+                raise SystemExit("Invalid selected app-server preferences")
+            for key, value in preferences.items():
+                command += ["-c", key + "=" + json.dumps(value)]
         command += args
     if app_server:
         # OpenShell 0.1.2 gRPC exec buffers nonterminal stdin until EOF;

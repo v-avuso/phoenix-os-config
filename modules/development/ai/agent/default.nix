@@ -230,6 +230,10 @@ let
         )
       );
       workspaces = cfg.workspaces;
+      appServerPreferences = [
+        "${pkgs.python3}/bin/python3" "-I" (toString ./gui-profile.py)
+        "--worker" "${user.homeDirectory}/.codex/config.toml"
+      ];
       default_workdir = user.repoDirectory;
       inherit state;
     }

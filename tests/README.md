@@ -10,6 +10,7 @@ python3 -B tests/agent-admin.py
 python3 -B tests/agent-launch.py
 python3 -B tests/agent-review.py
 python3 -B tests/agent-gui.py
+python3 -B tests/agent-gui-profile.py
 python3 -B tests/agent-deployment.py
 python3 -B tests/agent-gui-http.py
 node tests/agent-gui-http-hook.cjs

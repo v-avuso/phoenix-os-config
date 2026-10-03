@@ -3,9 +3,9 @@
 The declarations are in `modules/development/ai/agent`. Installation and runtime
 status are recorded separately in [acceptance](AGENT_SANDBOX_ACCEPTANCE.md).
 A successful build does not install these services or launcher entries.
-The CLI and independent reviewer have authenticated runtime acceptance.
-The desktop and unattended deployment adapters must pass the runtime checks
-in that report before daily use; component tests alone are insufficient.
+The CLI, diagnostic broker and independently reviewed unattended test/switch
+have runtime acceptance. Interactive desktop acceptance is still pending;
+component tests alone are insufficient.
 
 ## Everyday use
 
@@ -26,8 +26,8 @@ Launchers start their required services automatically. The current declaration f
 sandboxed GUI entry; fuzzy matching and usage history still affect search order.
 Native remains available for repair. There is no automatic native fallback.
 
-Sandbox and Native GUI profiles are separate. Native credentials, history and
-state are not copied or reconciled. Sharing the whole profile would expose that
+Sandbox and Native GUI profiles are separate. Native credentials and private
+history are not copied or reconciled. Sharing the whole profile would expose that
 state and risk redirecting launches to an existing Native process. The GUI
 profile and sandbox/reviewer logins require initial user participation. Saved
 credentials survive launches; diagnostic failures do not trigger another login.
@@ -37,6 +37,17 @@ happens on egress. The sandbox-only immutable desktop bootstrap forwards its
 authenticated backend fetches to that adapter. Real account metadata supplies
 workspace routing and a public identity selector; no reusable bearer reaches the
 GUI. Public asset requests retain the upstream transport.
+
+At first configured launch, a host-only adapter imports selected existing
+onboarding/display preferences and project roots inside the declared workspaces.
+It preserves other sandbox state and starts without maximization. It never copies
+the whole global-state map, draft/resume tokens, history or authentication.
+Separately, each GUI app-server launch reads only typed model/effort/tier and
+four supported desktop preferences from Native `config.toml`; these become fixed
+scalar Codex overrides. Permission modes, endpoints, commands, MCP servers and
+plugins are excluded. The worker never receives or mounts that Native file.
+The CLI TUI retains its own configuration; this is selective GUI settings reuse,
+not shared profiles or shared Native task history.
 
 ## Boundaries and initial access
 
@@ -138,6 +149,20 @@ its saved provider. Missing routing metadata needs repair, not another sign-in.
 The public workspace UUID is passed separately because Codex compares it locally.
 The desktop uses OpenShell’s mTLS SSH proxy for duplex app-server traffic, without
 host SSH keys/configuration or remote login profiles; ordinary commands use gRPC.
+
+The pinned desktop decodes public `chatgpt_account_id` and `chatgpt_user_id`
+claims before it performs account lookup. The GUI relay supplies those required
+fields, actual email/plan and routing from authenticated account/profile APIs.
+An incomplete selector can therefore look like unavailable Work access even when
+CLI authentication succeeds. Repair that adapter rather than starting OAuth.
+
+Chromium's singleton socket cannot reliably coordinate separate private `/tmp`
+and PID namespaces. The host launcher serializes access to the writable private
+GUI profile for the wrapper's lifetime. A repeated launch uses upstream tray
+activation only when its owner is the exact same-user immutable filtered bus
+proxy for this sandbox; it never falls back to Native. This activation adapter
+still requires live acceptance. Close processes, not just visible test windows,
+before another isolated trial; never reset the profile to hide lock errors.
 
 Live writable repositories require OpenShell's unsafe host-bind opt-in and
 relaxed driver resource admission. Host kernel/runtime and gateway remain

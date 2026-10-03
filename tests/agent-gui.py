@@ -9,6 +9,8 @@ import shutil
 import sys
 import time
 from pathlib import Path
+from unittest import mock
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -57,6 +59,43 @@ with tempfile.TemporaryDirectory() as directory:
             pass
         else:
             raise AssertionError("Foreign display/runtime accepted")
+
+# Standard tray replies select only the exact immutable filtered proxy owner.
+tray_config = {"busctl": "/immutable/busctl", "proxyExecutable": "/immutable/proxy",
+               "proxySocket": "/fixed/proxy/bus"}
+tray_items = ["org.freedesktop.StatusNotifierItem-2-1/StatusNotifierItem"]
+def tray_reply(command, **kwargs):
+    assert command[:3] == [tray_config["busctl"], "--user", "--json=short"]
+    assert kwargs["timeout"] <= 2
+    if command[3] == "get-property": value = {"type": "as", "data": tray_items}
+    elif "GetNameOwner" in command:
+        service = command[-1]
+        value = {"type": "s", "data": [service if service.startswith(":") else ":1.99"]}
+    elif "GetConnectionUnixProcessID" in command: value = {"type": "u", "data": [987]}
+    else:
+        assert command[3:] == ["call", ":1.99", "/StatusNotifierItem", "org.kde.StatusNotifierItem", "Activate", "ii", "0", "0"]
+        return subprocess.CompletedProcess(command, 0, stdout=b"", stderr=b"")
+    return subprocess.CompletedProcess(command, 0, stdout=json.dumps(value).encode(), stderr=b"")
+with mock.patch.object(launch.subprocess, "run", side_effect=tray_reply) as run, \
+     mock.patch.object(launch.Path, "resolve", return_value=Path("/immutable/proxy")), \
+     mock.patch.object(launch.Path, "stat", return_value=SimpleNamespace(st_uid=os.getuid())), \
+     mock.patch.object(launch.Path, "read_bytes", return_value=b"/immutable/proxy\0/fixed/proxy/bus\0--filter\0"):
+    assert launch.reactivate(tray_config, clean)
+    assert any("Activate" in call.args[0] for call in run.call_args_list)
+    run.reset_mock()
+    assert not launch.reactivate(tray_config | {"proxySocket": "/foreign/bus"}, clean)
+    assert not any("Activate" in call.args[0] for call in run.call_args_list)
+    tray_items[:] = [":1.99/StatusNotifierItem", ":1.100/StatusNotifierItem"]
+    run.reset_mock()
+    assert not launch.reactivate(tray_config, clean)
+    assert not any("Activate" in call.args[0] for call in run.call_args_list)
+with mock.patch.object(launch.subprocess, "run", side_effect=tray_reply) as run, \
+     mock.patch.object(launch.Path, "resolve", return_value=Path("/native/electron")), \
+     mock.patch.object(launch.Path, "stat", return_value=SimpleNamespace(st_uid=os.getuid())), \
+     mock.patch.object(launch.Path, "read_bytes") as read:
+    assert not launch.reactivate(tray_config, clean)
+    read.assert_not_called()
+    assert not any("Activate" in call.args[0] for call in run.call_args_list)
 
 # Independent wrapper launches must not concurrently open one private profile:
 # Chromium's own singleton check cannot see another wrapper's private /tmp.

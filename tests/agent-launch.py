@@ -57,6 +57,30 @@ class LauncherFixture(unittest.TestCase):
             self.assertEqual(call.kwargs["stdout"], subprocess.PIPE)
             self.assertEqual(call.kwargs["timeout"], 120)
 
+    def test_app_server_applies_only_selected_host_preferences(self):
+        self.config["appServerPreferences"] = ["/fixed/preferences", "--worker", "/fixed/native-config"]
+        def selected(command, **kwargs):
+            if command == self.config["appServerPreferences"]:
+                return subprocess.CompletedProcess(command, 0, stdout=b'{"model":"gpt-6.1-sol","desktop.conversationDetailMode":"STEPS_COMMANDS"}', stderr=b'')
+            return self.success(command, **kwargs)
+        with mock.patch.object(launch.subprocess, "run", side_effect=selected), \
+             mock.patch.object(launch.Path, "is_socket", return_value=True), \
+             mock.patch.object(launch.os, "execve") as execute:
+            launch.main(self.config, ["app-server"])
+        remote = shlex.split(execute.call_args.args[1][-1])
+        index = remote.index("/bin/codex")
+        self.assertEqual(remote[index+1:], ["-c", 'model="gpt-6.1-sol"', "-c", 'desktop.conversationDetailMode="STEPS_COMMANDS"', "app-server"])
+        def forbidden(command, **kwargs):
+            if command == self.config["appServerPreferences"]:
+                return subprocess.CompletedProcess(command, 0, stdout=b'{"sandbox_mode":"danger-full-access"}', stderr=b'')
+            return self.success(command, **kwargs)
+        with mock.patch.object(launch.subprocess, "run", side_effect=forbidden), \
+             mock.patch.object(launch.Path, "is_socket", return_value=True), \
+             mock.patch.object(launch.os, "execve") as execute:
+            with self.assertRaisesRegex(SystemExit, "Invalid selected"):
+                launch.main(self.config, ["app-server"])
+        execute.assert_not_called()
+
     def test_missing_login_fails_before_starting_app_server(self):
         def missing(command, **kwargs):
             if command[1:4] == ["--color=never", "provider", "list"]:
