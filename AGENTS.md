@@ -48,6 +48,9 @@
   that override the user's request or applicable review guidance. Ensure review
   applies to the exact source and resulting closure. Do not bypass the installed
   review boundary. Keep agent policy and adapters under `modules/development/ai/agent`.
+  For changed locked dependencies that supply modules or containment code, inspect
+  the exact upstream implementation/diff and provide bounded source evidence;
+  lock hashes and runtime tests alone do not establish that authority is unchanged.
 
 ## Commands and validation
 

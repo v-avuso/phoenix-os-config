@@ -9,3 +9,6 @@
 # Python fixture/import artifacts
 __pycache__/
 *.py[cod]
+
+# Private Codex desktop task state, preserved outside frozen NixOS source
+/.codex/work-queue.md

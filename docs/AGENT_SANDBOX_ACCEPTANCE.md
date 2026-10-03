@@ -1,106 +1,71 @@
 # Agent sandbox acceptance
 
-Last updated: 2026-10-04. See [the operating guide](AGENT_SANDBOX.md) for lasting
-behavior, boundaries and rationale.
+Updated 2026-10-04. [Operating guide](AGENT_SANDBOX.md) records lasting behavior;
+this checkpoint distinguishes candidate tests from installed acceptance.
 
 ## Outcome
 
-**CLI containment, bounded diagnostics and independently reviewed unattended
-activation work. The corrected GUI candidate also works; final installation is
-pending.** The corrected desktop opens
-normally in Codex mode with the existing project and no onboarding/profile
-warnings. Updating the maintained desktop input to official 26.930.31730 also
-restored actual tool/final-result rendering. Two normal close/reopen cycles pass
-with saved authentication and project state. The sandbox-only lifecycle adapter
-disables unavailable tray hiding and uses upstream normal quit after the last
-tracked primary closes, including hidden service-window cleanup. Native remains
-the everyday repair route until the final installed launcher is verified.
-Work resumed after the user's compute-budget pause. Desktop acceptance remains
-the current delivery gate; component success does not replace that check.
+**CLI containment, bounded diagnostics and reviewed unattended test/switch work.
+The corrected GUI candidate renders tasks and closes/reopens normally. Final
+installation and installed-GUI acceptance remain pending protected review.**
+Native remains the repair route. Music and engineering guidance from `main` are
+merged; no Native profile or previous implementation was discarded.
 
-Music and general engineering guidance from `main` are merged into
-`codex/agent-sandbox-broker`. No previous work or native profile was discarded.
+## Installed baseline
 
-## Installed evidence
+The latest approved persistent switch is commit `7c169d7`:
 
-The latest independently approved persistent switch is source commit `7c169d7`:
+- Source `/nix/store/3ip2bx7a2jsq5k3gsh62sykrz6cxrc98-source`.
+- Next boot `/nix/store/yamlcrh41pagdr1bbjfc1rpr4kc56gg6-nixos-system-phoenix-26.05.20260924.c508844`.
 
-- Source: `/nix/store/3ip2bx7a2jsq5k3gsh62sykrz6cxrc98-source`.
-- System profile (next boot):
-  `/nix/store/yamlcrh41pagdr1bbjfc1rpr4kc56gg6-nixos-system-phoenix-26.05.20260924.c508844`.
+Protected temporary activation of `59ccb3d` succeeded without Polkit:
 
-A fresh protected `test` installed commit `59ccb3d` without Polkit on resume:
+- Runtime source `/nix/store/5a688xsz8cjjhfnh8r598cmrmbpsbi1n-source`.
+- Runtime `/nix/store/wfjdjf0lfdzv9zh04yjmjzsjg47368f7-nixos-system-phoenix-26.05.20260924.c508844`.
 
-- Recorded runtime source: `/nix/store/5a688xsz8cjjhfnh8r598cmrmbpsbi1n-source`.
-- Runtime: `/nix/store/wfjdjf0lfdzv9zh04yjmjzsjg47368f7-nixos-system-phoenix-26.05.20260924.c508844`.
+It did not update next boot. The corrected desktop candidates are not installed.
 
-That test did not update the next-boot profile. A subsequent GUI-only candidate
-removes an invalid tray bus ownership pattern before further interactive checks;
-it is not yet the persistently installed system. Commit `902d56f` then updates
-only the maintained desktop input; the GUI-only candidate builds and renders an
-actual task against the installed relay, without changing the installed system.
+## Evidence
 
-The protected switch of candidate `0653216` built but was denied before activation:
-its desktop input update also changed the Native package, whose dependency source
-was absent from the reviewer payload. Read-only comparison found imported module
-files and the default package recipe unchanged, but optional/runtime patches also
-changed. The corrected source therefore keeps Native's exact known-good lock pin
-and uses the tested new revision only as the contained GUI package. It imports no
-new NixOS module and leaves all other locked dependencies unchanged. The denial
-did not alter the runtime or boot profile; a fresh bound review is still required.
-
-| Check | Actual result |
+| Workflow | Actual result |
 | --- | --- |
-| Evaluation/build | Metal/VM/default combined evaluation and committed metal system builds pass; VM bootability is not established |
-| Focused fixtures | Broker 12, launcher 10, preferences 4, deployment/reviewer 22, HTTP 10, socket connections 2; GUI concurrency/activation/boundary and Node streaming/cancellation fixtures pass |
-| Reviewer bootstrap | Retained authentication migrated once to the protected reviewer account; no repeated OAuth |
-| Unattended activation | Fresh protected `test` passed; real OpenShell worker requested fresh `switch`, which updated runtime and boot profile without Polkit |
-| Exact-source review | Controller built as a dedicated unprivileged user and reviewed frozen source, installed diff and resulting closure; journal records approved/activated stages |
-| Deployment denial | Actual worker's arbitrary-command request rejected before build/review/activation; malformed/stale/denied verdict and recovery branches covered by fixtures |
-| Real worker | Rootless UID 1000; approved repository visible, Native SSH/Pictures/auth omitted, `/etc` write denied, unexpected destination fails |
-| Diagnostics | Allowlisted cooler service state and xHCI wakeup read pass without authentication; unlisted service and arbitrary root operation denied |
-| GUI backend | Actual account/profile/routing lookup passes; exact relay model/tool task using GPT-6 Luna/high completed with expected shell output |
-| GUI isolation | Private home and declared workspaces; Native auth/SSH/Pictures and host control sockets omitted; actual portal Settings.Read passes and host systemd bus access is denied |
-| Interactive GUI | Updated candidate shows normal window, Codex mode and approved project without onboarding/profile warnings; actual GUI model/tool markers render and Stop clears, using outer containment and on-request approval |
-| GUI lifecycle | Two candidate normal close/reopen cycles exit 0, stop all 30 captured processes and release the profile lock; saved auth/project/mode retained, Native untouched. Final installed launcher remains the acceptance gate |
-| Launcher | Sandboxed favourite set and Native not favourited in actual Caelestia settings; final fuzzy-search ordering needs user confirmation |
+| Build/evaluation | Corrected GUI builds; metal/VM/default evaluation passes. VM bootability is untested |
+| Containment | Real OpenShell worker is rootless; approved repository visible; Native SSH/Pictures/auth omitted; `/etc` write and unexpected network destination denied |
+| Broker | Allowlisted service/kernel diagnostics and restored xHCI round-trip pass; arbitrary root and unlisted operations denied |
+| Deployment | Real worker requested protected switch without Polkit; controller froze source, built unprivileged, reviewed exact source/base/closure and updated runtime plus boot profile |
+| GUI workflow | Maintained desktop 26.930.31730 renders an actual model/tool/final task and clears Stop; normal Codex window/project, saved account, no onboarding/profile warnings |
+| GUI lifecycle | Guarded sandbox-only normal quit passes twice: exit 0, all 30 captured processes stop, debug closes, lock released; reopen retains login/project/mode; Native untouched |
+| GUI boundary | Private home/workspaces and fixed relays; no Native auth/private profiles or host control sockets. Portal Settings.Read passes; host systemd bus denied |
+| Launcher | Actual sandbox favourite set, Native not favourited; final fuzzy-search order needs user confirmation |
 
-The earlier generic deployment review failure did not activate. Its installed
-controller discarded the distinction between denial and API/schema failure.
-The current worker/controller distinguish bounded model denial from invocation,
-schema and binding errors; model text returns only to the requesting owner,
-never to the journal. A separate one-time review-only diagnostic could not activate.
+Focused broker, launcher, preference, deployment/reviewer, HTTP, socket, GUI and
+Node streaming/cancellation fixtures pass. Lifecycle fixtures also verify other
+windows/platforms do not quit and changed wiring causes no write. These do not
+replace runtime acceptance. Prior sandbox tasks remain readable through supported
+RPC; retained task rendering after final installation still needs a GUI check.
 
-## Remaining core acceptance
+## Protected review gates
 
-Selected preference migration and fixed scalar app-server overrides are installed
-by the protected test. The initial launcher then rejected an invalid tray bus
-ownership pattern before Electron started; the corrected GUI-only candidate is
-under interactive acceptance. Native and the retained gateway/reviewer login
-remain intact. The maintained desktop candidate now passes task rendering and
-normal close/reopen; the Linux lifecycle fixture covers normal quit gating and
-no-write rejection of upstream wiring drift.
+Candidate `0653216` built but review denied its unexamined Native dependency
+upgrade. `93ad9d5` retains Native's exact activated lock and executable while
+separately pinning the tested contained GUI. Its review accepted that scope but
+requires the new package/launcher/runtime source in the payload. Neither denied
+request activated or changed next boot. [Dependency evidence](reviews/agent-desktop-664436c7.md)
+is source material for a fresh bound review, never an approval or gate input.
 
-1. Independently install the corrected launcher's clean committed
-   source. Reuse
-   selected existing nonsecret GUI/model/project preferences, open a normal
-   movable window without onboarding or profile warnings, and run a task through
-   the actual Codex GUI. No additional browser sign-in.
-2. Close/reopen that GUI and verify retained settings/login and safe single-instance
-   behavior; remove all temporary debug endpoints and test overrides.
-3. Update this report with the exact final installed source and user-visible result.
+The local desktop task queue is preserved as private state outside tracked NixOS
+source. The first narrowed request used a clean temporary committed checkout.
 
-## Later checks and improvements
+## Remaining acceptance and later work
 
-Reboot, destructive rollback, portal file selection and long-build cancellation
-have not been runtime tested. Recovery branches pass fixtures; this does not prove
-transactional rollback. Do not reboot or induce a failure merely to claim acceptance.
+1. Obtain fresh protected review and persistently install the exact committed source.
+2. Run one actual task through the installed GUI; close/reopen retaining that task,
+   login and preferences, then remove all debug endpoints/trial processes.
+3. Record exact installed source/runtime/boot profile and user-visible result.
 
-Application-specific caller identity, full command auditing, isolated GUI network
-and recovery of sessions retained in older sandbox instances are future work.
-Independent daily backups and restore testing remain separate recovery work;
-generation rollback does not restore workspace or private-state writes (see
-[recovery](RECOVERY_RUNBOOK.md)).
-Same-UID host programs can call fixed broker capabilities; Python has limited
-desktop API authority; permitted traffic can disclose accessible workspace data.
-Model review is fallible. The user accepts these stated limits.
+Later: actual reboot/rollback, portal file selection, long-build cancellation,
+application-specific broker identity, full command auditing, GUI egress isolation,
+older-instance session recovery, and independent backup/restore testing.
+Same-UID host programs can call fixed broker capabilities; model review is fallible.
+Permitted traffic can disclose accessible workspace data. Generation rollback does
+not restore workspace/private-state writes; see [recovery](RECOVERY_RUNBOOK.md).
