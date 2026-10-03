@@ -3,6 +3,7 @@
 import importlib.util
 import json
 import os
+import shlex
 from pathlib import Path
 import subprocess
 import tempfile
@@ -20,7 +21,7 @@ class LauncherFixture(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        self.config = {key: "/fixed/" + key for key in ("openshell", "native", "podman", "systemctl", "image", "policy", "profile")}
+        self.config = {key: "/fixed/" + key for key in ("openshell", "native", "podman", "systemctl", "ssh", "image", "policy", "profile")}
         self.config.update(state=str(self.root / "state"), workspaces=[str(self.root)], default_workdir=str(self.root), mounts=str(self.root / "mounts"))
         (self.root / "mounts").write_text('{}')
         (self.root / "state").mkdir()
@@ -41,13 +42,16 @@ class LauncherFixture(unittest.TestCase):
              mock.patch.dict(os.environ, {"OPENSHELL_GATEWAY": "attacker", "OPENSHELL_POLICY": "attacker"}):
             launch.main(self.config, ["app-server", "--listen", "stdio://"])
         executable, argv, env = execute.call_args.args
-        self.assertEqual(executable, self.config["openshell"])
-        self.assertIn("--no-tty", argv)
+        self.assertEqual(executable, self.config["ssh"])
+        self.assertIn("-T", argv)
+        self.assertIn("IdentityAgent=none", argv)
+        self.assertIn("SetEnv=OPENSHELL_NO_LOGIN_SHELL=1", argv)
+        self.assertEqual(argv[1:3], ["-F", "/dev/null"])
         self.assertNotIn("--no-daemon", argv)
-        self.assertEqual(argv[-5:], ["/bin/phoenix-sandbox-init", "/bin/codex", "app-server", "--listen", "stdio://"])
+        self.assertEqual(shlex.split(argv[-1])[-5:], ["/bin/phoenix-sandbox-init", "/bin/codex", "app-server", "--listen", "stdio://"])
         self.assertEqual(env["OPENSHELL_GATEWAY"], "openshell")
         self.assertNotIn("OPENSHELL_POLICY", env)
-        self.assertIn("PHOENIX_CODEX_ACCOUNT_ID=00000000-0000-0000-0000-000000000001", argv)
+        self.assertIn("PHOENIX_CODEX_ACCOUNT_ID=00000000-0000-0000-0000-000000000001", shlex.split(argv[-1]))
         for call in run.call_args_list:
             self.assertEqual(call.kwargs["stdout"], subprocess.PIPE)
             self.assertEqual(call.kwargs["timeout"], 120)

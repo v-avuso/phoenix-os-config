@@ -3,6 +3,7 @@ import fcntl
 import hashlib
 import json
 import os
+import shlex
 from pathlib import Path
 import subprocess
 import sys
@@ -155,7 +156,23 @@ def main(config, args):
         if not app_server:
             command += ["--no-daemon"]
         command += args
-    os.execve(config["openshell"], execution + command, env)
+    if app_server:
+        # OpenShell 0.1.2 gRPC exec buffers nonterminal stdin until EOF;
+        # an app-server needs full duplex. Use upstream's mTLS SSH proxy,
+        # with no host SSH configuration, keys, agent, or terminal involved.
+        proxy = shlex.join(cli + ["ssh-proxy", "--gateway-name", "openshell", "--name", name])
+        remote = "cd " + shlex.quote(workdir) + " && exec " + shlex.join(
+            ["/bin/env", "PHOENIX_CODEX_ACCOUNT_ID=" + account_id] + command)
+        ssh = [config["ssh"], "-F", "/dev/null", "-T", "-o", "BatchMode=yes",
+               "-o", "IdentityAgent=none", "-o", "IdentityFile=none", "-o", "IdentitiesOnly=yes",
+               "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+               "-o", "GlobalKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR",
+               "-o", "SetEnv=OPENSHELL_NO_LOGIN_SHELL=1",
+               "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3",
+               "-o", "ProxyCommand=" + proxy, "sandbox", remote]
+        os.execve(config["ssh"], ssh, env)
+    else:
+        os.execve(config["openshell"], execution + command, env)
 
 
 if __name__ == "__main__":

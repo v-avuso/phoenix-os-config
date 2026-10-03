@@ -170,6 +170,7 @@ let
       native = "${codexCliPackage}/bin/codex";
       podman = "${pkgs.podman}/bin/podman";
       systemctl = "${pkgs.systemd}/bin/systemctl";
+      ssh = "${pkgs.openssh}/bin/ssh";
       image = toString image;
       policy = toString policy;
       mounts = toString driverConfig;
