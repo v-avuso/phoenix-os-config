@@ -5,3 +5,7 @@
 # Local development shells
 /.direnv/
 /direnvrc
+
+# Python fixture/import artifacts
+__pycache__/
+*.py[cod]

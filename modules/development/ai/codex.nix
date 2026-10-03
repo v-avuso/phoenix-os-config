@@ -36,5 +36,4 @@ let
 in
 {
   _module.args.codexCliPackage = codexPrebuilt;
-  environment.systemPackages = [ codexPrebuilt ];
 }
