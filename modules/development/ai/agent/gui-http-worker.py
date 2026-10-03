@@ -7,6 +7,9 @@ scope. No host credential file, gateway socket or bearer export is involved.
 import base64
 import json
 import os
+import functools
+import re
+import subprocess
 import sys
 import urllib.error
 import urllib.parse
@@ -28,6 +31,18 @@ ACCOUNTS_URL = "https://chatgpt.com/backend-api/wham/accounts/check"
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs):
         return None
+
+
+@functools.lru_cache(maxsize=1)
+def cli_user_agent():
+    # The authenticated /me endpoint rejects urllib's generic user agent. Use
+    # the actual contained CLI version, never a claimed older compatible one.
+    version = subprocess.run(["/bin/codex", "--version"], check=True,
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5)
+    match = re.fullmatch(rb"codex-cli ([A-Za-z0-9.+-]+)\s*", version.stdout)
+    if not match:
+        raise ValueError("Contained CLI version unavailable")
+    return "codex_cli_rs/" + match[1].decode("ascii")
 
 
 def validate(request):
@@ -54,6 +69,9 @@ def validate(request):
     # owns the opaque credential; account identity comes from trusted launch.
     headers["authorization"] = "Bearer " + os.environ["CODEX_AUTH_ACCESS_TOKEN"]
     headers["chatgpt-account-id"] = os.environ["PHOENIX_CODEX_ACCOUNT_ID"]
+    if "user-agent" not in headers:
+        headers["user-agent"] = cli_user_agent()
+    headers.setdefault("originator", "codex_cli_rs")
     body = base64.b64decode(request.get("body", ""), validate=True)
     if len(body) > LIMIT:
         raise ValueError("Desktop HTTP request is too large")
@@ -116,7 +134,7 @@ def main():
                     raise ValueError("Desktop HTTP response is too large")
                 emit({"chunk": base64.b64encode(chunk).decode("ascii")})
             emit({"done": True})
-    except (KeyError, TypeError, ValueError, OSError, urllib.error.URLError):
+    except (KeyError, TypeError, ValueError, OSError, urllib.error.URLError, subprocess.SubprocessError):
         # Reflect neither upstream error text nor request headers: credentials
         # and task content must never reach stderr/journal on adapter failure.
         print("Desktop backend request failed within the sandbox", file=sys.stderr)

@@ -22,6 +22,7 @@ def load(name):
 
 worker = load("gui-http-worker")
 relay = load("gui-relay")
+actual_cli_user_agent = worker.cli_user_agent
 
 
 class DesktopHTTP(unittest.TestCase):
@@ -29,6 +30,32 @@ class DesktopHTTP(unittest.TestCase):
         self.environment = patch.dict(os.environ, {"CODEX_AUTH_ACCESS_TOKEN": "opaque-fixture-handle", "PHOENIX_CODEX_ACCOUNT_ID": "11111111-1111-4111-8111-111111111111"})
         self.environment.start()
         self.addCleanup(self.environment.stop)
+        self.user_agent = patch.object(worker, "cli_user_agent", return_value="codex_cli_rs/fixture-version")
+        self.user_agent.start()
+        self.addCleanup(self.user_agent.stop)
+
+    def test_metadata_uses_actual_cli_identity_and_preserves_desktop_identity(self):
+        request = worker.validate({"url": "https://chatgpt.com/backend-api/me"})
+        headers = {key.lower(): value for key, value in request.header_items()}
+        self.assertEqual(headers["user-agent"], "codex_cli_rs/fixture-version")
+        self.assertEqual(headers["originator"], "codex_cli_rs")
+        request = worker.validate({"url": "https://chatgpt.com/backend-api/me", "headers": {"User-Agent": "actual-desktop", "Originator": "codex_desktop"}})
+        headers = {key.lower(): value for key, value in request.header_items()}
+        self.assertEqual(headers["user-agent"], "actual-desktop")
+        self.assertEqual(headers["originator"], "codex_desktop")
+
+    def test_cli_version_probe_is_fixed_bounded_and_validated(self):
+        actual_cli_user_agent.cache_clear()
+        self.addCleanup(actual_cli_user_agent.cache_clear)
+        with patch.object(worker.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, stdout=b"codex-cli 0.159.0-alpha.9\n")) as probe:
+            self.assertEqual(actual_cli_user_agent(), "codex_cli_rs/0.159.0-alpha.9")
+            self.assertEqual(actual_cli_user_agent(), "codex_cli_rs/0.159.0-alpha.9")
+            probe.assert_called_once()
+            self.assertEqual(probe.call_args.args[0], ["/bin/codex", "--version"])
+            self.assertEqual(probe.call_args.kwargs["timeout"], 5)
+        actual_cli_user_agent.cache_clear()
+        with patch.object(worker.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, stdout=b"unrecognised secret-reflective output")), self.assertRaises(ValueError):
+            actual_cli_user_agent()
 
     def test_fixed_destination_and_method(self):
         for url in ["https://evil.test/backend-api/me", "http://chatgpt.com/backend-api/me",
