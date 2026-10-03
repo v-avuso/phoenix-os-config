@@ -23,6 +23,13 @@ assert not client.supported(["app-server", "--listen", "tcp://0.0.0.0:1234"])
 assert client.main("/missing/phoenix-gui.sock", "0.159.0", ["app-server"]) == 1
 
 launch = load("gui-launch")
+assert "[Instance]\ninstance-id=phoenix-fixture\n" in launch.flatpak_info("phoenix-fixture")
+try:
+    launch.flatpak_info("../foreign-instance")
+except ValueError:
+    pass
+else:
+    raise AssertionError("Aliased portal instance accepted")
 with tempfile.TemporaryDirectory() as directory:
     workspace = Path(directory) / "workspace"
     workspace.mkdir()
@@ -30,6 +37,8 @@ with tempfile.TemporaryDirectory() as directory:
               "workdir": str(workspace), "bwrap": "/bwrap", "ca_file": "/immutable-ca-bundle", "client": "/client", "desktop": "/desktop", "path": "/tools"}
     args = launch.command(config, {"XDG_RUNTIME_DIR": "/run/user/1000", "WAYLAND_DISPLAY": "wayland-1",
                                   "SECRET_TOKEN": "must-not-enter"}, Path(directory), Path(directory) / "bus")
+    registered = launch.command(config, {"XDG_RUNTIME_DIR": "/run/user/1000", "WAYLAND_DISPLAY": "wayland-1"}, Path(directory), Path(directory) / "bus", Path(directory) / "info", 7)
+    assert registered[registered.index("--info-fd") + 1] == "7"
     assert "--clearenv" in args and "SECRET_TOKEN" not in args
     cli_index = args.index("CODEX_CLI_PATH")
     assert args[cli_index + 1] == "client"  # Plain override prevents bundled fallback.

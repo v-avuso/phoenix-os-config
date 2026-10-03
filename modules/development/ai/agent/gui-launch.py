@@ -8,7 +8,7 @@ import tempfile
 import time
 
 
-def command(config, env, profile, proxy):
+def command(config, env, profile, proxy, metadata=None, info_fd=None):
     home = config["home"]
     runtime = env["XDG_RUNTIME_DIR"]
     wayland = env.get("WAYLAND_DISPLAY", "wayland-1")
@@ -20,7 +20,7 @@ def command(config, env, profile, proxy):
             "--tmpfs", "/tmp", "--dir", runtime, "--bind", str(profile / "home"), home,
             "--ro-bind", runtime + "/phoenix-agent-gui.sock", runtime + "/phoenix-agent-gui.sock",
             "--ro-bind", runtime + "/" + wayland, runtime + "/" + wayland,
-            "--bind", str(proxy), runtime + "/bus", "--ro-bind", str(profile / "flatpak-info"), "/.flatpak-info"]
+            "--bind", str(proxy), runtime + "/bus", "--ro-bind", str(metadata or profile / "flatpak-info"), "/.flatpak-info"]
     for path in config["workspaces"]:
         if not Path(path).is_dir() or str(Path(path).resolve()) != path:
             raise ValueError("Missing or aliased declared workspace: " + path)
@@ -40,6 +40,8 @@ def command(config, env, profile, proxy):
     documents = Path(runtime) / "doc/by-app/io.phoenix.Codex"
     if documents.is_dir():
         args += ["--bind", str(documents), runtime + "/doc"]
+    if info_fd is not None:
+        args += ["--info-fd", str(info_fd)]
     args += ["--clearenv"]
     # A plain command override makes the pinned desktop skip its absolute-path
     # existence check and bundled-CLI fallback. Controlled PATH resolves only
@@ -64,6 +66,13 @@ def command(config, env, profile, proxy):
     return args + ["--chdir", config["workdir"], config["desktop"]]
 
 
+def flatpak_info(instance):
+    if not instance or "/" in instance or "\n" in instance:
+        raise ValueError("Invalid portal instance identity")
+    return ("[Application]\nname=io.phoenix.Codex\n[Context]\nshared=network;\nsockets=wayland;\n"
+            "[Instance]\ninstance-id=" + instance + "\n")
+
+
 def main(config, args):
     env = dict(os.environ)
     if not env.get("XDG_RUNTIME_DIR") or not env.get("WAYLAND_DISPLAY"):
@@ -74,10 +83,16 @@ def main(config, args):
     if profile.resolve() != profile or (profile / "home").resolve() != profile / "home":
         raise SystemExit("Sandbox GUI profile must not be a symlink or an aliased directory")
     profile.chmod(0o700)
-    if (profile / "flatpak-info").is_symlink():
-        raise SystemExit("Sandbox GUI portal identity must not be a symlink")
-    (profile / "flatpak-info").write_text("[Application]\nname=io.phoenix.Codex\n[Context]\nshared=network;\nsockets=wayland;\n")
-    with tempfile.TemporaryDirectory(prefix="phoenix-gui-", dir=env["XDG_RUNTIME_DIR"]) as directory:
+    # Mirror NixPak's Flatpak runtime contract: unique Instance metadata and
+    # Bubblewrap child PID information, used by portals to identify this app.
+    flatpak_runtime = Path(env["XDG_RUNTIME_DIR"]) / ".flatpak"
+    flatpak_runtime.mkdir(mode=0o700, exist_ok=True)
+    if flatpak_runtime.resolve() != flatpak_runtime:
+        raise SystemExit("Sandbox GUI instance registry must not be aliased")
+    with tempfile.TemporaryDirectory(prefix="phoenix-gui-", dir=env["XDG_RUNTIME_DIR"]) as directory, \
+         tempfile.TemporaryDirectory(prefix="phoenix-gui-", dir=flatpak_runtime) as instance_dir:
+        metadata = Path(instance_dir) / "info"
+        metadata.write_text(flatpak_info(Path(instance_dir).name))
         proxy = Path(directory) / "bus"
         # Portals identify the bus peer (the proxy), so its namespace must
         # carry the same Flatpak identity as the GUI; a host-side proxy with
@@ -90,7 +105,7 @@ def main(config, args):
             "--unshare-ipc", "--unshare-uts", "--cap-drop", "ALL",
             "--ro-bind", "/nix/store", "/nix/store", "--proc", "/proc", "--dev", "/dev",
             "--ro-bind", bus, bus, "--bind", directory, directory,
-            "--ro-bind", str(profile / "flatpak-info"), "/.flatpak-info",
+            "--ro-bind", str(metadata), "/.flatpak-info",
             "--", config["proxy"], "unix:path=" + bus, str(proxy),
             "--filter", "--talk=org.freedesktop.portal.*", "--own=io.phoenix.Codex.*"])
         try:
@@ -101,7 +116,9 @@ def main(config, args):
                 if process.poll() is not None or time.monotonic() >= deadline:
                     raise SystemExit("Sandbox desktop portal proxy did not become ready")
                 time.sleep(0.05)
-            return subprocess.call(command(config, env, profile, proxy) + args)
+            with open(Path(instance_dir) / "bwrapinfo.json", "w") as info:
+                return subprocess.call(command(config, env, profile, proxy, metadata, info.fileno()) + args,
+                                       pass_fds=(info.fileno(),))
         finally:
             process.terminate()
             process.wait(timeout=5)
