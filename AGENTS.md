@@ -88,8 +88,17 @@
 ## Git and documentation
 
 - Use Conventional Commits: `type(scope): imperative summary`; include a concise
-  scope when meaningful. Non-trivial commits need a body explaining why,
-  non-obvious tradeoffs, and relevant validation.
+  scope when meaningful.
+- For future non-trivial commits, include a concise body recording the problem,
+  the chosen decision, and why it was chosen. Preserve material constraints,
+  tradeoffs or rejected alternatives when non-obvious, plus relevant validation.
+  Give future agents enough context to reassess the current implementation;
+  do not merely repeat the diff. Omit the body only when the rationale is obvious.
+- For complex or lasting architectural decisions, also document the reasoning
+  in the relevant repository guide or module: motivation, constraints, important
+  alternatives, and conditions that would justify revisiting the choice. Link
+  that documentation from the commit body instead of duplicating it. Apply these
+  rules prospectively; do not rewrite existing commit history.
 - Keep docs compact: update current behavior in README/recovery/state guides,
   future direction in VISION, and local rationale in comments/commit bodies.
   Avoid duplicating code inventories or maintaining an exhaustive decision log.
