@@ -10,9 +10,21 @@
   authentication, and recovery constraints documented in operational guides.
 - Keep changes scoped. Preserve concurrent/dirty edits and do not stage or
   commit another worker's files. Coordinate ownership before parallel edits.
-- Reuse maintained upstream tools and reference configurations before building
-  infrastructure. Prefer a small integration and useful incremental delivery;
-  avoid large frameworks when a short, auditable helper suffices.
+- Before custom infrastructure, inspect relevant maintained upstream tools,
+  especially those the user names, and their implementation. Prefer configuration
+  and small adapters. Choose custom code only for narrow, straightforward behavior
+  with demonstrably lower integration and maintenance cost; record that comparison.
+  Fewer dependencies or a short initial implementation alone are not sufficient.
+- Count lifecycle, security, compatibility, edge cases and tests as maintenance.
+  Do not reproduce an existing framework's features or configuration converter
+  merely to avoid a dependency.
+- Define milestone acceptance through the user's primary workflow before work
+  starts. Component builds and smoke tests do not complete an iteration whose
+  core workflow is unusable. Required integration is part of delivery; continue
+  authorized work rather than silently deferring it as another iteration.
+- Report progress against requested outcomes: working, partial, missing, and
+  actual blockers. State unmet core goals prominently; implementation effort or
+  a technical handover is not evidence that the user's goal was achieved.
 - Separate general agent permissions/review intent from harness adapters under
   `modules/development/ai/agent`. Preserve useful prior work when plans change.
 - When parallel work is requested, assign distinct files and interfaces before

@@ -4,8 +4,9 @@ See [the operating guide](AGENT_SANDBOX.md) for lasting behavior and rationale.
 
 ## Current status — 2026-10-03
 
-**First iteration temporarily installed; retained-authentication CLI and independent
-reviewer model requests succeeded.** Changes are on `codex/agent-sandbox-broker`.
+**Requested first iteration incomplete: the GUI workflow is not usable.** The CLI
+and independent reviewer foundation is temporarily installed, and their retained-
+authentication model requests succeeded. Changes are on `codex/agent-sandbox-broker`.
 The sandboxed desktop opens and its contained backend initializes, but cannot
 switch successfully into Codex. The pinned GUI requires workspace routing and
 bearer authentication outside the worker proxy; this integration is unfinished. Automatic root deployment is not implemented.
