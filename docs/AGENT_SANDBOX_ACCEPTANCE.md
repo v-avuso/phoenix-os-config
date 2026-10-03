@@ -1,31 +1,44 @@
 # Agent sandbox acceptance
 
-Last updated: 2026-10-03. See [the operating guide](AGENT_SANDBOX.md) for lasting
+Last updated: 2026-10-04. See [the operating guide](AGENT_SANDBOX.md) for lasting
 behavior, boundaries and rationale.
 
 ## Outcome
 
 **CLI containment, bounded diagnostics and independently reviewed unattended
-activation work. GUI acceptance is still pending.** The corrected desktop account
-connection works, but its first interactive launch exposed profile contention
-and unwanted onboarding/maximized startup. Those are being corrected before
-calling the desktop usable. Native remains the everyday repair route.
-Work is paused at the user's compute-budget request; no new GUI or deployment
-trial should start until the user resumes.
+activation work. The corrected GUI candidate also works; final installation is
+pending.** The corrected desktop opens
+normally in Codex mode with the existing project and no onboarding/profile
+warnings. Updating the maintained desktop input to official 26.930.31730 also
+restored actual tool/final-result rendering. Two normal close/reopen cycles pass
+with saved authentication and project state. The sandbox-only lifecycle adapter
+disables unavailable tray hiding and uses upstream normal quit after the last
+tracked primary closes, including hidden service-window cleanup. Native remains
+the everyday repair route until the final installed launcher is verified.
+Work resumed after the user's compute-budget pause. Desktop acceptance remains
+the current delivery gate; component success does not replace that check.
 
 Music and general engineering guidance from `main` are merged into
 `codex/agent-sandbox-broker`. No previous work or native profile was discarded.
 
 ## Installed evidence
 
-The latest independently approved persistent switch records source commit
-`7c169d7` in `/etc/phoenix-agent/activated-source`:
+The latest independently approved persistent switch is source commit `7c169d7`:
 
 - Source: `/nix/store/3ip2bx7a2jsq5k3gsh62sykrz6cxrc98-source`.
-- Runtime and system profile:
+- System profile (next boot):
   `/nix/store/yamlcrh41pagdr1bbjfc1rpr4kc56gg6-nixos-system-phoenix-26.05.20260924.c508844`.
 
-Later documentation commits do not change that recorded runtime source.
+A fresh protected `test` installed commit `59ccb3d` without Polkit on resume:
+
+- Recorded runtime source: `/nix/store/5a688xsz8cjjhfnh8r598cmrmbpsbi1n-source`.
+- Runtime: `/nix/store/wfjdjf0lfdzv9zh04yjmjzsjg47368f7-nixos-system-phoenix-26.05.20260924.c508844`.
+
+That test did not update the next-boot profile. A subsequent GUI-only candidate
+removes an invalid tray bus ownership pattern before further interactive checks;
+it is not yet the persistently installed system. Commit `902d56f` then updates
+only the maintained desktop input; the GUI-only candidate builds and renders an
+actual task against the installed relay, without changing the installed system.
 
 | Check | Actual result |
 | --- | --- |
@@ -39,7 +52,8 @@ Later documentation commits do not change that recorded runtime source.
 | Diagnostics | Allowlisted cooler service state and xHCI wakeup read pass without authentication; unlisted service and arbitrary root operation denied |
 | GUI backend | Actual account/profile/routing lookup passes; exact relay model/tool task using GPT-6 Luna/high completed with expected shell output |
 | GUI isolation | Private home and declared workspaces; Native auth/SSH/Pictures and host control sockets omitted; actual portal Settings.Read passes and host systemd bus access is denied |
-| Interactive GUI | Corrected public identity makes account lookup authenticated; Work denial disappeared in controlled retry, but onboarding/window behavior and existing settings reuse still need acceptance |
+| Interactive GUI | Updated candidate shows normal window, Codex mode and approved project without onboarding/profile warnings; actual GUI model/tool markers render and Stop clears, using outer containment and on-request approval |
+| GUI lifecycle | Two candidate normal close/reopen cycles exit 0, stop all 30 captured processes and release the profile lock; saved auth/project/mode retained, Native untouched. Final installed launcher remains the acceptance gate |
 | Launcher | Sandboxed favourite set and Native not favourited in actual Caelestia settings; final fuzzy-search ordering needs user confirmation |
 
 The earlier generic deployment review failure did not activate. Its installed
@@ -50,13 +64,16 @@ never to the journal. A separate one-time review-only diagnostic could not activ
 
 ## Remaining core acceptance
 
-The checkpoint contains selected preference migration, fixed scalar app-server
-overrides and tray-based single-instance activation, but these changes are **not
-installed**. Their fixtures pass. GUI trials and the temporary loopback debug
-endpoint are stopped; temporary user relay overrides were removed. Native and
-the retained gateway/reviewer login remain intact.
+Selected preference migration and fixed scalar app-server overrides are installed
+by the protected test. The initial launcher then rejected an invalid tray bus
+ownership pattern before Electron started; the corrected GUI-only candidate is
+under interactive acceptance. Native and the retained gateway/reviewer login
+remain intact. The maintained desktop candidate now passes task rendering and
+normal close/reopen; the Linux lifecycle fixture covers normal quit gating and
+no-write rejection of upstream wiring drift.
 
-1. Build and independently review/install the clean committed checkpoint. Reuse
+1. Independently install the corrected launcher's clean committed
+   source. Reuse
    selected existing nonsecret GUI/model/project preferences, open a normal
    movable window without onboarding or profile warnings, and run a task through
    the actual Codex GUI. No additional browser sign-in.
@@ -72,6 +89,9 @@ transactional rollback. Do not reboot or induce a failure merely to claim accept
 
 Application-specific caller identity, full command auditing, isolated GUI network
 and recovery of sessions retained in older sandbox instances are future work.
+Independent daily backups and restore testing remain separate recovery work;
+generation rollback does not restore workspace or private-state writes (see
+[recovery](RECOVERY_RUNBOOK.md)).
 Same-UID host programs can call fixed broker capabilities; Python has limited
 desktop API authority; permitted traffic can disclose accessible workspace data.
 Model review is fallible. The user accepts these stated limits.
