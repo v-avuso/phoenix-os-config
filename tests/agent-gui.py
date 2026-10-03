@@ -5,7 +5,9 @@ import tempfile
 import json
 import socket
 import subprocess
+import shutil
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -55,6 +57,37 @@ with tempfile.TemporaryDirectory() as directory:
             pass
         else:
             raise AssertionError("Foreign display/runtime accepted")
+
+# Independent wrapper launches must not concurrently open one private profile:
+# Chromium's own singleton check cannot see another wrapper's private /tmp.
+with tempfile.TemporaryDirectory() as directory:
+    temporary = Path(directory)
+    marker = temporary / "started"
+    wrapper = temporary / "wrapper.py"
+    wrapper.write_text("#!" + sys.executable + "\nfrom pathlib import Path\nimport time\n"
+                       + "Path(" + repr(str(marker)) + ").touch()\ntime.sleep(1)\n")
+    wrapper.chmod(0o700)
+    config = temporary / "gui.json"
+    config.write_text(json.dumps({"home": directory, "workspaces": [directory],
+        "profile": directory + "/profile", "path": "/unused", "workdir": directory,
+        "systemctl": shutil.which("true"), "wrapper": str(wrapper)}))
+    command = [sys.executable, "-I", str(ROOT / "modules/development/ai/agent/gui-launch.py"), str(config)]
+    env = dict(os.environ, XDG_RUNTIME_DIR="/run/user/" + str(os.getuid()), WAYLAND_DISPLAY="wayland-1")
+    first = subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        deadline = time.monotonic() + 3
+        while not marker.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert marker.exists(), first.communicate(timeout=3)
+        second = subprocess.run(command, env=env, capture_output=True, timeout=3)
+        assert second.returncode == 0 and b"already running" in second.stderr
+        assert first.wait(timeout=3) == 0
+        third = subprocess.run(command, env=env, capture_output=True, timeout=3)
+        assert third.returncode == 0 and b"already running" not in third.stderr
+    finally:
+        if first.poll() is None:
+            first.kill()
+            first.wait()
 # Exercise the socket-activated service contract with a real subprocess. The
 # client sends bytes only; no header can select a host executable or arguments.
 with tempfile.TemporaryDirectory() as directory:

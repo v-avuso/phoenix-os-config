@@ -1,5 +1,6 @@
 """Validate declared paths and launch the upstream Nix-Bwrapper package."""
 import json
+import fcntl
 import os
 from pathlib import Path
 import subprocess
@@ -37,9 +38,20 @@ def main(config, args):
     os.umask(0o077)
     env = environment(config, os.environ)
     validate(config)
-    subprocess.run([config["systemctl"], "--user", "start", "phoenix-agent-gui.socket",
-                    "phoenix-agent-gui-http.socket"], env=env, check=True)
-    return subprocess.call([config["wrapper"], *args], cwd=config["workdir"], env=env)
+    # Chromium's singleton socket lives in private /tmp, and namespace-local
+    # PIDs cannot identify peers in another wrapper. Serialize on the host for
+    # the wrapper's entire lifetime instead of resetting any private profile.
+    fd = os.open(Path(config["profile"]) / "desktop.lock",
+                 os.O_RDWR | os.O_CREAT | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "w") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            print("Sandboxed ChatGPT is already running; use its existing window.", file=sys.stderr)
+            return 0
+        subprocess.run([config["systemctl"], "--user", "start", "phoenix-agent-gui.socket",
+                        "phoenix-agent-gui-http.socket"], env=env, check=True)
+        return subprocess.call([config["wrapper"], *args], cwd=config["workdir"], env=env)
 
 
 if __name__ == "__main__":
