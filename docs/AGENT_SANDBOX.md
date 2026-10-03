@@ -92,6 +92,10 @@ Successful wakeup changes include before/after state. Gateway logs and Codex
 transcripts cover their respective activity; these are not a complete host
 process-command audit.
 
+Deployment review observations are private, bounded and rotated under
+`~/.local/state/phoenix-agent-review/audit.jsonl`. They record source, target,
+outcome and any built closure; they are never read as approval inputs.
+
 The broker authenticates the desktop UID using kernel credentials. Other
 same-user host programs can call its fixed capabilities too: this is not
 application identity. Executable store paths detect version selection, but do

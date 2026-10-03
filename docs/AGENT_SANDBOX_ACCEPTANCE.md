@@ -7,11 +7,13 @@ See [the operating guide](AGENT_SANDBOX.md) for lasting behavior and rationale.
 **First iteration implemented; installation and authenticated end-to-end use
 still need acceptance.** Changes are organized on `codex/agent-sandbox-broker`.
 No successful model turn or passwordless system deployment is claimed.
+Graphical Polkit installation was requested, remained unauthenticated, and was
+cancelled before handover. The running system and persistent profile are unchanged.
 
 | Validation | Evidence |
 | --- | --- |
 | Metal/VM/default evaluation | Combined modules passed `nix flake check --no-build --no-write-lock-file path:.`; VM bootability not claimed |
-| Metal build | Combined configuration built without activation; final committed Git-flake build recorded below |
+| Metal build | Clean committed Git flake built successfully; baseline matches all 100 tracked files with no Git metadata |
 | Diagnostic broker fixtures | 12 passed: fixed operations/argv, bounded time/output, argument/protocol rejection, xHCI checks, symlink rejection and audit privacy |
 | Launcher fixtures | 4 passed: quiet stdio, bounded setup, login prerequisite and no native fallback |
 | Deployment review fixtures | 6 passed: source freezing, mode changes, activated diffs, dirty/unsupported source rejection, forged/stale/rejected verdicts, process bounds, Git helper suppression and audit safety |
@@ -30,6 +32,10 @@ No successful model turn or passwordless system deployment is claimed.
 Credential-free probe sandboxes, gateways, proxy processes and temporary sockets
 were removed/stopped. Native authentication and profile were not migrated.
 Built caches and private OpenShell registration/TLS state remain for reuse.
+
+Validated committed system (source commit `2f20820`):
+`/nix/store/0p9zily7s0ms4j1v0zbdyz03hqkn0ywi-nixos-system-phoenix-26.05.20260924.c508844`.
+Later documentation-only commits do not change that recorded result.
 
 ## Installation and remaining acceptance
 
