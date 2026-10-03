@@ -23,6 +23,8 @@ class LauncherFixture(unittest.TestCase):
         self.config = {key: "/fixed/" + key for key in ("openshell", "native", "podman", "systemctl", "image", "policy", "profile")}
         self.config.update(state=str(self.root / "state"), workspaces=[str(self.root)], default_workdir=str(self.root), mounts=str(self.root / "mounts"))
         (self.root / "mounts").write_text('{}')
+        (self.root / "state").mkdir()
+        (self.root / "state/account-id.json").write_text('"00000000-0000-0000-0000-000000000001"')
 
     @staticmethod
     def success(command, **kwargs):
@@ -45,6 +47,7 @@ class LauncherFixture(unittest.TestCase):
         self.assertEqual(argv[-5:], ["/bin/phoenix-sandbox-init", "/bin/codex", "app-server", "--listen", "stdio://"])
         self.assertEqual(env["OPENSHELL_GATEWAY"], "openshell")
         self.assertNotIn("OPENSHELL_POLICY", env)
+        self.assertIn("PHOENIX_CODEX_ACCOUNT_ID=00000000-0000-0000-0000-000000000001", argv)
         for call in run.call_args_list:
             self.assertEqual(call.kwargs["stdout"], subprocess.PIPE)
             self.assertEqual(call.kwargs["timeout"], 120)
@@ -73,6 +76,20 @@ class LauncherFixture(unittest.TestCase):
                 launch.main(self.config, [])
         self.assertFalse(any("login" in call.args[0] for call in run.call_args_list))
         execute.assert_not_called()
+
+    def test_saved_login_command_does_not_repeat_oauth(self):
+        with mock.patch.object(launch.subprocess, "run", side_effect=self.success) as run, \
+             mock.patch.object(launch.Path, "is_socket", return_value=True):
+            self.assertEqual(launch.main(self.config, ["--phoenix-login"]), 0)
+        self.assertFalse(any("login" in call.args[0] for call in run.call_args_list))
+
+    def test_missing_account_selector_does_not_repeat_oauth(self):
+        (self.root / "state/account-id.json").unlink()
+        with mock.patch.object(launch.subprocess, "run", side_effect=self.success) as run, \
+             mock.patch.object(launch.Path, "is_socket", return_value=True):
+            with self.assertRaisesRegex(SystemExit, "without repeating sign-in"):
+                launch.main(self.config, ["--phoenix-login"])
+        self.assertFalse(any("login" in call.args[0] for call in run.call_args_list))
 
     def test_setup_timeout_fails_closed_without_credential_output(self):
         with mock.patch.object(launch.subprocess, "run", side_effect=subprocess.TimeoutExpired("setup", 120, output=b'secret')), \

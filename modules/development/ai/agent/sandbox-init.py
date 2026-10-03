@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import sys
 import time
+import uuid
 
 home = Path(os.environ["HOME"]) / ".codex"
 home.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -21,7 +22,7 @@ auth = {
     "auth_mode": "chatgptAuthTokens", "OPENAI_API_KEY": None,
     "tokens": {"id_token": identity,
                "access_token": os.environ["CODEX_AUTH_ACCESS_TOKEN"],
-               "refresh_token": "", "account_id": os.environ["CODEX_AUTH_ACCOUNT_ID"]},
+               "refresh_token": "", "account_id": str(uuid.UUID(os.environ["PHOENIX_CODEX_ACCOUNT_ID"]))},
     "last_refresh": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
 }
 target = home / "auth.json"

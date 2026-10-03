@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import uuid
 
 
 def main(config, args):
@@ -60,6 +61,13 @@ def main(config, args):
         providers = run(cli + ["provider", "list", "--names"])
         provider_exists = "phoenix-codex" in providers.stdout.decode().splitlines()
         login_requested = args == ["--phoenix-login"]
+        if login_requested and provider_exists:
+            try:
+                uuid.UUID(json.loads((state / "account-id.json").read_text()))
+            except (OSError, ValueError, TypeError):
+                raise SystemExit("Saved sandbox login exists; repair its account metadata without repeating sign-in.") from None
+            print("Reusing the saved sandbox login; no browser authentication needed.", file=sys.stderr)
+            return 0
         if not provider_exists and not login_requested:
             raise SystemExit("Sandbox login is required; run codex-sandbox-login explicitly.")
         if login_requested:
@@ -88,8 +96,18 @@ def main(config, args):
                            "--material", "client_id=app_EMoamEEZ73f0CkXaXp7hrann",
                            "--secret-material-env", "refresh_token=CODEX_AUTH_REFRESH_TOKEN"],
                     extra_env={"CODEX_AUTH_REFRESH_TOKEN": tokens["refresh_token"]})
+                # Workspace discovery compares this public selector locally;
+                # only bearer/refresh credentials belong behind opaque handles.
+                account_file = state / "account-id.json"
+                account_file.write_text(json.dumps(str(uuid.UUID(tokens["account_id"]))))
+                account_file.chmod(0o600)
             if login_requested:
                 return 0
+
+        try:
+            account_id = str(uuid.UUID(json.loads((state / "account-id.json").read_text())))
+        except (OSError, ValueError, TypeError):
+            raise SystemExit("Sandbox account selector is missing or invalid; repair saved metadata through Native Codex, without repeating sign-in.") from None
 
         archive = Path(config["image"])
         image_marker = state / "image.path"
@@ -112,7 +130,7 @@ def main(config, args):
                        "--policy", config["policy"], "--driver-config-json", mounts,
                        "--provider", "phoenix-codex", "--no-auto-providers", "--detach", "--no-tty",
                        "--cpu", "8", "--memory", "8Gi", "--output", "json",
-                       "--", "/bin/phoenix-sandbox-init", "/bin/sleep", "infinity"])
+                       "--", "/bin/sleep", "infinity"])
         else:
             # start is idempotent for a Ready instance; fails closed otherwise.
             run(cli + ["sandbox", "start", name])
@@ -122,7 +140,8 @@ def main(config, args):
     workdir = str(Path.cwd().resolve())
     if not any(Path(workdir).is_relative_to(Path(path)) for path in config["workspaces"]):
         workdir = config["default_workdir"]
-    execution = cli + ["sandbox", "exec", "--name", name, "--no-login-shell"]
+    execution = cli + ["sandbox", "exec", "--name", name, "--no-login-shell",
+                       "--env", "PHOENIX_CODEX_ACCOUNT_ID=" + account_id]
     if app_server:
         execution += ["--no-tty"]
     execution += ["--workdir", workdir, "--"]
