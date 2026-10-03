@@ -14,7 +14,9 @@ now = int(time.time())
 identity = ".".join([
     encode({"alg": "none", "typ": "JWT"}),
     encode({"iss": "https://auth.openai.com", "aud": "codex", "sub": "phoenix-sandbox",
-            "email": "sandbox@phoenix.invalid", "iat": now, "exp": now + 3600}),
+            "email": "sandbox@phoenix.invalid", "iat": now, "exp": now + 3600,
+            "https://api.openai.com/auth": {
+                "chatgpt_account_id": str(uuid.UUID(os.environ["PHOENIX_CODEX_ACCOUNT_ID"]))}}),
     "placeholder",
 ])
 # Matches upstream's v0.1.2 examples/codex-app-server authentication pattern.

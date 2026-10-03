@@ -3,6 +3,7 @@
   codexCliPackage,
   phoenixAdminPackage,
   phoenixAgentCodexConfig,
+  phoenixDeployReviewPackage,
 }:
 let
   tools = pkgs.buildEnv {
@@ -10,6 +11,7 @@ let
     paths = [
       codexCliPackage
       phoenixAdminPackage
+      phoenixDeployReviewPackage
       pkgs.bashInteractive
       pkgs.coreutils
       pkgs.findutils
@@ -52,6 +54,9 @@ let
   init = pkgs.writeShellScriptBin "phoenix-sandbox-init" ''
     exec ${pkgs.python3}/bin/python3 -I ${./sandbox-init.py} "$@"
   '';
+  guiHttp = pkgs.writeShellScriptBin "phoenix-gui-http" ''
+    exec ${pkgs.python3}/bin/python${pkgs.python3.pythonVersion} -I ${./gui-http-worker.py}
+  '';
 in
 pkgs.dockerTools.buildLayeredImage {
   name = "localhost/phoenix-codex";
@@ -60,12 +65,13 @@ pkgs.dockerTools.buildLayeredImage {
     tools
     etc
     init
+    guiHttp
     pkgs.dockerTools.binSh
     pkgs.dockerTools.caCertificates
   ];
   includeNixDB = true;
   extraCommands = ''
-    mkdir -p sandbox tmp dev sys run/phoenix-admin home/v
+    mkdir -p sandbox tmp dev sys run/phoenix-admin run/phoenix-deploy home/v
     chmod 1777 tmp
   '';
   # This /nix store belongs to the isolated image, never the host store. Nix

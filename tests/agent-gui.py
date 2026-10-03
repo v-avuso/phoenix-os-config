@@ -23,42 +23,38 @@ assert not client.supported(["app-server", "--listen", "tcp://0.0.0.0:1234"])
 assert client.main("/missing/phoenix-gui.sock", "0.159.0", ["app-server"]) == 1
 
 launch = load("gui-launch")
-assert "[Instance]\ninstance-id=phoenix-fixture\n" in launch.flatpak_info("phoenix-fixture")
-try:
-    launch.flatpak_info("../foreign-instance")
-except ValueError:
-    pass
-else:
-    raise AssertionError("Aliased portal instance accepted")
 with tempfile.TemporaryDirectory() as directory:
     workspace = Path(directory) / "workspace"
     workspace.mkdir()
-    config = {"home": "/home/example", "user": "example", "workspaces": [str(workspace)],
-              "workdir": str(workspace), "bwrap": "/bwrap", "ca_file": "/immutable-ca-bundle", "client": "/client", "desktop": "/desktop", "path": "/tools"}
-    args = launch.command(config, {"XDG_RUNTIME_DIR": "/run/user/1000", "WAYLAND_DISPLAY": "wayland-1",
-                                  "SECRET_TOKEN": "must-not-enter"}, Path(directory), Path(directory) / "bus")
-    registered = launch.command(config, {"XDG_RUNTIME_DIR": "/run/user/1000", "WAYLAND_DISPLAY": "wayland-1"}, Path(directory), Path(directory) / "bus", Path(directory) / "info", 7)
-    assert registered[registered.index("--info-fd") + 1] == "7"
-    assert "--clearenv" in args and "SECRET_TOKEN" not in args
-    cli_index = args.index("CODEX_CLI_PATH")
-    assert args[cli_index + 1] == "client"  # Plain override prevents bundled fallback.
-    assert "/home/example/.codex" in args  # Private namespace home, not host bind.
-    mounts = [args[i + 1:i + 3] for i, item in enumerate(args) if item in ("--bind", "--ro-bind", "--dev-bind")]
-    assert ["/home/example", "/home/example"] not in mounts
-    assert [str(workspace), str(workspace)] in mounts
-    for destination in ["/etc/ssl/certs/ca-certificates.crt", "/etc/ssl/certs/ca-bundle.crt"]:
-        assert ["/immutable-ca-bundle", destination] in mounts
-    assert ["/etc/ssl", "/etc/ssl"] not in mounts
-    assert not any(path.startswith("/etc/static") for pair in mounts for path in pair)
-    assert args[args.index("SSL_CERT_FILE") + 1] == "/etc/ssl/certs/ca-certificates.crt"
-    assert not any("podman" in path or "phoenix-admin" in path for pair in mounts for path in pair)
-    assert ["/run/user/1000/bus", "/run/user/1000/bus"] not in mounts
-    try:
-        launch.command(config, {"XDG_RUNTIME_DIR": "/run/user/1000", "WAYLAND_DISPLAY": "../bus"}, Path(directory), Path(directory) / "bus")
-    except ValueError:
-        pass
-    else:
-        raise AssertionError("Aliased Wayland socket accepted")
+    config = {"home": "/home/example", "workspaces": [str(workspace)],
+              "profile": directory + "/private-profile", "path": "/immutable-tools"}
+    import os
+    env = {"XDG_RUNTIME_DIR": "/run/user/" + str(os.getuid()), "WAYLAND_DISPLAY": "wayland-1",
+           "SECRET_TOKEN": "must-not-enter", "CODEX_CLI_PATH": "/unrestricted", "PYTHONPATH": "/injected"}
+    clean = launch.environment(config, env)
+    assert not any(key in clean for key in ("SECRET_TOKEN", "CODEX_CLI_PATH", "PYTHONPATH"))
+    assert clean["HOME"] == "/home/example"
+    assert clean["PATH"] == "/immutable-tools"
+    launch.validate(config)
+    assert (Path(config["profile"]) / "home").stat().st_mode & 0o777 == 0o700
+    alias = Path(directory) / "alias"
+    alias.symlink_to(workspace, target_is_directory=True)
+    for invalid in [config | {"workspaces": [str(alias)]},
+                    config | {"profile": str(alias)},
+                    config | {"workspaces": [directory + "/missing"]}]:
+        try:
+            launch.validate(invalid)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Aliased or missing private path accepted")
+    for invalid in [env | {"WAYLAND_DISPLAY": "../bus"}, env | {"XDG_RUNTIME_DIR": "/run/user/foreign"}]:
+        try:
+            launch.environment(config, invalid)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Foreign display/runtime accepted")
 # Exercise the socket-activated service contract with a real subprocess. The
 # client sends bytes only; no header can select a host executable or arguments.
 with tempfile.TemporaryDirectory() as directory:

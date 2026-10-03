@@ -26,6 +26,7 @@ class LauncherFixture(unittest.TestCase):
         (self.root / "mounts").write_text('{}')
         (self.root / "state").mkdir()
         (self.root / "state/account-id.json").write_text('"00000000-0000-0000-0000-000000000001"')
+        (self.root / "state/profile.path").write_text(self.config["profile"])
 
     @staticmethod
     def success(command, **kwargs):
@@ -110,6 +111,48 @@ class LauncherFixture(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, "socket is unavailable"):
                 launch.main(self.config, [])
         execute.assert_not_called()
+
+    def test_changed_profile_updates_retained_provider_with_export_version(self):
+        profile = self.root / "codex-profile.yaml"
+        profile.write_text('id: codex\nbinaries: [/fixed/python3.13]\n')
+        self.config["profile"] = str(profile)
+        updates = []
+        def existing(command, **kwargs):
+            if command[1:5] == ["--color=never", "provider", "profile", "list"]:
+                return subprocess.CompletedProcess(command, 0, stdout=b'[{"id":"codex"}]', stderr=b'')
+            if command[1:5] == ["--color=never", "provider", "profile", "export"]:
+                return subprocess.CompletedProcess(command, 0, stdout=b'{"resource_version":7}', stderr=b'')
+            if command[1:5] == ["--color=never", "provider", "profile", "update"]:
+                updates.append(Path(command[-1]).read_text())
+            return self.success(command, **kwargs)
+        with mock.patch.object(launch.subprocess, "run", side_effect=existing) as run, \
+             mock.patch.object(launch.Path, "is_socket", return_value=True):
+            self.assertEqual(launch.main(self.config, ["--phoenix-login"]), 0)
+            self.assertEqual(launch.main(self.config, ["--phoenix-login"]), 0)
+        self.assertEqual(updates, ['resource_version: 7\nid: codex\nbinaries: [/fixed/python3.13]\n'])
+        self.assertEqual((self.root / "state/profile.path").read_text(), str(profile))
+        self.assertFalse(list((self.root / "state").glob('profile-*.yaml')))
+        self.assertFalse(any('login' in call.args[0] or 'delete' in call.args[0] or 'create' in call.args[0] for call in run.call_args_list))
+
+    def test_failed_profile_update_preserves_login_and_retries_next_launch(self):
+        profile = self.root / "codex-profile.yaml"
+        profile.write_text('id: codex\n')
+        self.config["profile"] = str(profile)
+        def failing(command, **kwargs):
+            if command[1:5] == ["--color=never", "provider", "profile", "list"]:
+                return subprocess.CompletedProcess(command, 0, stdout=b'[{"id":"codex"}]', stderr=b'')
+            if command[1:5] == ["--color=never", "provider", "profile", "export"]:
+                return subprocess.CompletedProcess(command, 0, stdout=b'{"resource_version":7}', stderr=b'')
+            if command[1:5] == ["--color=never", "provider", "profile", "update"]:
+                return subprocess.CompletedProcess(command, 1, stdout=b'', stderr=b'')
+            return self.success(command, **kwargs)
+        with mock.patch.object(launch.subprocess, "run", side_effect=failing) as run, \
+             mock.patch.object(launch.Path, "is_socket", return_value=True):
+            with self.assertRaisesRegex(SystemExit, "setup failed"):
+                launch.main(self.config, ["--phoenix-login"])
+        self.assertNotEqual((self.root / "state/profile.path").read_text(), str(profile))
+        self.assertTrue((self.root / "state/account-id.json").exists())
+        self.assertFalse(any('login' in call.args[0] or 'delete' in call.args[0] for call in run.call_args_list))
 
 
 if __name__ == "__main__":

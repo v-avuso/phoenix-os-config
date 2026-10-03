@@ -41,6 +41,12 @@
     # The upstream Linux port wraps OpenAI's signed Linux desktop payload.
     codex-desktop-linux.url = "github:ilysenko/codex-desktop-linux";
 
+    # Upstream GUI containment; the lock pins framework and manifest translation.
+    nix-bwrapper = {
+      url = "github:Naxdy/nix-bwrapper/d170b06fafc0703fff36ec422a64516594b39bd9";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # Stable Psysonic channel; flake.lock pins the release branch revision.
     psysonic.url = "github:Psysonic/psysonic?ref=release";
   };

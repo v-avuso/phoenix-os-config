@@ -6,12 +6,21 @@
   codexCliPackage,
   phoenixAdminPackage,
   phoenixAgentCodexConfig,
+  phoenixDeployReviewPackage,
   ...
 }:
 let
   cfg = config.phoenix.agent;
   packages = import ./packages.nix { inherit pkgs; };
-  image = import ./image.nix { inherit pkgs codexCliPackage phoenixAdminPackage phoenixAgentCodexConfig; };
+  image = import ./image.nix {
+    inherit
+      pkgs
+      codexCliPackage
+      phoenixAdminPackage
+      phoenixAgentCodexConfig
+      phoenixDeployReviewPackage
+      ;
+  };
   formats = pkgs.formats.toml { };
   yaml = pkgs.formats.yaml { };
   state = "${user.homeDirectory}/.local/state/phoenix-openshell";
@@ -51,6 +60,7 @@ let
         "/sys"
         "/dev"
         "/run/phoenix-admin"
+        "/run/phoenix-deploy"
       ];
       read_write = [
         "/sandbox"
@@ -85,6 +95,38 @@ let
               "ab.chatgpt.com"
             ];
         binaries = [ { path = "${codexCliPackage}/bin/codex"; } ];
+      };
+      gui_http = {
+        name = "gui_http";
+        endpoints = [
+          {
+            host = "chatgpt.com";
+            port = 443;
+            protocol = "rest";
+            enforcement = "enforce";
+            rules =
+              lib.concatMap
+                (
+                  method:
+                  map (path: { allow = { inherit method path; }; }) [
+                    "/backend-api/**"
+                    "/api/codex/**"
+                  ]
+                )
+                [
+                  "GET"
+                  "HEAD"
+                  "POST"
+                  "PUT"
+                  "PATCH"
+                  "DELETE"
+                ];
+          }
+        ];
+        # Python is an interpreter, not fixed-script identity. Its whole egress
+        # authority is limited to these desktop API namespaces; gateway handle
+        # resolution follows L7 admission and remains endpoint-scoped.
+        binaries = [ { path = "${pkgs.python3}/bin/python${pkgs.python3.pythonVersion}"; } ];
       };
       development = {
         name = "development";
@@ -152,6 +194,12 @@ let
             type = "bind";
             source = "/run/phoenix-admin";
             target = "/run/phoenix-admin";
+            read_only = true;
+          }
+          {
+            type = "bind";
+            source = "/run/phoenix-deploy";
+            target = "/run/phoenix-deploy";
             read_only = true;
           }
           # Present the protected source as the reviewed immutable snapshot too.

@@ -3,6 +3,7 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 import shlex
 from pathlib import Path
 import subprocess
@@ -12,7 +13,8 @@ import uuid
 
 
 def main(config, args):
-    app_server = args[:1] == ["app-server"]
+    gui_http = args == ["--phoenix-gui-http"]
+    app_server = args[:1] == ["app-server"] or gui_http
     state = Path(config["state"])
     state.mkdir(mode=0o700, parents=True, exist_ok=True)
     state.chmod(0o700)
@@ -63,6 +65,33 @@ def main(config, args):
         providers = run(cli + ["provider", "list", "--names"])
         provider_exists = "phoenix-codex" in providers.stdout.decode().splitlines()
         login_requested = args == ["--phoenix-login"]
+        if not provider_exists and not login_requested:
+            raise SystemExit("Sandbox login is required; run codex-sandbox-login explicitly.")
+
+        # Provider definitions are a separate control-plane resource from saved
+        # credentials. Upstream import is create-only; export+versioned update
+        # changes a retained provider's policy without deleting it or signing in.
+        # The reviewed store path is the revision, not a worker-supplied file.
+        profile_marker = state / "profile.path"
+        if not profile_marker.exists() or profile_marker.read_text() != config["profile"]:
+            profiles = run(cli + ["provider", "profile", "list", "--output", "json"])
+            if any(item["id"] == "codex" for item in json.loads(profiles.stdout)):
+                exported = run(cli + ["provider", "profile", "export", "codex", "--output", "json"])
+                version = json.loads(exported.stdout).get("resource_version")
+                if not isinstance(version, int) or isinstance(version, bool) or version <= 0:
+                    raise SystemExit("Saved provider profile has no update version; retained authentication was preserved.")
+                declaration = Path(config["profile"]).read_text()
+                if re.search(r"^resource_version\s*:", declaration, re.MULTILINE):
+                    raise SystemExit("Declared provider profile must not pin mutable resource_version.")
+                with tempfile.NamedTemporaryFile(mode="w", prefix="profile-", suffix=".yaml", dir=state) as update:
+                    update.write("resource_version: " + str(version) + "\n" + declaration)
+                    update.flush()
+                    run(cli + ["provider", "profile", "update", "codex", "--file", update.name])
+            else:
+                run(cli + ["provider", "profile", "import", "--file", config["profile"]])
+            profile_marker.write_text(config["profile"])
+            profile_marker.chmod(0o600)
+
         if login_requested and provider_exists:
             try:
                 uuid.UUID(json.loads((state / "account-id.json").read_text()))
@@ -70,13 +99,8 @@ def main(config, args):
                 raise SystemExit("Saved sandbox login exists; repair its account metadata without repeating sign-in.") from None
             print("Reusing the saved sandbox login; no browser authentication needed.", file=sys.stderr)
             return 0
-        if not provider_exists and not login_requested:
-            raise SystemExit("Sandbox login is required; run codex-sandbox-login explicitly.")
         if login_requested:
             print("One-time Codex sandbox sign-in; Native Codex keeps its separate login.", file=sys.stderr)
-            profiles = run(cli + ["provider", "profile", "list", "--output", "json"])
-            if not any(item["id"] == "codex" for item in json.loads(profiles.stdout)):
-                run(cli + ["provider", "profile", "import", "--file", config["profile"]])
             # A separate OAuth session avoids two refresh owners invalidating the
             # existing Native login. The temporary host login is migrated exactly
             # once to OpenShell, then removed. It is never used as a second client.
@@ -147,7 +171,9 @@ def main(config, args):
     if app_server:
         execution += ["--no-tty"]
     execution += ["--workdir", workdir, "--"]
-    if args[:1] == ["--phoenix-exec"]:
+    if gui_http:
+        command = ["/bin/phoenix-gui-http"]
+    elif args[:1] == ["--phoenix-exec"]:
         if not args[1:]:
             raise SystemExit("expected sandbox command")
         command = args[1:]
