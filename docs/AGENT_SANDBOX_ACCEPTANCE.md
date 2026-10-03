@@ -1,29 +1,32 @@
 # Agent sandbox acceptance
 
 Updated 2026-10-04. [Operating guide](AGENT_SANDBOX.md) records lasting behavior;
-this checkpoint distinguishes candidate tests from installed acceptance.
+this checkpoint records installed acceptance and remaining hardening.
 
 ## Outcome
 
-**CLI containment, bounded diagnostics and reviewed unattended test/switch work.
-The corrected GUI candidate renders tasks and closes/reopens normally. Final
-installation and installed-GUI acceptance remain pending protected review.**
+**The first iteration is installed and usable: GUI tasks render and survive
+normal close/reopen; OpenShell containment, bounded diagnostics and independent
+reviewed unattended test/switch have runtime acceptance.**
 Native remains the repair route. Music and engineering guidance from `main` are
 merged; no Native profile or previous implementation was discarded.
 
-## Installed baseline
+## Installed source
 
-The latest approved persistent switch is commit `7c169d7`:
+Protected persistent switch of commit
+`ed913e5497192dff0a3d8165798380856d409177` succeeded without Polkit:
 
-- Source `/nix/store/3ip2bx7a2jsq5k3gsh62sykrz6cxrc98-source`.
-- Next boot `/nix/store/yamlcrh41pagdr1bbjfc1rpr4kc56gg6-nixos-system-phoenix-26.05.20260924.c508844`.
+- Source `/nix/store/azrjjgc03z1r4c0qxj069ipkqs4vs8h6-source`.
+- Runtime and next boot both
+  `/nix/store/l3hvc6gs09g1jckh6v9m9998m8zbzvbc-nixos-system-phoenix-26.05.20260924.c508844`.
+- Installed GUI `/nix/store/d1mcr9l0phwl4mind1lk0ar7289h806i-codex-desktop-sandboxed/bin/codex-desktop-sandboxed`.
+- Native remains exactly
+  `/nix/store/7arsi88iwfa5baljss24dq2x9shc7d1q-codex-desktop-26.917.71314-codex-cli-path/bin/codex-desktop`.
 
-Protected temporary activation of `59ccb3d` succeeded without Polkit:
-
-- Runtime source `/nix/store/5a688xsz8cjjhfnh8r598cmrmbpsbi1n-source`.
-- Runtime `/nix/store/wfjdjf0lfdzv9zh04yjmjzsjg47368f7-nixos-system-phoenix-26.05.20260924.c508844`.
-
-It did not update next boot. The corrected desktop candidates are not installed.
+The controller journal recorded build → review → approval → activation. The
+public runtime, system profile and activated-source marker match its response.
+Earlier approved switch `7c169d7` and temporary test `59ccb3d` are retained in
+Git history; neither candidate denial activated a system.
 
 ## Evidence
 
@@ -33,35 +36,40 @@ It did not update next boot. The corrected desktop candidates are not installed.
 | Containment | Real OpenShell worker is rootless; approved repository visible; Native SSH/Pictures/auth omitted; `/etc` write and unexpected network destination denied |
 | Broker | Allowlisted service/kernel diagnostics and restored xHCI round-trip pass; arbitrary root and unlisted operations denied |
 | Deployment | Real worker requested protected switch without Polkit; controller froze source, built unprivileged, reviewed exact source/base/closure and updated runtime plus boot profile |
-| GUI workflow | Maintained desktop 26.930.31730 renders an actual model/tool/final task and clears Stop; normal Codex window/project, saved account, no onboarding/profile warnings |
-| GUI lifecycle | Guarded sandbox-only normal quit passes twice: exit 0, all 30 captured processes stop, debug closes, lock released; reopen retains login/project/mode; Native untouched |
+| GUI workflow | Installed desktop 26.930.31730 renders an actual model/tool/final task and clears Stop; normal tiled Codex/project window, retained account, no onboarding/profile warnings |
+| GUI lifecycle | Candidate and installed normal quit pass: exit 0, all captured processes stop, debug closes, lock released; reopen retains login/project/mode and renders the same completed task; Native untouched |
 | GUI boundary | Private home/workspaces and fixed relays; no Native auth/private profiles or host control sockets. Portal Settings.Read passes; host systemd bus denied |
 | Launcher | Actual sandbox favourite set, Native not favourited; final fuzzy-search order needs user confirmation |
 
 Focused broker, launcher, preference, deployment/reviewer, HTTP, socket, GUI and
 Node streaming/cancellation fixtures pass. Lifecycle fixtures also verify other
 windows/platforms do not quit and changed wiring causes no write. These do not
-replace runtime acceptance. Prior sandbox tasks remain readable through supported
-RPC; retained task rendering after final installation still needs a GUI check.
+replace runtime acceptance. Installed task `01a10419-2ec0-7c41-bf98-c7c1933f8c02` completed one
+authorized printf with exit 0 and exact output/final markers. After reopening, an
+observed sidebar control selected that same task and rendered its exact final
+response with Stop cleared; RPC independently confirmed the saved command result.
+Older-instance task import remains separate from this close/reopen acceptance.
+Final installed closes captured 30/29/29 processes and each exited normally
+with zero remainder. The final check, 27.6 seconds after close, found debug port
+19229 closed and Native PID 2890 alive; no additional OAuth was requested.
 
 ## Protected review gates
 
-Candidate `0653216` built but review denied its unexamined Native dependency
-upgrade. `93ad9d5` retains Native's exact activated lock and executable while
-separately pinning the tested contained GUI. Its review accepted that scope but
-requires the new package/launcher/runtime source in the payload. Neither denied
-request activated or changed next boot. [Dependency evidence](reviews/agent-desktop-664436c7.md)
-is source material for a fresh bound review, never an approval or gate input.
+Candidate `0653216` was denied for an unexamined Native dependency upgrade.
+`93ad9d5` narrowed the update to the sandbox desktop; review then required its
+exact package/launcher/runtime code. `ed913e5` supplied bounded upstream evidence
+and received a fresh source/closure-bound approval. No review rule was weakened.
+The [evidence index](reviews/agent-desktop-664436c7.md) preserves the full artifact
+in that approved commit and immutable source while avoiding vendor-code
+duplication in every future bounded review. Reports never authorize deployment.
 
-The local desktop task queue is preserved as private state outside tracked NixOS
-source. The first narrowed request used a clean temporary committed checkout.
+The local desktop task queue remains private, ignored state; the committed
+snapshot excludes it. Native credentials/profile and prior work were preserved.
 
-## Remaining acceptance and later work
+## Later work
 
-1. Obtain fresh protected review and persistently install the exact committed source.
-2. Run one actual task through the installed GUI; close/reopen retaining that task,
-   login and preferences, then remove all debug endpoints/trial processes.
-3. Record exact installed source/runtime/boot profile and user-visible result.
+The required installed workflow passed. Final documentation follows the approved
+implementation commit; no additional activation is needed for this report.
 
 Later: actual reboot/rollback, portal file selection, long-build cancellation,
 application-specific broker identity, full command auditing, GUI egress isolation,

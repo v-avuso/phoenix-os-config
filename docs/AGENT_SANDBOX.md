@@ -4,9 +4,9 @@ The declarations are in `modules/development/ai/agent`. Installation and runtime
 status are recorded separately in [acceptance](AGENT_SANDBOX_ACCEPTANCE.md).
 A successful build does not install these services or launcher entries.
 The CLI, diagnostic broker and independently reviewed unattended test/switch
-have runtime acceptance. The corrected desktop candidate has interactive task
-and close/reopen acceptance; final installed-launcher acceptance is recorded
-separately. Component tests alone are insufficient.
+have runtime acceptance. The installed GUI completes interactive tasks and
+retains them across normal close/reopen. Exact source and runtime evidence are
+recorded in acceptance; component tests alone are insufficient.
 
 ## Everyday use
 
