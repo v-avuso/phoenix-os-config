@@ -29,6 +29,9 @@ let
     export CODEX_HOME="${user.homeDirectory}/.local/state/phoenix-agent-review"
     ${pkgs.coreutils}/bin/install -d -m 700 "$CODEX_HOME"
     cd /
+    if [ "$#" -eq 0 ] && [ -f "$CODEX_HOME/auth.json" ]; then
+      exec ${codexCliPackage}/bin/codex login status
+    fi
     exec ${codexCliPackage}/bin/codex login "$@"
   '';
 in

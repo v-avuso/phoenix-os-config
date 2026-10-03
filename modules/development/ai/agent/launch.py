@@ -15,6 +15,7 @@ def main(config, args):
     app_server = args[:1] == ["app-server"]
     state = Path(config["state"])
     state.mkdir(mode=0o700, parents=True, exist_ok=True)
+    state.chmod(0o700)
     env = dict(os.environ)
     # Ignore inherited OpenShell endpoint/policy/provider overrides. All
     # effective control inputs are the reviewed immutable launcher config.
