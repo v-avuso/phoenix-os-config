@@ -20,6 +20,9 @@ let
   });
 
   caelestiaSettings = {
+    # Prefer the contained entry without renaming it or favouriting Native.
+    # Query ordering still depends on Caelestia's fuzzy match/frequency score.
+    launcher.favouriteApps = [ "codex-desktop-sandboxed" ];
     # Caelestia's upstream idle defaults lock after 180 seconds. Phoenix
     # handles display blanking separately; do not lock or power off outputs.
     general.idle = {

@@ -6,5 +6,6 @@
     ./agent/codex-sandbox.nix
     ./agent/review.nix
     ./agent
+    ./agent/gui.nix
   ];
 }

@@ -28,8 +28,8 @@
     # otherwise defaults CODEX_OZONE_PLATFORM to x11, then lets this variable
     # select Wayland before that fallback is appended.
     xdg.desktopEntries.codex-desktop = {
-      name = "ChatGPT Community";
-      comment = "Community Linux distribution based on OpenAI ChatGPT";
+      name = "ChatGPT Community (Native)";
+      comment = "Direct host access; use ChatGPT Community (Sandboxed) for contained engineering";
       exec = "env NIXOS_OZONE_WL=1 BAMF_DESKTOP_FILE_HINT=/run/current-system/sw/share/applications/codex-desktop.desktop CHROME_DESKTOP=codex-desktop.desktop codex-desktop %u";
       icon = "codex-desktop";
       terminal = false;
