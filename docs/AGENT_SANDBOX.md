@@ -3,28 +3,37 @@
 The declarations are in `modules/development/ai/agent`. Installation and runtime
 status are recorded separately in [acceptance](AGENT_SANDBOX_ACCEPTANCE.md).
 A successful build does not install these services or launcher entries.
+The CLI and independent reviewer have authenticated runtime acceptance.
+The desktop entry is experimental: its required routing/auth mediation is
+unfinished; use Native GUI until that integration is accepted.
 
 ## Everyday use
 
 | Entry | Purpose |
 | --- | --- |
-| **ChatGPT Community (Sandboxed)** | Private GUI home, filtered desktop portals, OpenShell backend |
+| **ChatGPT Community (Sandboxed)** | Experimental private GUI; desktop authentication integration pending |
 | **ChatGPT Community (Native)** | Existing host GUI and profile; deliberate repair/administration |
 | `codex` / **Codex (Sandboxed)** | Persistent OpenShell CLI |
 | `codex-native` | Direct host CLI |
-| `codex-sandbox-login` | Separate sandbox OAuth sign-in |
+| `codex-sandbox-login` | One-time sandbox sign-in; existing login is reused |
 | `codex-sandbox-exec COMMAND...` | Tool execution inside the managed sandbox |
-| `phoenix-review-login` | Separate trusted deployment-review OAuth sign-in |
+| `phoenix-review-login` | One-time reviewer sign-in; existing login reports saved status |
 | `phoenix-deploy-review --target metal --reason "…" --action review` | Review committed source against the installed source |
 
-Launchers start their required services automatically. Caelestia favours the
+Launchers start their required services automatically. The current declaration favours the
 sandboxed GUI entry; fuzzy matching and usage history still affect search order.
 Native remains available for repair. There is no automatic native fallback.
 
 Sandbox and Native GUI profiles are separate. Native credentials, history and
 state are not copied or reconciled. Sharing the whole profile would expose that
 state and risk redirecting launches to an existing Native process. The GUI
-profile and sandbox/reviewer logins require initial user participation.
+profile and sandbox/reviewer logins require initial user participation. Saved
+credentials survive launches; diagnostic failures do not trigger another login.
+The upstream placeholder identity explains the synthetic GUI email. The pinned
+GUI also needs discovered workspace routing and uses its own Electron network
+for authenticated requests, outside OpenShell’s worker proxy. Supporting that
+requires explicit mediation; cosmetic identity changes or repeated sign-ins
+are insufficient.
 
 ## Boundaries and initial access
 
@@ -105,6 +114,11 @@ no arbitrary shell, file access, service control or NixOS activation.
 The trusted host launcher/gateway owns sandbox OAuth refresh. The worker gets
 endpoint-scoped opaque handles, not reusable bearer tokens. Native, sandbox and
 reviewer authentication are separate. Keep their state private and unreconciled.
+Ordinary launches never initiate OAuth; a repeated sandbox login command reuses
+its saved provider. Missing routing metadata needs repair, not another sign-in.
+The public workspace UUID is passed separately because Codex compares it locally.
+The desktop uses OpenShell’s mTLS SSH proxy for duplex app-server traffic, without
+host SSH keys/configuration or remote login profiles; ordinary commands use gRPC.
 
 Live writable repositories require OpenShell's unsafe host-bind opt-in and
 relaxed driver resource admission. Host kernel/runtime and gateway remain
