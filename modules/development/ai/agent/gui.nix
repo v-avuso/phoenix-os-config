@@ -152,9 +152,6 @@ let
       );
     };
     dbus.system.talks = lib.mkForce [ ];
-    # Chromium exports its maintained tray interface under a process name.
-    # Host activation additionally verifies this exact filtered proxy/socket.
-    dbus.session.owns = [ "org.freedesktop.StatusNotifierItem-*" ];
   };
   wrapped = bwrapper.mkBwrapper wrapperModule;
   profileSeedConfig = pkgs.writeText "phoenix-agent-gui-profile.json" (builtins.toJSON {
