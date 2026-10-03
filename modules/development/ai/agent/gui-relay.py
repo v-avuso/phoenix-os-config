@@ -10,7 +10,7 @@ import time
 import uuid
 
 
-def desktop_identity(account, profile):
+def desktop_identity(account, profile, selected=None):
     """Public routing claims, never a credential accepted by OpenAI.
 
     The desktop parses its auth status as JWT before invoking its own HTTP.
@@ -19,10 +19,18 @@ def desktop_identity(account, profile):
     """
     encode = lambda value: base64.urlsafe_b64encode(json.dumps(value).encode()).decode().rstrip("=")
     now = int(time.time())
+    # The pinned desktop's account-info decoder requires chatgpt_user_id;
+    # user_id alone silently produces an unauthenticated Work account.
+    auth = {"chatgpt_account_id": account, "chatgpt_user_id": profile["id"],
+            "user_id": profile["id"]}
+    for source, target in (("plan_type", "chatgpt_plan_type"),
+                           ("account_user_id", "chatgpt_account_user_id")):
+        value = (selected or {}).get(source)
+        if isinstance(value, str) and value:
+            auth[target] = value
     return ".".join([encode({"alg": "none", "typ": "JWT"}),
                      encode({"sub": profile["id"], "exp": now + 3600,
-                             "https://api.openai.com/auth": {
-                                 "chatgpt_account_id": account, "user_id": profile["id"]},
+                             "https://api.openai.com/auth": auth,
                              "https://api.openai.com/profile": {"email": profile.get("email")}}),
                      "phoenix-opaque-desktop"])
 
@@ -43,7 +51,7 @@ def worker_json(config, url):
     return json.loads(body)
 
 
-def worker_routing(config, account):
+def worker_account(config, account):
     discovered = worker_json(config, "https://chatgpt.com/backend-api/wham/accounts/check")
     candidates = [entry for entry in discovered["accounts"] if entry.get("id") == account]
     if len(candidates) != 1:
@@ -55,8 +63,16 @@ def worker_routing(config, account):
         origin = "https://chatgpt.com"
     if origin != "https://chatgpt.com" or selected.get("account_routing_override") not in {"NO_CONSTRAINT", "us", "us_cr"}:
         raise ValueError("Sandbox workspace routing outside declared endpoint")
-    return {"chatgptAccountId": account, "backendOrigin": origin,
+    return selected
+
+
+def account_routing(account, selected):
+    return {"chatgptAccountId": account, "backendOrigin": "https://chatgpt.com",
             "accountRoutingOverride": selected["account_routing_override"]}
+
+
+def worker_routing(config, account):
+    return account_routing(account, worker_account(config, account))
 
 
 def relay(config):
@@ -75,6 +91,7 @@ def relay(config):
     account = None
     routing = None
     profile = None
+    selected = None
 
     def input_stream():
         try:
@@ -119,13 +136,21 @@ def relay(config):
                         account = str(uuid.UUID(json.loads((Path(launcher["state"]) / "account-id.json").read_text())))
                     result = response["result"]
                     if method == "getAuthStatus" and result.get("authToken"):
+                        selected = selected or worker_account(config, account)
                         profile = profile or worker_json(config, "https://chatgpt.com/backend-api/me")
                         if not isinstance(profile.get("id"), str) or not profile["id"]:
                             raise ValueError("Desktop profile identity missing")
-                        result["authToken"] = desktop_identity(account, profile)
-                    if method == "account/read" and (result.get("account") or {}).get("type") == "chatgpt" and not result.get("workspaceRouting"):
-                        routing = routing or worker_routing(config, account)
-                        result["workspaceRouting"] = routing
+                        result["authToken"] = desktop_identity(account, profile, selected)
+                    if method == "account/read" and (result.get("account") or {}).get("type") == "chatgpt":
+                        selected = selected or worker_account(config, account)
+                        profile = profile or worker_json(config, "https://chatgpt.com/backend-api/me")
+                        if isinstance(profile.get("email"), str):
+                            result["account"]["email"] = profile["email"]
+                        if isinstance(selected.get("plan_type"), str) and selected["plan_type"]:
+                            result["account"]["planType"] = selected["plan_type"]
+                        if not result.get("workspaceRouting"):
+                            routing = routing or account_routing(account, selected)
+                            result["workspaceRouting"] = routing
                     line = json.dumps(response).encode() + b"\n"
             except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired):
                 # A failed routing repair cannot silently claim usable auth or

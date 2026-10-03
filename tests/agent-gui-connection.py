@@ -32,7 +32,7 @@ class Connections(unittest.TestCase):
         source = '''import base64,json,sys
 if sys.argv[2:] == ["--phoenix-gui-http"]:
     request=json.loads(sys.stdin.readline())
-    value={"id":"actual-fixture-user","email":"fixture@example.invalid"} if request["url"].endswith("/me") else {"accounts":[{"id":"11111111-1111-4111-8111-111111111111","workspace_backend_origin":"NO_CONSTRAINT","account_routing_override":"NO_CONSTRAINT"}]}
+    value={"id":"actual-fixture-user","email":"fixture@example.invalid"} if request["url"].endswith("/me") else {"accounts":[{"id":"11111111-1111-4111-8111-111111111111","workspace_backend_origin":"NO_CONSTRAINT","account_routing_override":"NO_CONSTRAINT","plan_type":"plus","account_user_id":"actual-fixture-account-user"}]}
     print(json.dumps({"status":200,"headers":{}}))
     print(json.dumps({"chunk":base64.b64encode(json.dumps(value).encode()).decode()}))
     print(json.dumps({"done":True}))
@@ -52,7 +52,7 @@ else:
             process = subprocess.Popen([sys.executable, "-I", str(AGENT / "gui-relay.py"), str(config)],
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             try:
-                for index, method in enumerate(["initialize", "getAuthStatus", "account/read"]):
+                for index, method in enumerate(["initialize", "account/read", "getAuthStatus"]):
                     process.stdin.write(json.dumps({"id": index, "method": method, "params": {"refreshToken": True}}).encode() + b"\n")
                     process.stdin.flush()
                     self.assertTrue(select.select([process.stdout], [], [], 5)[0])
@@ -61,8 +61,15 @@ else:
                         token = result["authToken"]
                         self.assertNotIn("opaque-must-not-enter-gui", token)
                         payload = json.loads(base64.urlsafe_b64decode(token.split(".")[1] + "=="))
-                        self.assertEqual(payload["https://api.openai.com/auth"]["user_id"], "actual-fixture-user")
+                        auth = payload["https://api.openai.com/auth"]
+                        self.assertEqual(auth["user_id"], "actual-fixture-user")
+                        # Pinned main account-info rejects a token without this field.
+                        self.assertEqual(auth["chatgpt_user_id"], "actual-fixture-user")
+                        self.assertEqual(auth["chatgpt_plan_type"], "plus")
+                        self.assertEqual(auth["chatgpt_account_user_id"], "actual-fixture-account-user")
                     elif method == "account/read":
+                        self.assertEqual(result["account"]["email"], "fixture@example.invalid")
+                        self.assertEqual(result["account"]["planType"], "plus")
                         self.assertEqual(result["workspaceRouting"]["chatgptAccountId"], ACCOUNT)
                         self.assertEqual(result["workspaceRouting"]["backendOrigin"], "https://chatgpt.com")
                 process.stdin.close()

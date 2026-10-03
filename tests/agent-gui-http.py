@@ -130,7 +130,7 @@ class DesktopHTTP(unittest.TestCase):
     def test_identity_contains_only_public_account_and_actual_profile(self):
         token = relay.desktop_identity("public-account", {"id": "actual-user", "email": "fixture@example.invalid"})
         claims = json.loads(base64.urlsafe_b64decode(token.split(".")[1] + "=="))
-        self.assertEqual(claims["https://api.openai.com/auth"], {"chatgpt_account_id": "public-account", "user_id": "actual-user"})
+        self.assertEqual(claims["https://api.openai.com/auth"], {"chatgpt_account_id": "public-account", "chatgpt_user_id": "actual-user", "user_id": "actual-user"})
         self.assertNotIn("opaque-fixture-handle", token)
         self.assertNotIn("chatgpt_plan_type", json.dumps(claims))
 
