@@ -19,7 +19,7 @@ let
     pkgs.python3
   ];
   upstreamDesktop =
-    inputs.codex-desktop-linux.packages.${pkgs.stdenv.hostPlatform.system}.codex-desktop;
+    inputs.codex-desktop-sandbox.packages.${pkgs.stdenv.hostPlatform.system}.codex-desktop;
   # Only this immutable sandbox copy mediates desktop backend fetches. Neither
   # the native app nor its private account/profile is patched or mounted.
   desktop = upstreamDesktop.overrideAttrs (old: {

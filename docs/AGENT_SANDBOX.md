@@ -27,6 +27,12 @@ Launchers start their required services automatically. The current declaration f
 sandboxed GUI entry; fuzzy matching and usage history still affect search order.
 Native remains available for repair. There is no automatic native fallback.
 
+Native keeps the known-good `codex-desktop-linux` lock revision. The contained
+GUI uses the separately pinned `codex-desktop-sandbox` package from the same
+upstream, sharing its existing dependencies. Its newer desktop protocol does not
+update Native or import another NixOS module. Review Native upgrades separately;
+the Flatpak/Bubblewrap framework remains shared.
+
 The sandbox GUI requests a normal quit when its last primary window closes.
 Its current Chromium runtime
 reports tray readiness even when the filtered bus prevents registration; hiding

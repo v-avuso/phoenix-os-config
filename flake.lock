@@ -91,6 +91,31 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
+        "lastModified": 1790257126,
+        "narHash": "sha256-mZuRL48CPa7RsPWhEY6JGPI1oBIkj1TP8nrwTkvGqIk=",
+        "owner": "ilysenko",
+        "repo": "codex-desktop-linux",
+        "rev": "8e3f6b4b665b9e9c219b286cf57b89f516bb0bd8",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ilysenko",
+        "repo": "codex-desktop-linux",
+        "type": "github"
+      }
+    },
+    "codex-desktop-sandbox": {
+      "inputs": {
+        "flake-utils": [
+          "codex-desktop-linux",
+          "flake-utils"
+        ],
+        "nixpkgs": [
+          "codex-desktop-linux",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
         "lastModified": 1791046758,
         "narHash": "sha256-Fa9OfsikyBoz+gvAZetBAoS2bmIILya+3+c/CJdjpjs=",
         "owner": "ilysenko",
@@ -101,6 +126,7 @@
       "original": {
         "owner": "ilysenko",
         "repo": "codex-desktop-linux",
+        "rev": "664436c7d0f3f7919a626c25999424f92bf4a044",
         "type": "github"
       }
     },
@@ -578,6 +604,7 @@
         "caelestia-dots": "caelestia-dots",
         "caelestia-shell": "caelestia-shell",
         "codex-desktop-linux": "codex-desktop-linux",
+        "codex-desktop-sandbox": "codex-desktop-sandbox",
         "firefox-addons": "firefox-addons",
         "home-manager": "home-manager",
         "nix-bwrapper": "nix-bwrapper",

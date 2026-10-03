@@ -40,6 +40,15 @@ it is not yet the persistently installed system. Commit `902d56f` then updates
 only the maintained desktop input; the GUI-only candidate builds and renders an
 actual task against the installed relay, without changing the installed system.
 
+The protected switch of candidate `0653216` built but was denied before activation:
+its desktop input update also changed the Native package, whose dependency source
+was absent from the reviewer payload. Read-only comparison found imported module
+files and the default package recipe unchanged, but optional/runtime patches also
+changed. The corrected source therefore keeps Native's exact known-good lock pin
+and uses the tested new revision only as the contained GUI package. It imports no
+new NixOS module and leaves all other locked dependencies unchanged. The denial
+did not alter the runtime or boot profile; a fresh bound review is still required.
+
 | Check | Actual result |
 | --- | --- |
 | Evaluation/build | Metal/VM/default combined evaluation and committed metal system builds pass; VM bootability is not established |
