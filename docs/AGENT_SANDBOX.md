@@ -4,8 +4,9 @@ The declarations are in `modules/development/ai/agent`. Installation and runtime
 status are recorded separately in [acceptance](AGENT_SANDBOX_ACCEPTANCE.md).
 A successful build does not install these services or launcher entries.
 The CLI, diagnostic broker and independently reviewed unattended test/switch
-have runtime acceptance. Interactive desktop acceptance is still pending;
-component tests alone are insufficient.
+have runtime acceptance. The corrected desktop candidate has interactive task
+and close/reopen acceptance; final installed-launcher acceptance is recorded
+separately. Component tests alone are insufficient.
 
 ## Everyday use
 
@@ -26,6 +27,18 @@ Launchers start their required services automatically. The current declaration f
 sandboxed GUI entry; fuzzy matching and usage history still affect search order.
 Native remains available for repair. There is no automatic native fallback.
 
+The sandbox GUI requests a normal quit when its last primary window closes.
+Its current Chromium runtime
+reports tray readiness even when the filtered bus prevents registration; hiding
+would leave the profile locked behind an unreachable window. A checked patch in
+the sandbox copy disables tray hiding/keepalive on Linux and requests normal quit
+after upstream tracked-primary cleanup, even with a hidden service window.
+It preserves close/quit confirmations, saved bounds and normal shutdown cleanup.
+Remove it once maintained upstream close/reopen works under the same policy.
+Reopening retains the private profile and existing login. Normal shutdown can
+take several seconds while upstream flushes state; a duplicate launch never starts another
+writer to that profile.
+
 Sandbox and Native GUI profiles are separate. Native credentials and private
 history are not copied or reconciled. Sharing the whole profile would expose that
 state and risk redirecting launches to an existing Native process. The GUI
@@ -40,14 +53,20 @@ GUI. Public asset requests retain the upstream transport.
 
 At first configured launch, a host-only adapter imports selected existing
 onboarding/display preferences and project roots inside the declared workspaces.
-It preserves other sandbox state and starts without maximization. It never copies
+It preserves other sandbox state and clears maximization on valid imported window
+bounds. This import runs once; later Native global-state changes are not
+synchronized. It never copies
 the whole global-state map, draft/resume tokens, history or authentication.
 Separately, each GUI app-server launch reads only typed model/effort/tier and
 four supported desktop preferences from Native `config.toml`; these become fixed
 scalar Codex overrides. Permission modes, endpoints, commands, MCP servers and
 plugins are excluded. The worker never receives or mounts that Native file.
 The CLI TUI retains its own configuration; this is selective GUI settings reuse,
-not shared profiles or shared Native task history.
+not shared profiles or shared Native task history. Sandbox tasks persist in the
+managed OpenShell instance across GUI close/reopen; the GUI retains its own private
+display state. Changing the sandbox declaration can select a new instance rather
+than import earlier tasks. Native scalar model/display settings are reread each
+time the GUI starts an app-server, not continuously synchronized while it runs.
 
 ## Boundaries and initial access
 
@@ -158,11 +177,12 @@ CLI authentication succeeds. Repair that adapter rather than starting OAuth.
 
 Chromium's singleton socket cannot reliably coordinate separate private `/tmp`
 and PID namespaces. The host launcher serializes access to the writable private
-GUI profile for the wrapper's lifetime. A repeated launch uses upstream tray
-activation only when its owner is the exact same-user immutable filtered bus
-proxy for this sandbox; it never falls back to Native. This activation adapter
-still requires live acceptance. Close processes, not just visible test windows,
-before another isolated trial; never reset the profile to hide lock errors.
+GUI profile for the wrapper's lifetime. A repeated launch starts no second
+writer; use the existing window. A guarded tray-activation adapter can use only
+the exact same-user immutable filtered bus proxy for this sandbox, but the
+current runtime does not register a reachable tray. It never falls back to
+Native. Close processes, not just visible test windows, before another isolated
+trial; never reset the profile to hide lock errors.
 
 Live writable repositories require OpenShell's unsafe host-bind opt-in and
 relaxed driver resource admission. Host kernel/runtime and gateway remain

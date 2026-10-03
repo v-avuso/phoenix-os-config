@@ -30,6 +30,11 @@ let
       test -f "$bootstrap"
       { printf '%s\n' 'require(${builtins.toJSON (toString ./gui-http-hook.cjs)});'; cat "$bootstrap"; } > phoenix-bootstrap.js
       mv phoenix-bootstrap.js "$bootstrap"
+      # A failed tray registration and hidden service windows can retain the
+      # private profile after its last primary window closes. Reuse upstream
+      # confirmation, bounds persistence and normal quit cleanup. Remove this
+      # adapter when upstream close/reopen works under the same filtered bus.
+      ${python} -I ${./gui-lifecycle.py} phoenix-app
       # Electron native modules must retain their original unpacked layout.
       asar pack phoenix-app "$out/opt/codex-desktop/resources/app.asar" --unpack '*.node'
     '';

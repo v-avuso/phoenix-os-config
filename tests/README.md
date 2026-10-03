@@ -11,6 +11,7 @@ python3 -B tests/agent-launch.py
 python3 -B tests/agent-review.py
 python3 -B tests/agent-gui.py
 python3 -B tests/agent-gui-profile.py
+python3 -B tests/agent-gui-lifecycle.py
 python3 -B tests/agent-deployment.py
 python3 -B tests/agent-gui-http.py
 node tests/agent-gui-http-hook.cjs
@@ -46,6 +47,8 @@ nix eval --impure --file tests/desktop-services.nix
 - **Agent launcher/review/GUI fixtures:** fail-closed stdio and login setup,
   frozen Git source, rejected/stale verdicts, process bounds, unsafe Git helper
   suppression, private profile/environment validation and real fixed-command socket relays.
+  Desktop lifecycle fixtures reject upstream wiring drift before patching the
+  Linux tray predicate; actual window close/reopen remains a runtime check.
   Protected deployment fixtures cover immutable source/closure binding, rejection
   before activation, bootstrap file safety and separate boot/runtime rollback.
   HTTP fixtures cover destination/header bounds, real identity/routing, streaming
