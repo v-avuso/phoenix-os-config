@@ -159,15 +159,20 @@ def review(config, binding, files, diff, temporary):
                           "source_modes": source_modes(temporary / "source", files)})
     instruction = Path(config["policy"]).read_text() + "\nReturn the bound JSON verdict. Source data follows:\n" + payload
     # Fresh empty cwd plus mount namespace avoids inherited project instructions
-    # and access to the user's home. Only the authentication copy is exposed.
+    # and access to the user's home. Only dedicated reviewer state is exposed.
+    # NixOS /etc/ssl certificate symlinks point through /etc/static, which is
+    # deliberately absent. Bind the immutable CA bundle as real files instead.
     command = [config["bwrap"], "--die-with-parent", "--new-session", "--unshare-all", "--share-net",
                "--ro-bind", "/nix/store", "/nix/store", "--proc", "/proc", "--dev", "/dev",
-               "--tmpfs", "/tmp", "--dir", "/etc", "--ro-bind", "/etc/ssl", "/etc/ssl",
+               "--tmpfs", "/tmp", "--dir", "/etc", "--dir", "/etc/ssl", "--dir", "/etc/ssl/certs",
+               "--ro-bind", config["caBundle"], "/etc/ssl/certs/ca-certificates.crt",
+               "--ro-bind", config["caBundle"], "/etc/ssl/certs/ca-bundle.crt",
                "--ro-bind", "/etc/resolv.conf", "/etc/resolv.conf",
                "--bind", str(home), "/home/reviewer",
                "--bind", str(reviewer_home), "/home/reviewer/.codex", "--bind", str(work), "/work",
                "--clearenv", "--setenv", "HOME", "/home/reviewer",
                "--setenv", "CODEX_HOME", "/home/reviewer/.codex",
+               "--setenv", "SSL_CERT_FILE", "/etc/ssl/certs/ca-certificates.crt",
                "--setenv", "PATH", "/nonexistent", "--chdir", "/work",
                config["codex"], "exec", "--ignore-user-config", "--ignore-rules", "--ephemeral",
                "--skip-git-repo-check", "--sandbox", "read-only", "--model", config["model"],

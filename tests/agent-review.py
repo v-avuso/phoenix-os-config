@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 spec = importlib.util.spec_from_file_location("deploy_review", Path(__file__).resolve().parents[1] / "modules/development/ai/agent/deploy-review.py")
 review = importlib.util.module_from_spec(spec)
@@ -38,6 +39,29 @@ class ReviewTests(unittest.TestCase):
         self.assertIn("-retired", diff)
         self.assertIn("+new", diff)
         self.assertIn("+yes", diff)
+
+    def test_reviewer_certificate_mount_is_self_contained(self):
+        with tempfile.TemporaryDirectory() as directory:
+            temporary = Path(directory)
+            state = temporary / "state"
+            state.mkdir()
+            (state / "auth.json").write_text("{}")
+            policy = temporary / "policy"
+            policy.write_text("trusted policy")
+            config = dict(reviewHome=str(state), policy=str(policy), bwrap="bwrap", codex="codex",
+                          model="gpt-6.1-sol", effort="medium", caBundle="/nix/store/cert/ca-bundle.crt")
+            with mock.patch.object(review, "run", side_effect=ValueError("probe stopped")) as run:
+                with self.assertRaisesRegex(ValueError, "probe stopped"):
+                    review.review(config, {"source": "frozen"}, {}, "", temporary)
+                argv = run.call_args.args[0]
+                mounts = [argv[index + 1:index + 3] for index, value in enumerate(argv) if value == "--ro-bind"]
+                self.assertIn([config["caBundle"], "/etc/ssl/certs/ca-certificates.crt"], mounts)
+                self.assertIn([config["caBundle"], "/etc/ssl/certs/ca-bundle.crt"], mounts)
+                self.assertNotIn(["/etc/ssl", "/etc/ssl"], mounts)
+                self.assertNotIn(["/etc", "/etc"], mounts)
+                location = argv.index("SSL_CERT_FILE")
+                self.assertEqual(argv[location + 1], "/etc/ssl/certs/ca-certificates.crt")
+                self.assertIn("--clearenv", argv)
 
     def test_baseline_keeps_all_effective_files(self):
         with tempfile.TemporaryDirectory() as directory:

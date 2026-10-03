@@ -14,6 +14,7 @@ let
       git = "${pkgs.git}/bin/git";
       nix = "${pkgs.nix}/bin/nix";
       bwrap = "${pkgs.bubblewrap}/bin/bwrap";
+      caBundle = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
       pkexec = "${pkgs.polkit}/bin/pkexec";
       policy = toString ./review-policy.md;
       model = "gpt-6.1-sol";
