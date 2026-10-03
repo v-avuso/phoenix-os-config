@@ -136,7 +136,11 @@ let
       # Preserve the existing whole private home, including GUI state. Manifest
       # persistence must never mount the native ~/.codex or GTK profiles.
       sandbox = lib.mkForce [ ];
-      read = lib.mkForce [ ];
+      read = lib.mkForce [
+        "/sys"
+        "${runtime}/phoenix-agent-gui.sock"
+        "${runtime}/phoenix-agent-gui-http.sock"
+      ];
       readWrite = lib.mkForce (
         [
           {
@@ -147,10 +151,6 @@ let
         ++ cfg.workspaces
       );
     };
-    runtime.binds = [
-      "phoenix-agent-gui.sock"
-      "phoenix-agent-gui-http.sock"
-    ];
     dbus.system.talks = lib.mkForce [ ];
   };
   wrapped = bwrapper.mkBwrapper wrapperModule;
