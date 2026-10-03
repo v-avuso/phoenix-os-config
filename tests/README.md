@@ -10,6 +10,10 @@ python3 -B tests/agent-admin.py
 python3 -B tests/agent-launch.py
 python3 -B tests/agent-review.py
 python3 -B tests/agent-gui.py
+python3 -B tests/agent-deployment.py
+python3 -B tests/agent-gui-http.py
+node tests/agent-gui-http-hook.cjs
+python3 -B tests/agent-gui-connection.py
 nix build --impure --file tests/commands-packaging.nix --no-link
 nix build --impure --file tests/clamav-recovery.nix --no-link
 nix eval --impure --file tests/opensnitch-observation.nix
@@ -40,7 +44,11 @@ nix eval --impure --file tests/desktop-services.nix
   require the [agent acceptance pass](../docs/AGENT_SANDBOX_ACCEPTANCE.md).
 - **Agent launcher/review/GUI fixtures:** fail-closed stdio and login setup,
   frozen Git source, rejected/stale verdicts, process bounds, unsafe Git helper
-  suppression, namespace mount arguments and a real fixed-command socket relay.
+  suppression, private profile/environment validation and real fixed-command socket relays.
+  Protected deployment fixtures cover immutable source/closure binding, rejection
+  before activation, bootstrap file safety and separate boot/runtime rollback.
+  HTTP fixtures cover destination/header bounds, real identity/routing, streaming
+  and cancellation without exposing credentials.
   GUI socket fixtures need sandbox execution permission; they need no OS root.
   Separate sign-in, real model turns, desktop portal behavior and authenticated
   system activation remain runtime acceptance checks.

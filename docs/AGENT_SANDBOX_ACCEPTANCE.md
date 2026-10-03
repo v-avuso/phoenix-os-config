@@ -4,13 +4,13 @@ See [the operating guide](AGENT_SANDBOX.md) for lasting behavior and rationale.
 
 ## Current status — 2026-10-03
 
-**Requested first iteration incomplete: the GUI workflow is not usable.** The CLI
-and independent reviewer foundation is temporarily installed, and their retained-
-authentication model requests succeeded. Changes are on `codex/agent-sandbox-broker`.
-The sandboxed desktop opens and its contained backend initializes, but cannot
-switch successfully into Codex. The pinned GUI requires workspace routing and
-bearer authentication outside the worker proxy; this integration is unfinished. Automatic root deployment is not implemented.
-The persistent boot profile still points to the previous known-good generation.
+**First iteration still requires live acceptance.** New committed adapters replace
+the custom GUI wrapper with pinned Nix-Bwrapper/Flatpak manifest import and add
+retained-authentication desktop routing plus independently reviewed unattended
+test/switch. Focused fixtures, combined metal/VM evaluation and a candidate build
+pass. These results do not establish interactive GUI or passwordless deployment.
+`main` music changes are merged into `codex/agent-sandbox-broker`; the currently
+installed runtime below is still the earlier temporary test generation.
 
 | Validation | Evidence |
 | --- | --- |
@@ -43,27 +43,23 @@ Currently installed test system (source commit `55ac611`):
 The source baseline is the reviewed frozen Git snapshot; later documentation-only
 commits do not change this recorded runtime result.
 
-## Remaining acceptance and integration
+## Remaining live acceptance
 
-1. Verify refresh, session/reboot persistence, large-build cancellation and
-   recovery before a persistent switch. The prior boot profile remains intact;
-   reboot acceptance is not claimed.
-2. Finish desktop routing/auth mediation before using the sandboxed GUI daily.
-   Its synthetic email is a placeholder, not the cause of the blocked mode
-   switch. The GUI needs non-null `account/read.workspaceRouting` and sends
-   authenticated Electron HTTP outside worker credential injection. Repeating
-   OAuth or adding public identity fields alone does not resolve this. Preserve
-   existing logins; do not copy Native profiles or expose worker tokens.
-3. Verify interactive GUI model/tool use, portal file selection, permission
-   defaults, private profiles and launcher ordering after that integration.
-   The isolated portal Settings.Read fix already passes; whole GUI acceptance
-   does not.
-4. Passwordless root activation, application-specific broker identity, complete
-   process-command auditing and isolated GUI networking remain future work.
-   Reviewed `test` uses normal graphical Polkit; persistent `switch` is absent.
+1. Install a clean, freshly reviewed candidate with graphical Polkit, then run
+   one-time protected reviewer bootstrap using retained authentication. Confirm
+   migration and ordinary launches need no repeated OAuth.
+2. Verify real worker HTTP credential injection under the narrow Python API
+   policy, actual account/routing and interactive sandboxed GUI model/tool use.
+3. Verify the Nix-Bwrapper namespace, filtered bus, portal Settings.Read, profile
+   persistence, no native CLI fallback and launcher ordering. File selection
+   depends on upstream portal identity compatibility; test it separately.
+4. Request reviewed test and switch from the sandbox, prove no additional Polkit,
+   and verify source/closure binding, boot profile, bounded audit and recovery.
+5. Confirm service/session persistence; reboot and destructive rollback tests
+   require explicit scheduling, not assumed acceptance.
 
-Temporary test activation, model/reviewer smoke processes and the blocked GUI
-probe finished. Saved state and the managed gateway remain for reuse.
-
-The user authorizes task-related activation without reminders to save temporary
-mutable desktop settings. Authentication still requires user participation.
+Application-specific broker identity, complete command auditing and isolated
+GUI networking remain possible improvements, not implemented claims. Same-UID
+host callers can request the narrow broker/deployment operations, and model
+review is fallible. The user accepts that residual risk and authorizes task-related
+activation without reminders to save temporary desktop experiment settings.

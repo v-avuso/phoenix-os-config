@@ -4,21 +4,23 @@ The declarations are in `modules/development/ai/agent`. Installation and runtime
 status are recorded separately in [acceptance](AGENT_SANDBOX_ACCEPTANCE.md).
 A successful build does not install these services or launcher entries.
 The CLI and independent reviewer have authenticated runtime acceptance.
-The desktop entry is experimental: its required routing/auth mediation is
-unfinished; use Native GUI until that integration is accepted.
+The desktop and unattended deployment adapters must pass the runtime checks
+in that report before daily use; component tests alone are insufficient.
 
 ## Everyday use
 
 | Entry | Purpose |
 | --- | --- |
-| **ChatGPT Community (Sandboxed)** | Experimental private GUI; desktop authentication integration pending |
+| **ChatGPT Community (Sandboxed)** | Private GUI connected to the OpenShell app-server and mediated backend |
 | **ChatGPT Community (Native)** | Existing host GUI and profile; deliberate repair/administration |
 | `codex` / **Codex (Sandboxed)** | Persistent OpenShell CLI |
 | `codex-native` | Direct host CLI |
 | `codex-sandbox-login` | One-time sandbox sign-in; existing login is reused |
 | `codex-sandbox-exec COMMAND...` | Tool execution inside the managed sandbox |
 | `phoenix-review-login` | One-time reviewer sign-in; existing login reports saved status |
-| `phoenix-deploy-review --target metal --reason "…" --action review` | Review committed source against the installed source |
+| `phoenix-deploy-bootstrap` | One-time graphical installation of protected reviewer authentication |
+| `phoenix-deploy-review --target metal --reason "…" --action test` | Review/build frozen committed source and activate now |
+| `phoenix-deploy-review --target metal --reason "…" --action switch` | Review/build and activate now plus next boot |
 
 Launchers start their required services automatically. The current declaration favours the
 sandboxed GUI entry; fuzzy matching and usage history still affect search order.
@@ -29,11 +31,12 @@ state are not copied or reconciled. Sharing the whole profile would expose that
 state and risk redirecting launches to an existing Native process. The GUI
 profile and sandbox/reviewer logins require initial user participation. Saved
 credentials survive launches; diagnostic failures do not trigger another login.
-The upstream placeholder identity explains the synthetic GUI email. The pinned
-GUI also needs discovered workspace routing and uses its own Electron network
-for authenticated requests, outside OpenShell’s worker proxy. Supporting that
-requires explicit mediation; cosmetic identity changes or repeated sign-ins
-are insufficient.
+The gateway remains the sole owner of sandbox OAuth refresh. A fixed HTTP
+adapter runs inside OpenShell and receives opaque handles; credential injection
+happens on egress. The sandbox-only immutable desktop bootstrap forwards its
+authenticated backend fetches to that adapter. Real account metadata supplies
+workspace routing and a public identity selector; no reusable bearer reaches the
+GUI. Public asset requests retain the upstream transport.
 
 ## Boundaries and initial access
 
@@ -43,7 +46,8 @@ are insufficient.
 - **CLI network:** exact OpenAI destinations plus declared public documentation,
   Git, package registry and Nix-cache HTTPS hosts. Public GET/HEAD and GitHub
   fetch are allowed; arbitrary destinations, SSH, push and publishing are not.
-- **GUI:** Bubblewrap gives the app a private home and process namespace,
+- **GUI:** pinned Nix-Bwrapper imports the community ChatGPT Flatpak manifest
+  and supplies Bubblewrap, filtered buses and portal integration. It gives the app a private home and process namespace,
   declared workspaces, Wayland/GPU access and a filtered portal bus. A fixed
   socket relay starts only the OpenShell app-server; the GUI gets no Podman,
   diagnostic broker or host service-control socket. GUI network is shared with
@@ -56,6 +60,8 @@ are insufficient.
 - **Development:** Nix uses an isolated store/database without the host daemon.
   Preinstalled tools are root-owned; added build outputs are writable.
 
+The Python interpreter can use authenticated desktop API namespaces too; this
+is endpoint-limited authority, not proof that a particular script is calling.
 Exact workspace/destination/capability lists are in the module. Policy changes
 require a reviewed declaration and host deployment, rather than a worker edit.
 
@@ -74,18 +80,28 @@ model selector; the separate deployment reviewer uses GPT-6.1 Sol / medium.
 
 ## Reviewing and deploying configuration
 
-The host-only `phoenix-deploy-review` helper requires a clean, committed checkout
+The `phoenix-deploy-review` helper requires a clean, committed checkout
 and a concrete task reason. It freezes the exact Git blobs, includes the full
 source and changes since `/etc/phoenix-agent/activated-source`, and asks a fresh
 isolated reviewer for a structured verdict. Repository instructions/comments are
 untrusted evidence. Binary files, symlinks, submodules, oversized source and
 malformed, stale, rejected or timed-out verdicts fail closed.
 
-`--action build` builds that approved immutable source; `--action test` additionally
-requests normal graphical Polkit authentication for that exact closure's
-`switch-to-configuration test`. Saved reports never authorize deployment.
-Persistent `switch`, passwordless activation and automatic root review/brokering
-are not implemented. Command Auto-review does not provide OS authentication.
+`test` and `switch` submit bounded source files and a reason through a fixed
+root-owned socket; callers cannot submit commands, closures or approvals. The
+controller reconstructs the snapshot, builds as an unprivileged dedicated user,
+verifies the resulting closure records that exact source, then obtains a fresh
+GPT-6.1 Sol / medium review under a separate protected reviewer identity. The
+verdict binds source, installed baseline, closure, target, action, reason and a
+nonce, stays in memory and is rechecked immediately before activation.
+
+`test` activates now. `switch` deliberately updates the system profile and next
+boot too. Neither requests routine Polkit after one-time installation/bootstrap.
+Failed activation attempts restore the previous boot profile and runtime
+separately; rollback is best effort, not transactional recovery. Saved reports
+never authorize deployment. Codex Auto-review remains separate and does not
+supply OS root privileges. Host-only legacy `review`/`build` is for initial setup;
+bootstrap transfers reviewer refresh ownership to the protected service.
 
 Install from a clean committed Git flake, so the installed baseline contains
 exactly the tracked source. `path:.` is useful for evaluating untracked work,
@@ -101,15 +117,18 @@ Successful wakeup changes include before/after state. Gateway logs and Codex
 transcripts cover their respective activity; these are not a complete host
 process-command audit.
 
-Deployment review observations are private, bounded and rotated under
-`~/.local/state/phoenix-agent-review/audit.jsonl`. They record source, target,
-outcome and any built closure; they are never read as approval inputs.
+The deployment controller journals bounded stages, caller UID/PID, source,
+closure, target, action and reason digest. It omits task content and credentials.
+Private legacy review reports are never read as approval inputs.
 
 The broker authenticates the desktop UID using kernel credentials. Other
 same-user host programs can call its fixed capabilities too: this is not
 application identity. Executable store paths detect version selection, but do
-not distinguish malware launching the legitimate executable. The broker grants
-no arbitrary shell, file access, service control or NixOS activation.
+not distinguish malware launching the legitimate executable. The diagnostic broker grants
+no arbitrary shell, file access, service control or NixOS activation. A separate
+protected deployment controller supplies only freshly reviewed test/switch.
+Same-UID host programs can request costly reviews/builds; executable hashes
+do not authenticate the application or its intent.
 
 The trusted host launcher/gateway owns sandbox OAuth refresh. The worker gets
 endpoint-scoped opaque handles, not reusable bearer tokens. Native, sandbox and
@@ -138,3 +157,10 @@ still needs testing. Do not weaken outer enforcement to hide cleanup warnings.
 - [Codex Auto-review](https://learn.chatgpt.com/docs/sandboxing/auto-review).
 - [Bubblewrap](https://github.com/containers/bubblewrap) and
   [Flatpak sandbox permissions](https://docs.flatpak.org/en/latest/sandbox-permissions.html).
+
+- [Pinned Nix-Bwrapper framework](https://github.com/Naxdy/nix-bwrapper/tree/d170b06fafc0703fff36ec422a64516594b39bd9)
+  and [pinned community ChatGPT Flatpak baseline](https://github.com/kk-daniel/chatgpt-desktop-flatpak/blob/521efae965529d2bda3e7d59eaa83173dc89357d/com.openai.ChatGPT/com.openai.ChatGPT.yaml).
+  The manifest is a permission reference, not proof that this Electron port is tested.
+  Updates import applicable permissions automatically at build time; review pin
+  updates and local restrictions. Upstream portal instance metadata remains a
+  compatibility workaround and needs real acceptance, especially for file selection.
