@@ -19,3 +19,13 @@ worker-authored approval file or reuse an approval after the source changes.
 Privileged activation must remain authenticated until a separately protected
 reviewer and activation gate are deployed and tested. Preserve known-good system
 generations and recovery. Prefer existing tools and compact, testable interfaces.
+
+Protected deployment controller policy: the user has explicitly accepted model
+review residual risk for task-related test and switch. A dedicated reviewer with
+protected retained authentication issues a fresh in-memory verdict. The review
+binds full source, activated baseline, closure, target, action, task reason and
+nonce. The controller builds with a separate unprivileged identity, verifies the
+closure records this source, and performs upstream activation without another
+Polkit prompt. No caller approval, persistent verdict, executable identity claim,
+or arbitrary privileged command is accepted. Review changes to this boundary
+especially carefully. Preserve music/user state and known-good generations.

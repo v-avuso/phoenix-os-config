@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import socket
 import signal
 import stat
 import subprocess
@@ -20,7 +21,7 @@ import sys
 import tempfile
 import time
 
-SOURCE_LIMIT = 400 * 1024
+SOURCE_LIMIT = 512 * 1024
 OUTPUT_LIMIT = 2 * 1024 * 1024
 
 
@@ -238,16 +239,25 @@ def build_environment(config):
 
 
 def main():
+    config = json.loads(Path(sys.argv[1]).read_text())
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("config")
     parser.add_argument("--base", help="optional full commit SHA for an additional informational diff")
     parser.add_argument("--reason", required=True, help="concrete authorized task purpose")
     parser.add_argument("--target", choices=["metal", "vm"], required=True)
-    parser.add_argument("--action", choices=["review", "build", "test"], default="review")
+    parser.add_argument("--action", choices=(["test", "switch"] if config.get("clientOnly") else ["review", "build", "test", "switch"]), default=("test" if config.get("clientOnly") else "review"))
     args = parser.parse_args()
     if (args.base and not re.fullmatch(r"[0-9a-f]{40,64}", args.base)) or not 1 <= len(args.reason.strip()) <= 2000:
         parser.error("base must be a full commit SHA and reason must be 1–2000 characters")
     config = json.loads(Path(args.config).read_text())
+    if args.action in {"review", "build"}:
+        # Serialize retained-auth operations with the one-time ownership transfer.
+        legacy = Path(config["reviewHome"])
+        if legacy.is_dir():
+            lock_fd = os.open(legacy / "migration.lock", os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+            fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        if Path(config["migrationMarker"]).is_file():
+            raise ValueError("reviewer login belongs to protected controller; use test/switch without another OAuth login")
     with tempfile.TemporaryDirectory(prefix="phoenix-review-") as directory:
         temporary = Path(directory)
         config["buildHome"] = str(temporary / "build-home")
@@ -255,6 +265,24 @@ def main():
         source = temporary / "source"
         source.mkdir()
         commit, files = snapshot(config, source)
+        if args.action in {"test", "switch"}:
+            request = dict(files=files, modes=source_modes(source, files), commit=commit,
+                           reason=args.reason.strip(), target=args.target, action=args.action)
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+                connection.settimeout(7200)
+                connection.connect(config["deploymentSocket"])
+                connection.sendall(json.dumps(request).encode() + b"\n")
+                response = bytearray()
+                while not response.endswith(b"\n"):
+                    block = connection.recv(65536)
+                    if not block or len(response) > 65536:
+                        raise ValueError("deployment controller response lost or oversized")
+                    response.extend(block)
+                result = json.loads(response)
+                if not result.get("ok"):
+                    raise ValueError(result.get("error", "deployment rejected"))
+                print(json.dumps(result, indent=2))
+            return
         baseline_path = Path(config["baseline"]).resolve(strict=True)
         if not str(baseline_path).startswith("/nix/store/"):
             raise ValueError("activated baseline is not immutable")
@@ -293,16 +321,7 @@ def main():
             raise ValueError("unexpected system closure")
         audit(config, binding, "built", verdict, closure)
         print("Reviewed source: " + store + "\nBuilt closure: " + closure, flush=True)
-        if args.action == "test":
-            # Same invocation only. No saved approval input; normal Polkit still
-            # authenticates this exact immutable system executable and action.
-            try:
-                subprocess.run([config["pkexec"], "--disable-internal-agent",
-                                closure + "/bin/switch-to-configuration", "test"], check=True)
-            except (OSError, subprocess.SubprocessError):
-                audit(config, binding, "test-failed", verdict, closure)
-                raise
-            audit(config, binding, "tested", verdict, closure)
+
 
 
 if __name__ == "__main__":

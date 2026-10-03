@@ -8,3 +8,7 @@ worker-produced review report as privileged deployment authorization. Host
 configuration changes require the independent frozen-source deployment review;
 Auto-review approves individual command escalation, not a full configuration.
 Use the existing default Auto-review safety policy together with these additions.
+For authorized NixOS test/switch, call the installed phoenix-deploy-review client
+with a concrete task reason. It submits frozen committed files to the separate
+protected deployment controller. The controller independently reviews/builds;
+do not supply approvals, closures, commands, or attempt to use the Nix daemon.

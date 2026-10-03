@@ -17,12 +17,12 @@ spec.loader.exec_module(review)
 
 class ReviewTests(unittest.TestCase):
     def test_verdict_binding(self):
-        binding = {"source": "/nix/store/source", "nonce": "fresh", "target": "metal"}
+        binding = {"source": "/nix/store/source", "nonce": "fresh", "target": "metal", "closure": "/nix/store/bound-system"}
         good = dict(binding, approved=True, summary="reviewed")
         review.validate_verdict(good, binding)
         for bad in [dict(good, nonce="old"), dict(good, source="other"),
                     dict(good, approved=False), dict(good, approved="true"),
-                    dict(good, untrusted_extra=True), {"approved": True}]:
+                    dict(good, closure="/nix/store/other-system"), dict(good, untrusted_extra=True), {"approved": True}]:
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 review.validate_verdict(bad, binding)
 

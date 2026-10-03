@@ -1,0 +1,200 @@
+#!/usr/bin/env python3
+"""Rejection and profile-recovery fixtures; no actual activation/network."""
+import importlib.util
+from pathlib import Path
+import json
+import contextlib
+import io
+import os
+import shutil
+import tempfile
+import unittest
+from unittest import mock
+
+spec = importlib.util.spec_from_file_location('deployment', Path(__file__).resolve().parents[1] / 'modules/development/ai/agent/deployment.py')
+deploy = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(deploy)
+
+
+class DeploymentTests(unittest.TestCase):
+    def request(self):
+        return dict(files={'flake.nix': '{}', 'flake.lock': '{}'},
+                    modes={'flake.nix': '100644', 'flake.lock': '100644'},
+                    commit='a' * 40, action='test', target='metal', reason='Implement requested isolated controller')
+
+    def test_unsupported_capabilities_and_forged_verdict(self):
+        good = self.request()
+        deploy.request_valid(good, 'metal')
+        for mutation in [dict(approved=True), dict(closure='/nix/store/evil'),
+                         dict(argv=['sh']), dict(action='boot'), dict(action='sh'),
+                         dict(target='vm'), dict(reason=''), dict(commit='HEAD')]:
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                deploy.request_valid(dict(good, **mutation), 'metal')
+
+    def test_source_names_modes_bounds(self):
+        for name in ['/etc/passwd', '../escape', 'a/../escape', '.git/config', 'a//b', 'x\ncommand', '.', 'a/./b']:
+            request = self.request()
+            request['files'][name] = 'text'
+            request['modes'][name] = '100644'
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                deploy.request_valid(request, 'metal')
+        for content, mode in [('x', '120000'), ('x' * (512 * 1024), '100644'), (['binary'], '100644')]:
+            request = self.request()
+            request['files']['flake.nix'] = content
+            request['modes']['flake.nix'] = mode
+            with self.assertRaises(ValueError):
+                deploy.request_valid(request, 'metal')
+
+    def test_mutable_source_and_fake_closure_rejected(self):
+        for path in ['/tmp/source', '/nix/store/short-source', '/nix/store/' + 'a' * 32 + '-source/../source']:
+            with self.assertRaises(ValueError):
+                deploy.store_path(path, 'source')
+
+    def test_prefix_collision_rejected_before_materialization(self):
+        request = self.request()
+        request['files'].update({'directory': 'file', 'directory/child': 'child'})
+        request['modes'].update({'directory': '100644', 'directory/child': '100644'})
+        with mock.patch.object(deploy.tempfile, 'TemporaryDirectory') as temporary:
+            with self.assertRaises(deploy.DeploymentFailure):
+                deploy.process({'target': 'metal'}, request, 1000, 22)
+            temporary.assert_not_called()
+
+    def test_controller_never_activates_failed_or_forged_review(self):
+        for mode in ['rejected', 'forged', 'model-failed', 'malformed', 'closure-mismatch']:
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                baseline = root / 'baseline'
+                baseline.mkdir()
+                (baseline / 'flake.nix').write_text('{}')
+                (baseline / 'flake.lock').write_text('{}')
+                frozen, closure = root / 'frozen', root / 'closure'
+                marker = closure / 'etc/phoenix-agent'
+                marker.mkdir(parents=True)
+                (marker / 'activated-source').symlink_to(baseline if mode == 'closure-mismatch' else frozen)
+                review = deploy.load_review({'reviewScript': str(Path(__file__).resolve().parents[1] / 'modules/development/ai/agent/deploy-review.py')})
+                review.run = mock.Mock(return_value=b'')
+                config = dict(target='metal', work=directory, builderUser='builder', reviewerUser='reviewer',
+                              reviewHome='/protected/auth', nix='nix', nixStore='nix-store', baseline=str(baseline),
+                              python='python', controller='controller', configPath='config', systemdRun='systemd-run')
+                def user_command(config, user, argv, run, **kwargs):
+                    if argv[:3] == ['nix', 'store', 'add-path']:
+                        shutil.copytree(argv[3], frozen)
+                        return str(frozen).encode()
+                    if argv[:2] == ['nix', 'build']:
+                        return str(closure).encode()
+                    if mode == 'model-failed':
+                        raise ValueError('authentication or model failed')
+                    if mode == 'malformed':
+                        return b'not json'
+                    binding = json.loads(kwargs['data'])['binding']
+                    verdict = dict(binding, approved=(mode != 'rejected'), summary='fixture')
+                    if mode == 'forged':
+                        verdict['nonce'] = 'wrong'
+                    return json.dumps(verdict).encode()
+                account = mock.Mock(pw_uid=os.getuid(), pw_gid=os.getgid())
+                with contextlib.redirect_stdout(io.StringIO()), mock.patch.object(deploy, 'load_review', return_value=review), mock.patch.object(deploy, 'as_user', side_effect=user_command), mock.patch.object(deploy, 'store_path'), mock.patch.object(deploy, 'activation_executable'), mock.patch.object(deploy.pwd, 'getpwnam', return_value=account):
+                    with self.assertRaises(deploy.DeploymentFailure) as failure:
+                        deploy.process(config, self.request(), os.getuid(), 22)
+                self.assertIn(failure.exception.stage, {'verdict', 'review', 'closure-binding'})
+                self.assertFalse(any(call.args[0][0] == 'systemd-run' for call in review.run.call_args_list))
+
+    def test_bootstrap_rejects_auth_links_and_atomically_replaces_destination(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            login, state = root / 'login', root / 'state'
+            login.mkdir(mode=0o700); state.mkdir(mode=0o700)
+            original = root / 'original'
+            original.write_text('{"credential": "never-print"}')
+            auth = login / 'auth.json'
+            config = dict(migrationMarker=str(root / 'migrated'), loginHome=str(login), reviewHome=str(state), clientUid=os.getuid(), reviewerUser='reviewer')
+            account = mock.Mock(pw_uid=os.getuid(), pw_gid=os.getgid())
+            with contextlib.redirect_stdout(io.StringIO()), mock.patch.object(deploy.os, 'getuid', return_value=0), mock.patch.object(deploy.pwd, 'getpwnam', return_value=account):
+                auth.symlink_to(original)
+                with self.assertRaises(OSError):
+                    deploy.bootstrap(config)
+                auth.unlink()
+                os.link(original, auth)
+                with self.assertRaisesRegex(ValueError, 'authentication'):
+                    deploy.bootstrap(config)
+                auth.unlink(); auth.write_text('{"new": "protected"}')
+                destination = state / 'auth.json'
+                destination.symlink_to(original)
+                deploy.bootstrap(config)
+                self.assertFalse(destination.is_symlink())
+                self.assertEqual(json.loads(destination.read_text()), {'new': 'protected'})
+                self.assertEqual(json.loads(original.read_text()), {'credential': 'never-print'})
+                self.assertEqual(destination.stat().st_mode & 0o777, 0o600)
+                self.assertFalse(auth.exists())
+                self.assertTrue(Path(config['migrationMarker']).is_file())
+                deploy.bootstrap(config)
+
+    def test_activation_executable_cannot_follow_mutable_symlink(self):
+        with tempfile.TemporaryDirectory() as directory:
+            closure = Path(directory) / 'closure'
+            (closure / 'bin').mkdir(parents=True)
+            external = Path(directory) / 'outside'
+            external.write_text('mutable script')
+            external.chmod(0o755)
+            (closure / 'bin/switch-to-configuration').symlink_to(external)
+            with self.assertRaisesRegex(ValueError, 'escapes'):
+                deploy.activation_executable(closure)
+
+    def test_test_never_updates_profile(self):
+        run = mock.Mock()
+        config = dict(nixEnv='nix-env', activationEnvironment={'HOME': '/root'})
+        with mock.patch.object(Path, 'resolve', return_value=Path('/old')):
+            deploy.activate(config, '/nix/store/system', 'test', run)
+        self.assertEqual(run.call_args.args[0], ['/nix/store/system/bin/switch-to-configuration', 'test'])
+        self.assertEqual(run.call_count, 1)
+
+    def test_failed_test_restores_runtime_only(self):
+        run = mock.Mock(side_effect=[ValueError('failed'), None])
+        with mock.patch.object(Path, 'resolve', return_value=Path('/old')):
+            with self.assertRaises(ValueError):
+                deploy.activate(dict(activationEnvironment={}), '/new', 'test', run)
+        self.assertEqual(run.call_args.args[0], ['/old/bin/switch-to-configuration', 'test'])
+        self.assertEqual(run.call_count, 2)
+
+    def test_failed_switch_restores_profile_and_runtime(self):
+        calls = []
+        def run(argv, **kwargs):
+            calls.append(argv)
+            if argv == ['/new/bin/switch-to-configuration', 'switch']:
+                raise ValueError('activation failure')
+        with mock.patch.object(Path, 'resolve', return_value=Path('/old')):
+            with self.assertRaisesRegex(ValueError, 'activation failure'):
+                deploy.activate(dict(nixEnv='nix-env', activationEnvironment={}), '/new', 'switch', run)
+        self.assertEqual(calls, [
+            ['nix-env', '--profile', '/nix/var/nix/profiles/system', '--set', '/new'],
+            ['/new/bin/switch-to-configuration', 'switch'],
+            ['nix-env', '--profile', '/nix/var/nix/profiles/system', '--set', '/old'],
+            ['/old/bin/switch-to-configuration', 'boot'],
+            ['/old/bin/switch-to-configuration', 'test']])
+
+    def test_profile_update_timeout_also_rolls_back(self):
+        run = mock.Mock(side_effect=[ValueError('timed out after side effect'), None, None, None])
+        with mock.patch.object(Path, 'resolve', return_value=Path('/old')):
+            with self.assertRaises(ValueError):
+                deploy.activate(dict(nixEnv='nix-env', activationEnvironment={}), '/new', 'switch', run)
+        self.assertEqual(run.call_count, 4)
+        self.assertEqual(run.call_args.args[0], ['/old/bin/switch-to-configuration', 'test'])
+
+    def test_boot_rollback_failure_still_attempts_runtime(self):
+        run = mock.Mock(side_effect=[None, ValueError('activation'), None, ValueError('boot rollback'), None])
+        with mock.patch.object(Path, 'resolve', return_value=Path('/old')):
+            with self.assertRaises(deploy.DeploymentFailure) as failure:
+                deploy.activate(dict(nixEnv='nix-env', activationEnvironment={}), '/new', 'switch', run)
+        self.assertEqual(failure.exception.code, 'rollback-incomplete')
+        self.assertEqual(run.call_args.args[0], ['/old/bin/switch-to-configuration', 'test'])
+
+    def test_separate_identities_no_groups_and_no_new_privileges(self):
+        account = mock.Mock(pw_uid=44, pw_gid=45)
+        run = mock.Mock(return_value=b'output')
+        with mock.patch.object(deploy.pwd, 'getpwnam', return_value=account):
+            deploy.as_user({'setpriv': '/trusted/setpriv'}, 'reviewer', ['/trusted/codex'], run)
+        self.assertEqual(run.call_args.args[0], ['/trusted/setpriv', '--reuid', '44', '--regid', '45',
+                                               '--clear-groups', '--no-new-privs', '/trusted/codex'])
+
+
+if __name__ == '__main__':
+    unittest.main()
