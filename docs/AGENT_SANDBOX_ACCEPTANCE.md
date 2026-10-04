@@ -21,8 +21,10 @@ source is `/nix/store/11a9f348ykp0qsmn8y8rjzdwfqaw6wkj-source`. Controller audit
 records build → independent review → approval → activation. Live Kando hover/no-
 confirmation/100px settings match, and its service restarted on switch. The user
 confirmed no pointer jumping but the previous 200px build failed held selection;
-physical acceptance of this corrected build is pending. Psysonic audible playback
-is user-confirmed. The stale Caelestia shell was refreshed gracefully; live IPC
+physical testing of this corrected build still fails. The compositor retains
+pointer focus during held mouse buttons; the supported external remapper route
+needs agreement with the user’s configuration-only constraint before proceeding.
+Psysonic audible playback is user-confirmed. The stale Caelestia shell was refreshed gracefully; live IPC
 exposes idle activate/restore, while actual blank/wake remains pending.
 
 Shared-history support is installed but inactive. Its actual cold preflight

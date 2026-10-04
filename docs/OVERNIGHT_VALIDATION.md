@@ -87,7 +87,16 @@ profile/authentication access is unnecessary.
   Live hover mode/distance/no-warp match; the user confirms no pointer jumping
   but held selection still fails on that installed version. A follow-up detector
   correction and 100px distance pass the regression and packaging checks;
-  protected persistent activation now passes; physical acceptance remains pending.
+  protected persistent activation passes, but user physical acceptance still fails
+  (neither held movement nor an extra left click executes). Exact Hyprland
+  InputManager source retains prior pointer focus while any mouse button is held,
+  even when its binding consumes the press; renderer fixtures miss this boundary.
+  Kando upstream documents mouse-to-keyboard shortcut remapping via maintained
+  Input Remapper. Proposed mapping: debounced BTN_EXTRA → F23 → global-menu,
+  BTN_SIDE → F24 → contextual-menu. No remapper change is installed; the user
+  requested supported configuration rather than custom low-level I/O changes,
+  and clarification on the documented remapper route is pending.
+  Reference: [upstream configuration guide](https://kando.menu/input-remapper-tutorial/).
   Psysonic playback is accepted. No reboot or live display blanking occurred. Private notes remain read-only; this guide
   tracks their acceptance.
 
