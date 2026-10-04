@@ -18,7 +18,7 @@ profile/authentication access is unnecessary.
 - Installed first iteration: approved source `ed913e5`, acceptance report
   `c7777c3`. GUI task, close/reopen and reviewed persistent switch passed before
   the unattended session. No new sign-in is needed.
-- New hardening: GUI RPC frames are bounded to 16 MiB in both directions;
+- New hardening (`cc98afe`): GUI RPC frames are bounded to 16 MiB in both directions;
   oversized or expanded frames close with a generic diagnostic. Temporary
   subprocess/socket fixtures verify bounds, cleanup, backpressure and spaced
   requests on a shared socket. This is not yet activated.
@@ -27,11 +27,28 @@ profile/authentication access is unnecessary.
   need a reviewed remedy; do not reauthenticate to fix a frame-limit error.
 - Optional: type `chat` in the launcher; expect Sandboxed before Native.
 
+## Music namespace — feat(music): add Psysonic and Navidrome
+
+- Follow-up fix changes only `modules/services/music.nix`: read-only
+  `/home/v/sync/music` → `/var/lib/navidrome/music`, with supported
+  `ND_MUSICFOLDER` selecting the internal path. No duplicate mount destination;
+  upstream CA/store/etc mounts, RootDirectory and ProtectHome remain intact.
+- ACLs remain: source files/directories still need Navidrome group read/traverse
+  after binding. `/home/v` remains 0700; no broad group or write grant was added.
+- Full metal build `/nix/store/2kk870fyaxcc26n5597lclxcfy70r7i8-nixos-system-phoenix-26.05.20260924.c508844`
+  succeeds; metal/VM/default evaluation and generated-unit checks pass.
+- Tomorrow: reviewed activation, inspect live mount namespace and read-only
+  mount flag; verify representative MP3/Opus reads as the service user. Run the
+  supported scan and confirm nonzero tracks/albums, then check Psysonic.
+  No live scan/count/client acceptance is claimed tonight.
+- Newer unrelated commits prevent safely amending original music commit
+  `3d17787`; the follow-up preserves that history.
+
 ## Queue status
 
 | Task | Status |
 | --- | --- |
-| Music namespace | Investigated; implementation next; live scan/client checks deferred |
+| Music namespace | Implemented; full metal build and all-host evaluation pass; runtime pending |
 | Idle shader | Read-only plan complete; implementation next; monitor tests deferred |
 | Session restore | Unsafe hyprsession startup rejected; maintained alternative under review |
 | Kando | Exact 2.3 schema/shortcuts/debounce plan investigated; implementation pending |
