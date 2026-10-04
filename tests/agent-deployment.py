@@ -38,12 +38,19 @@ class DeploymentTests(unittest.TestCase):
             request['modes'][name] = '100644'
             with self.subTest(name=name), self.assertRaises(ValueError):
                 deploy.request_valid(request, 'metal')
-        for content, mode in [('x', '120000'), ('x' * (512 * 1024), '100644'), (['binary'], '100644')]:
+        for content, mode in [('x', '120000'), ('x' * deploy.SOURCE_LIMIT, '100644'), (['binary'], '100644')]:
             request = self.request()
             request['files']['flake.nix'] = content
             request['modes']['flake.nix'] = mode
             with self.assertRaises(ValueError):
                 deploy.request_valid(request, 'metal')
+
+    def test_larger_complete_source_preserves_wire_bound(self):
+        request = self.request()
+        request['files']['flake.nix'] = 'x' * (512 * 1024 + 1)
+        deploy.request_valid(request, 'metal')
+        self.assertEqual(deploy.SOURCE_LIMIT, 768 * 1024)
+        self.assertEqual(deploy.LIMIT, 1024 * 1024)
 
     def test_mutable_source_and_fake_closure_rejected(self):
         for path in ['/tmp/source', '/nix/store/short-source', '/nix/store/' + 'a' * 32 + '-source/../source']:
@@ -60,7 +67,7 @@ class DeploymentTests(unittest.TestCase):
             temporary.assert_not_called()
 
     def test_controller_never_activates_failed_or_forged_review(self):
-        for mode in ['rejected', 'forged', 'model-failed', 'malformed', 'closure-mismatch']:
+        for mode in ['rejected', 'forged', 'model-failed', 'malformed', 'closure-mismatch', 'compacted', 'oversized']:
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 baseline = root / 'baseline'
@@ -82,6 +89,9 @@ class DeploymentTests(unittest.TestCase):
                         return str(frozen).encode()
                     if argv[:2] == ['nix', 'build']:
                         return str(closure).encode()
+                    if mode in {'compacted', 'oversized'}:
+                        code = 'context-compacted' if mode == 'compacted' else 'review-context-oversized'
+                        return json.dumps(dict(status='error', code=code)).encode()
                     if mode == 'model-failed':
                         raise ValueError('authentication or model failed')
                     if mode == 'malformed':
@@ -111,6 +121,8 @@ class DeploymentTests(unittest.TestCase):
             (review.ReviewDenied(verdict), {'status': 'verdict', 'verdict': verdict}),
             (review.ReviewVerdictError('binding-mismatch'), {'status': 'error', 'code': 'binding-mismatch'}),
             (review.ReviewVerdictError('schema-invalid'), {'status': 'error', 'code': 'schema-invalid'}),
+            (review.ReviewVerdictError('context-compacted'), {'status': 'error', 'code': 'context-compacted'}),
+            (review.ReviewVerdictError('review-context-oversized'), {'status': 'error', 'code': 'review-context-oversized'}),
             (ValueError('API stderr contains SECRET credential'), {'status': 'error', 'code': 'reviewer-invocation-failed'}),
         ]:
             with self.subTest(error=type(error).__name__), tempfile.TemporaryDirectory() as directory:

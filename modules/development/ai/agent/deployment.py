@@ -21,6 +21,7 @@ import sys
 import tempfile
 
 LIMIT = 1024 * 1024
+SOURCE_LIMIT = 768 * 1024
 class DeploymentFailure(ValueError):
     def __init__(self, stage, code):
         self.stage, self.code = stage, code
@@ -62,7 +63,7 @@ def request_valid(request, target):
         total += len(content.encode())
     if any(str(parent) in files for name in files for parent in Path(name).parents if str(parent) != '.'):
         raise ValueError('file/directory prefix collision')
-    if total > 512 * 1024:
+    if total > SOURCE_LIMIT:
         raise ValueError('source exceeds review bound')
 
 
@@ -226,7 +227,8 @@ def process_inner(config, request, uid, pid, state):
         if result['status'] == 'error':
             # Only static worker classifications are allowed out of this boundary.
             code = result.get('code')
-            if code not in {'reviewer-invocation-failed', 'schema-invalid', 'binding-mismatch'}:
+            if code not in {'reviewer-invocation-failed', 'schema-invalid', 'binding-mismatch',
+                            'context-compacted', 'review-context-oversized'}:
                 code = 'worker-envelope-invalid'
             raise DeploymentFailure('review', code)
         verdict = result.get('verdict')

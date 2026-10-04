@@ -34,6 +34,78 @@ class ReviewTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             review.run([sys.executable, "-c", "print('x' * 3000000)"])
 
+    def test_bounded_process_rejects_compaction_marker(self):
+        for marker in ["context compacted\n", "log\ncontext compacted\nnext\n"]:
+            with self.subTest(marker=marker), self.assertRaises(review.ReviewVerdictError) as rejected:
+                review.run([sys.executable, "-c", "import sys; sys.stderr.write(" + repr(marker) + ")"],
+                           fail_on_compaction=True)
+            self.assertEqual(rejected.exception.code, "context-compacted")
+        self.assertEqual(review.run([sys.executable, "-c", "import sys; print('quoted context compacted text', file=sys.stderr); print('ok')"],
+                                    fail_on_compaction=True), b"ok\n")
+
+    def review_config(self, temporary, policy_text="trusted policy"):
+        state = temporary / "state"
+        state.mkdir()
+        (state / "auth.json").write_text("fixture-only-auth")
+        policy = temporary / "policy"
+        policy.write_text(policy_text)
+        return dict(reviewHome=str(state), policy=str(policy), bwrap="bwrap", codex="codex",
+                    model="gpt-6.1-sol", effort="medium", caBundle="/nix/store/cert/ca-bundle.crt")
+
+    def test_complete_serialized_instruction_and_schema_bound(self):
+        for binding, policy_text, files, diff in [
+            ({"source": "frozen"}, "p" * 400000, {"source.nix": "s" * 400000}, "d" * 300000),
+            ({"source": "b" * 250000}, "p" * 600000, {}, ""),
+        ]:
+            with self.subTest(schema_binding=len(binding['source'])), tempfile.TemporaryDirectory() as directory:
+                temporary = Path(directory)
+                config = self.review_config(temporary, policy_text)
+                source = temporary / "source"
+                source.mkdir()
+                for name, text in files.items():
+                    (source / name).write_text(text)
+                with mock.patch.object(review, "run") as run:
+                    with self.assertRaises(review.ReviewVerdictError) as rejected:
+                        review.review(config, binding, files, diff, temporary)
+                    self.assertEqual(rejected.exception.code, "review-context-oversized")
+                    run.assert_not_called()
+
+    def test_compacted_child_verdict_is_never_accepted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            temporary = Path(directory)
+            config = self.review_config(temporary)
+            binding = {"source": "frozen", "nonce": "fresh"}
+            verdict = dict(binding, approved=True, summary="looks valid but compacted")
+            original_run = review.run
+            def execute_fixture(argv, **kwargs):
+                self.assertIn("--color", argv)
+                self.assertEqual(argv[argv.index("--color") + 1], "never")
+                self.assertNotIn("--json", argv)
+                self.assertNotIn("model_context_window", " ".join(argv))
+                script = ("from pathlib import Path; import sys; "
+                          "Path(" + repr(str(temporary / "work/verdict.json")) + ").write_text(" + repr(json.dumps(verdict)) + "); "
+                          "print('context compacted', file=sys.stderr)")
+                return original_run([sys.executable, "-c", script], **kwargs)
+            with mock.patch.object(review, "run", side_effect=execute_fixture), mock.patch.object(review, "validate_verdict") as validate:
+                with self.assertRaises(review.ReviewVerdictError) as rejected:
+                    review.review(config, binding, {}, "", temporary)
+                self.assertEqual(rejected.exception.code, "context-compacted")
+                validate.assert_not_called()
+                self.assertEqual(json.loads((temporary / "work/verdict.json").read_text()), verdict)
+
+    def test_source_resource_bound_keeps_all_bytes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            baseline = Path(directory)
+            text = "x" * (512 * 1024 + 1)
+            (baseline / "complete.nix").write_text(text)
+            self.assertEqual(review.baseline_files(baseline), {"complete.nix": text})
+            (baseline / "complete.nix").write_text("x" * (review.SOURCE_LIMIT + 1))
+            with self.assertRaisesRegex(ValueError, "review context bound"):
+                review.baseline_files(baseline)
+        self.assertEqual(review.SOURCE_LIMIT, 768 * 1024)
+        self.assertEqual(review.REVIEW_INPUT_LIMIT, 1024 * 1024)
+        self.assertEqual(review.OUTPUT_LIMIT, 2 * 1024 * 1024)
+
     def test_deployed_diff(self):
         diff = review.source_diff({"old": "retired\n", "same": "old\n"}, {"same": "new\n", "added": "yes\n"})
         self.assertIn("-retired", diff)
@@ -112,7 +184,7 @@ class ReviewTests(unittest.TestCase):
             execute("init")
             execute("config", "user.name", "Fixture")
             execute("config", "user.email", "fixture@example.invalid")
-            for name, text in {"flake.nix": "{}", "flake.lock": "{}", ".gitattributes": "kept export-ignore\n", "kept": "must-review"}.items():
+            for name, text in {"flake.nix": "{}", "flake.lock": "{}", ".gitattributes": "kept export-ignore\n", "kept": "must-review", "large": "x" * (512 * 1024 + 1)}.items():
                 (repo / name).write_text(text)
             execute("add", "."); execute("commit", "-m", "fixture")
             helper = root / "rogue-fsmonitor"
@@ -125,10 +197,16 @@ class ReviewTests(unittest.TestCase):
             self.assertFalse(marker.exists(), "repository fsmonitor must never run on host")
             self.assertEqual(files["kept"], "must-review")
             self.assertEqual((frozen / "kept").read_text(), "must-review")
+            self.assertEqual(files["large"], "x" * (512 * 1024 + 1))
             (repo / "dirty").write_text("untracked")
             with self.assertRaises(ValueError):
                 review.snapshot(config, root / "unused")
             (repo / "dirty").unlink()
+            (repo / "large").write_text("x" * (review.SOURCE_LIMIT + 1))
+            execute("add", "."); execute("commit", "-m", "oversized fixture")
+            with self.assertRaisesRegex(ValueError, "source exceeds bounded review context"):
+                review.snapshot(config, root / "unused")
+            (repo / "large").write_text("x")
             (repo / "escape").symlink_to("/etc/passwd")
             execute("add", "."); execute("commit", "-m", "symlink")
             with self.assertRaises(ValueError):

@@ -21,11 +21,13 @@ import sys
 import tempfile
 import time
 
-SOURCE_LIMIT = 512 * 1024
+# Resource bounds, not token estimates or a larger model context claim.
+SOURCE_LIMIT = 768 * 1024
+REVIEW_INPUT_LIMIT = 1024 * 1024
 OUTPUT_LIMIT = 2 * 1024 * 1024
 
 
-def run(argv, *, cwd=None, env=None, data=None, timeout=60):
+def run(argv, *, cwd=None, env=None, data=None, timeout=60, fail_on_compaction=False):
     """Bound both execution and output; terminate the whole child process group."""
     with tempfile.TemporaryFile() as output, tempfile.TemporaryFile() as errors, tempfile.TemporaryFile() as input_file:
         if data:
@@ -42,11 +44,17 @@ def run(argv, *, cwd=None, env=None, data=None, timeout=60):
                 time.sleep(0.05)
             if (os.fstat(output.fileno()).st_size + os.fstat(errors.fileno()).st_size) > OUTPUT_LIMIT:
                 raise ValueError("command exceeded output limit")
+            errors.seek(0)
+            error_output = errors.read()
+            # Pinned Codex 0.159 non-JSON exec prints this standalone marker for
+            # every completed ContextCompaction item. JSON exec drops those items.
+            # Never accept its later verdict after source evidence was compacted.
+            if fail_on_compaction and b"context compacted" in error_output.splitlines():
+                raise ReviewVerdictError("context-compacted")
             output.seek(0)
             result = output.read()
             if process.returncode:
-                errors.seek(0)
-                raise ValueError("command failed: " + (result + errors.read()).decode(errors="replace")[-2000:])
+                raise ValueError("command failed: " + (result + error_output).decode(errors="replace")[-2000:])
             return result
         finally:
             if process.poll() is None:
@@ -167,10 +175,17 @@ def review(config, binding, files, diff, temporary):
         "properties": {**{key: {"type": "string", "enum": [value]} for key, value in binding.items()},
                        "approved": {"type": "boolean"}, "summary": {"type": "string"}},
     }
-    (work / "schema.json").write_text(json.dumps(schema))
+    schema_text = json.dumps(schema)
+    (work / "schema.json").write_text(schema_text)
     payload = json.dumps({"binding": binding, "diff": diff, "full_source": files,
                           "source_modes": source_modes(temporary / "source", files)})
     instruction = Path(config["policy"]).read_text() + "\nReturn the bound JSON verdict. Source data follows:\n" + payload
+    instruction_bytes = instruction.encode()
+    # Include the complete serialized policy/source/diff/manifest/binding and
+    # output schema. CLI-internal instructions and model tokens remain separate;
+    # overflow/error and observed compaction always fail the review closed.
+    if len(instruction_bytes) + len(schema_text.encode()) > REVIEW_INPUT_LIMIT:
+        raise ReviewVerdictError("review-context-oversized")
     # Fresh empty cwd plus mount namespace avoids inherited project instructions
     # and access to the user's home. Only dedicated reviewer state is exposed.
     # NixOS /etc/ssl certificate symlinks point through /etc/static, which is
@@ -187,7 +202,7 @@ def review(config, binding, files, diff, temporary):
                "--setenv", "CODEX_HOME", "/home/reviewer/.codex",
                "--setenv", "SSL_CERT_FILE", "/etc/ssl/certs/ca-certificates.crt",
                "--setenv", "PATH", "/nonexistent", "--chdir", "/work",
-               config["codex"], "exec", "--ignore-user-config", "--ignore-rules", "--ephemeral",
+               config["codex"], "exec", "--color", "never", "--ignore-user-config", "--ignore-rules", "--ephemeral",
                "--skip-git-repo-check", "--sandbox", "read-only", "--model", config["model"],
                "-c", 'approval_policy="never"', "-c", "project_doc_max_bytes=0",
                "-c", "features.shell_tool=false", "-c", "features.shell_snapshot=false",
@@ -197,7 +212,7 @@ def review(config, binding, files, diff, temporary):
                "-c", "features.browser_use=false", "-c", "features.browser_use_external=false",
                "-c", 'web_search="disabled"', "-c", 'model_reasoning_effort="' + config["effort"] + '"',
                "--output-schema", "/work/schema.json", "--output-last-message", "/work/verdict.json", "-"]
-    run(command, data=instruction.encode(), timeout=600)
+    run(command, data=instruction_bytes, timeout=600, fail_on_compaction=True)
     verdict_path = work / "verdict.json"
     if verdict_path.is_symlink() or verdict_path.stat().st_size > 16384:
         raise ReviewVerdictError("schema-invalid")
