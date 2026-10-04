@@ -1,6 +1,6 @@
 # Run with: nix eval --impure --file tests/opensnitch-observation.nix
 let
-  flake = builtins.getFlake (toString ../.);
+  flake = builtins.getFlake ("git+file://" + toString ../.);
   config = flake.nixosConfigurations.metal.config;
   rules = config.services.opensnitch.rules;
 in

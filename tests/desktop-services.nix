@@ -1,10 +1,11 @@
 # Run with: nix eval --impure --file tests/desktop-services.nix
 let
-  flake = builtins.getFlake (toString ../.);
+  flake = builtins.getFlake ("git+file://" + toString ../.);
   metal = flake.nixosConfigurations.metal.config;
   vm = flake.nixosConfigurations.vm.config;
   user = import ../config/user.nix { inherit (flake.inputs.nixpkgs) lib; };
-  sharedServices = config:
+  sharedServices =
+    config:
     config.services.displayManager.sddm.enable
     && config.services.pipewire.enable
     && config.services.upower.enable

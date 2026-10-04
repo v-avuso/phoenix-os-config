@@ -1,6 +1,6 @@
 # Run with: nix eval --impure --file tests/pam-desktop-conditional.nix
 let
-  flake = builtins.getFlake (toString ../.);
+  flake = builtins.getFlake ("git+file://" + toString ../.);
   metal = flake.nixosConfigurations.metal.config;
   vm = flake.nixosConfigurations.vm.config;
   hasService = config: name: builtins.hasAttr name config.security.pam.services;

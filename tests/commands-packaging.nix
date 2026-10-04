@@ -1,12 +1,13 @@
 # Run with: nix build --impure --file tests/commands-packaging.nix --no-link
 let
-  flake = builtins.getFlake (toString ../.);
+  flake = builtins.getFlake ("git+file://" + toString ../.);
   config = flake.nixosConfigurations.metal.config;
   pkgs = flake.inputs.nixpkgs.legacyPackages.x86_64-linux;
   user = import ../config/user.nix { inherit (pkgs) lib; };
   commands = builtins.head (
-    builtins.filter (package: (package.name or "") == "phoenix-user-commands")
-      config.home-manager.users.${user.name}.home.packages
+    builtins.filter (
+      package: (package.name or "") == "phoenix-user-commands"
+    ) config.home-manager.users.${user.name}.home.packages
   );
 in
 pkgs.runCommand "phoenix-command-packaging" { } ''
