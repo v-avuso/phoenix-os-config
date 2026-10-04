@@ -20,6 +20,8 @@ python3 -B tests/agent-gui-connection.py
 nix build --impure --file tests/commands-packaging.nix --no-link
 nix build --impure --file tests/clamav-recovery.nix --no-link
 nix build --impure --file tests/hypr-persist.nix --no-link
+nix build --impure --file tests/kando-packaging.nix --no-link
+python3 -B tests/mouse-side-button-debounce.py
 nix eval --impure --file tests/opensnitch-observation.nix
 nix eval --impure --file tests/pam-desktop-conditional.nix
 nix eval --impure --file tests/desktop-services.nix
@@ -49,6 +51,11 @@ nix eval --impure --file tests/desktop-services.nix
   restore path. It checks private state/unit/logout declarations without starting
   a daemon or importing live session state. New files must be staged for its
   Git-flake source; logout/login and reboot restoration need manual acceptance.
+- **Kando fixtures:** validate menus against the exact upstream 2.3 schemas and
+  real context-selection method; check managed launch paths and the closed,
+  non-root input unit. Fake events exercise stable-release debounce, unchanged
+  high-resolution wheel events, recovery and cleanup without grabbing hardware.
+  Portal shortcuts, focus, gestures and hotplug require manual acceptance.
 - **Agent broker fixtures:** fixed commands, argument rejection, output/deadline
   bounds, named tracing reads, xHCI wakeup round-trip, malformed requests, and
   symlink escape rejection. These use temporary trees and mocked subprocesses;

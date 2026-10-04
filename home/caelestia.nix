@@ -3,6 +3,7 @@
   inputs,
   lib,
   pkgs,
+  phoenixKandoHyprLua,
   ...
 }:
 
@@ -116,6 +117,7 @@ let
 
   hyprUser = ''
     ${idleBlankLua}
+    ${phoenixKandoHyprLua}
 
     hl.monitor({
       output = "DP-1",
@@ -162,7 +164,10 @@ in
   imports = [
     inputs.caelestia-shell.homeManagerModules.default
     ./hypr-persist.nix
+    ./kando.nix
   ];
+
+  phoenix.kando.enable = true;
 
   # Mirror only Home Manager Hyprland's generic session lifecycle: import the
   # compositor environment, then activate the target linked to the graphical

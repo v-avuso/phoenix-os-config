@@ -31,6 +31,18 @@ let
         target = "${home.xdg.configHome}/caelestia/shell.json";
         type = "object";
       }
+    ]
+    ++ lib.optionals (home.phoenix.kando.enable or false) [
+      {
+        source = home.xdg.dataFile."kando/config.json.nix-baseline".source;
+        target = "${home.xdg.configHome}/phoenix-kando/kando/config.json";
+        type = "object";
+      }
+      {
+        source = home.xdg.dataFile."kando/menus.json.nix-baseline".source;
+        target = "${home.xdg.configHome}/phoenix-kando/kando/menus.json";
+        type = "object";
+      }
     ];
   reassertBaselines = lib.concatMapStringsSep "\n" (
     entry:

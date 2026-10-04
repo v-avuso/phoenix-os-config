@@ -55,7 +55,7 @@ profile/authentication access is unnecessary.
 | Music namespace | Implemented; full metal build and all-host evaluation pass; runtime pending |
 | Idle shader | Implemented; full metal build and all-host evaluation pass; monitor tests deferred |
 | Session restore | Conservative hypr-persist prototype implemented; tests/full build pass; reboot acceptance deferred |
-| Kando | Exact 2.3 schema/shortcuts/debounce plan investigated; implementation pending |
+| Kando | Implemented; exact upstream schema and fake-input checks pass; build/GUI acceptance recorded below |
 | Dynamic wallpaper/theme | Eight-frame metadata and supported backend verified; implementation pending |
 | Thunar integration | Supported stack/theme defects investigated; implementation pending |
 
@@ -93,3 +93,25 @@ profile/authentication access is unnecessary.
   temporary legacy Hyprland rules are unsupported, though explicit placement is
   Lua-compatible. Verify partially closed shutdown snapshots and stopping during
   initial restore. Do not repeatedly launch apps to mask a lifecycle failure.
+
+## Kando — feat(kando): add contextual radial menus
+
+- Pin the packaged 2.3 integration: a controlled writable config root, one
+  session service, native Wayland, two portal shortcut IDs and minimal global,
+  Firefox, Codex and fallback menus. Two JSON baselines reset at service start;
+  private profile/cache state is not reconciled. Menu-launched apps use normal
+  config and separate user units so a Kando restart should leave them running.
+- The physical Razer's two side buttons use a separate non-root libevdev filter:
+  immediate presses, 180 ms stable-release debounce, cloned capabilities and
+  unchanged high-resolution wheel events. A closed device policy grants only
+  the fixed mouse and uinput nodes; no human account gains input-group access.
+- Exact upstream schema/context-selection, packaging and fake input/lifecycle
+  fixtures, all-host evaluation and full metal build pass:
+  `/nix/store/4dwvx6wyhxv55n32cyv4jabvd8036vw0-nixos-system-phoenix-26.05.20260924.c508844`.
+  No real input device was opened or grabbed, and no app/service was started.
+- Tomorrow after reviewed activation: approve/register global shortcuts if the
+  portal asks; verify side-button global/context menus, native Wayland, focus
+  return, quick/held gestures, Firefox/Codex/fallback selection, wheel/pointer
+  behavior and mouse disconnect/reconnect. Restart Kando deliberately: declared
+  menus/settings must return and menu-launched apps must retain their profiles
+  and remain open. Confirm the service actually uses the controlled config root.

@@ -57,6 +57,15 @@ Exact Codex launch overrides preserve Native versus Sandboxed containment;
 other applications use upstream resolution. Reboot fidelity is a prototype
 acceptance check, not process/RAM continuation or a substitute for backups.
 
+Kando on metal uses a private config root. Only its `config.json` and `menus.json`
+are writable baselines; every service start also reasserts them, including login
+and restart. This deliberately differs from Caelestia/VSCodium experiment
+preservation: promote Kando edits before restarting it. Chromium caches and other
+app-owned state remain untouched. Menu-launched apps regain the normal config
+root and use upstream systemd isolation to survive a Kando service restart.
+The separate non-root hardware filter debounces only the physical mouse's two
+side buttons; menu bindings and application conditions belong to Kando/Hyprland.
+
 ## Protected state and extension rules
 
 Never blanket-overwrite Firefox or Codex profiles, cookies, history, bookmarks,
