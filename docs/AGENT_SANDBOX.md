@@ -128,6 +128,13 @@ isolated reviewer for a structured verdict. Repository instructions/comments are
 untrusted evidence. Binary files, symlinks, submodules, oversized source and
 malformed, stale, rejected or timed-out verdicts fail closed.
 
+The installed client/controller currently allow at most 512 KiB of complete
+UTF-8 tracked source and a 1 MiB serialized request. These are admission bounds,
+not evidence that a model retains every token. Larger repositories require a
+deliberately reviewed capacity update covering the complete serialized prompt,
+the pinned model/CLI context and compaction behavior, and output headroom.
+Never omit tracked files or substitute a summary to fit the deployment gate.
+
 `test` and `switch` submit bounded source files and a reason through a fixed
 root-owned socket; callers cannot submit commands, closures or approvals. The
 controller reconstructs the snapshot, builds as an unprivileged dedicated user,
@@ -145,10 +152,10 @@ supply OS root privileges. Host-only legacy `review`/`build` is for initial setu
 bootstrap transfers reviewer refresh ownership to the protected service.
 
 Install from a clean committed Git flake, so the installed baseline contains
-exactly the tracked source. `path:.` is useful for evaluating untracked work,
-but may include Git metadata, ignored artifacts and private local files; its
-result is unsuitable as this review baseline. A baseline that cannot be reviewed
-is rejected rather than silently filtered.
+exactly the tracked source. Never evaluate this checkout through `path:.`: it
+copies ignored artifacts and private local notes into the Nix store. Stage only
+owned new files before Git-flake checks; use a vetted disposable source tree
+when a path source is necessary. An unreviewable baseline fails closed.
 
 ## Auditing, trust and recovery
 
