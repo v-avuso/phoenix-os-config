@@ -1,0 +1,70 @@
+--- a/modules/IdleMonitors.qml
++++ b/modules/IdleMonitors.qml
+@@ -3,6 +3,7 @@
+ import "lock"
+ import QtQuick
+ import Quickshell
++import Quickshell.Io
+ import Quickshell.Wayland
+ import Quickshell.Services.UPower
+ import Caelestia.Config
+@@ -22,6 +23,23 @@
+             return false;
+         return true;
+     }
++
++    property var manualIdleEntry: null
++    property bool manualIdleActionApplied: false
++
++    function finishManualIdle(): void {
++        if (!manualIdleEntry)
++            return;
++
++        const entry = manualIdleEntry;
++        const runReturnAction = manualIdleActionApplied;
++        manualIdleEntry = null;
++        manualIdleActionApplied = false;
++        if (runReturnAction)
++            handleIdleAction(entry.returnAction);
++    }
++
++    Component.onDestruction: finishManualIdle()
+ 
+     function handleIdleAction(action: var): void {
+         if (!action)
+@@ -74,4 +92,35 @@
+             onIsIdleChanged: root.handleIdleAction(isIdle ? modelData.idleAction : modelData.returnAction)
+         }
+     }
++
++    IdleMonitor {
++        id: manualIdleMonitor
++        enabled: root.manualIdleEntry !== null
++        timeout: 0
++        respectInhibitors: false
++        onIsIdleChanged: {
++            if (isIdle && root.manualIdleEntry && !root.manualIdleActionApplied) {
++                root.manualIdleActionApplied = true;
++                root.handleIdleAction(root.manualIdleEntry.idleAction);
++            } else if (!isIdle && root.manualIdleActionApplied) {
++                root.finishManualIdle();
++            }
++        }
++    }
++
++    IpcHandler {
++        target: "idle"
++
++        function activate(index: int): void {
++            if (root.manualIdleEntry !== null)
++                return;
++            const entry = GlobalConfig.general.idle.timeouts.values[index];
++            if (entry !== undefined && entry !== null)
++                root.manualIdleEntry = entry;
++        }
++
++        function restore(): void {
++            root.finishManualIdle();
++        }
++    }
+ }

@@ -27,7 +27,10 @@ let
       caelestia-cli = caelestiaCli;
     }).overrideAttrs
       (old: {
-        patches = (old.patches or [ ]) ++ [ ../patches/caelestia-u2f-lock.patch ];
+        patches = (old.patches or [ ]) ++ [
+          ../patches/caelestia-u2f-lock.patch
+          ../patches/caelestia-idle-command.patch
+        ];
         postPatch = (old.postPatch or "") + ''
           substituteInPlace assets/pam.d/u2f \
             --replace-fail '@PAM_U2F_SO@' '${pkgs.pam_u2f}/lib/security/pam_u2f.so'
@@ -52,12 +55,12 @@ let
       timeouts = [
         {
           timeout = 300;
-          onTimeout = [
+          idleAction = [
             "${hyprlandPackages.hyprland}/bin/hyprctl"
             "eval"
             "phoenix_idle_blank(true)"
           ];
-          onResume = [
+          returnAction = [
             "${hyprlandPackages.hyprland}/bin/hyprctl"
             "eval"
             "phoenix_idle_blank(false)"
@@ -77,6 +80,28 @@ let
     builtins.toJSON caelestiaSettings + "\n"
   );
   caelestiaSettingsWriter = import ./mutable-json-settings.nix { inherit pkgs; };
+  blank = pkgs.writeShellScriptBin "blank" ''
+    case "''${1:-}" in
+      "")
+        if [ "$#" -ne 0 ]; then
+          echo "usage: blank [off]" >&2
+          exit 2
+        fi
+        exec ${caelestiaCli}/bin/caelestia shell ipc call idle activate 0
+        ;;
+      off)
+        if [ "$#" -ne 1 ]; then
+          echo "usage: blank [off]" >&2
+          exit 2
+        fi
+        exec ${caelestiaCli}/bin/caelestia shell ipc call idle restore
+        ;;
+      *)
+        echo "usage: blank [off]" >&2
+        exit 2
+        ;;
+    esac
+  '';
   # NixOS owns the GeoClue user agent; retain only upstream's polkit path fix.
   caelestiaDots = pkgs.stdenvNoCC.mkDerivation {
     pname = "caelestia-dots-phoenix";
@@ -262,6 +287,7 @@ in
     bat
     bluez
     btop
+    blank
     cliphist
     coreutils
     curl
