@@ -55,12 +55,23 @@ profile/authentication access is unnecessary.
 - Psysonic's saved output alone was reset to system default with a key-only backup;
   a bounded launch then stayed open. The initial exit cause is not established as
   OOM. The patched package builds; audible playback still needs acceptance.
+- Subsequent live follow-up confirmed the patched app was installed and stable.
+  Remaining silence was its PipeWire stream gain at 0%, while internal gain was
+  100% and the default speaker remained 30%. Restored only that verified stream
+  to 100%; recreating it retained the gain through WirePlumber. App stays open,
+  paused; user audible confirmation is outstanding. No reboot is needed.
 - Idle integration used unsupported callback names; corrected to the exact schema.
   `idle` is Python IDLE, so the new command is `blank` (`blank off` restores).
   Source/API/state fixtures pass; actual idle/manual blank and wake remain pending.
 - Kando now uses portal release for held gestures, valid key names, swapped mouse
   bindings, no pointer warp, and upward F11 in Firefox/both ChatGPT variants.
   Patched package/gesture lifecycle fixtures pass; physical input testing is pending.
+- For execution while the button remains held, enable maintained hover mode with
+  a fixed 150px stroke beyond the 50px center dead zone: 200px total, no pause or
+  additional click. Kando's own warp was already disabled; Hyprland's global
+  `cursor.no_warps` prevents compositor focus/workspace warps. No per-window guard
+  exists in the pinned implementation. The Foot store path is regenerated with
+  package changes and reasserted with the menu baseline, not a manual hash.
 - Thunar groups image conversions and adds Archive → Create ZIP, retaining the
   broader archive plugin. Safety/packaging fixtures pass; inspect live menus after
   activation. Native scaling now uses upstream Wayland detection on direct launch,

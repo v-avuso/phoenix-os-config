@@ -25,6 +25,8 @@
 - Report progress against requested outcomes: working, partial, missing, and
   actual blockers. State unmet core goals prominently; implementation effort or
   a technical handover is not evidence that the user's goal was achieved.
+- Before attributing a symptom to pending activation, check the installed source,
+  running executable and effective settings; another task may have deployed it.
 - Separate general policy intent from tool-specific integration. Preserve useful
   prior work when plans change.
 - Optimize the user's normal project workflow and low authentication friction.
