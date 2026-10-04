@@ -60,10 +60,13 @@
 - `config/user.nix` owns `repoDirectory`; `PHOENIX_REPO_ROOT` overrides the
   checkout and `PHOENIX_TARGET=metal|vm` overrides target detection.
 - Evaluate with `nix eval --no-write-lock-file
-  path:.#nixosConfigurations.metal.config.system.build.toplevel.drvPath`; use the
+  .#nixosConfigurations.metal.config.system.build.toplevel.drvPath`; use the
   corresponding `vm` output when relevant. `nix flake check --no-build
-  --no-write-lock-file path:.` checks evaluation, including untracked new modules
-  without staging them. Git flakes omit untracked files. Neither proves runtime.
+  --no-write-lock-file .` checks evaluation. Git flakes omit untracked files:
+  the coordinator stages only owned new files before combined checks. Never use
+  `path:.` on this checkout: it also copies ignored private task notes into the
+  Nix store. Standalone fixtures must likewise use a Git-flake source or a vetted
+  disposable source tree. Neither evaluation nor building proves runtime.
 - For mutable settings, command, desktop, or security changes, run appropriate
   focused fixtures from tests/README.md; docs-only edits need document validation.
 - `phoenix-dry-build` evaluates a build plan; `phoenix-build` builds without
