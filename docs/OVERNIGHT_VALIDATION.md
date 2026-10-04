@@ -38,6 +38,20 @@ profile/authentication access is unnecessary.
   well as source/wire bytes; never truncate source or accept silent compaction.
   Controller restart/activation needs deliberate authorization. Retain existing
   reviewer login; no new OAuth is required.
+- Capacity investigation: the pinned 0.159.0 CLI's offline catalog lists
+  `gpt-6-sol` at 272,000 tokens and omits the selected `gpt-6.1-sol`. This does
+  not disprove the previously successful authenticated review; the effective
+  server catalog may differ. Its shipped metadata does not establish compaction
+  or output reserves. Obtain the effective protected reviewer's model metadata
+  and matching CLI behavior before preparing an increase. The Thunar checkpoint
+  measured 623,125 source bytes (roughly 609 KiB), with
+  656,838 bytes for full-source JSON alone before diff/policy/framing. No cap,
+  login, controller or runtime state was changed during this investigation.
+  The rendered review instruction is now about 893 kB before hidden CLI
+  context/schema overhead. The public [Sol model budget](https://developers.openai.com/api/docs/models/gpt-6.1-sol)
+  alone cannot certify this pinned CLI's effective budget. A later upgrade must
+  share canonical evidence serialization, check its complete budget independently
+  in controller and reviewer, and preserve separate wire/source/verdict limits.
 
 ## Music namespace — feat(music): add Psysonic and Navidrome
 
