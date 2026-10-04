@@ -20,7 +20,7 @@ let
     enableTurboMode = true;
     fixedStrokeLength = 0;
     keepInputFocus = false;
-    warpMouse = true;
+    warpMouse = false;
     enableAchievements = false;
     enableAchievementNotifications = false;
   };
@@ -52,8 +52,10 @@ let
       delayed = true;
       inhibitShortcuts = false;
     };
-  copy = hotkey "Copy" "content_copy" 0 "Control+c";
-  paste = hotkey "Paste" "content_paste" 180 "Control+v";
+  copyAt = angle: hotkey "Copy" "content_copy" angle "ControlLeft+KeyC";
+  copy = copyAt 0;
+  fullscreen = hotkey "Fullscreen" "fullscreen" 0 "F11";
+  paste = hotkey "Paste" "content_paste" 180 "ControlLeft+KeyV";
   menu =
     name: id: conditions: children:
     {
@@ -93,42 +95,54 @@ let
         paste
       ])
       (menu "Firefox" "contextual-menu" { appName = "/^firefox$/i"; } [
-        copy
-        (hotkey "New tab" "add" 45 "Control+t")
-        (hotkey "Forward" "arrow_forward" 90 "Alt+Right")
+        fullscreen
+        (hotkey "New tab" "add" 45 "ControlLeft+KeyT")
+        (hotkey "Forward" "arrow_forward" 90 "AltLeft+ArrowRight")
+        (copyAt 135)
         paste
-        (hotkey "Reload" "refresh" 225 "Control+r")
-        (hotkey "Back" "arrow_back" 270 "Alt+Left")
+        (hotkey "Reload" "refresh" 225 "ControlLeft+KeyR")
+        (hotkey "Back" "arrow_back" 270 "AltLeft+ArrowLeft")
       ])
-      (menu "Codex" "contextual-menu" { appName = "/^codex-desktop(-sandboxed)?$/"; } [
-        copy
-        (hotkey "Select all" "select_all" 90 "Control+a")
+      (menu "ChatGPT" "contextual-menu" { appName = "/^codex-desktop(-sandboxed)?$/"; } [
+        fullscreen
+        (copyAt 45)
+        (hotkey "Select all" "select_all" 90 "ControlLeft+KeyA")
         paste
       ])
     ];
   };
   configBaseline = pkgs.writeText "kando-config-baseline.json" (builtins.toJSON settings);
   menusBaseline = pkgs.writeText "kando-menus-baseline.json" (builtins.toJSON menus);
+  # Stock 2.3 discards GlobalShortcuts.Deactivated. Hyprland already sends
+  # both edges; this narrow patch feeds that lifetime into Kando's existing
+  # PointerInput. Unlike uinput/click adapters, no synthetic input escapes the
+  # menu or requires another privileged device owner. Remove when upstream
+  # supports portal hold/release; re-review at the version assertion below.
+  heldKando = pkgs.kando.overrideAttrs (old: {
+    patches = (old.patches or [ ]) ++ [ ../patches/kando-shortcut-hold.patch ];
+  });
   wrapped = pkgs.symlinkJoin {
     name = "kando-phoenix-${pkgs.kando.version}";
-    paths = [ pkgs.kando ];
+    paths = [ heldKando ];
     nativeBuildInputs = [ pkgs.makeWrapper ];
     postBuild = ''
       rm "$out/bin/kando"
-      makeWrapper ${pkgs.kando}/bin/kando "$out/bin/kando" \
+      makeWrapper ${heldKando}/bin/kando "$out/bin/kando" \
         --set XDG_CONFIG_HOME ${lib.escapeShellArg "${config.xdg.configHome}/phoenix-kando"} \
+        --set KANDO_HOLD_SHORTCUT_IDS global-menu,contextual-menu \
         --prefix PATH : ${lib.makeBinPath [ pkgs.systemd ]} \
         --add-flags --ozone-platform=wayland
       rm "$out/share/applications/kando.desktop"
-      cp ${pkgs.kando}/share/applications/kando.desktop "$out/share/applications/kando.desktop"
+      cp ${heldKando}/share/applications/kando.desktop "$out/share/applications/kando.desktop"
       chmod u+w "$out/share/applications/kando.desktop"
       substituteInPlace "$out/share/applications/kando.desktop" \
         --replace-fail 'Exec=kando %U' "Exec=$out/bin/kando %U"
     '';
   };
   lua = ''
-    hl.bind("mouse:275", hl.dsp.global("menu.kando.Kando:global-menu"))
-    hl.bind("mouse:276", hl.dsp.global("menu.kando.Kando:contextual-menu"))
+    -- hl.dsp.global automatically forwards release (releasePending in Hyprland).
+    hl.bind("mouse:276", hl.dsp.global("menu.kando.Kando:global-menu"))
+    hl.bind("mouse:275", hl.dsp.global("menu.kando.Kando:contextual-menu"))
     hl.window_rule({
       name = "phoenix-kando",
       match = { class = "^menu[.]kando[.]Kando$", title = "^Kando Menu$" },

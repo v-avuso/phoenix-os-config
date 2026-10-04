@@ -10,6 +10,7 @@ let
     stdenv.hostPlatform.system = "x86_64-linux";
     kando = (package "kando") // {
       version = "2.3.0";
+      overrideAttrs = f: (package "kando-held") // (f { patches = [ ]; });
     };
     foot = package "foot";
     xdg-utils = package "xdg-utils";

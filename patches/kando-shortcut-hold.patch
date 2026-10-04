@@ -1,0 +1,249 @@
+--- a/src/main/app.ts
++++ b/src/main/app.ts
+@@ -162,8 +162,34 @@
+     Menu.setApplicationMenu(menu);
+   }
+ 
++  private shortcutHold: { trigger: string; ready: Promise<void> } = null;
++
+   /** This is called when the app is started. It initializes the backend and the window. */
+   public async init() {
++    this.backend.on('shortcutHold', (trigger: string, pressed: boolean) => {
++      if (pressed) {
++        // One physical hold owns the menu. Ignore repeats and another held button.
++        if (this.shortcutHold) return;
++        const hold = { trigger, ready: Promise.resolve() };
++        this.shortcutHold = hold;
++        hold.ready = this.showMenu({ trigger, shortcutHold: true }).catch((error) => {
++          if (this.shortcutHold === hold) this.shortcutHold = null;
++          console.error('Failed to show held shortcut menu:', error);
++        });
++      } else {
++        const hold = this.shortcutHold;
++        if (!hold || hold.trigger !== trigger) return;
++        // A release during WM-info/window loading is delivered after show, never lost.
++        hold.ready.then(() => {
++          if (this.shortcutHold !== hold) return;
++          this.shortcutHold = null;
++          if (this.menuWindow?.lastRequest?.shortcutHold &&
++              this.menuWindow.lastRequest.trigger === trigger) {
++            this.menuWindow.webContents.send('menu-window.release-shortcut');
++          }
++        });
++      }
++    });
+     this.backend.on('shortcutPressed', (trigger) => {
+       this.showMenu({ trigger });
+ 
+@@ -406,6 +432,7 @@
+    * @param request Required information to select correct menu.
+    */
+   public async showMenu(request: ShowMenuRequest) {
++    if (!request.shortcutHold) this.shortcutHold = null;
+     // Create and load the main window if it does not exist yet.
+     if (!this.menuWindow) {
+       await this.createMenuWindow();
+@@ -501,6 +528,7 @@
+   private async createMenuWindow() {
+     this.menuWindow = new MenuWindow(this, {
+       onSelect: (target, path) => {
++        this.shortcutHold = null;
+         for (const observer of this.ipcObservers.values()) {
+           observer.onSelect(target, path);
+         }
+@@ -511,6 +539,7 @@
+         }
+       },
+       onCancel: () => {
++        this.shortcutHold = null;
+         for (const observer of this.ipcObservers.values()) {
+           observer.onCancel();
+         }
+--- a/src/main/menu-window.ts
++++ b/src/main/menu-window.ts
+@@ -297,6 +297,7 @@
+       'menu-window.show-menu',
+       this.lastMenu.root,
+       {
++        shortcutHold: request.shortcutHold,
+         mousePosition,
+         windowSize,
+         zoomFactor: this.webContents.getZoomFactor(),
+--- a/src/common/index.ts
++++ b/src/common/index.ts
+@@ -198,6 +198,7 @@
+  * structure).
+  */
+ export type ShowMenuRequest = {
++  readonly shortcutHold?: boolean;
+   readonly trigger?: string;
+   readonly name?: string;
+   readonly menu?: Menu;
+@@ -208,6 +209,7 @@
+  * `show()` method from the main to the renderer process.
+  */
+ export type ShowMenuOptions = {
++  readonly shortcutHold?: boolean;
+   /**
+    * The position of the mouse cursor when the menu was opened. Relative to the top left
+    * corner of the window.
+--- a/src/menu-renderer/menu-window-api.ts
++++ b/src/menu-renderer/menu-window-api.ts
+@@ -53,6 +53,11 @@
+     );
+   },
+ 
++  /** Complete an explicitly configured portal mouse-button hold. */
++  onReleaseShortcut: (func: () => void) => {
++    ipcRenderer.on('menu-window.release-shortcut', func);
++  },
++
+   /**
+    * This will be called by the host process when the menu should be closed. Usually, the
+    * renderer will call selectItem or cancelSelection to close the menu, but sometimes the
+--- a/src/menu-renderer/index.ts
++++ b/src/menu-renderer/index.ts
+@@ -110,12 +110,22 @@
+   );
+ 
+   // Show the menu when the main process requests it.
+-  window.menuAPI.onShowMenu(async (root, menuOptions) => {
+-    if (menuOptions.systemIconsChanged) {
+-      await IconThemeRegistry.getInstance().reloadSystemIcons();
+-    }
+-    menu.show(root, menuOptions);
+-    settingsButton.show();
++  let menuShown = Promise.resolve();
++  window.menuAPI.onShowMenu((root, menuOptions) => {
++    menuShown = (async () => {
++      if (menuOptions.systemIconsChanged) {
++        await IconThemeRegistry.getInstance().reloadSystemIcons();
++      }
++      menu.show(root, menuOptions);
++      settingsButton.show();
++    })();
++  });
++  window.menuAPI.onReleaseShortcut(() => {
++    // Icon reload may still be running; release must follow this menu's show.
++    const showing = menuShown;
++    showing.then(() => {
++      if (menuShown === showing) menu.releaseShortcut();
++    });
+   });
+ 
+   // Hide the menu when the main process requests it.
+--- a/src/menu-renderer/menu.ts
++++ b/src/menu-renderer/menu.ts
+@@ -178,7 +178,7 @@
+     // Also, if the pointer is not warped to the center of the menu, we should not enter
+     // turbo-mode right away.
+     const deferTurboMode = !this.settings.warpMouse && showMenuOptions.centeredMode;
+-    this.pointerInput.onShowMenu(deferTurboMode);
++    this.pointerInput.onShowMenu(deferTurboMode, showMenuOptions.shortcutHold);
+ 
+     // In anchored mode, we have to disable turbo and marking mode.
+     this.pointerInput.enableMarkingMode =
+@@ -330,6 +330,13 @@
+     this.gamepadInput.closeButton = this.settings.gamepadCloseButton;
+   }
+ 
++  /** Finish a portal-owned mouse hold through the existing pointer selection path. */
++  public releaseShortcut() {
++    if (!this.container.classList.contains('hidden') && this.showMenuOptions.shortcutHold) {
++      this.pointerInput.releaseShortcut();
++    }
++  }
++
+   /**
+    * This method closes the menu in case the selection should be canceled. This should be
+    * called if nothing is selected but the menu should be closed.
+--- a/src/menu-renderer/input-methods/pointer-input.ts
++++ b/src/menu-renderer/input-methods/pointer-input.ts
+@@ -60,6 +60,8 @@
+   /** The current input state. */
+   private buttonState = ButtonState.eReleased;
+ 
++  private shortcutHeld = false;
++
+   /**
+    * If set to true, the turbo mode can only be activated after a key is released. This is
+    * useful if the menu is not opened under the mouse pointer.
+@@ -131,9 +133,10 @@
+    * We simply ignore these events. This code is currently used on all platforms but I
+    * think it's not an issue.
+    */
+-  public onShowMenu(deferTurboMode: boolean) {
++  public onShowMenu(deferTurboMode: boolean, shortcutHold = false) {
++    this.shortcutHeld = shortcutHold;
+     this.ignoreMotionEvents = 2;
+-    this.buttonState = ButtonState.eReleased;
++    this.buttonState = shortcutHold ? ButtonState.eDragged : ButtonState.eReleased;
+     this.anyKeyPressed = false;
+     this.deferredTurboMode = deferTurboMode;
+   }
+@@ -290,6 +293,21 @@
+     this.update(event, this.centerPosition, ButtonState.eReleased);
+   }
+ 
++  /** Finish a portal-owned hold using the existing menu radius and selection path. */
++  public releaseShortcut() {
++    if (!this.shortcutHeld) return;
++    this.shortcutHeld = false;
++    this.gestureDetector.reset();
++    const outsideCenter =
++      math.getDistance(this.pointerPosition, this.centerPosition) > this.centerRadius;
++    this.update(this.pointerPosition, this.centerPosition, ButtonState.eReleased);
++    if (outsideCenter) {
++      this.selectCallback(this.pointerPosition, SelectionType.eActiveItem, SelectionSource.eGesture);
++    } else {
++      this.closeCallback();
++    }
++  }
++
+   /** This method should be called when a key is pressed. */
+   public onKeyDownEvent() {
+     if (!this.deferredTurboMode) {
+--- a/src/main/backends/linux/portals/global-shortcuts.ts
++++ b/src/main/backends/linux/portals/global-shortcuts.ts
+@@ -161,6 +161,10 @@
+       this.session = this.generateToken('session');
+       await this.createSession();
+ 
++      this.interface.on('Deactivated', (handle, id) => {
++        this.emit('ShortcutDeactivated', id);
++      });
++
+       // Listen for shortcut activation events.
+       this.interface.on('Activated', (handle, id) => {
+         this.emit('ShortcutActivated', id);
+--- a/src/main/backends/linux/hyprland/backend.ts
++++ b/src/main/backends/linux/hyprland/backend.ts
+@@ -53,14 +53,27 @@
+ `
+     );
+ 
++    this.globalShortcuts.on('ShortcutDeactivated', (shortcutID: string) => {
++      if (this.holdShortcuts.includes(shortcutID)) {
++        this.emit('shortcutHold', shortcutID, false);
++      }
++    });
++
+     // Emit the 'shortcutPressed' event when a shortcut is activated.
+     this.globalShortcuts.on('ShortcutActivated', (shortcutID: string) => {
+       if (!this.isShortcutInhibited(shortcutID)) {
+-        this.onShortcutPressed(shortcutID);
++        if (this.holdShortcuts.includes(shortcutID)) {
++          this.emit('shortcutHold', shortcutID, true);
++        } else {
++          this.onShortcutPressed(shortcutID);
++        }
+       }
+     });
+   }
+ 
++  /** Only explicitly configured mouse triggers use release-to-select. */
++  private holdShortcuts = (process.env.KANDO_HOLD_SHORTCUT_IDS || '').split(',');
++
+   /** Nothing to be done here. */
+   public async deinit() {}
+ 

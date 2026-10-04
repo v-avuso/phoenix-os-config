@@ -42,15 +42,19 @@ pkgs.runCommand "phoenix-kando-check"
     nativeBuildInputs = [
       pkgs.nodejs
       pkgs.python3
+      pkgs.patch
     ];
   }
   ''
       mkdir zod
       tar xf ${zod} -C zod
+      cp -r ${pkgs.kando.src} source
+      chmod -R u+w source
+      patch -d source -p1 < ${../patches/kando-shortcut-hold.patch}
       node ${./kando.mjs} ${fixture} \
         ${pkgs.kando.src}/src/common/settings-schemata/general-settings-v1.ts \
         ${pkgs.kando.src}/src/common/settings-schemata/menu-settings-v1.ts \
-        ${pkgs.kando.src}/src/main/menu-window.ts "$PWD/zod/package/index.js"
+        ${pkgs.kando.src}/src/main/menu-window.ts "$PWD/zod/package/index.js" "$PWD/source" ${pkgs.typescript}/lib/node_modules/typescript/lib/typescript.js
       python3 - ${wrapped}/share/applications/kando.desktop ${wrapped}/bin/kando <<'PY'
     import pathlib, sys
     entry = pathlib.Path(sys.argv[1]).read_text()
