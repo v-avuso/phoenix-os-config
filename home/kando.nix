@@ -18,9 +18,10 @@ let
     enableDarkModeForMenuThemes = true;
     enableMarkingMode = true;
     enableTurboMode = true;
-    # Upstream distance-based hover selection: default 150px stroke plus its
-    # 50px center dead zone. The portal hold still owns release/cancellation.
-    fixedStrokeLength = 150;
+    # The default theme places children 100px from center. Select there while
+    # held (50px stroke + 50px dead zone), without a click or release.
+    fixedStrokeLength = 50;
+    hoverModeNeedsConfirmation = false;
     keepInputFocus = false;
     warpMouse = false;
     enableAchievements = false;

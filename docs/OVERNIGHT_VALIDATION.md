@@ -72,8 +72,9 @@ profile/authentication access is unnecessary.
   bindings, no pointer warp, and upward F11 in Firefox/both ChatGPT variants.
   Patched package/gesture lifecycle fixtures pass; physical input testing is pending.
 - For execution while the button remains held, enable maintained hover mode with
-  a fixed 150px stroke beyond the 50px center dead zone: 200px total, no pause or
-  additional click. Kando's own warp was already disabled; Hyprland's global
+  a fixed 50px stroke beyond the 50px center dead zone: 100px total, matching
+  the visible default item radius. A narrow upstream detector correction uses
+  the current sample, so stopping at that radius needs no extra movement/click. Kando's own warp was already disabled; Hyprland's global
   `cursor.no_warps` prevents compositor focus/workspace warps. No per-window guard
   exists in the pinned implementation. The Foot store path is regenerated with
   package changes and reasserted with the menu baseline, not a manual hash.
@@ -84,7 +85,9 @@ profile/authentication access is unnecessary.
 - Protected persistent switch installed the held-gesture changes without Polkit;
   Kando was restarted, then the stale Caelestia shell was refreshed separately.
   Live hover mode/distance/no-warp match; the user confirms no pointer jumping
-  but held selection still fails. A follow-up detector correction is prepared.
+  but held selection still fails on that installed version. A follow-up detector
+  correction and 100px distance pass the regression and packaging checks;
+  final activation and physical acceptance remain pending.
   Psysonic playback is accepted. No reboot or live display blanking occurred. Private notes remain read-only; this guide
   tracks their acceptance.
 

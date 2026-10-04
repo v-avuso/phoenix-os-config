@@ -247,3 +247,24 @@
    /** Nothing to be done here. */
    public async deinit() {}
  
+--- a/src/menu-renderer/input-methods/gesture-detector.ts
++++ b/src/menu-renderer/input-methods/gesture-detector.ts
+@@ -101,11 +101,15 @@
+ 
+       // If fixedStrokeLength is set, we only need to check if the stroke is long enough.
+       if (this.fixedStrokeLength > 0) {
++        // Use this motion, not the previous sample: the pointer may stop as soon
++        // as it reaches the item, and fixed mode has no pause-selection timer.
++        const currentDir = math.subtract(coords, this.strokeStart);
++        const currentLength = math.getLength(currentDir);
+         const minStrokeLength = this.fixedStrokeLength + this.centerDeadZone;
+-        if (strokeLength > minStrokeLength) {
++        if (currentLength >= minStrokeLength) {
+           const idealCoords = {
+-            x: this.strokeStart.x + (strokeDir.x / strokeLength) * minStrokeLength,
+-            y: this.strokeStart.y + (strokeDir.y / strokeLength) * minStrokeLength,
++            x: this.strokeStart.x + (currentDir.x / currentLength) * minStrokeLength,
++            y: this.strokeStart.y + (currentDir.y / currentLength) * minStrokeLength,
+           };
+ 
+           this.reset(idealCoords);
