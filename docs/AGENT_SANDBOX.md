@@ -14,8 +14,8 @@ recorded in acceptance; component tests alone are insufficient.
 | --- | --- |
 | **ChatGPT Community (Sandboxed)** | Private GUI connected to the OpenShell app-server and mediated backend |
 | **ChatGPT Community (Native)** | Existing host GUI and profile; deliberate repair/administration |
-| `codex` / **Codex (Sandboxed)** | Persistent OpenShell CLI |
-| `codex-native` | Direct host CLI |
+| `codex` / **Codex CLI (Sandboxed)** | Persistent OpenShell CLI |
+| `codex-native` / **Codex CLI (Native)** | Direct host CLI |
 | `codex-sandbox-login` | One-time sandbox sign-in; existing login is reused |
 | `codex-sandbox-exec COMMAND...` | Tool execution inside the managed sandbox |
 | `phoenix-review-login` | One-time reviewer sign-in; existing login reports saved status |
@@ -45,9 +45,12 @@ Reopening retains the private profile and existing login. Normal shutdown can
 take several seconds while upstream flushes state; a duplicate launch never starts another
 writer to that profile.
 
-Sandbox and Native GUI profiles are separate. Native credentials and private
-history are not copied or reconciled. Sharing the whole profile would expose that
-state and risk redirecting launches to an existing Native process. The GUI
+Sandbox and Native browser profiles are separate. Chromium uses profile locks
+and process-singleton routing; sharing that directory can redirect a sandbox
+launch to the existing Native window. This is distinct from Codex task storage,
+which upstream supports sharing with SQLite WAL and per-thread writer locks.
+Native task history is currently not shared, an outstanding usability limitation,
+not an anonymity requirement. The GUI
 profile and sandbox/reviewer logins require initial user participation. Saved
 credentials survive launches; diagnostic failures do not trigger another login.
 The gateway remains the sole owner of sandbox OAuth refresh. A fixed HTTP
@@ -73,6 +76,16 @@ managed OpenShell instance across GUI close/reopen; the GUI retains its own priv
 display state. Changing the sandbox declaration can select a new instance rather
 than import earlier tasks. Native scalar model/display settings are reread each
 time the GUI starts an app-server, not continuously synchronized while it runs.
+
+The preferred history-sharing route is upstream `sqlite_home`/`CODEX_SQLITE_HOME`
+in a dedicated credential-free directory, plus shared sessions, archived sessions
+and writer locks at identical absolute paths. This avoids a custom synchronization
+or import framework. It grants access to all stored task history, including future
+tasks outside the coding workspaces; project filters are not security boundaries.
+Migration requires a coordinated exit of Native and sandbox writers, preserving
+existing state and a rollback route. It is not implemented or safe to perform by
+copying live databases during this task. Browser profiles and OAuth refresh owners
+can remain separate while project history is shared.
 
 ## Boundaries and initial access
 
@@ -100,6 +113,10 @@ GUI app-server relay frames are capped at 16 MiB including the newline, before
 forwarding in either direction. Oversized frames close the connection and fixed
 child with a generic diagnostic; login state is preserved. This protects against
 unbounded individual frames, not every possible resource-exhaustion pattern.
+The extra bridge buffers newline-delimited JSON; an unterminated stream could
+otherwise grow without bound. Ordinary text does not become dangerous because
+of sandboxing. The cap fixes our adapter's buffering risk, and legitimate larger
+frames need a reviewed transport remedy rather than another sign-in.
 
 The Python interpreter can use authenticated desktop API namespaces too; this
 is endpoint-limited authority, not proof that a particular script is calling.
@@ -128,12 +145,23 @@ isolated reviewer for a structured verdict. Repository instructions/comments are
 untrusted evidence. Binary files, symlinks, submodules, oversized source and
 malformed, stale, rejected or timed-out verdicts fail closed.
 
-The installed client/controller currently allow at most 512 KiB of complete
-UTF-8 tracked source and a 1 MiB serialized request. These are admission bounds,
-not evidence that a model retains every token. Larger repositories require a
-deliberately reviewed capacity update covering the complete serialized prompt,
-the pinned model/CLI context and compaction behavior, and output headroom.
-Never omit tracked files or substitute a summary to fit the deployment gate.
+The declaration allows 768 KiB of complete UTF-8 tracked source, a 1 MiB wire
+request and a separately bounded 1 MiB review instruction including policy,
+source, diff, binding, modes and output schema. Process output remains 2 MiB;
+verdicts remain 16 KiB. These are resource bounds, not token estimates. The older
+installed gate still uses 512 KiB until a deliberately authorized transition.
+Never omit tracked files or substitute a summary to fit the gate.
+
+Protected reviewer metadata reports `gpt-6.1-sol` at 272,000 tokens with 95%
+effective context; the larger public API window does not establish this CLI's
+budget. No context override is added. Pinned Codex 0.159 non-JSON `exec` emits
+`context compacted` for completed compaction; review rejects that marker before
+accepting any verdict. `--color never` keeps detection exact. JSON exec drops
+these events and must not replace this path. This source-dependent guard must be
+rechecked on CLI upgrades; a typed app-server event adapter is the alternative
+if upstream changes the marker. Byte admission does not guarantee every source
+fits; model overflow or compaction fails closed. The private backend's server
+internals remain outside this guarantee.
 
 `test` and `switch` submit bounded source files and a reason through a fixed
 root-owned socket; callers cannot submit commands, closures or approvals. The

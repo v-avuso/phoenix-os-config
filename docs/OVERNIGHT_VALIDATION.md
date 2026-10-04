@@ -1,7 +1,7 @@
 # Overnight validation
 
-This session permits builds/static fixtures only. No activation, service restart,
-GUI interaction, logout/reboot or hardware mutation is authorized overnight.
+The overnight session permitted builds/static fixtures only. The later daytime
+follow-up permits task-related activation, but reboot acceptance stays deferred.
 Task specifications remain in the private `.codex/work-queue.md`.
 
 ## Notes/status permission blocker
@@ -18,10 +18,11 @@ profile/authentication access is unnecessary.
 - Installed first iteration: approved source `ed913e5`, acceptance report
   `c7777c3`. GUI task, close/reopen and reviewed persistent switch passed before
   the unattended session. No new sign-in is needed.
-- New hardening (`cc98afe`): GUI RPC frames are bounded to 16 MiB in both directions;
+- Hardening (`cc98afe`): GUI RPC frames are bounded to 16 MiB in both directions;
   oversized or expanded frames close with a generic diagnostic. Temporary
   subprocess/socket fixtures verify bounds, cleanup, backpressure and spaced
-  requests on a shared socket. This is not yet activated.
+  requests on a shared socket. The user's subsequent switch installed this source;
+  normal GUI task/reopen acceptance after that switch is still outstanding.
 - After reviewed activation, run a normal GUI task, close/reopen and confirm
   saved task/login survive without profile errors. Oversized legitimate results
   need a reviewed remedy; do not reauthenticate to fix a frame-limit error.
@@ -30,28 +31,43 @@ profile/authentication access is unnecessary.
   bound. They still evaluate/build, but reviewed activation now needs a deliberate
   bounded-review design/capacity update; neither the client nor root controller
   limit was relaxed overnight. Do not bypass this by omitting tracked files.
-- Next-day capacity route: the installed source exactly matches `ed913e5` and
-  has 3,117 bytes of headroom under the old limit. A small capacity-only change
-  based on that revision may pass the existing protected review before the
-  queued branch is reviewed. Preserve this branch; verify the actual model's
-  token budget and full-source retention first. Bound serialized evidence as
-  well as source/wire bytes; never truncate source or accept silent compaction.
-  Controller restart/activation needs deliberate authorization. Retain existing
-  reviewer login; no new OAuth is required.
-- Capacity investigation: the pinned 0.159.0 CLI's offline catalog lists
-  `gpt-6-sol` at 272,000 tokens and omits the selected `gpt-6.1-sol`. This does
-  not disprove the previously successful authenticated review; the effective
-  server catalog may differ. Its shipped metadata does not establish compaction
-  or output reserves. Obtain the effective protected reviewer's model metadata
-  and matching CLI behavior before preparing an increase. The Thunar checkpoint
-  measured 623,125 source bytes (roughly 609 KiB), with
-  656,838 bytes for full-source JSON alone before diff/policy/framing. No cap,
-  login, controller or runtime state was changed during this investigation.
-  The rendered review instruction is now about 893 kB before hidden CLI
-  context/schema overhead. The public [Sol model budget](https://developers.openai.com/api/docs/models/gpt-6.1-sol)
-  alone cannot certify this pinned CLI's effective budget. A later upgrade must
-  share canonical evidence serialization, check its complete budget independently
-  in controller and reviewer, and preserve separate wire/source/verdict limits.
+- The user's switch changed the installed baseline to source
+  `/nix/store/3if0zg7byd9vnzsm72lzz95fzv8f7d4b-source`; the earlier small-update
+  route based on `ed913e5` is obsolete. Do not treat historical headroom as current.
+- The protected reviewer's non-secret metadata now confirms Sol 6.1 at 272,000
+  tokens / 95% effective context. The new declaration admits 768 KiB source and
+  independently bounds complete instruction plus schema at 1 MiB, rejecting
+  observed pinned-CLI compaction before accepting a verdict. All 27 guard fixtures
+  pass; real review and deliberately authorized installation remain pending.
+  Existing reviewer login is retained; no new OAuth sign-in is required.
+- Native history is still separate. Prefer upstream shared SQLite/session/writer
+  storage over a custom importer, after a coordinated exit of all writers; browser
+  profiles and refresh ownership stay separate. See the long-term sandbox guide.
+
+## Daytime feedback and refinement
+
+- Main now includes the feature branch without rewriting history. Separate commits
+  cover Kando release gestures, Thunar submenus/quick ZIP, Psysonic output recovery,
+  idle integration/`blank`, Native scaling and review-capacity guards.
+- User confirmed Navidrome/Psysonic playback before selecting an unusable output,
+  most session restoration, initial Thunar integration and wallpaper/light theme.
+  Wallpaper is accepted for this iteration. Other feedback is partial acceptance.
+- Psysonic's saved output alone was reset to system default with a key-only backup;
+  a bounded launch then stayed open. The initial exit cause is not established as
+  OOM. The patched package builds; audible playback still needs acceptance.
+- Idle integration used unsupported callback names; corrected to the exact schema.
+  `idle` is Python IDLE, so the new command is `blank` (`blank off` restores).
+  Source/API/state fixtures pass; actual idle/manual blank and wake remain pending.
+- Kando now uses portal release for held gestures, valid key names, swapped mouse
+  bindings, no pointer warp, and upward F11 in Firefox/both ChatGPT variants.
+  Patched package/gesture lifecycle fixtures pass; physical input testing is pending.
+- Thunar groups image conversions and adds Archive → Create ZIP, retaining the
+  broader archive plugin. Safety/packaging fixtures pass; inspect live menus after
+  activation. Native scaling now uses upstream Wayland detection on direct launch,
+  including session restore; verify font size after reopen, then later after reboot.
+- No reboot, live display blanking or desktop-service restart was performed during
+  this follow-up. Combine activation and physical checks once the gate transition
+  is authorized. Private notes remain read-only; this guide tracks their acceptance.
 
 ## Music namespace — feat(music): add Psysonic and Navidrome
 

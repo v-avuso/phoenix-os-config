@@ -27,6 +27,11 @@
   a technical handover is not evidence that the user's goal was achieved.
 - Separate general policy intent from tool-specific integration. Preserve useful
   prior work when plans change.
+- Optimize the user's normal project workflow and low authentication friction.
+  File-access guardrails protect unrelated personal data; anonymity and maximum
+  isolation are not goals. Explain material usability costs before adding them.
+- Keep unfinished modules isolated until integration checks are ready. Coordinate
+  activation centrally; do not let parallel workers restart shared desktop services.
 - When the user requests parallel work, assign distinct files and interfaces
   before dispatch. Workers report changes without committing; the coordinator
   validates the combined result and commits coherent bundles. Prefer GPT-6.1 Sol

@@ -22,6 +22,8 @@ nix build --impure --file tests/clamav-recovery.nix --no-link
 nix build --impure --file tests/hypr-persist.nix --no-link
 nix build --impure --file tests/kando-packaging.nix --no-link
 python3 -B tests/mouse-side-button-debounce.py
+python3 -B tests/thunar-archive.py
+nix build --impure --file tests/idle-command.nix --no-link
 python3 -B tests/timewall.py
 nix build --impure --file tests/timewall-packaging.nix --no-link
 nix build --impure --file tests/thunar-packaging.nix --no-link
@@ -49,6 +51,9 @@ nix eval --impure --file tests/desktop-services.nix
 - **Idle fixture:** a Lua interpreter mocks compositor options to check snapshot
   ownership, repeated callbacks, config reload and partial-write recovery. It
   never changes the live shader, cursor, locking or DPMS.
+  The command fixture checks the exact upstream schema/IPC/idle-monitor API and
+  executes patched manual-idle transitions, including duplicate activation,
+  input resume, explicit restore and teardown.
 - **Session fixture:** builds pinned hypr-persist with upstream tests, exact
   containment-launch override tests and guards for the audited no-close simple
   restore path. It checks private state/unit/logout declarations without starting
@@ -69,6 +74,8 @@ nix eval --impure --file tests/desktop-services.nix
   and shutdown cleanup. Generated ImageMagick samples verify literal filenames,
   batch collision safety, first-frame conversion and lossless JXL; originals stay
   intact. No live file-manager window, user image or desktop setting is touched.
+  Quick ZIP fixtures cover collisions, literal filenames, overlapping selection,
+  symlink preservation, special-file rejection and old timestamps.
 - **Agent broker fixtures:** fixed commands, argument rejection, output/deadline
   bounds, named tracing reads, xHCI wakeup round-trip, malformed requests, and
   symlink escape rejection. These use temporary trees and mocked subprocesses;
@@ -81,6 +88,8 @@ nix eval --impure --file tests/desktop-services.nix
   Linux tray predicate; actual window close/reopen remains a runtime check.
   Protected deployment fixtures cover immutable source/closure binding, rejection
   before activation, bootstrap file safety and separate boot/runtime rollback.
+  They also reject oversized complete review inputs and any verdict after
+  observed compaction, without omitting source to fit a bound.
   HTTP fixtures cover destination/header bounds, real identity/routing, streaming
   and cancellation without exposing credentials.
   GUI socket fixtures need sandbox execution permission; they need no OS root.
