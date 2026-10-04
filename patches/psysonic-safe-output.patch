@@ -1,0 +1,80 @@
+--- a/src-tauri/crates/psysonic-audio/src/dev_io.rs
++++ b/src-tauri/crates/psysonic-audio/src/dev_io.rs
+@@ -46,6 +46,12 @@
+     f()
+ }
+ 
++/// ALSA's null PCM discards playback; exclude it before stream negotiation.
++#[cfg(target_os = "linux")]
++pub(crate) fn is_silent_alsa_pcm(driver: Option<&str>) -> bool {
++    driver == Some("null")
++}
++
+ pub(crate) fn enumerate_output_device_names() -> Vec<String> {
+     enumerate_output_device_entries()
+         .into_iter()
+@@ -67,6 +73,16 @@
+         host.output_devices()
+             .map(|iter| {
+                 iter.filter_map(|d| {
++                    #[cfg(target_os = "linux")]
++                    {
++                        use rodio::cpal::traits::DeviceTrait;
++                        if d.description()
++                            .map(|desc| is_silent_alsa_pcm(desc.driver()))
++                            .unwrap_or(false)
++                        {
++                            return None;
++                        }
++                    }
+                     let key = output_device_stable_key(&d);
+                     if key.is_empty() {
+                         return None;
+--- a/src-tauri/crates/psysonic-audio/src/engine/output_stream.rs
++++ b/src-tauri/crates/psysonic-audio/src/engine/output_stream.rs
+@@ -109,9 +109,7 @@
+     desired_rate: u32,
+     require_named_device: bool,
+ ) -> StreamOpenResult {
+-    #[cfg(not(target_os = "linux"))]
+-    use rodio::cpal::traits::DeviceTrait;
+-    use rodio::cpal::traits::HostTrait;
++    use rodio::cpal::traits::{DeviceTrait, HostTrait};
+ 
+     #[cfg(unix)]
+     let _guard = unsafe {
+@@ -157,6 +155,12 @@
+     if let Some(device) = device {
+         #[cfg(target_os = "linux")]
+         {
++            if device.description()
++                .map(|desc| crate::dev_io::is_silent_alsa_pcm(desc.driver()))
++                .unwrap_or(false)
++            {
++                return Err("ALSA null output discards audio; choose system default".to_string());
++            }
+             let (config, choice) = select_verified_stream_config(&device, desired_rate)?;
+             let (handle, actual_rate) = open_stream_with_verified_rate(&device, &config)?;
+             crate::app_eprintln!(
+--- a/src/features/playback/store/audioListenerSetup/initialAudioSync.ts
++++ b/src/features/playback/store/audioListenerSetup/initialAudioSync.ts
+@@ -58,6 +58,18 @@
+     }
+   }
+   if (audioOutputDevice) {
+-    audioSetDevice({ deviceName: audioOutputDevice }).catch(() => {});
++    audioSetDevice({ deviceName: audioOutputDevice }).catch(async () => {
++      // Recover an unusable saved endpoint; preserve concurrent Settings edits.
++      // Persist default only after it successfully opens.
++      if (useAuthStore.getState().audioOutputDevice !== audioOutputDevice) return;
++      try {
++        await audioSetDevice({ deviceName: null });
++        if (useAuthStore.getState().audioOutputDevice === audioOutputDevice) {
++          useAuthStore.getState().setAudioOutputDevice(null);
++        }
++      } catch {
++        /* no working output yet; keep the saved choice available for retry */
++      }
++    });
+   }
+ }

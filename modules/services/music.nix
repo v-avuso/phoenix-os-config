@@ -25,6 +25,13 @@ let
   serviceMusicDirectory = "/var/lib/navidrome/music";
   quotedMusicDirectory = lib.escapeShellArg musicDirectory;
   system = pkgs.stdenv.hostPlatform.system;
+  # Upstream exposes ALSA's discard-only null PCM and retries a saved unusable
+  # output at every launch. Keep upstream's device rollback/stream lifecycle;
+  # reject that pseudo-output before negotiation and recover startup to default.
+  # Remove this patch when upstream handles both cases (pin bd6c320, 1.55.0).
+  psysonic = inputs.psysonic.packages.${system}.psysonic.overrideAttrs (old: {
+    patches = (old.patches or [ ]) ++ [ ../../patches/psysonic-safe-output.patch ];
+  });
 in
 {
   system.activationScripts.navidromeMusicAccess = {
@@ -62,6 +69,6 @@ in
   # The client stays independent from the server; another Subsonic client can
   # replace this package without changing Navidrome or its library settings.
   home-manager.users.${user.name}.home.packages = [
-    inputs.psysonic.packages.${system}.psysonic
+    psysonic
   ];
 }
