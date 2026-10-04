@@ -64,9 +64,10 @@ profile/authentication access is unnecessary.
   paused; the user subsequently confirmed audible playback. No reboot is needed.
 - Idle integration used unsupported callback names; corrected to the exact schema.
   `idle` is Python IDLE, so the new command is `blank` (`blank off` restores).
-  Source/API/state fixtures pass. A live check found the installed wrapper lacks
-  its patched idle IPC target; package integration is being corrected before
-  shell reload and actual blank/wake acceptance.
+  Source/API/state and actual built-package fixtures pass. The running shell
+  still used the old store path; it was replaced gracefully with the configured
+  patched package. Read-only IPC now exposes idle activate/restore. Actual
+  manual blank/wake acceptance remains pending.
 - Kando now uses portal release for held gestures, valid key names, swapped mouse
   bindings, no pointer warp, and upward F11 in Firefox/both ChatGPT variants.
   Patched package/gesture lifecycle fixtures pass; physical input testing is pending.
@@ -81,9 +82,10 @@ profile/authentication access is unnecessary.
   activation. Native scaling now uses upstream Wayland detection on direct launch,
   including session restore; verify font size after reopen, then later after reboot.
 - Protected persistent switch installed the held-gesture changes without Polkit;
-  Kando alone was restarted. Live hover mode, distance and compositor no-warp
-  settings match. Physical gesture/playback checks remain pending. No reboot or
-  live display blanking occurred. Private notes remain read-only; this guide
+  Kando was restarted, then the stale Caelestia shell was refreshed separately.
+  Live hover mode/distance/no-warp match; the user confirms no pointer jumping
+  but held selection still fails. A follow-up detector correction is prepared.
+  Psysonic playback is accepted. No reboot or live display blanking occurred. Private notes remain read-only; this guide
   tracks their acceptance.
 
 ## Music namespace — feat(music): add Psysonic and Navidrome

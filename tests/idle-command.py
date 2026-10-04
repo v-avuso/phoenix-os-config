@@ -7,7 +7,9 @@ import subprocess
 import sys
 import tempfile
 
-shell_source, quickshell_source, cli_source, patch_file, baseline_file = map(pathlib.Path, sys.argv[1:])
+shell_source, quickshell_source, cli_source, patch_file, baseline_file, shell_package = map(
+    pathlib.Path, sys.argv[1:]
+)
 
 
 def block_after(source: str, marker: str) -> str:
@@ -49,6 +51,15 @@ with tempfile.TemporaryDirectory(prefix="phoenix-idle-patch-") as tmp:
         check=True,
     )
     qml = target.read_text()
+
+packaged_qml = (shell_package / "share/caelestia-shell/modules/IdleMonitors.qml").read_text()
+assert 'target: "idle"' in packaged_qml
+assert "function activate(index: int)" in packaged_qml
+assert "function restore(): void" in packaged_qml
+assert "timeout: 0" in packaged_qml
+assert "respectInhibitors: false" in packaged_qml
+assert "root.manualIdleEntry.idleAction" in packaged_qml
+assert "Component.onDestruction: finishManualIdle()" in packaged_qml
 
 for fragment in (
     "import Quickshell.Io",

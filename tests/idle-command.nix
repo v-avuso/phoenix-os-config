@@ -4,6 +4,7 @@ let
   pkgs = flake.inputs.nixpkgs.legacyPackages.x86_64-linux;
   user = import ../config/user.nix { inherit (pkgs) lib; };
   home = flake.nixosConfigurations.metal.config.home-manager.users.${user.name};
+  shellPackage = home.programs.caelestia.package;
   baselineFile = home.xdg.dataFile."caelestia/shell.json.nix-baseline".source;
   shellSource = flake.inputs.caelestia-shell.outPath;
   quickshellSource = flake.inputs.caelestia-shell.inputs.quickshell.outPath;
@@ -19,6 +20,6 @@ pkgs.runCommand "phoenix-idle-command-check"
     ];
   }
   ''
-    python3 ${./idle-command.py} ${shellSource} ${quickshellSource} ${cliSource} ${../patches/caelestia-idle-command.patch} ${baselineFile}
+    python3 ${./idle-command.py} ${shellSource} ${quickshellSource} ${cliSource} ${../patches/caelestia-idle-command.patch} ${baselineFile} ${shellPackage}
     touch "$out"
   ''
