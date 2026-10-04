@@ -19,6 +19,7 @@ node tests/agent-gui-http-hook.cjs
 python3 -B tests/agent-gui-connection.py
 nix build --impure --file tests/commands-packaging.nix --no-link
 nix build --impure --file tests/clamav-recovery.nix --no-link
+nix build --impure --file tests/hypr-persist.nix --no-link
 nix eval --impure --file tests/opensnitch-observation.nix
 nix eval --impure --file tests/pam-desktop-conditional.nix
 nix eval --impure --file tests/desktop-services.nix
@@ -43,6 +44,11 @@ nix eval --impure --file tests/desktop-services.nix
 - **Idle fixture:** a Lua interpreter mocks compositor options to check snapshot
   ownership, repeated callbacks, config reload and partial-write recovery. It
   never changes the live shader, cursor, locking or DPMS.
+- **Session fixture:** builds pinned hypr-persist with upstream tests, exact
+  containment-launch override tests and guards for the audited no-close simple
+  restore path. It checks private state/unit/logout declarations without starting
+  a daemon or importing live session state. New files must be staged for its
+  Git-flake source; logout/login and reboot restoration need manual acceptance.
 - **Agent broker fixtures:** fixed commands, argument rejection, output/deadline
   bounds, named tracing reads, xHCI wakeup round-trip, malformed requests, and
   symlink escape rejection. These use temporary trees and mocked subprocesses;

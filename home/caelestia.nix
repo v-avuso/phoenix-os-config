@@ -20,6 +20,13 @@ let
     '';
   });
 
+  # Stop while the compositor still has clients: upstream SIGTERM saves their
+  # final state before graceful shutdown starts closing applications.
+  logout = pkgs.writeShellScript "phoenix-hyprland-logout" ''
+    ${pkgs.systemd}/bin/systemctl --user stop hypr-persist.service || exit $?
+    exec ${pkgs.hyprshutdown}/bin/hyprshutdown --vt 1
+  '';
+
   caelestiaSettings = {
     # Prefer the contained entry without renaming it or favouriting Native.
     # Query ordering still depends on Caelestia's fuzzy match/frequency score.
@@ -48,7 +55,7 @@ let
     session.commands.logout = [
       "${hyprlandPackages.hyprland}/bin/hyprctl"
       "dispatch"
-      "hl.dsp.exec_cmd('${pkgs.hyprshutdown}/bin/hyprshutdown --vt 1')"
+      "hl.dsp.exec_cmd('${logout}')"
     ];
   };
 
@@ -152,7 +159,10 @@ let
   };
 in
 {
-  imports = [ inputs.caelestia-shell.homeManagerModules.default ];
+  imports = [
+    inputs.caelestia-shell.homeManagerModules.default
+    ./hypr-persist.nix
+  ];
 
   # Mirror only Home Manager Hyprland's generic session lifecycle: import the
   # compositor environment, then activate the target linked to the graphical

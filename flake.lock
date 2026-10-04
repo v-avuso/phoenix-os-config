@@ -281,6 +281,23 @@
         "type": "github"
       }
     },
+    "hypr-persist": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1785372293,
+        "narHash": "sha256-Nh2+JpQQW6qi2ULUGjJyqhN8/3AKRHjlpHOXiVeD6h0=",
+        "owner": "ngamber",
+        "repo": "hypr-persist",
+        "rev": "31836057e09b46d8d32645dbb75035f31164dd5f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ngamber",
+        "repo": "hypr-persist",
+        "rev": "31836057e09b46d8d32645dbb75035f31164dd5f",
+        "type": "github"
+      }
+    },
     "ixx": {
       "inputs": {
         "flake-utils": [
@@ -607,6 +624,7 @@
         "codex-desktop-sandbox": "codex-desktop-sandbox",
         "firefox-addons": "firefox-addons",
         "home-manager": "home-manager",
+        "hypr-persist": "hypr-persist",
         "nix-bwrapper": "nix-bwrapper",
         "nix-vscode-extensions": "nix-vscode-extensions",
         "nixpkgs": "nixpkgs_5",

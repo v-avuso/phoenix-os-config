@@ -26,6 +26,10 @@ profile/authentication access is unnecessary.
   saved task/login survive without profile errors. Oversized legitimate results
   need a reviewed remedy; do not reauthenticate to fix a frame-limit error.
 - Optional: type `chat` in the launcher; expect Sandboxed before Native.
+- Queued changes have reached the protected controller's 512 KiB whole-source
+  bound. They still evaluate/build, but reviewed activation now needs a deliberate
+  bounded-review design/capacity update; neither the client nor root controller
+  limit was relaxed overnight. Do not bypass this by omitting tracked files.
 
 ## Music namespace — feat(music): add Psysonic and Navidrome
 
@@ -50,10 +54,10 @@ profile/authentication access is unnecessary.
 | --- | --- |
 | Music namespace | Implemented; full metal build and all-host evaluation pass; runtime pending |
 | Idle shader | Implemented; full metal build and all-host evaluation pass; monitor tests deferred |
-| Session restore | Unsafe hyprsession startup rejected; maintained alternative under review |
+| Session restore | Conservative hypr-persist prototype implemented; tests/full build pass; reboot acceptance deferred |
 | Kando | Exact 2.3 schema/shortcuts/debounce plan investigated; implementation pending |
-| Dynamic wallpaper/theme | Pending |
-| Thunar integration | Pending |
+| Dynamic wallpaper/theme | Eight-frame metadata and supported backend verified; implementation pending |
+| Thunar integration | Supported stack/theme defects investigated; implementation pending |
 
 ## Idle display — feat(display): blank idle monitors without DPMS
 
@@ -68,3 +72,24 @@ profile/authentication access is unnecessary.
   and keyboard, verify cursor return and existing inhibition/night-light
   behavior. Reload the config while blanked; it should clear blanking. No live
   shader, DPMS, lock or monitor action was performed overnight.
+
+## Session restore — feat(desktop): restore Hyprland sessions
+
+- Pin hypr-persist 0.1.2, save every 120 seconds, and use private
+  `~/.local/state/phoenix-hypr-persist/sessions/last.toml`. Native SIGTERM saves
+  before Caelestia's normal logout closes clients. No foreign snapshots are
+  imported; remembered commands are executable user state, never broker authority.
+- Simple restore adopts existing windows or launches missing apps. Layout-tree
+  reconstruction is disabled because upstream's layout path can close splash
+  windows. Exact Codex class overrides retain their respective installed Native
+  and Sandboxed launchers across deployment changes.
+- All-host evaluation, 264 upstream/added tests and full metal build pass:
+  `/nix/store/3yni5c7qbaw5467mfd1q8pxwlv35jv68-nixos-system-phoenix-26.05.20260924.c508844`.
+  Tomorrow after reviewed
+  activation: multiple Firefox windows, terminals, Thunar and Electron; different
+  workspaces/monitors plus floating windows; logout/login then reboot. Expect
+  useful app/workspace restoration without duplicate windows or closing live apps.
+- Prototype limits: adopted geometry and monitor/layout fidelity are limited;
+  temporary legacy Hyprland rules are unsupported, though explicit placement is
+  Lua-compatible. Verify partially closed shutdown snapshots and stopping during
+  initial restore. Do not repeatedly launch apps to mask a lifecycle failure.

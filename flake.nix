@@ -27,6 +27,12 @@
       flake = false;
     };
 
+    # Audited non-destructive simple restore; layout reconstruction stays disabled.
+    hypr-persist = {
+      url = "github:ngamber/hypr-persist/31836057e09b46d8d32645dbb75035f31164dd5f";
+      flake = false;
+    };
+
     firefox-addons = {
       url = "gitlab:rycee/nur-expressions?dir=pkgs/firefox-addons";
       inputs.nixpkgs.follows = "nixpkgs";

@@ -48,6 +48,15 @@ saved shader/cursor; a new shader owner is preserved. Hyprland config reload
 resets this temporary state. The immutable helper/shader keep this policy within
 the existing compositor and idle owner instead of adding another daemon.
 
+Hypr-persist on metal keeps private executable session state under
+`~/.local/state/phoenix-hypr-persist`; Nix never reconciles it. Simple restore
+adopts existing windows or relaunches missing apps, with layout reconstruction
+disabled to avoid upstream window-closing behavior. Caelestia's normal logout
+stops its daemon before closing clients so native SIGTERM can save their state.
+Exact Codex launch overrides preserve Native versus Sandboxed containment;
+other applications use upstream resolution. Reboot fidelity is a prototype
+acceptance check, not process/RAM continuation or a substitute for backups.
+
 ## Protected state and extension rules
 
 Never blanket-overwrite Firefox or Codex profiles, cookies, history, bookmarks,
