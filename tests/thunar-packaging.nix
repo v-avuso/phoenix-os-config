@@ -27,6 +27,10 @@ assert home.xfconf.settings.thunar.misc-middle-click-in-tab;
 assert !home.xfconf.settings.thunar.last-menubar-visible;
 assert home.xdg.mimeApps.defaultApplications."inode/directory" == [ "thunar.desktop" ];
 assert home.xdg.mimeApps.defaultApplications."application/zip" == [ "engrampa.desktop" ];
+assert home.dconf.settings."org/mate/engrampa/dialogs/batch-add".default-extension == ".zip";
+assert pkgs.lib.hasInfix "<submenu>Convert to…</submenu>" home.xdg.configFile."Thunar/uca.xml".text;
+assert pkgs.lib.hasInfix "<submenu>Archive</submenu>" home.xdg.configFile."Thunar/uca.xml".text;
+assert pkgs.lib.hasInfix "<name>Create ZIP</name>" home.xdg.configFile."Thunar/uca.xml".text;
 assert pkgs.lib.any (
   p: toString p == "${flake.outPath}/patches/thunar-live-user-css.patch"
 ) pkgs.thunar-unwrapped.patches;

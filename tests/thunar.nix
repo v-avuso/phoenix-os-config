@@ -34,10 +34,13 @@ pkgs.runCommand "phoenix-thunar-integration-fixtures"
       ./check-css "$TMPDIR/rendered"
     mkdir -p fixture/home fixture/tests
     cp ${../home/thunar-image-convert.py} fixture/home/thunar-image-convert.py
+    cp ${../home/thunar-archive.py} fixture/home/thunar-archive.py
     cp ${./thunar-image-convert.py} fixture/tests/thunar-image-convert.py
     cp ${./thunar-image-real.py} fixture/tests/thunar-image-real.py
     python fixture/tests/thunar-image-convert.py
     python fixture/tests/thunar-image-real.py ${pkgs.imagemagick}/bin/magick
+    cp ${./thunar-archive.py} fixture/tests/thunar-archive.py
+    python fixture/tests/thunar-archive.py
     mkdir -p "$out"
     echo "Exact patched GTK/Caelestia lifecycle and ImageMagick fixtures passed" > "$out/result"
   ''

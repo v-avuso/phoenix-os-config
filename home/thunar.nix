@@ -4,12 +4,16 @@ let
     exec ${pkgs.python3}/bin/python3 -I ${./thunar-image-convert.py} \
       --magick ${pkgs.imagemagick}/bin/magick "$@"
   '';
+  archiveCreator = pkgs.writeShellScript "phoenix-thunar-create-zip" ''
+    exec ${pkgs.python3}/bin/python3 -I ${./thunar-archive.py} "$@"
+  '';
   # %F is quoted by Thunar's supported filename expansion; the converter reads
   # stdin so ImageMagick never interprets user filenames as coder/frame syntax.
   imageAction = format: title: ''
     <action>
       <icon>image-x-generic</icon>
       <name>Convert to ${title}</name>
+      <submenu>Convert to…</submenu>
       <unique-id>phoenix-convert-${format}</unique-id>
       <command>${converter} ${format} %F</command>
       <description>Create ${title} copies; keep originals and existing files</description>
@@ -41,6 +45,8 @@ in
     "inode/directory" = [ "thunar.desktop" ];
   }
   // lib.genAttrs archiveTypes (_: [ "engrampa.desktop" ]);
+  # Engrampa's batch archive chooser otherwise defaults to tar.gz.
+  dconf.settings."org/mate/engrampa/dialogs/batch-add".default-extension = ".zip";
   # Own only UCA, not history, bookmarks, tabs or other Thunar state.
   xdg.configFile."Thunar/uca.xml".text = ''
     <?xml version="1.0" encoding="UTF-8"?>
@@ -54,6 +60,21 @@ in
         <patterns>*</patterns>
         <startup-notify/>
         <directories/>
+      </action>
+      <action>
+        <icon>application-zip</icon>
+        <name>Create ZIP</name>
+        <submenu>Archive</submenu>
+        <unique-id>phoenix-create-zip</unique-id>
+        <command>${archiveCreator} %F</command>
+        <description>Create a compatible ZIP archive without replacing existing files</description>
+        <patterns>*</patterns>
+        <directories/>
+        <audio-files/>
+        <image-files/>
+        <other-files/>
+        <text-files/>
+        <video-files/>
       </action>
       ${imageAction "jpeg" "JPEG"}
       ${imageAction "png" "PNG"}
