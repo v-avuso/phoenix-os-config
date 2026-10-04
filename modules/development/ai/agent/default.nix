@@ -231,8 +231,11 @@ let
       );
       workspaces = cfg.workspaces;
       appServerPreferences = [
-        "${pkgs.python3}/bin/python3" "-I" (toString ./gui-profile.py)
-        "--worker" "${user.homeDirectory}/.codex/config.toml"
+        "${pkgs.python3}/bin/python3"
+        "-I"
+        (toString ./gui-profile.py)
+        "--worker"
+        "${user.homeDirectory}/.codex/config.toml"
       ];
       default_workdir = user.repoDirectory;
       inherit state;
@@ -345,7 +348,7 @@ in
         Install.WantedBy = [ "default.target" ];
       };
       xdg.desktopEntries.codex-sandboxed = {
-        name = "Codex (Sandboxed)";
+        name = "Codex CLI (Sandboxed)";
         comment = "OpenShell-protected Codex CLI with bounded host diagnostics";
         exec = "${launchers}/bin/codex";
         icon = "codex-desktop";
@@ -354,10 +357,10 @@ in
         categories = [ "Development" ];
       };
       xdg.desktopEntries.codex-native = {
-        name = "Codex CLI (Native / Unrestricted)";
+        name = "Codex CLI (Native)";
         comment = "Direct host CLI for policy repair and deliberate administrative work";
         exec = "${native}/bin/codex-native";
-        icon = "dialog-warning";
+        icon = "codex-desktop";
         terminal = true;
         type = "Application";
         categories = [ "Development" ];
