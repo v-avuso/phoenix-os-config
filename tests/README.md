@@ -24,6 +24,7 @@ nix build --impure --file tests/kando-packaging.nix --no-link
 python3 -B tests/mouse-side-button-debounce.py
 python3 -B tests/timewall.py
 nix build --impure --file tests/timewall-packaging.nix --no-link
+nix build --impure --file tests/thunar-packaging.nix --no-link
 nix eval --impure --file tests/opensnitch-observation.nix
 nix eval --impure --file tests/pam-desktop-conditional.nix
 nix eval --impure --file tests/desktop-services.nix
@@ -62,6 +63,12 @@ nix eval --impure --file tests/desktop-services.nix
   missing/invalid assets, FIFO rejection, theme boundaries, black fallback,
   quoting and serialized writes. Packaging checks actual executable/config paths
   and session-bound declarations; no user wallpaper is read or displayed.
+- **Thunar fixture:** checks metal/VM declarations and applies the exact pinned
+  Caelestia/Thunar patches. GTK under an isolated Xvfb verifies light/dark palette,
+  icon/list/backdrop selection, file-monitor refresh, invalid last-good retention
+  and shutdown cleanup. Generated ImageMagick samples verify literal filenames,
+  batch collision safety, first-frame conversion and lossless JXL; originals stay
+  intact. No live file-manager window, user image or desktop setting is touched.
 - **Agent broker fixtures:** fixed commands, argument rejection, output/deadline
   bounds, named tracing reads, xHCI wakeup round-trip, malformed requests, and
   symlink escape rejection. These use temporary trees and mocked subprocesses;

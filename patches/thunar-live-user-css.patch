@@ -1,0 +1,190 @@
+--- a/thunar/thunar-application.c
++++ b/thunar/thunar-application.c
+@@ -65,6 +65,7 @@
+ #include "thunar/thunar-transfer-job.h"
+ #include "thunar/thunar-util.h"
+ #include "thunar/thunar-view.h"
++#include "thunar/thunar-user-css.h"
+ 
+ #include <libxfce4ui/libxfce4ui.h>
+ 
+@@ -221,6 +222,8 @@
+ struct _ThunarApplication
+ {
+   GtkApplication __parent__;
++
++  ThunarUserCss user_css;
+ 
+   ThunarSessionClient *session_client;
+ 
+@@ -425,6 +428,7 @@
+   application->accel_map = NULL;
+ 
+   thunar_application_load_css ();
++  thunar_user_css_start (&application->user_css);
+ }
+ 
+ 
+@@ -433,6 +437,8 @@
+ thunar_application_shutdown (GApplication *gapp)
+ {
+   ThunarApplication *application = THUNAR_APPLICATION (gapp);
++
++  thunar_user_css_stop (&application->user_css);
+ 
+   /* unqueue all files waiting to be processed */
+   thunar_g_list_free_full (application->files_to_launch);
+--- /dev/null
++++ b/thunar/thunar-user-css.h
+@@ -0,0 +1,151 @@
++/* Watch only the existing GTK user CSS directory. GTK3 caches its USER
++ * provider, so replacing theme files alone does not update running windows.
++ * Keep the built-in APPLICATION provider and original GTK USER provider;
++ * removed rules in that original cached provider require one restart. */
++#ifndef THUNAR_USER_CSS_H
++#define THUNAR_USER_CSS_H
++#include <gtk/gtk.h>
++#include <gio/gio.h>
++
++typedef struct
++{
++  GtkCssProvider *provider;
++  GFileMonitor *monitor;
++  GdkScreen *screen;
++  gchar *path;
++  guint reload_id;
++  gulong monitor_handler;
++} ThunarUserCss;
++
++static void
++thunar_user_css_parse_error (GtkCssProvider *provider,
++                             GtkCssSection *section,
++                             GError *error,
++                             gpointer data)
++{
++  (void) provider;
++  (void) section;
++  if (!g_error_matches (error, GTK_CSS_PROVIDER_ERROR, GTK_CSS_PROVIDER_ERROR_DEPRECATED))
++    *(gboolean *) data = TRUE;
++}
++
++static gboolean
++thunar_user_css_reload (gpointer data)
++{
++  ThunarUserCss *css = data;
++  GtkCssProvider *candidate = gtk_css_provider_new ();
++  gboolean invalid = FALSE;
++  GError *error = NULL;
++  gulong handler;
++  gboolean loaded;
++
++  css->reload_id = 0;
++  handler = g_signal_connect (candidate, "parsing-error",
++                              G_CALLBACK (thunar_user_css_parse_error), &invalid);
++  loaded = gtk_css_provider_load_from_path (candidate, css->path, &error);
++  /* Disconnect before retaining candidate: invalid is a stack variable. */
++  g_signal_handler_disconnect (candidate, handler);
++  if (!loaded || invalid)
++    g_warning ("Cannot refresh Thunar user CSS; keeping previous styling: %s",
++               error != NULL ? error->message : "invalid imported CSS");
++  g_clear_error (&error);
++  if (loaded && !invalid)
++    {
++      gtk_style_context_add_provider_for_screen (css->screen, GTK_STYLE_PROVIDER (candidate),
++                                                 GTK_STYLE_PROVIDER_PRIORITY_USER + 1);
++      if (css->provider != NULL)
++        gtk_style_context_remove_provider_for_screen (css->screen, GTK_STYLE_PROVIDER (css->provider));
++      g_clear_object (&css->provider);
++      css->provider = candidate;
++    }
++  else
++    g_object_unref (candidate);
++  return G_SOURCE_REMOVE;
++}
++
++static gboolean
++thunar_user_css_is_file (GFile *file)
++{
++  gchar *name;
++  gboolean matches;
++  if (file == NULL)
++    return FALSE;
++  name = g_file_get_basename (file);
++  matches = g_strcmp0 (name, "gtk.css") == 0 || g_strcmp0 (name, "thunar.css") == 0;
++  g_free (name);
++  return matches;
++}
++
++static void
++thunar_user_css_changed (GFileMonitor *monitor,
++                         GFile *file,
++                         GFile *other_file,
++                         GFileMonitorEvent event,
++                         gpointer data)
++{
++  ThunarUserCss *css = data;
++  (void) monitor;
++  if (!thunar_user_css_is_file (file) && !thunar_user_css_is_file (other_file))
++    return;
++  switch (event)
++    {
++    case G_FILE_MONITOR_EVENT_CHANGED:
++    case G_FILE_MONITOR_EVENT_CHANGES_DONE_HINT:
++    case G_FILE_MONITOR_EVENT_CREATED:
++    case G_FILE_MONITOR_EVENT_DELETED:
++    case G_FILE_MONITOR_EVENT_RENAMED:
++    case G_FILE_MONITOR_EVENT_MOVED_IN:
++    case G_FILE_MONITOR_EVENT_MOVED_OUT:
++      if (css->reload_id == 0)
++        css->reload_id = g_idle_add (thunar_user_css_reload, css);
++      break;
++    default:
++      break;
++    }
++}
++
++static void
++thunar_user_css_start (ThunarUserCss *css)
++{
++  GFile *file, *directory;
++  GdkScreen *screen = gdk_screen_get_default ();
++  if (screen == NULL)
++    return;
++  css->screen = g_object_ref (screen);
++  css->path = g_build_filename (g_get_user_config_dir (), "gtk-3.0", "gtk.css", NULL);
++  file = g_file_new_for_path (css->path);
++  directory = g_file_get_parent (file);
++  if (g_file_query_file_type (directory, G_FILE_QUERY_INFO_NONE, NULL) == G_FILE_TYPE_DIRECTORY)
++    css->monitor = g_file_monitor_directory (directory, G_FILE_MONITOR_WATCH_MOVES, NULL, NULL);
++  if (css->monitor != NULL)
++    css->monitor_handler = g_signal_connect (css->monitor, "changed",
++                                             G_CALLBACK (thunar_user_css_changed), css);
++  else
++    g_warning ("Cannot monitor existing GTK user CSS directory; live refresh unavailable");
++  /* Connect first: do not lose a write racing the initial load. */
++  thunar_user_css_reload (css);
++  g_object_unref (directory);
++  g_object_unref (file);
++}
++
++static void
++thunar_user_css_stop (ThunarUserCss *css)
++{
++  if (css->monitor != NULL)
++    {
++      g_signal_handler_disconnect (css->monitor, css->monitor_handler);
++      g_file_monitor_cancel (css->monitor);
++      g_clear_object (&css->monitor);
++    }
++  if (css->reload_id != 0)
++    {
++      g_source_remove (css->reload_id);
++      css->reload_id = 0;
++    }
++  if (css->provider != NULL)
++    gtk_style_context_remove_provider_for_screen (css->screen, GTK_STYLE_PROVIDER (css->provider));
++  g_clear_object (&css->provider);
++  g_clear_object (&css->screen);
++  g_clear_pointer (&css->path, g_free);
++}
++#endif

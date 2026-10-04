@@ -1,0 +1,48 @@
+--- a/src/caelestia/utils/theme.py
++++ b/src/caelestia/utils/theme.py
+@@ -313,7 +313,8 @@
+         atomic_write(gtk_config_dir / "gtk.css", gtk_template)
+         atomic_write(gtk_config_dir / "thunar.css", thunar_template)
+ 
+-    subprocess.run(["dconf", "write", "/org/gnome/desktop/interface/gtk-theme", "'adw-gtk3-dark'"])
++    gtk_theme = "adw-gtk3-dark" if mode == "dark" else "adw-gtk3"
++    subprocess.run(["dconf", "write", "/org/gnome/desktop/interface/gtk-theme", f"'{gtk_theme}'"])
+     subprocess.run(["dconf", "write", "/org/gnome/desktop/interface/color-scheme", f"'prefer-{mode}'"])
+     gtk_icon_theme = icon_theme if icon_theme is not None else f"Papirus-{mode.capitalize()}"
+     subprocess.run(["dconf", "write", "/org/gnome/desktop/interface/icon-theme", f"'{gtk_icon_theme}'"])
+--- a/src/caelestia/data/templates/gtk.css
++++ b/src/caelestia/data/templates/gtk.css
+@@ -15,7 +15,7 @@
+ @define-color sidebar_fg_color @window_fg_color;
+ @define-color sidebar_border_color @window_bg_color;
+ @define-color sidebar_backdrop_color @window_bg_color;
+-@define-color theme_selected_bg_color alpha(@accent_color, 0.15);
+-@define-color theme_selected_fg_color @primary;
++@define-color theme_selected_bg_color @accent_bg_color;
++@define-color theme_selected_fg_color @accent_fg_color;
+ 
+ @import "thunar.css";
+--- a/src/caelestia/data/templates/thunar.css
++++ b/src/caelestia/data/templates/thunar.css
+@@ -51,13 +51,17 @@
+     animation-delay: 250ms;
+ }
+ 
+-.thunar .frame.standard-view .view:not(.rubberband),
+-.thunar .frame.standard-view .view *:not(.rubberband) {
++.thunar .frame.standard-view .view:not(.rubberband):not(:selected) {
+     background-color: transparent;
+ }
+ 
+-.thunar .frame.standard-view .view *:selected {
+-    color: {{ $primary }};
++/* Both icon and detailed views, including unfocused and multi-selection. */
++.thunar .frame.standard-view .view:selected,
++.thunar .frame.standard-view .view:selected *,
++.thunar .frame.standard-view .view *:selected,
++.thunar .frame.standard-view .view *:selected * {
++    background-color: {{ $primary }};
++    color: {{ $onPrimary }};
+ }
+ 
+ .thunar .rubberband {

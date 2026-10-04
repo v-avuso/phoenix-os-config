@@ -65,7 +65,7 @@ profile/authentication access is unnecessary.
 | Session restore | Conservative hypr-persist prototype implemented; tests/full build pass; reboot acceptance deferred |
 | Kando | Implemented; exact upstream schema and fake-input checks pass; build/GUI acceptance recorded below |
 | Dynamic wallpaper/theme | Implemented; adapter checks and upstream package build pass; combined/manual acceptance below |
-| Thunar integration | Supported stack/theme defects investigated; implementation pending |
+| Thunar integration | Implemented; exact GTK/image fixtures pass; combined build and live acceptance below |
 
 ## Idle display — feat(display): blank idle monitors without DPMS
 
@@ -151,3 +151,35 @@ profile/authentication access is unnecessary.
   commands. Test missing-file fallback only with guaranteed file restoration,
   then restart the service and confirm the dynamic image returns. No live setter,
   theme change, asset rename or service action was performed overnight.
+
+## Thunar — fix(files): complete Thunar integration
+
+- Caelestia now chooses the matching light/dark GTK theme and generates opaque
+  palette-aware selection backgrounds. Thunar's scoped CSS monitor reloads valid
+  generated updates without another theme owner; invalid/missing CSS keeps the
+  last good provider. Source defects are verified, but the original live light
+  symptom still needs acceptance. Removing rules can require one restart because
+  GTK's original user provider stays loaded; the config directory must exist.
+- Use supported Thunar/xfconf, GVfs, Tumbler, archive/volume/media-tags plugins.
+  Engrampa is a shipped archive-plugin backend; Xarchiver has no shipped adapter.
+  This avoids a custom archive integration or full Xfce/KDE session. Middle-click
+  opens tabs, Ctrl+M toggles the initially hidden menu bar, and Thunar is the
+  directory MIME default. Persistent bookmarks/history/session state stay intact.
+- Four image actions produce JPEG/PNG/WebP/JXL copies beside their originals.
+  Existing files are never replaced; repeated/same-format inputs are skipped.
+  Conversion uses the existing ImageMagick dependency and stdin filenames, with
+  first-frame output, white JPEG transparency and lossless JXL defaults.
+- Exact patched GTK lifecycle/selection tests and mocked/real generated-image
+  tests pass, including light→dark→light, atomic imported-CSS updates, malformed
+  files, literal bracket/colon filenames, batch collisions and JXL pixel equality.
+  Metal/VM packaging assertions and the full combined metal build pass:
+  `/nix/store/dj708v9552l56byycd7fq0xjbhcc0vmv-nixos-system-phoenix-26.05.20260924.c508844`.
+  The built wrapper includes the three plugins; `engrampa.desktop` and ZIP tools
+  exist. Net system closure growth versus the previous Timewall build is about
+  70 MiB, including small Caja/MATE libraries but no full desktop/session.
+- After reviewed activation: test both theme directions, icon/list single and
+  Ctrl multi-selection in focused/unfocused windows; tabs/middle-click/Ctrl+M;
+  thumbnails and trash; removable/internal drives and Windows volumes when
+  present (unlock only with authorization). Create/extract multi-file ZIP;
+  convert temporary image selections in all four formats and verify originals;
+  inspect audio Properties metadata. No live mount/UI/service action was taken.

@@ -1,5 +1,8 @@
 * text=auto eol=lf
 
+# A blank context line in a unified diff consists of a required single space.
+*.patch whitespace=-blank-at-eol
+
 *.png binary
 *.jpg binary
 *.jpeg binary

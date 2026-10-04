@@ -13,13 +13,26 @@ let
   hyprlandPackages = inputs.nixpkgs-unstable.legacyPackages.${system};
   desktopScale = import ../config/desktop-scale.nix;
   idleBlackShader = pkgs.writeText "phoenix-idle-black.frag" (builtins.readFile ./idle-black.frag);
-  caelestiaShell = inputs.caelestia-shell.packages.${system}.with-cli.overrideAttrs (old: {
-    patches = (old.patches or [ ]) ++ [ ../patches/caelestia-u2f-lock.patch ];
-    postPatch = (old.postPatch or "") + ''
-      substituteInPlace assets/pam.d/u2f \
-        --replace-fail '@PAM_U2F_SO@' '${pkgs.pam_u2f}/lib/security/pam_u2f.so'
-    '';
-  });
+  # The CLI owns palette generation. Its custom patchPhase skips the standard
+  # patch hooks, so append explicitly and use this same CLI in both launch paths.
+  caelestiaCli =
+    inputs.caelestia-shell.inputs.caelestia-cli.packages.${system}.default.overrideAttrs
+      (old: {
+        patchPhase = old.patchPhase + ''
+          patch -p1 < ${../patches/caelestia-gtk-thunar.patch}
+        '';
+      });
+  caelestiaShell =
+    (inputs.caelestia-shell.packages.${system}.with-cli.override {
+      caelestia-cli = caelestiaCli;
+    }).overrideAttrs
+      (old: {
+        patches = (old.patches or [ ]) ++ [ ../patches/caelestia-u2f-lock.patch ];
+        postPatch = (old.postPatch or "") + ''
+          substituteInPlace assets/pam.d/u2f \
+            --replace-fail '@PAM_U2F_SO@' '${pkgs.pam_u2f}/lib/security/pam_u2f.so'
+        '';
+      });
 
   # Stop while the compositor still has clients: upstream SIGTERM saves their
   # final state before graceful shutdown starts closing applications.
@@ -165,6 +178,7 @@ in
     inputs.caelestia-shell.homeManagerModules.default
     ./hypr-persist.nix
     ./kando.nix
+    ./thunar.nix
     ./timewall.nix
   ];
 
@@ -188,7 +202,10 @@ in
     # Keep lifecycle ownership there so Home Manager config changes can be
     # handled by Caelestia's in-process settings watcher.
     systemd.enable = false;
-    cli.enable = true;
+    cli = {
+      enable = true;
+      package = caelestiaCli;
+    };
   };
 
   # Keep one Nix-owned baseline while leaving shell.json as a normal writable
@@ -229,10 +246,6 @@ in
     };
     "btop/btop.conf".source = dots + "/btop/btop.conf";
     "micro/settings.json".source = dots + "/micro/settings.json";
-    "Thunar" = {
-      source = dots + "/thunar";
-      recursive = true;
-    };
   };
 
   xdg.userDirs = {
@@ -269,7 +282,6 @@ in
     pwvucontrol
     ripgrep
     systemd
-    thunar
     trash-cli
     papirus-folders
     xdg-user-dirs

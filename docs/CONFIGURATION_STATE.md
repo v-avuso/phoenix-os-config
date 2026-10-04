@@ -74,6 +74,15 @@ Missing/broken assets fall back to generated black without repeated restarts;
 restore the asset and restart the wallpaper service to resume. Manual Caelestia
 changes remain possible; scheduled updates reassert the declared mode/frame.
 
+On metal, Thunar preferences use managed xfconf keys and its custom actions use
+one immutable `Thunar/uca.xml`; bookmarks, history and session state stay app-owned.
+Caelestia remains the sole palette/CSS generator. Its GTK theme name follows the
+mode, and Thunar watches the generated GTK3 CSS directory to replace a validated
+application-scoped provider. Invalid updates retain the last good palette.
+GTK's original user provider remains loaded, so removing CSS rules can require
+one Thunar restart. The watcher needs the GTK3 config directory at startup.
+Generic plugins/GVfs/thumbnails belong to the NixOS Thunar module, not Caelestia.
+
 ## Protected state and extension rules
 
 Never blanket-overwrite Firefox or Codex profiles, cookies, history, bookmarks,
