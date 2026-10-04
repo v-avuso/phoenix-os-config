@@ -6,6 +6,7 @@ Run from the repository root:
 python3 tests/mutable-json-settings.py
 python3 tests/mutable-settings-activation.py
 python3 tests/commands.py
+nix shell --inputs-from . nixpkgs#lua --command lua tests/idle-blank.lua home/idle-blank.lua home/idle-black.frag
 python3 -B tests/agent-admin.py
 python3 -B tests/agent-launch.py
 python3 -B tests/agent-review.py
@@ -39,6 +40,9 @@ nix eval --impure --file tests/desktop-services.nix
   firewall, and desktop-dependent PAM services with the intended U2F routes.
 - **Desktop evaluation:** asserts host-owned sessions, shared login/audio/power
   services, and absence of metal's retired KWin/reflow services.
+- **Idle fixture:** a Lua interpreter mocks compositor options to check snapshot
+  ownership, repeated callbacks, config reload and partial-write recovery. It
+  never changes the live shader, cursor, locking or DPMS.
 - **Agent broker fixtures:** fixed commands, argument rejection, output/deadline
   bounds, named tracing reads, xHCI wakeup round-trip, malformed requests, and
   symlink escape rejection. These use temporary trees and mocked subprocesses;

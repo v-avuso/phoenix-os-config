@@ -42,6 +42,12 @@ configuration directory, while extensions remain immutable and workspace/app
 state remains app-owned. Firefox needs a carefully selected preference
 allowlist before any such change.
 
+On metal, Caelestia owns the 300-second idle timeout. A black compositor shader
+and hidden cursor blank the display without DPMS or locking. Input restores the
+saved shader/cursor; a new shader owner is preserved. Hyprland config reload
+resets this temporary state. The immutable helper/shader keep this policy within
+the existing compositor and idle owner instead of adding another daemon.
+
 ## Protected state and extension rules
 
 Never blanket-overwrite Firefox or Codex profiles, cookies, history, bookmarks,

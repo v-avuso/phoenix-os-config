@@ -11,6 +11,7 @@ let
   system = pkgs.stdenv.hostPlatform.system;
   hyprlandPackages = inputs.nixpkgs-unstable.legacyPackages.${system};
   desktopScale = import ../config/desktop-scale.nix;
+  idleBlackShader = pkgs.writeText "phoenix-idle-black.frag" (builtins.readFile ./idle-black.frag);
   caelestiaShell = inputs.caelestia-shell.packages.${system}.with-cli.overrideAttrs (old: {
     patches = (old.patches or [ ]) ++ [ ../patches/caelestia-u2f-lock.patch ];
     postPatch = (old.postPatch or "") + ''
@@ -27,7 +28,21 @@ let
     # handles display blanking separately; do not lock or power off outputs.
     general.idle = {
       lockBeforeSleep = true;
-      timeouts = [ ];
+      timeouts = [
+        {
+          timeout = 300;
+          onTimeout = [
+            "${hyprlandPackages.hyprland}/bin/hyprctl"
+            "eval"
+            "phoenix_idle_blank(true)"
+          ];
+          onResume = [
+            "${hyprlandPackages.hyprland}/bin/hyprctl"
+            "eval"
+            "phoenix_idle_blank(false)"
+          ];
+        }
+      ];
     };
 
     session.commands.logout = [
@@ -88,7 +103,13 @@ let
 
   renderLuaTable = attrs: toLua attrs;
 
+  idleBlankLua =
+    builtins.replaceStrings [ "@IDLE_BLACK_SHADER@" ] [ (builtins.toJSON (toString idleBlackShader)) ]
+      (builtins.readFile ./idle-blank.lua);
+
   hyprUser = ''
+    ${idleBlankLua}
+
     hl.monitor({
       output = "DP-1",
       mode = "3840x2160@144",

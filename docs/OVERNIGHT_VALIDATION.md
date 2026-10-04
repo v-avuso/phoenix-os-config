@@ -49,8 +49,22 @@ profile/authentication access is unnecessary.
 | Task | Status |
 | --- | --- |
 | Music namespace | Implemented; full metal build and all-host evaluation pass; runtime pending |
-| Idle shader | Read-only plan complete; implementation next; monitor tests deferred |
+| Idle shader | Implemented; full metal build and all-host evaluation pass; monitor tests deferred |
 | Session restore | Unsafe hyprsession startup rejected; maintained alternative under review |
 | Kando | Exact 2.3 schema/shortcuts/debounce plan investigated; implementation pending |
 | Dynamic wallpaper/theme | Pending |
 | Thunar integration | Pending |
+
+## Idle display — feat(display): blank idle monitors without DPMS
+
+- Caelestia blanks after 300 seconds using an opaque black compositor shader,
+  hiding the cursor without locking or changing DPMS. Wake restores the previous
+  shader while it is still owned, and restores cursor visibility independently.
+- Pinned Hyprland 0.56.2 recreates Lua/config state on reload; fixtures cover
+  this reset, helper re-execution, competing shaders and partial apply recovery.
+  Lua fixtures, all-host evaluation and full metal build pass; built system:
+  `/nix/store/l0md58kxk21sjzyg9pwk21699n9lwqgy-nixos-system-phoenix-26.05.20260924.c508844`.
+- Tomorrow after reviewed activation: idle all three monitors, wake with mouse
+  and keyboard, verify cursor return and existing inhibition/night-light
+  behavior. Reload the config while blanked; it should clear blanking. No live
+  shader, DPMS, lock or monitor action was performed overnight.
