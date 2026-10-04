@@ -40,7 +40,7 @@ profile/authentication access is unnecessary.
   observed pinned-CLI compaction before accepting a verdict. All 27 guard fixtures
   pass; fresh protected review and persistent installation now pass without Polkit.
   Existing reviewer login is retained; no new OAuth sign-in is required.
-- Conditional shared history support is prepared using upstream SQLite/session/
+- Conditional shared history support is installed using upstream SQLite/session/
   writer locations, without a custom importer. Enable only after a coordinated
   exit of all writers; browser profiles and refresh ownership stay separate.
   Real shared listing/resume/archive/writer exclusion remain pending; retained
@@ -87,7 +87,7 @@ profile/authentication access is unnecessary.
   Live hover mode/distance/no-warp match; the user confirms no pointer jumping
   but held selection still fails on that installed version. A follow-up detector
   correction and 100px distance pass the regression and packaging checks;
-  final activation and physical acceptance remain pending.
+  protected persistent activation now passes; physical acceptance remains pending.
   Psysonic playback is accepted. No reboot or live display blanking occurred. Private notes remain read-only; this guide
   tracks their acceptance.
 

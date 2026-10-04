@@ -13,14 +13,24 @@ merged; no Native profile or previous implementation was discarded.
 
 ## Current follow-up
 
-Protected persistent switch of `b473516` installed the held Kando gesture and
-expanded review guards without Polkit. Runtime and next boot both match
-`/nix/store/wrwx1bclidyfkpgiyqnyw8872q7gxf4w-nixos-system-phoenix-26.05.20260924.c508844`;
-source is `/nix/store/r79f6dlcniv2qqahnd2dlyxgyjsixkl8-source`. Live Kando distance/
-hover settings and Hyprland no-warp match. Physical gesture testing is pending;
-Psysonic audible playback is now user-confirmed. Conditional shared history is
-prepared but remains inactive pending the coordinated cold handoff described in
-[the operating guide](AGENT_SANDBOX.md).
+Protected persistent switch of `cdb3b64` installed conditional shared-history
+support and the current-event Kando detector correction without Polkit. Runtime
+and next boot both match
+`/nix/store/p0r9drdxzgbgs3w5r6n081vv5vf1vqqs-nixos-system-phoenix-26.05.20260924.c508844`;
+source is `/nix/store/11a9f348ykp0qsmn8y8rjzdwfqaw6wkj-source`. Controller audit
+records build → independent review → approval → activation. Live Kando hover/no-
+confirmation/100px settings match, and its service restarted on switch. The user
+confirmed no pointer jumping but the previous 200px build failed held selection;
+physical acceptance of this corrected build is pending. Psysonic audible playback
+is user-confirmed. The stale Caelestia shell was refreshed gracefully; live IPC
+exposes idle activate/restore, while actual blank/wake remains pending.
+
+Shared-history support is installed but inactive. Its actual cold preflight
+correctly refuses the current same-user Codex writers; no data was migrated and
+the current Native conversation remains alive. Enable only through the
+coordinated cold handoff in [the operating guide](AGENT_SANDBOX.md), then verify
+listing/resume/archive and same-task writer exclusion. Legacy sandbox containers
+and Native source databases are retained rather than silently merged.
 
 ## Initial accepted source
 
