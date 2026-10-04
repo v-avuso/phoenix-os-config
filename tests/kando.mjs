@@ -84,14 +84,19 @@ const math = compile(read('src/common/math/index.ts'), {'.': {}});
 const common = {SelectionSource: {eGesture: 0, eClick: 1}};
 const input = compile(read('src/menu-renderer/input-methods/input-method.ts'),
   {'../../common': common});
-class GestureDetector {
-  on() {} reset() {} onMotionEvent() {}
-}
+const {EventEmitter} = await import('node:events');
+const {GestureDetector} = compile(read('src/menu-renderer/input-methods/gesture-detector.ts'), {
+  events: {EventEmitter}, '../../common/math': math, '../../common': common,
+});
 const {PointerInput} = compile(read('src/menu-renderer/input-methods/pointer-input.ts'), {
   '../../common/math': math, '../../common': common,
   './input-method': input, './gesture-detector': {GestureDetector},
 });
-globalThis.MouseEvent = class {};
+globalThis.MouseEvent = class {
+  constructor(x, y) {this.clientX = x; this.clientY = y;}
+  preventDefault() {} stopPropagation() {}
+};
+globalThis.requestAnimationFrame = callback => callback();
 globalThis.TouchEvent = class {};
 const pointer = new PointerInput();
 let selects = 0, cancels = 0;
@@ -129,7 +134,6 @@ const appSource = read('src/main/app.ts');
 const begin = appSource.indexOf('  private shortcutHold:');
 const end = appSource.indexOf("    this.backend.on('shortcutPressed'", begin);
 const {HoldApp} = compile(`export class HoldApp {${appSource.slice(begin, end)} } }`);
-const {EventEmitter} = await import('node:events');
 const app = new HoldApp();
 app.backend = new EventEmitter();
 const messages = [];
@@ -235,3 +239,32 @@ assert.deepEqual(backendEdges, [
   ['global-menu', true], ['global-menu', false], ['keyboard-menu', 'ordinary'],
 ]);
 console.log('Kando: exact Hyprland backend preserves portal edges and ordinary/inhibited triggers');
+
+// Execute the real upstream detector/PointerInput motion path. In marking mode
+// a straight gesture cannot select a leaf while held; hover mode can, using
+// Kando's fixedStrokeLength + centerDeadZone distance (no synthetic click).
+assert.equal(data.settings.fixedStrokeLength, 150);
+assert.ok(parsed.menus.every(m => m.hoverMode === true));
+function straightHold(hoverMode) {
+  const input = new PointerInput();
+  const selections = [];
+  input.onSelection((position, type) => selections.push({position, type}));
+  input.enableHoverMode = hoverMode;
+  input.gestureDetector.fixedStrokeLength = data.settings.fixedStrokeLength;
+  input.gestureDetector.centerDeadZone = 50;
+  input.onShowMenu(false, true);
+  input.setCurrentCenter({x:100, y:100}, 50);
+  input.ignoreMotionEvents = 0;
+  input.onMotionEvent(new MouseEvent(100, -90)); // 190px: inside 200px stroke threshold
+  input.onMotionEvent(new MouseEvent(100, -95));
+  assert.equal(selections.length, 0, 'no premature selection inside default combined distance');
+  input.onMotionEvent(new MouseEvent(100, -115)); // 215px
+  input.onMotionEvent(new MouseEvent(100, -120)); // detector confirms previous sample
+  assert.equal(input.shortcutHeld, true, 'selection occurs before physical release');
+  assert.equal(selections.length, 1);
+  input.gestureDetector.reset();
+  return selections[0];
+}
+assert.equal(straightHold(false).type, input.SelectionType.eSubmenuOnly, 'old mode waits for leaf confirmation');
+assert.equal(straightHold(true).type, input.SelectionType.eActiveItem, 'configured hover mode executes leaf without click/release');
+console.log('Kando: real upstream straight hold-distance selects final action without another click');

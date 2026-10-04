@@ -18,7 +18,9 @@ let
     enableDarkModeForMenuThemes = true;
     enableMarkingMode = true;
     enableTurboMode = true;
-    fixedStrokeLength = 0;
+    # Upstream distance-based hover selection: default 150px stroke plus its
+    # 50px center dead zone. The portal hold still owns release/cancellation.
+    fixedStrokeLength = 150;
     keepInputFocus = false;
     warpMouse = false;
     enableAchievements = false;
@@ -63,7 +65,9 @@ let
       shortcut = "";
       centered = false;
       anchored = false;
-      hoverMode = false;
+      # Hover mode lets GestureDetector select final actions while the opening
+      # mouse button is held; marking/turbo modes select only submenus this way.
+      hoverMode = true;
       root = {
         inherit name children;
         type = "submenu";
