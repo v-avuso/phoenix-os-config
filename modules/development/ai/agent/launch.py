@@ -1,15 +1,45 @@
 """Trusted host launcher. None of its state/control sockets enters the sandbox."""
 import fcntl
+import ctypes
 import hashlib
 import json
 import os
 import re
 import shlex
+import signal
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import uuid
+
+
+def locked_transport(command, env, lock):
+    """Hold the host lifecycle lock; transport dies if the relay kills us."""
+    parent = os.getpid()
+
+    def attach_to_parent():
+        # Linux PR_SET_PDEATHSIG needs no privilege. Close the fork/parent-exit
+        # race before executing SSH, which may close inherited lock descriptors.
+        if ctypes.CDLL(None).prctl(1, signal.SIGTERM, 0, 0, 0) != 0:
+            os._exit(126)
+        if os.getppid() != parent:
+            os.kill(os.getpid(), signal.SIGTERM)
+
+    child = subprocess.Popen(command, env=env, preexec_fn=attach_to_parent)
+    previous = signal.signal(signal.SIGTERM, lambda *_: child.terminate())
+    try:
+        return child.wait()
+    finally:
+        if child.poll() is None:
+            child.terminate()
+            try:
+                child.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                child.kill()
+                child.wait()
+        signal.signal(signal.SIGTERM, previous)
+        os.close(lock)
 
 
 def main(config, args):
@@ -41,6 +71,28 @@ def main(config, args):
             raise SystemExit("Phoenix sandbox setup failed (" + command[1] + "). "
                              "Inspect the gateway journal using Native Codex.")
         return result
+
+    history = {"active": False}
+    history_lock = None
+    if config.get("historyLock"):
+        history_lock = os.open(config["historyLock"], os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+        try:
+            fcntl.flock(history_lock, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        except BlockingIOError:
+            os.close(history_lock)
+            raise SystemExit("Cold history handoff is in progress; retry after it completes.") from None
+    if config.get("historyCommand"):
+        selected = run(config["historyCommand"], check=False)
+        if selected.returncode:
+            raise SystemExit("Phoenix history readiness failed; repair the cold handoff through Native administration before launching.")
+        history = json.loads(selected.stdout)
+        if history.get("active"):
+            config = config | {"policy": config["sharedPolicy"], "mounts": config["sharedMounts"]}
+            if any(value.split("=", 1)[0].strip().split(".")[-1] == "sqlite_home"
+                   and index and args[index - 1] in ("-c", "--config")
+                   or value.startswith("--config=") and value.removeprefix("--config=").split("=", 1)[0].strip().split(".")[-1] == "sqlite_home"
+                   for index, value in enumerate(args)):
+                raise SystemExit("Shared history does not accept sqlite_home overrides.")
 
     with open(state / "launch.lock", "a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
@@ -168,6 +220,10 @@ def main(config, args):
         workdir = config["default_workdir"]
     execution = cli + ["sandbox", "exec", "--name", name, "--no-login-shell",
                        "--env", "PHOENIX_CODEX_ACCOUNT_ID=" + account_id]
+    history_env = (["CODEX_HOME=" + history["codexHome"], "CODEX_SQLITE_HOME=" + history["sqliteHome"]]
+                   if history["active"] else [])
+    for assignment in history_env:
+        execution += ["--env", assignment]
     if app_server:
         execution += ["--no-tty"]
     execution += ["--workdir", workdir, "--"]
@@ -202,7 +258,7 @@ def main(config, args):
         # with no host SSH configuration, keys, agent, or terminal involved.
         proxy = shlex.join(cli + ["ssh-proxy", "--gateway-name", "openshell", "--name", name])
         remote = "cd " + shlex.quote(workdir) + " && exec " + shlex.join(
-            ["/bin/env", "PHOENIX_CODEX_ACCOUNT_ID=" + account_id] + command)
+            ["/bin/env", "PHOENIX_CODEX_ACCOUNT_ID=" + account_id] + history_env + command)
         ssh = [config["ssh"], "-F", "/dev/null", "-T", "-o", "BatchMode=yes",
                "-o", "IdentityAgent=none", "-o", "IdentityFile=none", "-o", "IdentitiesOnly=yes",
                "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
@@ -210,8 +266,14 @@ def main(config, args):
                "-o", "SetEnv=OPENSHELL_NO_LOGIN_SHELL=1",
                "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3",
                "-o", "ProxyCommand=" + proxy, "sandbox", remote]
+        if history_lock is not None:
+            # SSH may close inherited descriptors. Keep the private lifecycle
+            # lock in this host parent for the full duplex transport lifetime.
+            return locked_transport(ssh, env, history_lock)
         os.execve(config["ssh"], ssh, env)
     else:
+        if history_lock is not None:
+            return locked_transport(execution + command, env, history_lock)
         os.execve(config["openshell"], execution + command, env)
 
 

@@ -1,6 +1,7 @@
 {
   config,
   codexCliPackage,
+  phoenixAgentHistoryConfig,
   inputs,
   pkgs,
   user,
@@ -26,7 +27,8 @@ let
     nativeBuildInputs = [ pkgs.makeWrapper ];
     postBuild = ''
       rm "$out/bin/codex-desktop"
-      makeWrapper "${base}/bin/codex-desktop" "$out/bin/codex-desktop" \
+      makeWrapper "${pkgs.python3}/bin/python3" "$out/bin/codex-desktop" \
+        --add-flags "-I ${../development/ai/agent/history-runtime.py} ${phoenixAgentHistoryConfig} -- ${base}/bin/codex-desktop" \
         --set-default CODEX_OZONE_PLATFORM auto
       desktopFile="$out/share/applications/codex-desktop.desktop"
       target="$(readlink -f "$desktopFile")"

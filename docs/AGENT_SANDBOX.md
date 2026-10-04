@@ -49,8 +49,8 @@ Sandbox and Native browser profiles are separate. Chromium uses profile locks
 and process-singleton routing; sharing that directory can redirect a sandbox
 launch to the existing Native window. This is distinct from Codex task storage,
 which upstream supports sharing with SQLite WAL and per-thread writer locks.
-Native task history is currently not shared, an outstanding usability limitation,
-not an anonymity requirement. The GUI
+Native task history stays separate until the explicit cold handoff below; this
+is a migration constraint, not an anonymity requirement. The GUI
 profile and sandbox/reviewer logins require initial user participation. Saved
 credentials survive launches; diagnostic failures do not trigger another login.
 The gateway remains the sole owner of sandbox OAuth refresh. A fixed HTTP
@@ -71,21 +71,26 @@ four supported desktop preferences from Native `config.toml`; these become fixed
 scalar Codex overrides. Permission modes, endpoints, commands, MCP servers and
 plugins are excluded. The worker never receives or mounts that Native file.
 The CLI TUI retains its own configuration; this is selective GUI settings reuse,
-not shared profiles or shared Native task history. Sandbox tasks persist in the
+not shared browser profiles. Task history sharing is enabled separately below. Sandbox tasks persist in the
 managed OpenShell instance across GUI close/reopen; the GUI retains its own private
 display state. Changing the sandbox declaration can select a new instance rather
 than import earlier tasks. Native scalar model/display settings are reread each
 time the GUI starts an app-server, not continuously synchronized while it runs.
 
-The preferred history-sharing route is upstream `sqlite_home`/`CODEX_SQLITE_HOME`
+The conditional history-sharing integration uses upstream `sqlite_home`/`CODEX_SQLITE_HOME`
 in a dedicated credential-free directory, plus shared sessions, archived sessions
 and writer locks at identical absolute paths. This avoids a custom synchronization
 or import framework. It grants access to all stored task history, including future
 tasks outside the coding workspaces; project filters are not security boundaries.
-Migration requires a coordinated exit of Native and sandbox writers, preserving
-existing state and a rollback route. It is not implemented or safe to perform by
-copying live databases during this task. Browser profiles and OAuth refresh owners
-can remain separate while project history is shared.
+Sharing remains inactive until a coordinated exit of Native and sandbox writers.
+`codex-history-enable` performs a cold preflight; explicit `--apply` uses SQLite
+backup to prepare credential-free databases and atomically publishes readiness.
+Original Native databases and old sandbox containers remain intact; old sandbox
+tasks are not merged. Browser profiles and OAuth refresh owners stay separate.
+See the [handoff and rationale](../modules/development/ai/agent/history-layout.md)
+for locking, interrupted preparation recovery, unsupported overrides and required
+listing/resume/archive/writer-exclusion checks. Do not run the handoff from a
+Native conversation that must remain alive.
 
 ## Boundaries and initial access
 

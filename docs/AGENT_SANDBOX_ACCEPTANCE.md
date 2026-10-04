@@ -11,7 +11,18 @@ reviewed unattended test/switch have runtime acceptance.**
 Native remains the repair route. Music and engineering guidance from `main` are
 merged; no Native profile or previous implementation was discarded.
 
-## Installed source
+## Current follow-up
+
+Protected persistent switch of `b473516` installed the held Kando gesture and
+expanded review guards without Polkit. Runtime and next boot both match
+`/nix/store/wrwx1bclidyfkpgiyqnyw8872q7gxf4w-nixos-system-phoenix-26.05.20260924.c508844`;
+source is `/nix/store/r79f6dlcniv2qqahnd2dlyxgyjsixkl8-source`. Live Kando distance/
+hover settings and Hyprland no-warp match. Physical gesture testing is pending;
+Psysonic audible playback is now user-confirmed. Conditional shared history is
+prepared but remains inactive pending the coordinated cold handoff described in
+[the operating guide](AGENT_SANDBOX.md).
+
+## Initial accepted source
 
 Protected persistent switch of commit
 `ed913e5497192dff0a3d8165798380856d409177` succeeded without Polkit:
@@ -68,9 +79,10 @@ snapshot excludes it. Native credentials/profile and prior work were preserved.
 
 ## Unattended follow-up
 
-Post-acceptance relay hardening is committed but not activated. Its temporary
-fixtures pass; [overnight notes](OVERNIGHT_VALIDATION.md) list next-day checks.
-The installed source/runtime above still describes the accepted first iteration.
+Post-acceptance relay hardening and review-capacity changes are now installed.
+Focused fixtures and a fresh protected deployment pass;
+[overnight notes](OVERNIGHT_VALIDATION.md) distinguish remaining physical checks
+from the initial GUI acceptance evidence above.
 
 ## Later work
 

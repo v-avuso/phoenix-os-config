@@ -7,7 +7,7 @@ import sys
 import time
 import uuid
 
-home = Path(os.environ["HOME"]) / ".codex"
+home = Path(os.environ.get("CODEX_HOME", str(Path(os.environ["HOME"]) / ".codex")))
 home.mkdir(mode=0o700, parents=True, exist_ok=True)
 encode = lambda value: base64.urlsafe_b64encode(json.dumps(value).encode()).decode().rstrip("=")
 now = int(time.time())

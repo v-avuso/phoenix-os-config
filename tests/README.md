@@ -9,6 +9,7 @@ python3 tests/commands.py
 nix shell --inputs-from . nixpkgs#lua --command lua tests/idle-blank.lua home/idle-blank.lua home/idle-black.frag
 python3 -B tests/agent-admin.py
 python3 -B tests/agent-launch.py
+python3 -B tests/agent-history.py
 python3 -B tests/agent-review.py
 python3 -B tests/agent-gui.py
 python3 -B tests/agent-gui-profile.py
@@ -81,6 +82,10 @@ nix eval --impure --file tests/desktop-services.nix
   symlink escape rejection. These use temporary trees and mocked subprocesses;
   real systemd socket activation, root diagnostics, sysfs writes, and auditing
   require the [agent acceptance pass](../docs/AGENT_SANDBOX_ACCEPTANCE.md).
+- **History fixtures:** disposable homes verify SQLite WAL backup, source and
+  credential preservation, cold-writer refusal, lifecycle exclusion, interrupted
+  staging recovery and conditional locations. Real listing/resume/archive and
+  cross-client task writer exclusion require a coordinated cold handoff.
 - **Agent launcher/review/GUI fixtures:** fail-closed stdio and login setup,
   frozen Git source, rejected/stale verdicts, process bounds, unsafe Git helper
   suppression, private profile/environment validation and real fixed-command socket relays.

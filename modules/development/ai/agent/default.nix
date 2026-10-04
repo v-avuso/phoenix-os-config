@@ -48,7 +48,7 @@ let
       };
     };
   };
-  policy = yaml.generate "phoenix-openshell-policy.yaml" {
+  policyContents = {
     version = 1;
     filesystem_policy = {
       include_workdir = false;
@@ -174,8 +174,17 @@ let
       };
     };
   };
-  driverConfig = pkgs.writeText "phoenix-openshell-mounts.json" (
-    builtins.toJSON {
+  policy = yaml.generate "phoenix-openshell-policy.yaml" policyContents;
+  historyRoot = "${state}/history";
+  historyDirectories = map (name: "${user.homeDirectory}/.codex/${name}") [ "sessions" "archived_sessions" "thread-writer-locks" ] ++ [ "${historyRoot}/sqlite" ];
+  sharedPolicy = yaml.generate "phoenix-openshell-shared-history-policy.yaml" (policyContents // {
+    filesystem_policy = policyContents.filesystem_policy // {
+      # The canonical parent is private image state: only the three listed
+      # children are host binds. Opaque auth remains private in this parent.
+      read_write = policyContents.filesystem_policy.read_write ++ historyDirectories ++ [ "${user.homeDirectory}/.codex" ];
+    };
+  });
+  mountsContents = {
       podman.mounts =
         (map (path: {
           type = "bind";
@@ -210,8 +219,19 @@ let
             read_only = true;
           }
         ];
-    }
-  );
+  };
+  driverConfig = pkgs.writeText "phoenix-openshell-mounts.json" (builtins.toJSON mountsContents);
+  sharedDriverConfig = pkgs.writeText "phoenix-openshell-shared-history-mounts.json" (builtins.toJSON {
+    podman.mounts = mountsContents.podman.mounts ++ map (path: {
+      type = "bind"; source = path; target = path; read_only = false;
+    }) historyDirectories;
+  });
+  historyConfig = pkgs.writeText "phoenix-codex-history.json" (builtins.toJSON {
+    nativeHome = "${user.homeDirectory}/.codex";
+    root = historyRoot;
+    transportHelper = toString ./launch.py;
+  });
+  historyCommand = [ "${pkgs.python3}/bin/python3" "-I" (toString ./history-runtime.py) (toString historyConfig) ];
   launcherConfig = pkgs.writeText "phoenix-openshell-launcher.json" (
     builtins.toJSON {
       openshell = "${packages.cli}/bin/openshell";
@@ -222,6 +242,10 @@ let
       image = toString image;
       policy = toString policy;
       mounts = toString driverConfig;
+      historyCommand = historyCommand;
+      historyLock = "${state}/history.lock";
+      sharedPolicy = toString sharedPolicy;
+      sharedMounts = toString sharedDriverConfig;
       profile = toString (
         pkgs.writeText "phoenix-codex-provider.yaml" (
           builtins.replaceStrings [ "@CODEX_BINARY@" ] [ "${codexCliPackage}/bin/codex" ] (
@@ -245,10 +269,13 @@ let
     exec ${pkgs.python3}/bin/python3 -I ${./launch.py} ${launcherConfig} "$@"
   '';
   native = pkgs.writeShellScriptBin "codex-native" ''
-    exec ${codexCliPackage}/bin/codex "$@"
+    exec ${pkgs.python3}/bin/python3 -I ${./history-runtime.py} ${historyConfig} -- ${codexCliPackage}/bin/codex "$@"
   '';
   login = pkgs.writeShellScriptBin "codex-sandbox-login" ''
     exec ${pkgs.python3}/bin/python3 -I ${./launch.py} ${launcherConfig} --phoenix-login
+  '';
+  historyEnable = pkgs.writeShellScriptBin "codex-history-enable" ''
+    exec ${pkgs.python3}/bin/python3 -I ${./history-runtime.py} --cold-preflight "$@" ${historyConfig}
   '';
   sandboxExec = pkgs.writeShellScriptBin "codex-sandbox-exec" ''
     exec ${pkgs.python3}/bin/python3 -I ${./launch.py} ${launcherConfig} --phoenix-exec "$@"
@@ -298,6 +325,7 @@ in
     };
   };
   config = {
+    _module.args.phoenixAgentHistoryConfig = historyConfig;
     _module.args.phoenixAgentImage = image;
     _module.args.phoenixAgentPackages = packages;
     _module.args.phoenixAgentLauncherConfig = launcherConfig;
@@ -308,6 +336,7 @@ in
       native
       login
       sandboxExec
+      historyEnable
     ];
     environment.etc."phoenix-openshell/gateway.toml".source = gatewayConfig;
     virtualisation.podman.enable = true;

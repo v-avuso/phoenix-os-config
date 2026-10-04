@@ -38,11 +38,13 @@ profile/authentication access is unnecessary.
   tokens / 95% effective context. The new declaration admits 768 KiB source and
   independently bounds complete instruction plus schema at 1 MiB, rejecting
   observed pinned-CLI compaction before accepting a verdict. All 27 guard fixtures
-  pass; real review and deliberately authorized installation remain pending.
+  pass; fresh protected review and persistent installation now pass without Polkit.
   Existing reviewer login is retained; no new OAuth sign-in is required.
-- Native history is still separate. Prefer upstream shared SQLite/session/writer
-  storage over a custom importer, after a coordinated exit of all writers; browser
-  profiles and refresh ownership stay separate. See the long-term sandbox guide.
+- Conditional shared history support is prepared using upstream SQLite/session/
+  writer locations, without a custom importer. Enable only after a coordinated
+  exit of all writers; browser profiles and refresh ownership stay separate.
+  Real shared listing/resume/archive/writer exclusion remain pending; retained
+  sandbox histories are not silently merged. See the long-term sandbox guide.
 
 ## Daytime feedback and refinement
 
@@ -59,10 +61,12 @@ profile/authentication access is unnecessary.
   Remaining silence was its PipeWire stream gain at 0%, while internal gain was
   100% and the default speaker remained 30%. Restored only that verified stream
   to 100%; recreating it retained the gain through WirePlumber. App stays open,
-  paused; user audible confirmation is outstanding. No reboot is needed.
+  paused; the user subsequently confirmed audible playback. No reboot is needed.
 - Idle integration used unsupported callback names; corrected to the exact schema.
   `idle` is Python IDLE, so the new command is `blank` (`blank off` restores).
-  Source/API/state fixtures pass; actual idle/manual blank and wake remain pending.
+  Source/API/state fixtures pass. A live check found the installed wrapper lacks
+  its patched idle IPC target; package integration is being corrected before
+  shell reload and actual blank/wake acceptance.
 - Kando now uses portal release for held gestures, valid key names, swapped mouse
   bindings, no pointer warp, and upward F11 in Firefox/both ChatGPT variants.
   Patched package/gesture lifecycle fixtures pass; physical input testing is pending.
@@ -76,9 +80,11 @@ profile/authentication access is unnecessary.
   broader archive plugin. Safety/packaging fixtures pass; inspect live menus after
   activation. Native scaling now uses upstream Wayland detection on direct launch,
   including session restore; verify font size after reopen, then later after reboot.
-- No reboot, live display blanking or desktop-service restart was performed during
-  this follow-up. Combine activation and physical checks once the gate transition
-  is authorized. Private notes remain read-only; this guide tracks their acceptance.
+- Protected persistent switch installed the held-gesture changes without Polkit;
+  Kando alone was restarted. Live hover mode, distance and compositor no-warp
+  settings match. Physical gesture/playback checks remain pending. No reboot or
+  live display blanking occurred. Private notes remain read-only; this guide
+  tracks their acceptance.
 
 ## Music namespace — feat(music): add Psysonic and Navidrome
 

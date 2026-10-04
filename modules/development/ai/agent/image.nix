@@ -71,13 +71,14 @@ pkgs.dockerTools.buildLayeredImage {
   ];
   includeNixDB = true;
   extraCommands = ''
-    mkdir -p sandbox tmp dev sys run/phoenix-admin run/phoenix-deploy home/v
+    mkdir -p sandbox tmp dev sys run/phoenix-admin run/phoenix-deploy home/v/.codex
+    chmod 700 home/v/.codex
     chmod 1777 tmp
   '';
   # This /nix store belongs to the isolated image, never the host store. Nix
   # single-user evaluation/builds stay inside OpenShell's process/network fence.
   fakeRootCommands = ''
-    chown 1000:1000 sandbox
+    chown 1000:1000 sandbox home/v home/v/.codex
     # Sticky, root-owned store: the single-user builder can add paths, but
     # cannot rename/replace the root-owned tool closures used by egress rules.
     chmod 1777 nix/store

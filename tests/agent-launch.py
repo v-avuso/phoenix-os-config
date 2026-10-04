@@ -7,6 +7,7 @@ import shlex
 from pathlib import Path
 import subprocess
 import tempfile
+import sys
 import unittest
 from unittest import mock
 
@@ -127,6 +128,56 @@ class LauncherFixture(unittest.TestCase):
                 launch.main(self.config, [])
         self.assertNotIn("secret", str(failure.exception))
         execute.assert_not_called()
+
+    def test_ready_history_selects_shared_mounts_and_both_transport_environments(self):
+        self.config.update(historyCommand=["/fixed/history"], sharedPolicy="/fixed/shared-policy", sharedMounts=str(self.root / "shared-mounts"))
+        (self.root / "shared-mounts").write_text('{"shared":true}')
+        def shared(command, **kwargs):
+            if command == self.config["historyCommand"]:
+                return subprocess.CompletedProcess(command, 0, stdout=b'{"active":true,"codexHome":"/home/v/.codex","sqliteHome":"/shared/sqlite"}', stderr=b'')
+            if command[1:4] == ["--color=never", "sandbox", "get"]:
+                return subprocess.CompletedProcess(command, 1, stdout=b'', stderr=b'')
+            return self.success(command, **kwargs)
+        for args in (["app-server"], []):
+            with mock.patch.object(launch.subprocess, "run", side_effect=shared) as run, \
+                 mock.patch.object(launch.Path, "is_socket", return_value=True), \
+                 mock.patch.object(launch.os, "execve") as execute:
+                launch.main(self.config, args)
+            argv = execute.call_args.args[1]
+            effective = shlex.split(argv[-1]) if args else argv
+            self.assertIn("CODEX_HOME=/home/v/.codex", effective)
+            self.assertIn("CODEX_SQLITE_HOME=/shared/sqlite", effective)
+            creation = next(call.args[0] for call in run.call_args_list if "create" in call.args[0])
+            self.assertIn("/fixed/shared-policy", creation)
+            self.assertIn('{"shared":true}', creation)
+
+    def test_history_failure_precedes_gateway_or_instance_changes(self):
+        self.config["historyCommand"] = ["/fixed/history"]
+        with mock.patch.object(launch.subprocess, "run", return_value=subprocess.CompletedProcess(["/fixed/history"], 1, stdout=b'', stderr=b'')) as run:
+            with self.assertRaises(SystemExit):
+                launch.main(self.config, [])
+        self.assertEqual(run.call_count, 1)
+
+    def test_supervised_transport_dies_when_test_parent_is_killed(self):
+        script = ('import importlib.util,os,sys; '
+                  'spec=importlib.util.spec_from_file_location("l",sys.argv[1]); '
+                  'l=importlib.util.module_from_spec(spec); spec.loader.exec_module(l); '
+                  'fd=os.open(sys.argv[2],os.O_RDWR|os.O_CREAT,0o600); '
+                  'l.fcntl.flock(fd,l.fcntl.LOCK_SH); '
+                  'child="import signal,sys; signal.signal(signal.SIGTERM,lambda *_:(print(\\\"stopped\\\",flush=True),sys.exit(0))); print(\\\"ready\\\",flush=True); signal.pause()"; '
+                  'l.locked_transport([sys.executable,"-c",child],dict(os.environ),fd)')
+        process = subprocess.Popen([sys.executable, "-c", script, str(ROOT / "modules/development/ai/agent/launch.py"), str(self.root / "history.lock")],
+                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            self.assertEqual(process.stdout.readline().strip(), "ready")
+            process.kill()  # Only this synthetic parent; no desktop process.
+            output, errors = process.communicate(timeout=5)
+            self.assertIn("stopped", output)
+            self.assertEqual(errors, "")
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.communicate(timeout=5)
 
     def test_unavailable_broker_fails_closed(self):
         with mock.patch.object(launch.subprocess, "run", side_effect=self.success), \
