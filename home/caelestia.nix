@@ -165,6 +165,7 @@ in
     inputs.caelestia-shell.homeManagerModules.default
     ./hypr-persist.nix
     ./kando.nix
+    ./timewall.nix
   ];
 
   phoenix.kando.enable = true;

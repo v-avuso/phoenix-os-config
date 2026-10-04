@@ -30,6 +30,14 @@ profile/authentication access is unnecessary.
   bound. They still evaluate/build, but reviewed activation now needs a deliberate
   bounded-review design/capacity update; neither the client nor root controller
   limit was relaxed overnight. Do not bypass this by omitting tracked files.
+- Next-day capacity route: the installed source exactly matches `ed913e5` and
+  has 3,117 bytes of headroom under the old limit. A small capacity-only change
+  based on that revision may pass the existing protected review before the
+  queued branch is reviewed. Preserve this branch; verify the actual model's
+  token budget and full-source retention first. Bound serialized evidence as
+  well as source/wire bytes; never truncate source or accept silent compaction.
+  Controller restart/activation needs deliberate authorization. Retain existing
+  reviewer login; no new OAuth is required.
 
 ## Music namespace — feat(music): add Psysonic and Navidrome
 
@@ -56,7 +64,7 @@ profile/authentication access is unnecessary.
 | Idle shader | Implemented; full metal build and all-host evaluation pass; monitor tests deferred |
 | Session restore | Conservative hypr-persist prototype implemented; tests/full build pass; reboot acceptance deferred |
 | Kando | Implemented; exact upstream schema and fake-input checks pass; build/GUI acceptance recorded below |
-| Dynamic wallpaper/theme | Eight-frame metadata and supported backend verified; implementation pending |
+| Dynamic wallpaper/theme | Implemented; adapter checks and upstream package build pass; combined/manual acceptance below |
 | Thunar integration | Supported stack/theme defects investigated; implementation pending |
 
 ## Idle display — feat(display): blank idle monitors without DPMS
@@ -115,3 +123,31 @@ profile/authentication access is unnecessary.
   behavior and mouse disconnect/reconnect. Restart Kando deliberately: declared
   menus/settings must return and menu-launched apps must retain their profiles
   and remain open. Confirm the service actually uses the controlled config root.
+
+## Wallpaper/theme — feat(desktop): add time-aware wallpaper and theme
+
+- Use upstream Timewall 2.1.0 at `19897aee9fee4f4ebd5cbd37b0fc4e3271cb6480`.
+  The external HEIC remains a runtime string, outside Git/Nix store; no asset
+  rename/read occurs during evaluation or building. Configured schedule uses its
+  eight encoded frames: 1@00:00, 2@04:00, 3@06:00, 4@09:00, 0@12:00,
+  5@16:00, 6@19:00, 7@22:00 (appearance metadata also identifies light 0/dark 6).
+- `phoenix-timewall.service` selects the current frame immediately, then checks
+  every 600 seconds. `phoenix-timewall-theme.service` reconciles at session start;
+  `phoenix-timewall-theme-light/dark.timer` run at 07:00/20:00 local time.
+  `--no-smart` prevents frames from changing the separate light/dark policy.
+  The palette name is preserved; a dark-only palette can reject light mode.
+- Fixed Caelestia writes share a private lock. Upstream state files are watched
+  by the shell, so no readiness polling or sleeps are added. A private systemd
+  RuntimeDirectory prevents a crashed daemon's saved setter PID crossing runs.
+  Missing/unreadable/invalid assets or daemon failure select generated black;
+  after fallback, fix the cause and restart this service deliberately.
+  Timewall's asynchronous setter cannot report backend exit status; the adapter
+  logs failures and attempts black, but cannot guarantee a broken backend works.
+- Ten isolated adapter fixtures, actual-package/config checks, all-host
+  evaluation and full metal build pass:
+  `/nix/store/fam9wmasppvcfcvzn6q7v3b1i6spw3xq-nixos-system-phoenix-26.05.20260924.c508844`.
+  Tomorrow after reviewed activation: inspect service/timers and journal,
+  current frame/mode and successive frames; verify ordinary manual Caelestia
+  commands. Test missing-file fallback only with guaranteed file restoration,
+  then restart the service and confirm the dynamic image returns. No live setter,
+  theme change, asset rename or service action was performed overnight.

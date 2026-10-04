@@ -630,7 +630,8 @@
         "nixpkgs": "nixpkgs_5",
         "nixpkgs-unstable": "nixpkgs-unstable",
         "plasma-manager": "plasma-manager",
-        "psysonic": "psysonic"
+        "psysonic": "psysonic",
+        "timewall": "timewall"
       }
     },
     "rust-analyzer-src": {
@@ -647,6 +648,27 @@
         "owner": "rust-lang",
         "ref": "nightly",
         "repo": "rust-analyzer",
+        "type": "github"
+      }
+    },
+    "rust-overlay": {
+      "inputs": {
+        "nixpkgs": [
+          "timewall",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1788456718,
+        "narHash": "sha256-TxHC0sBjV2pmsBLKAX02JTXlye/EOLt6Do+WNtGofGw=",
+        "owner": "oxalica",
+        "repo": "rust-overlay",
+        "rev": "0b20a18e84d9164464739189c2b2a1b00f6f0e4b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "oxalica",
+        "repo": "rust-overlay",
         "type": "github"
       }
     },
@@ -701,6 +723,28 @@
       "original": {
         "owner": "nix-systems",
         "repo": "default",
+        "type": "github"
+      }
+    },
+    "timewall": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs-unstable"
+        ],
+        "rust-overlay": "rust-overlay"
+      },
+      "locked": {
+        "lastModified": 1790870686,
+        "narHash": "sha256-7m9kynVhhwhsuH8n2zL2SH5Ph30d/Q2NXaCZzPmiM9E=",
+        "owner": "bcyran",
+        "repo": "timewall",
+        "rev": "19897aee9fee4f4ebd5cbd37b0fc4e3271cb6480",
+        "type": "github"
+      },
+      "original": {
+        "owner": "bcyran",
+        "repo": "timewall",
+        "rev": "19897aee9fee4f4ebd5cbd37b0fc4e3271cb6480",
         "type": "github"
       }
     },

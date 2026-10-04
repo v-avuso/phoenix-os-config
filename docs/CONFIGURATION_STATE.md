@@ -66,6 +66,14 @@ root and use upstream systemd isolation to survive a Kando service restart.
 The separate non-root hardware filter debounces only the physical mouse's two
 side buttons; menu bindings and application conditions belong to Kando/Hyprland.
 
+Timewall on metal reads an external HEIC at runtime and owns only its generated
+frame cache/session PID state. The asset never enters Git or the Nix store.
+Caelestia remains the wallpaper/theme owner: a narrow adapter writes through its
+CLI, with light mode from 07:00 to 20:00 local time independent of frame colours.
+Missing/broken assets fall back to generated black without repeated restarts;
+restore the asset and restart the wallpaper service to resume. Manual Caelestia
+changes remain possible; scheduled updates reassert the declared mode/frame.
+
 ## Protected state and extension rules
 
 Never blanket-overwrite Firefox or Codex profiles, cookies, history, bookmarks,

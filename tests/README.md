@@ -22,6 +22,8 @@ nix build --impure --file tests/clamav-recovery.nix --no-link
 nix build --impure --file tests/hypr-persist.nix --no-link
 nix build --impure --file tests/kando-packaging.nix --no-link
 python3 -B tests/mouse-side-button-debounce.py
+python3 -B tests/timewall.py
+nix build --impure --file tests/timewall-packaging.nix --no-link
 nix eval --impure --file tests/opensnitch-observation.nix
 nix eval --impure --file tests/pam-desktop-conditional.nix
 nix eval --impure --file tests/desktop-services.nix
@@ -56,6 +58,10 @@ nix eval --impure --file tests/desktop-services.nix
   non-root input unit. Fake events exercise stable-release debounce, unchanged
   high-resolution wheel events, recovery and cleanup without grabbing hardware.
   Portal shortcuts, focus, gestures and hotplug require manual acceptance.
+- **Wallpaper fixtures:** mock fixed commands and temporary files to check
+  missing/invalid assets, FIFO rejection, theme boundaries, black fallback,
+  quoting and serialized writes. Packaging checks actual executable/config paths
+  and session-bound declarations; no user wallpaper is read or displayed.
 - **Agent broker fixtures:** fixed commands, argument rejection, output/deadline
   bounds, named tracing reads, xHCI wakeup round-trip, malformed requests, and
   symlink escape rejection. These use temporary trees and mocked subprocesses;

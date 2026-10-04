@@ -63,6 +63,11 @@
 
     # Stable Psysonic channel; flake.lock pins the release branch revision.
     psysonic.url = "github:Psysonic/psysonic?ref=release";
+
+    timewall = {
+      url = "github:bcyran/timewall/19897aee9fee4f4ebd5cbd37b0fc4e3271cb6480";
+      inputs.nixpkgs.follows = "nixpkgs-unstable";
+    };
   };
 
   outputs =
