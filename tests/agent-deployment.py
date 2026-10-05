@@ -372,7 +372,7 @@ class DeploymentTests(unittest.TestCase):
             (source / 'upstream-linux-packages.json').write_text(json.dumps(payload))
             self.assertEqual(routine.validate_community_payload(directory), '1.2.3')
 
-    def test_routine_update_reaches_boot_without_invoking_reviewer(self):
+    def non_model_deployment(self, action='update', operator=False):
         before, _modes, candidate, modes = self.routine_sources()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -428,25 +428,39 @@ class DeploymentTests(unittest.TestCase):
                           reviewHome='/protected/auth', nix='nix', nixStore='nix-store', baseline='/etc/phoenix-agent/activated-source',
                           routineUpdateScript=str(Path(__file__).resolve().parents[1] / 'modules/development/ai/agent/routine-update.py'),
                           system='x86_64-linux', systemdRun='systemd-run', configPath='config', controller='controller',
-                          python='python', activationEnvironment={})
+                          python='python', activationEnvironment={}, modelReviewEnabled=False)
             request = dict(files=candidate, modes=modes, commit='a' * 40, action='update', target='metal',
                            reason='Stage deterministic stable package updates',
                            expectedBase=str(baseline), expectedProfile=str(profile))
+            request['action'] = action
+            if action not in {'boot', 'update'}:
+                del request['expectedBase'], request['expectedProfile']
             with contextlib.redirect_stdout(io.StringIO()), mock.patch.object(Path, 'resolve', resolve), \
                  mock.patch.object(deploy, 'load_review', return_value=Review), \
                  mock.patch.object(deploy, 'as_user', side_effect=as_user), \
                  mock.patch.object(deploy, 'store_path'), mock.patch.object(deploy, 'activation_executable'), \
                  mock.patch.object(deploy.pwd, 'getpwnam', return_value=account), \
-                 mock.patch.object(deploy, 'request_valid', wraps=deploy.request_valid):
-                result = deploy.process(config, request, os.getuid(), 42)
+                 mock.patch.object(deploy, 'request_valid', wraps=deploy.request_valid), \
+                 mock.patch.object(deploy.os, 'geteuid', return_value=0 if operator else os.getuid()):
+                result = deploy.process(config, request, os.getuid(), 42, operator=operator)
             self.assertTrue(result['ok'])
-            self.assertEqual(result['action'], 'update')
-            self.assertEqual([user for user, _argv in as_user_calls], ['builder', 'builder', 'builder'])
+            self.assertEqual(result['action'], action)
+            self.assertEqual([user for user, _argv in as_user_calls], ['builder'] * (3 if action == 'update' else 2))
             self.assertEqual(Review.run.call_count, 4)  # realize source/closure/runtime, then transient activation
             activation = next(call.args[0] for call in Review.run.call_args_list
                               if call.args[0][0] == 'systemd-run')
-            self.assertEqual(activation[activation.index('activate') + 2], 'update')
+            self.assertEqual(activation[activation.index('activate') + 2], action)
             self.assertFalse(any(user == 'reviewer' for user, _argv in as_user_calls))
+
+    def test_routine_update_reaches_boot_without_invoking_reviewer(self):
+        self.non_model_deployment()
+
+    def test_disabled_reviewer_requires_authenticated_operator_for_manual_deploy(self):
+        with mock.patch.object(deploy, 'process_inner') as inner:
+            with self.assertRaisesRegex(deploy.DeploymentFailure, 'operator-authentication-required'):
+                deploy.process({'target':'metal', 'modelReviewEnabled':False}, self.request(), 1000, 42)
+            inner.assert_not_called()
+        self.non_model_deployment(action='switch', operator=True)
 
     def test_default_github_branch_uses_canonical_flake_reference(self):
         self.assertEqual(deploy.frozen_github_reference('numtide', 'flake-utils'),

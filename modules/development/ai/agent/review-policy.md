@@ -1,5 +1,10 @@
 # Host review intent
 
+> Retained, inactive policy: mandatory AI deployment review is disabled by user
+> decision (2026-10-05). Before re-enabling, replace the broad review scope below
+> with diff-first, bounded context and useful error reporting; see
+> [deployment guidance](../../../../docs/AGENT_SANDBOX.md#reviewing-and-deploying-configuration).
+
 Delegate routine development and bounded diagnostic approvals. Review deployment
 separately from command approvals: command Auto-review does not approve a complete
 NixOS configuration or grant operating-system authentication.

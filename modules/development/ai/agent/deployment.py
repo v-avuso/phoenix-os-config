@@ -5,6 +5,7 @@ The desktop UID is caller identity, not application identity. The bounded source
 manifest bridges the worker's isolated Nix store; it is never privileged policy.
 """
 import argparse
+import contextlib
 import hashlib
 import fcntl
 import importlib.util
@@ -174,9 +175,17 @@ def collect_upstream(upstream, action, before, after, resolve_locked, resolve_cl
     return batches
 
 
-def process(config, request, uid, pid):
+def process(config, request, uid, pid, operator=False):
     state = {'stage': 'request'}
     try:
+        request_valid(request, config['target'])
+        if not config.get('modelReviewEnabled', True) and request['action'] != 'update':
+            if not operator or os.geteuid() != 0:
+                raise DeploymentFailure('authentication', 'operator-authentication-required')
+        if config.get('work'):
+            with (Path(config['work']).parent / 'deployment.lock').open('a') as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                return process_inner(config, request, uid, pid, state)
         return process_inner(config, request, uid, pid, state)
     except DeploymentFailure:
         raise
@@ -191,6 +200,7 @@ def process(config, request, uid, pid):
 
 def process_inner(config, request, uid, pid, state):
     request_valid(request, config['target'])
+    review_required = request['action'] != 'update' and config.get('modelReviewEnabled', True)
     state['stage'] = 'freeze'
     review = load_review(config)
     reason_hash = hashlib.sha256(request['reason'].strip().encode()).hexdigest()
@@ -316,7 +326,7 @@ def process_inner(config, request, uid, pid, state):
                                    verify_current_source)
         else:
             state['stage'] = 'upstream-evidence'
-        if request['action'] != 'update':
+        if review_required:
             spec = importlib.util.spec_from_file_location('upstream_review', config['upstreamReviewScript'])
             upstream = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(upstream)
@@ -339,7 +349,7 @@ def process_inner(config, request, uid, pid, state):
                 return record['storePath']
             upstream_batches = collect_upstream(upstream, request['action'], previous_dependencies,
                                                 request['files'], resolve_locked, resolve_cli)
-        if request['action'] != 'update' and len(upstream_batches) > upstream.MAX_BATCHES:
+        if review_required and len(upstream_batches) > upstream.MAX_BATCHES:
             raise ValueError('combined upstream evidence exceeds batch bound')
         state['stage'] = 'build'
         print(json.dumps(dict(event='building', uid=uid, pid=pid, source=source_store)), flush=True)
@@ -357,7 +367,7 @@ def process_inner(config, request, uid, pid, state):
         binding = {key: request[key] for key in ('commit', 'target', 'action', 'reason')}
         binding.update(source=source_store, base=baseline, profile=profile,
                        profileSource=profile_source, closure=closure, nonce=secrets.token_hex(32))
-        if request['action'] != 'update':
+        if review_required:
             work = temporary / 'review'
             work.mkdir(mode=0o700)
             reviewer = pwd.getpwnam(config['reviewerUser'])
@@ -585,7 +595,7 @@ def bootstrap_transfer(config, home_fd):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('config')
-    parser.add_argument('mode', choices=['serve', 'worker', 'bootstrap', 'activate'])
+    parser.add_argument('mode', choices=['serve', 'worker', 'bootstrap', 'activate', 'operator'])
     parser.add_argument('directory', nargs='?')
     parser.add_argument('action', nargs='?', choices=['test', 'switch', 'boot', 'update'])
     parser.add_argument('--expected-base')
@@ -594,7 +604,21 @@ def main():
     args = parser.parse_args()
     config = json.loads(Path(args.config).read_text())
     config['configPath'] = args.config
-    if args.mode == 'activate':
+    if args.mode == 'operator':
+        # This route is entered only via the immutable graphical Polkit command.
+        # The ordinary socket never treats disabled model review as approval.
+        if os.geteuid() != 0 or config.get('modelReviewEnabled', True):
+            raise ValueError('operator route requires root and explicitly disabled model review')
+        data = sys.stdin.buffer.read(LIMIT + 1)
+        if len(data) > LIMIT:
+            raise ValueError('operator request exceeds transport bound')
+        request = json.loads(data)
+        if request.get('action') not in {'test', 'switch', 'boot'}:
+            raise ValueError('operator route only accepts manual deployment actions')
+        with contextlib.redirect_stdout(sys.stderr):
+            result = process(config, request, int(os.environ.get('PKEXEC_UID', '0')), os.getpid(), operator=True)
+        print(json.dumps(result))
+    elif args.mode == 'activate':
         if os.getuid() != 0 or args.action is None:
             raise ValueError('activation is root-controller only')
         store_path(args.directory, 'closure')

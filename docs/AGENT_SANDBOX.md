@@ -3,8 +3,8 @@
 The declarations are in `modules/development/ai/agent`. Installation and runtime
 status are recorded separately in [acceptance](AGENT_SANDBOX_ACCEPTANCE.md).
 A successful build does not install these services or launcher entries.
-The CLI, diagnostic broker and independently reviewed unattended test/switch
-have runtime acceptance. The installed GUI completes interactive tasks and
+The CLI and diagnostic broker have runtime acceptance. Earlier model-reviewed
+deployment acceptance is historical; mandatory AI review is now suspended. The installed GUI completes interactive tasks and
 retains them across normal close/reopen. Exact source and runtime evidence are
 recorded in acceptance; component tests alone are insufficient.
 
@@ -20,8 +20,8 @@ recorded in acceptance; component tests alone are insufficient.
 | `codex-sandbox-exec COMMAND...` | Tool execution inside the managed sandbox |
 | `phoenix-review-login` | One-time reviewer sign-in; existing login reports saved status |
 | `phoenix-deploy-bootstrap` | One-time graphical installation of protected reviewer authentication |
-| `phoenix-deploy-review --target metal --reason "…" --action test` | Review/build frozen committed source and activate now |
-| `phoenix-deploy-review --target metal --reason "…" --action switch` | Review/build and activate now plus next boot |
+| `phoenix-deploy-review --target metal --reason "…" --action test` | Authenticate/build frozen committed source and activate now |
+| `phoenix-deploy-review --target metal --reason "…" --action switch` | Authenticate/build and activate now plus next boot |
 
 Launchers start their required services automatically. The current declaration favours the
 sandboxed GUI entry; fuzzy matching and usage history still affect search order.
@@ -143,50 +143,34 @@ model selector; the separate deployment reviewer uses GPT-6.1 Sol / medium.
 
 ## Reviewing and deploying configuration
 
-The `phoenix-deploy-review` helper requires a clean, committed checkout
-and a concrete task reason. It freezes the exact Git blobs, includes the full
-source and changes since `/etc/phoenix-agent/activated-source`, and asks a fresh
-isolated reviewer for a structured verdict. Repository instructions/comments are
-untrusted evidence. Binary files, symlinks, submodules, oversized source and
-malformed, stale, rejected or timed-out verdicts fail closed.
-
-The declaration allows 768 KiB of complete UTF-8 tracked source, a 1 MiB wire
-request and a separately bounded 1 MiB review instruction including policy,
-source, diff, binding, modes and output schema. Process output remains 2 MiB;
-verdicts remain 16 KiB. These are resource bounds, not token estimates. The older
-installed gate still uses 512 KiB until a deliberately authorized transition.
-Never omit tracked files or substitute a summary to fit the gate.
-
-Protected reviewer metadata reports `gpt-6.1-sol` at 272,000 tokens with 95%
-effective context; the larger public API window does not establish this CLI's
-budget. No context override is added. Pinned Codex 0.159 non-JSON `exec` emits
-`context compacted` for completed compaction; review rejects that marker before
-accepting any verdict. `--color never` keeps detection exact. JSON exec drops
-these events and must not replace this path. This source-dependent guard must be
-rechecked on CLI upgrades; a typed app-server event adapter is the alternative
-if upstream changes the marker. Byte admission does not guarantee every source
-fits; model overflow or compaction fails closed. The private backend's server
-internals remain outside this guarantee.
-
-`test`, `switch`, and update `boot` submit bounded source files and a reason through a fixed
-root-owned socket; callers cannot submit commands, closures or approvals. The
-controller reconstructs the snapshot, builds as an unprivileged dedicated user,
-verifies the resulting closure records that exact source, then obtains a fresh
-GPT-6.1 Sol / medium review under a separate protected reviewer identity. The
-verdict binds source, installed baseline, closure, target, action, reason and a
-nonce, stays in memory and is rechecked immediately before activation.
-
-`test` activates now. `switch` deliberately updates the system profile and next
-boot too. Update `boot` stages the next-boot profile without touching the running
-desktop and binds the observed active source and boot profile to prevent stale
-background staging. None requests routine Polkit after installation/bootstrap.
-The updater also requires exact bounded evidence for changed locked module and
-containment sources; see [automatic updates](UPDATES.md).
-Failed activation attempts restore the previous boot profile and runtime
-separately; rollback is best effort, not transactional recovery. Saved reports
-never authorize deployment. Codex Auto-review remains separate and does not
-supply OS root privileges. Host-only legacy `review`/`build` is for initial setup;
-bootstrap transfers reviewer refresh ownership to the protected service.
+- **AI review disabled:** Explicit user decision on 2026-10-05. Original reviewer
+  (`cb9aa96`, broker `8246b9f`) supplied the whole tracked repository plus diff;
+  update work added changed dependency batches. This scope exceeded the intended
+  change-focused review and compute budget. Repeated `reviewer-invocation-failed`
+  errors blocked deployment; their cause remains unknown. Exact AI cost was not
+  measured, so do not attribute the entire usage window to this reviewer.
+- **Manual deployment:** Clean committed source, immutable source/closure binding,
+  isolated unprivileged builder, baseline/profile rechecks and rollback remain.
+  `phoenix-switch`/`phoenix-test` use graphical Polkit authentication via a fixed
+  immutable operator command. The ordinary user socket refuses manual actions
+  when model review is disabled; disabling review never grants unattended root.
+- **Automatic updates:** Separate deterministic `update` action, boot staging only;
+  fixed distributors/declarations/source and satisfied exception removals. No
+  Polkit or AI on routine checks. See [automatic updates](UPDATES.md).
+- **Preserved code/state:** `services.phoenixDeployment.modelReview.enable = false`;
+  reviewer implementation, independent CLI pin and authentication remain. Never
+  reconcile or disclose reviewer credentials. Controller code takes effect after
+  explicit service restart or reboot; inspect the running executable.
+- **Before re-enabling:** Diff-first input, bounded on-demand affected-file/import
+  context, strict call/token limits, no automatic whole-repository expansion.
+  Classify authentication, transport, CLI startup, schema, quota and timeout errors
+  safely; distinguish invocation failure from model denial. Retain protected
+  diagnostics without exposing credentials or private native output. Validate
+  actual model invocation and activation; mocks/builds alone are insufficient.
+- **Source transport versus model input:** Full tracked source remains necessary
+  for exact builds; transporting it to the broker does not require sending it to
+  an LLM. Existing AI code still uses full-source prompts and is not suitable for
+  re-enabling unchanged. A model verdict is fallible; retain rollback generations.
 
 Install from a clean committed Git flake, so the installed baseline contains
 exactly the tracked source. Never evaluate this checkout through `path:.`: it
@@ -211,9 +195,9 @@ same-user host programs can call its fixed capabilities too: this is not
 application identity. Executable store paths detect version selection, but do
 not distinguish malware launching the legitimate executable. The diagnostic broker grants
 no arbitrary shell, file access, service control or NixOS activation. A separate
-protected deployment controller supplies only freshly reviewed test/switch.
-Same-UID host programs can request costly reviews/builds; executable hashes
-do not authenticate the application or its intent.
+protected deployment controller accepts deterministic boot-only updates; manual
+test/switch/boot requires graphical operator authentication while AI review is
+suspended. Executable hashes do not authenticate an application or its intent.
 
 The trusted host launcher/gateway owns sandbox OAuth refresh. The worker gets
 endpoint-scoped opaque handles, not reusable bearer tokens. Native, sandbox and
@@ -242,7 +226,8 @@ trial; never reset the profile to hide lock errors.
 Live writable repositories require OpenShell's unsafe host-bind opt-in and
 relaxed driver resource admission. Host kernel/runtime and gateway remain
 trusted. Workers can damage their workspaces or plant changes for later host
-execution; frozen-source review reduces this risk but remains probabilistic.
+execution. With AI review suspended, operator authentication approves deployment;
+it does not establish that workspace content is safe.
 Allowed traffic can still disclose accessible workspace data. OpenShell is alpha.
 
 Declaration changes create a new sandbox and retain previous state for deliberate

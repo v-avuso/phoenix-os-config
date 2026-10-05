@@ -3,15 +3,22 @@
   pkgs,
   user,
   inputs,
+  lib,
   ...
 }:
 let
+  cfg = config.services.phoenixDeployment;
+  operatorCommand = [ "/run/wrappers/bin/pkexec" "--disable-internal-agent"
+    "${pkgs.python3}/bin/python3" "-I" (toString ./deployment.py)
+    (toString deploymentConfig) "operator" ];
   # The privileged reviewer is a separate control-plane dependency. Everyday
   # CLI freshness must not silently replace the code enforcing review isolation.
   reviewerCodexPackage = pkgs.callPackage ./reviewer-codex.nix { };
   reviewConfig = pkgs.writeText "phoenix-review.json" (
     builtins.toJSON {
       repo = user.repoDirectory;
+      modelReviewEnabled = cfg.modelReview.enable;
+      operatorCommand = lib.optionals (!cfg.modelReview.enable) operatorCommand;
       reviewHome = "${user.homeDirectory}/.local/state/phoenix-agent-review";
       codex = "${reviewerCodexPackage}/bin/codex";
       git = "${pkgs.git}/bin/git";
@@ -34,6 +41,8 @@ let
   clientConfig = pkgs.writeText "phoenix-deployment-client.json" (
     builtins.toJSON {
       repo = user.repoDirectory;
+      modelReviewEnabled = cfg.modelReview.enable;
+      operatorCommand = lib.optionals (!cfg.modelReview.enable) operatorCommand;
       git = "${pkgs.git}/bin/git";
       deploymentSocket = "/run/phoenix-deploy/control.sock";
       clientOnly = true;
@@ -60,6 +69,7 @@ let
   '';
   deploymentConfig = pkgs.writeText "phoenix-deployment.json" (
     builtins.toJSON {
+      modelReviewEnabled = cfg.modelReview.enable;
       clientUid = config.users.users.${user.name}.uid;
       target = if config.networking.hostName == "phoenix-vm" then "vm" else "metal";
       reviewerUser = "phoenix-deploy-review";
@@ -99,6 +109,19 @@ let
 
 in
 {
+  options.services.phoenixDeployment.modelReview.enable = lib.mkOption {
+    type = lib.types.bool;
+    default = false;
+    description = "Require the independent model verdict for manual deployments.";
+  };
+  # Disabled by explicit user request: full tracked-source plus upstream batches
+  # was too broad for the compute budget, and repeated invocation failures blocked
+  # deployment without useful diagnostics. Keep implementation/authentication.
+  # Before re-enabling: diff-first review, bounded on-demand context and a strict
+  # call/token budget; classify errors safely instead of hiding every failure.
+  # With review disabled, manual deploys require graphical Polkit; automatic
+  # updates still pass the separate immutable-source/distributor checks.
+  config = {
   _module.args.phoenixDeployReviewPackage = deployClient;
   _module.args.phoenixDeployReviewClientConfig = clientConfig;
   # The upstream default allows all users, while only root is trusted. Keep
@@ -163,5 +186,6 @@ in
       Restart = "on-failure";
       KillMode = "process";
     };
+  };
   };
 }

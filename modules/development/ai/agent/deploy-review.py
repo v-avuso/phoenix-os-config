@@ -281,6 +281,8 @@ def main():
         parser.error("base must be a full commit SHA and reason must be 1–2000 characters")
     config = json.loads(Path(args.config).read_text())
     if args.action in {"review", "build"}:
+        if not config.get("modelReviewEnabled", True):
+            raise ValueError("AI review is explicitly disabled; use authenticated test/switch/boot")
         # Serialize retained-auth operations with the one-time ownership transfer.
         legacy = Path(config["reviewHome"])
         if legacy.is_dir():
@@ -301,22 +303,28 @@ def main():
             if args.action == "boot":
                 request.update(expectedBase=str(Path('/etc/phoenix-agent/activated-source').resolve(strict=True)),
                                expectedProfile=str(Path('/nix/var/nix/profiles/system').resolve(strict=True)))
-            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
-                connection.settimeout(7200)
-                connection.connect(config["deploymentSocket"])
-                connection.sendall(json.dumps(request).encode() + b"\n")
-                response = bytearray()
-                while not response.endswith(b"\n"):
-                    block = connection.recv(65536)
-                    if not block or len(response) > 65536:
-                        raise ValueError("deployment controller response lost or oversized")
-                    response.extend(block)
-                result = json.loads(response)
-                if not result.get("ok"):
-                    if result.get("code") == "model-denied":
-                        raise ValueError("Model review denied: " + json.dumps(result.get("summary", ""), ensure_ascii=True))
-                    raise ValueError(result.get("error", "deployment rejected"))
+            if config.get("operatorCommand"):
+                result = json.loads(run(config["operatorCommand"], data=json.dumps(request).encode(), timeout=7200))
+                if result.get("ok") is not True:
+                    raise ValueError("authenticated deployment failed")
                 print(json.dumps(result, indent=2))
+            else:
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+                    connection.settimeout(7200)
+                    connection.connect(config["deploymentSocket"])
+                    connection.sendall(json.dumps(request).encode() + b"\n")
+                    response = bytearray()
+                    while not response.endswith(b"\n"):
+                        block = connection.recv(65536)
+                        if not block or len(response) > 65536:
+                            raise ValueError("deployment controller response lost or oversized")
+                        response.extend(block)
+                    result = json.loads(response)
+                    if not result.get("ok"):
+                        if result.get("code") == "model-denied":
+                            raise ValueError("Model review denied: " + json.dumps(result.get("summary", ""), ensure_ascii=True))
+                        raise ValueError(result.get("error", "deployment rejected"))
+                    print(json.dumps(result, indent=2))
             return
         baseline_path = Path(config["baseline"]).resolve(strict=True)
         if not str(baseline_path).startswith("/nix/store/"):
