@@ -46,7 +46,10 @@ enabled. The source transport admits 896 KiB, but the existing complete
 serialized review limit remains 1 MiB and observed compaction rejects verdicts.
 
 A successful candidate is staged for next boot without restarting applications
-or rebooting. Git imports it using an index lock and compare-and-swap, preserving
+or rebooting. Git uses private sanitized common metadata for all updater commands and candidate
+worktrees; caller configuration, checkout filters, hooks and info attributes are
+not inherited. Objects/refs and the real checkout index remain shared for normal
+Git coordination. Git imports it using an index lock and compare-and-swap, preserving
 unrelated staged/unstaged edits. A changed HEAD or dirty affected file defers
 updates. If the checkout changes during review, boot staging can succeed while
 Git integration waits: the result explicitly records that state and retries

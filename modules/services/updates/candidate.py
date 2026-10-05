@@ -49,12 +49,55 @@ def _run(argv, cwd=None, env=None, timeout=60):
                 os.killpg(process.pid, signal.SIGKILL)
                 process.wait()
 
+def git_metadata(repo, home):
+    """Separate command-bearing config/attributes from shared objects and refs.
+
+    GIT_COMMON_DIR redirects config and info/attributes to our private view.
+    The real per-worktree HEAD/index remain in place for normal Git coordination.
+    Never copy caller config, attributes, hooks, worktree config or templates.
+    """
+    directory = Path(repo) / '.git'
+    if directory.is_file():
+        text = directory.read_text().strip()
+        if not text.startswith('gitdir: '):
+            raise CandidateError('unsupported Git directory marker')
+        directory = (Path(repo) / text[8:]).resolve(strict=True)
+    else:
+        directory = directory.resolve(strict=True)
+    marker = directory / 'commondir'
+    common = (directory / marker.read_text().strip()).resolve(strict=True) if marker.exists() else directory
+    safe_root = Path(home).resolve() / 'git-metadata'
+    safe_root.mkdir(mode=0o700, exist_ok=True)
+    if common.is_relative_to(safe_root):
+        safe = common
+    else:
+        safe = safe_root / hashlib.sha256(str(common).encode()).hexdigest()
+        if not safe.exists():
+            safe.mkdir(mode=0o700)
+            (safe / 'config').write_text('[core]\n repositoryformatversion = 0\n bare = false\n')
+            (safe / 'info').mkdir()
+            for name in ('objects', 'refs', 'packed-refs', 'logs'):
+                (safe / name).symlink_to(common / name)
+    return directory, safe
+
+
+def git_env(repo, home):
+    _directory, common = git_metadata(repo, home)
+    return {"HOME": str(home), "PATH": "/nonexistent", "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_OPTIONAL_LOCKS": "0",
+            "GIT_COMMON_DIR": str(common), "GIT_ATTR_NOSYSTEM": "1",
+            "GIT_NO_REPLACE_OBJECTS": "1", "GIT_TERMINAL_PROMPT": "0"}
+
+
+def git_command(exe, repo, home):
+    directory, _common = git_metadata(repo, home)
+    return [exe, '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false',
+            '-c', 'core.attributesFile=/dev/null', '-c', 'commit.gpgSign=false',
+            '--git-dir', str(directory), '--work-tree', str(repo), '-C', str(repo)]
+
+
 def git(exe, repo, home, *args):
-    env = {"HOME": str(home), "PATH": "/nonexistent", "GIT_CONFIG_NOSYSTEM": "1",
-           "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_OPTIONAL_LOCKS": "0",
-           "GIT_NO_REPLACE_OBJECTS": "1", "GIT_TERMINAL_PROMPT": "0"}
-    return _run([exe, "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false",
-                 "-c", "commit.gpgSign=false", "-C", str(repo), *args], env=env)
+    return _run([*git_command(exe, repo, home), *args], env=git_env(repo, home))
 
 def _inventory(path):
     files = {}

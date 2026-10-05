@@ -161,9 +161,8 @@ def integrate(config, c, home, head, commit, paths):
     alternate = Path(str(index) + '.phoenix-' + uuid.uuid4().hex)
     try:
         alternate.write_bytes(index.read_bytes())
-        env = dict(HOME=str(home), PATH=config['path'], GIT_CONFIG_NOSYSTEM='1',
-                   GIT_CONFIG_GLOBAL='/dev/null', GIT_INDEX_FILE=str(alternate), GIT_NO_REPLACE_OBJECTS='1')
-        command = [config['git'], '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-C', repo]
+        env = dict(c.git_env(repo, home), PATH=config['path'], GIT_INDEX_FILE=str(alternate))
+        command = c.git_command(config['git'], repo, home)
         # Git rejects changes to affected files and keeps unrelated index entries.
         c._run([*command, 'read-tree', '-m', '-u', head, commit], env=env)
         try:

@@ -62,6 +62,25 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(self.git('diff', '--name-only').strip(), 'config/updates.json')
         self.assertEqual((self.repo / 'new-user-file').read_text(), 'staged user data\n')
 
+    def test_checkout_and_integration_ignore_caller_filters(self):
+        commit = self.candidate()
+        sentinel = self.root/'filter-executed'
+        script = self.root/'filter'
+        script.write_text('#!/bin/sh\necho unsafe > "' + str(sentinel) + '"\n/bin/cat\n')
+        script.chmod(0o755)
+        self.git('config', 'filter.unsafe.smudge', str(script))
+        self.git('config', 'filter.unsafe.clean', str(script))
+        self.git('config', 'filter.unsafe.required', 'true')
+        (self.repo/'.git/info/attributes').write_text('* filter=unsafe\n')
+        tree = self.root/'candidate-tree'
+        candidate.git(self.config['git'], self.repo, self.home, 'worktree', 'add', '-b', 'codex/fixture', str(tree), self.head)
+        self.assertEqual((tree/'flake.lock').read_text(), '{}\n')
+        self.assertFalse(sentinel.exists())
+        runner.integrate(self.config, candidate, self.home, self.head, commit, {'flake.lock'})
+        self.assertFalse(sentinel.exists())
+        self.assertEqual((self.repo/'flake.lock').read_text(), '{"new": true}\n')
+        candidate.git(self.config['git'], self.repo, self.home, 'worktree', 'remove', '--force', str(tree))
+
     def test_dirty_affected_file_rejects_without_changing_index_head_or_edit(self):
         commit = self.candidate()
         (self.repo / 'flake.lock').write_text('user lock edit\n')
