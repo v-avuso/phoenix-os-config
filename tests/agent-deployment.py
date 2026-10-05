@@ -48,6 +48,42 @@ class DeploymentTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 deploy.request_valid(request, 'metal')
 
+    def test_reload_finishes_and_replies_to_active_request_before_exit(self):
+        handlers = {}
+        connection = mock.Mock()
+        connection.getsockopt.return_value = deploy.struct.pack('3i', 22, 1000, 1000)
+        connection.recv.return_value = b'{}\n'
+        listener = mock.Mock()
+        listener.accept.return_value = (connection, None)
+        def process(*args):
+            handlers[deploy.signal.SIGUSR1](deploy.signal.SIGUSR1, None)
+            connection.sendall.assert_not_called()
+            return dict(ok=True, action='update')
+        with mock.patch.object(deploy.os, 'getuid', return_value=0), \
+             mock.patch.object(deploy.socket, 'socket', return_value=listener), \
+             mock.patch.object(deploy.signal, 'signal', side_effect=lambda sig, handler: handlers.update({sig: handler})), \
+             mock.patch.object(deploy, 'process', side_effect=process), contextlib.redirect_stdout(io.StringIO()):
+            deploy.serve({'clientUid': 1000})
+        connection.sendall.assert_called_once()
+        self.assertTrue(json.loads(connection.sendall.call_args.args[0])['ok'])
+        connection.close.assert_called_once()
+        listener.accept.assert_called_once()
+
+    def test_idle_reload_exits_without_starting_another_request(self):
+        handlers = {}
+        listener = mock.Mock()
+        def accept():
+            handlers[deploy.signal.SIGUSR1](deploy.signal.SIGUSR1, None)
+            raise deploy.socket.timeout()
+        listener.accept.side_effect = accept
+        with mock.patch.object(deploy.os, 'getuid', return_value=0), \
+             mock.patch.object(deploy.socket, 'socket', return_value=listener), \
+             mock.patch.object(deploy.signal, 'signal', side_effect=lambda sig, handler: handlers.update({sig: handler})), \
+             mock.patch.object(deploy, 'process') as process:
+            deploy.serve({'clientUid': 1000})
+        process.assert_not_called()
+        listener.accept.assert_called_once()
+
     def test_larger_complete_source_preserves_wire_bound(self):
         request = self.request()
         request['files']['flake.nix'] = 'x' * (512 * 1024 + 1)

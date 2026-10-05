@@ -9,7 +9,13 @@ let
   scanner = config.systemd.services.clamav-clamonacc;
 in
 assert config.services.clamav.updater.enable;
-assert freshclam.wantedBy == [ "multi-user.target" ];
+assert freshclam.wantedBy == [ ];
+assert freshclam.serviceConfig.Restart == "on-failure";
+assert freshclam.serviceConfig.RestartSec == "5min";
+assert freshclam.unitConfig.StartLimitIntervalSec == "30min";
+assert freshclam.unitConfig.StartLimitBurst == 3;
+assert config.systemd.timers.clamav-freshclam.timerConfig.OnBootSec == "2min";
+assert config.systemd.timers.clamav-freshclam.timerConfig.OnCalendar == "hourly";
 assert freshclam.unitConfig.OnSuccess == [ "clamav-db-recovery.service" ];
 assert daemon.wants == [ ];
 assert builtins.elem "clamav-freshclam.service" daemon.after;

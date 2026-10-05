@@ -62,3 +62,10 @@
 - **Permissions:** The automatic action stages next boot only; it cannot supply a command, closure or verdict, reboot, or garbage-collect. Manual configuration changes require graphical operator authentication. Git commands use sanitized metadata to prevent inherited hooks and filters.
 - **Upstream comparison:** Stock `system.autoUpgrade` supplies scheduling and direct rebuild/update/commit flags. Its systemd unit can be extended without patching upstream, but a pre-hook alone cannot coordinate isolated preparation, conditional exceptions, protected deployment and safe checkout publication. The small adapter reuses systemd, Nix lock/build operations and Git integration; it does not implement an advisory framework.
 - **Validation:** Focused updater/controller fixtures cover dirty Git, source/publisher rejection, exception expiry, boot-only activation and no reviewer invocation. Full-host evaluation/build and a real service run are separate checks; mocks alone do not establish deployment success.
+
+## Activation recovery
+
+- **ClamAV:** Signature downloads are timer-driven (two minutes after boot and hourly, with missed calendar checks caught up). They are not a required activation job. Existing databases/scanners remain usable while offline; first-install recovery starts scanning after a successful download.
+- **Retries:** FreshClam failures retry after five minutes, capped at three starts within thirty minutes; the hourly timer permits later recovery. Keep failures visible rather than marking network errors successful. No AI or database deletion is involved.
+- **Controller refresh:** Changed deployment units reload gracefully after their active request/response, then systemd starts installed code/settings. This avoids killing the controller during its own deployment. Older controllers require one authenticated restart when adopting this mechanism; thereafter no manual restart is expected.
+- **Switch result:** A failed auxiliary service can make the command return nonzero even after configuration/profile activation. Inspect the running system, next-boot profile and failed unit before assuming rollback or repeating the whole switch.

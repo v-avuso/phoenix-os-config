@@ -159,8 +159,11 @@ model selector; the separate deployment reviewer uses GPT-6.1 Sol / medium.
   Polkit or AI on routine checks. See [automatic updates](UPDATES.md).
 - **Preserved code/state:** `services.phoenixDeployment.modelReview.enable = false`;
   reviewer implementation, independent CLI pin and authentication remain. Never
-  reconcile or disclose reviewer credentials. Controller code takes effect after
-  explicit service restart or reboot; inspect the running executable.
+  reconcile or disclose reviewer credentials. Changed controller units request a
+  graceful reload: finish the current request and response, then systemd restarts
+  with installed code/settings. This also works while idle. The legacy controller
+  needs one authenticated restart during migration; the reload guard avoids
+  signaling code without the handler. Inspect actual running arguments.
 - **Before re-enabling:** Diff-first input, bounded on-demand affected-file/import
   context, strict call/token limits, no automatic whole-repository expansion.
   Classify authentication, transport, CLI startup, schema, quota and timeout errors

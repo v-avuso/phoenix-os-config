@@ -159,10 +159,24 @@
   };
 
   systemd.services.clamav-freshclam = {
-    # The timer handles later checks; this also requests the first update during
-    # boot, independently of clamd/scanner recovery starts.
-    wantedBy = [ "multi-user.target" ];
-    unitConfig.OnSuccess = [ "clamav-db-recovery.service" ];
+    # Downloads must not determine switch success while Wi-Fi/DNS is restarting.
+    # Existing databases keep scanning active; first-install recovery still runs
+    # after a successful timer-triggered download. Preserve real failure status.
+    wantedBy = lib.mkForce [ ];
+    unitConfig = {
+      OnSuccess = [ "clamav-db-recovery.service" ];
+      StartLimitIntervalSec = "30min";
+      StartLimitBurst = 3;
+    };
+    serviceConfig = {
+      Restart = "on-failure";
+      RestartSec = "5min";
+    };
+  };
+
+  systemd.timers.clamav-freshclam.timerConfig = {
+    OnBootSec = "2min";
+    Persistent = true;
   };
 
   # The pinned NixOS module makes clamd Want freshclam. Keep its After ordering,

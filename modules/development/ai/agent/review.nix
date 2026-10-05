@@ -175,15 +175,30 @@ in
       "phoenix-deploy.socket"
       "nix-daemon.socket"
     ];
-    # Keep the authorizing controller alive through the activation it authorized.
-    # New controller/policy takes effect on explicit restart or reboot.
+    # Reload asks for a clean exit after the active request/response; systemd
+    # starts the installed ExecStart. Never kill the authorizing request midway.
+    # Legacy controllers lack the handler: the guarded reload leaves them alive
+    # for a one-time authenticated restart during migration.
+    reloadIfChanged = true;
     restartIfChanged = false;
     stopIfChanged = false;
     serviceConfig = {
       ExecStart = "${pkgs.python3}/bin/python3 -I ${./deployment.py} ${deploymentConfig} serve";
       User = "root";
       UMask = "0077";
-      Restart = "on-failure";
+      ExecReload = pkgs.writeShellScript "phoenix-deploy-reload" ''
+        while read -r key value rest; do
+          if [ "$key" = SigCgt: ]; then
+            if (( (16#$value & (1 << 9)) != 0 )); then
+              exec ${pkgs.coreutils}/bin/kill -USR1 "$MAINPID"
+            fi
+            echo 'Legacy deployment controller: one initial authenticated restart required.'
+            exit 0
+          fi
+        done < "/proc/$MAINPID/status"
+        exit 1
+      '';
+      Restart = "always";
       KillMode = "process";
     };
   };

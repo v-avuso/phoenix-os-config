@@ -15,6 +15,7 @@ from pathlib import Path
 import pwd
 import re
 import secrets
+import signal
 import socket
 import stat
 import struct
@@ -484,9 +485,20 @@ def worker(config, directory):
 def serve(config):
     if os.getuid() != 0:
         raise ValueError('controller requires installed root service')
+    reload_requested = False
+    def request_reload(_signal, _frame):
+        nonlocal reload_requested
+        reload_requested = True
+    signal.signal(signal.SIGUSR1, request_reload)
     listener = socket.socket(fileno=3)  # systemd socket activation; no caller path.
-    while True:
-        connection, _ = listener.accept()
+    listener.settimeout(1)
+    while not reload_requested:
+        try:
+            connection, _ = listener.accept()
+        except socket.timeout:
+            continue
+        # Reload only after this request's activation and response complete.
+        # Restart=always then loads the installed unit's immutable ExecStart.
         uid = pid = -1
         try:
             pid, uid, _ = struct.unpack('3i', connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
