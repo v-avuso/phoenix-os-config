@@ -1,134 +1,60 @@
 # Automatic updates
 
-`config/updates.json` owns package selection and temporary holds. The NixOS
-module is connected through `modules/services/default.nix`. It checks every six
-hours with up to fifteen minutes of jitter and catches up after power-off.
+## Policy and cost
 
-The system follows supported `nixos-26.05`; Firefox uses tested
-`nixos-unstable` for useful freshness in a deeply used daily application.
-Stable Firefox also receives security maintenance. The shared unstable input
-also supplies compatible Hyprland/Caelestia/Timewall dependencies, so advancing
-it can affect those applications. Community desktop and CLI follow their own
-checked stable upstream releases, rather than Nixpkgs unstable. Each choice has
-an explanation in the JSON comments and package declarations. No local cooldown
-or daily LLM vulnerability research is used. Existing protected deployment
-review still runs on actual source changes.
+- **Routine AI cost: zero.** Updates use Nix, Git and deterministic controller checks. They do not invoke Codex, scan every upstream source with an LLM, or require approval. Configuration changes still use the protected deployment review; installing this new policy requires that existing gate once.
+- **Distribution trust:** Stable NixOS and tested `nixos-unstable` channels supply package maintenance. Known-vulnerability evaluation remains enabled. This is neither a comprehensive CVE scanner nor a malware detector; no custom quarantine/security fast lane is maintained.
+- **Fresh applications:** Firefox and everyday Codex CLI use unstable because they are deeply and frequently used. Community desktop follows checked stable publisher releases. Shared unstable also supplies compatible desktop dependencies; it can change more than these two applications. Explanations live in `config/updates.json` and package declarations.
+- **Control plane:** The protected reviewer CLI has its own deliberate pin in `agent/reviewer-codex.nix`; everyday CLI updates do not change it. That separate pin still needs deliberate maintenance.
+- **Release lifecycle:** Supported-release upgrades remain deliberate. Following the same stable branch indefinitely does not extend its support lifetime. Keep rollback generations.
 
-Each run starts from a committed source identical to the active or next-boot
-reviewed source. It prepares an isolated Git worktree and commits only
-`flake.lock`, the CLI recipe, and satisfied hold removals. Nix constructs locks;
-maintained `nix-update` updates the conventional CLI recipe. Unchanged candidates
-skip builds/review. Failed unchanged candidates retry at most daily. Community
-requires its exact stable payload and successful `source-and-node`, `rust`,
-`nix`, and `official-linux-gate` checks; missing checks retain that application
-while independent channel updates can continue. A verified scoped upstream
-review denial records the root-generated affected input nodes, bound to its
-verdict. The updater retains those exact published revisions and retries once
-with independent groups. Native/Sandbox desktop sources are held together.
-Changed public heads become eligible again automatically; this transient cache
-is separate from explicit version holds and never authorizes deployment.
-Unknown, unbound or complete-configuration denials do not trigger that fallback. Explicitly pinned framework
-inputs retain their existing pins; this is not a blanket unlock of every input.
+## Scheduling and Git
 
-The protected controller builds and reviews the exact source/closure, including
-complete evidence from changed upstream module/build/containment code, split
-at file boundaries into at most 24 separately bound reviews, followed by the
-complete configuration review. Dependency evidence compares against the
-root-owned preceding next-boot source, so already staged upstream changes are
-not reviewed repeatedly before reboot. The protected reviewer CLI is pinned separately from the everyday CLI, so routine
-CLI updates do not replace review isolation or trigger expensive publisher-code
-reviews. Deliberate reviewer upgrades must supply exact official
-source evidence for changed publisher runtime authority, including configuration,
-rule loading, execution and sandbox authority used by the protected reviewer; an unknown guard contract blocks deployment. This is
-source evidence, not proof that a release binary reproduces that source;
-Bazel repository-cache lock metadata is outside this runtime authority scope.
-These checks can consume additional model compute on
-actual source changes, especially the initial backlog. Excessive,
-unsupported, or uncertain evidence is rejected, never truncated. Ordinary
-Nixpkgs package maintenance retains distribution trust; this is not a malware
-scanner or a comprehensive CVE scan. The reviewer pin requires deliberate security
-maintenance; routine user CLI updates and holds do not update that control-plane pin. Known-vulnerability evaluation remains
-enabled. The source transport admits 896 KiB, but the existing complete
-serialized review limit remains 1 MiB and observed compaction rejects verdicts.
+- **Defaults:** `services.phoenixUpdates` uses `baselineHour = 21`, `intervalHours = 24`, `sourceBranch = "main"`, `cleanupBranches = true`. Hours are local time; the interval must divide 24. Six hours yields 03:00, 09:00, 15:00, 21:00. Persistent systemd scheduling catches up once after downtime; it does not wake the computer.
+- **Isolation:** Prepare from the committed configured branch in a private timestamp-named `codex/updates/YYYYMMDD-HHMMSS` worktree. A different checked-out branch defers the run. Uncommitted unrelated edits are preserved; dirty updater-owned files, busy Git indexes and changed HEAD defer publication.
+- **Source boundary:** Committed source must match the active or preceding staged approved source. The root controller accepts only permitted publisher/input lock changes and satisfied exception removals. New configuration, hooks, trust settings, patches, publishers and exception additions require normal reviewed deployment.
+- **One commit:** Successful integration advances the target branch by one update commit, without a merge commit, history rewriting or force push. Unchanged runs create no commit. Only `flake.lock` and satisfied removals in `config/updates.json` are updater-owned.
+- **Cleanup:** Delete completed/discarded candidate branches; keep a pending integration candidate. Set `cleanupBranches = false` to preserve candidates for diagnosis. Historical prototype work remains in commit `ed38a0b`; unrelated branches are never deleted.
+- **Late race:** If the checkout changes during building/staging, next boot can be staged while publication waits. `pending.json` and the result explicitly report this partial state; retry safely imports it, or a newer manual deployment supersedes it. No automatic stashes, resets or AI conflict resolution. Normal contention waits for a later run.
+- **Branch limits:** Existing development branches do not inherit updated main automatically. Merge/rebase before building them. `phoenix-switch` from the updated branch activates its pins and replaces the next-boot profile; `test` does not replace that profile. Restart applications to use new binaries; some changes need reboot. Boot staging alone does not patch running software.
 
-A successful candidate is staged for next boot without restarting applications
-or rebooting. Git uses private sanitized common metadata for all updater commands and candidate
-worktrees; caller configuration, checkout filters, hooks and info attributes are
-not inherited. Objects/refs and the real checkout index remain shared for normal
-Git coordination. Git imports it using an index lock and compare-and-swap, preserving
-unrelated staged/unstaged edits. A changed HEAD or dirty affected file defers
-updates. If the checkout changes during review, boot staging can succeed while
-Git integration waits: the result explicitly records that state and retries
-when safe. New committed user work must be deployed first; the updater does not
-silently deploy it. Never automatically stash, reset, or resolve user conflicts.
+## Central exceptions
 
-`phoenix-switch` applies integrated pins sooner, followed by an application
-restart. Some changes require reboot. Boot staging alone does not patch running
-software. Normal builds still use the ordinary checkout. Keep supported-release
-upgrades deliberate: following one stable branch forever does not extend its
-support lifetime. Retain existing generations for rollback.
-
-## Holds
-
-JSON `_comments` is documentation, not executable policy. Keys normally name
-simple top-level Nixpkgs attributes, e.g. `kando`; special adapters are
-`firefox`, `codex-desktop`, and `codex-cli`. Use a real immutable pin, a reason,
-and optionally the **first version allowed again**:
+- **Location:** `config/updates.json` groups `holds` and `patches`; JSON `_comments` explain usage. Temporary bug-fix patch files belong in `config/update-patches/`. Feature patches belong beside their application module.
+- **Identifiers:** Simple top-level Nixpkgs attributes, e.g. `kando`; `codex-cli` maps to `codex`. Firefox/Codex CLI observe `packageSources`; other entries observe stable `nixpkgs`; ordinary entries cannot expire against an unrelated unstable version. Community desktop has its separate two-input hold adapter; arbitrary desktop patch recipes are not supported.
+- **Holds:** `pin` is a full immutable Nixpkgs revision, `reason` explains the regression, `resumeAtVersion` is the first acceptable stable numeric version. Null/omitted means indefinite; never invent a future version. A hold pins the named package, not the entire channel. Kando retains its existing 2.3.0 adapter requirement.
 
 ```json
-"firefox": {
-  "pin": "<reviewed 40-character Nixpkgs revision>",
-  "reason": "Regression; upstream expects the fix in the stated version",
-  "resumeAtVersion": "<actual numeric stable fix version>"
+"holds": {
+  "firefox": {
+    "pin": "<reviewed 40-character Nixpkgs revision>",
+    "reason": "Regression; upstream expects the fix in version 150.0",
+    "resumeAtVersion": "150.0"
+  }
 }
 ```
 
-Ordinary Nixpkgs holds use the same revision format and may specify
-`"source": "nixpkgs-unstable"` for resume observation; default is `nixpkgs`.
-Firefox observes its configured source and always pins only Firefox, letting
-other packages advance. Kando starts with its already-existing 2.3.0 compatibility
-pin and no resume threshold: its adapter explicitly requires that version.
+- **Temporary fixes:** Append patches to the upstream derivation; keep existing patches and packaging. Reusable archive extraction defaults are inappropriate across unrelated packages. Use an exceptional custom recipe only when upstream packaging cannot express the workaround.
 
-CLI `pin` is `{ "version": "<stable version>", "hash": "<matching sha256 SRI>" }`.
-Community `pin` is `{ "native": "<source revision>", "sandbox": "<source revision>" }`;
-set both corresponding `flake.lock` pins as part of a deliberate downgrade.
-Evaluation rejects a mismatch, so a manual lock update cannot override a hold.
-Use Nix's input override with `--output-lock-file flake.lock` to persist exact
-selected revisions; do not hand-edit lock graph hashes.
+```json
+"patches": {
+  "thunar": {
+    "reason": "Temporary bug fix pending upstream release",
+    "patchFiles": ["config/update-patches/thunar-fix.patch"],
+    "removeAtVersion": null,
+    "source": "nixpkgs"
+  }
+}
+```
 
-Omit `resumeAtVersion` or set it to `null` for an indefinite hold. Never invent a
-sentinel version. A verified stable version at or above the threshold permits
-ordinary checks; unknown/prerelease versions stay held. Successful staging and
-Git integration automatically remove satisfied entries in the update commit.
-Failed review/build leaves current pins and holds unchanged. The threshold is an
-expected fix, not proof of functional correctness; review indefinite holds when
-upstream supplies a fix. Old held metadata may miss later vulnerability flags.
+- **Expiry:** The updater removes entries only when a verified numeric upstream version meets the threshold and the candidate passes checks/build/staging. Unknown/prerelease versions retain exceptions. A patch stays while its package has an unreleased hold. Patch files may remain for provenance after removal; the updater does not delete source files.
+- **Limits:** A version threshold records an expected fix, not proof that the bug is fixed. Review indefinite entries when upstream resolves them. Old held revisions may lack later vulnerability flags.
+- **Desktop holds:** `pin = { "native": "<revision>", "sandbox": "<revision>" }`; deliberately update both corresponding lock pins when adding a downgrade. Evaluation rejects mismatches. Do not hand-edit NAR hashes; use Nix input overrides with `--output-lock-file flake.lock`.
 
-## Operation and validation
+## Operations and implementation
 
-Inspect `systemctl status phoenix-updates.timer`,
-`journalctl -u phoenix-updates.service`, and
-`/var/lib/phoenix-updates/last-result.json`. Failures issue a fixed desktop
-notification; credentials, profiles and CVE classifications are not collected.
-Run `phoenix-update` as the desktop user for an immediate serialized check.
-The oneshot service has a two-hour start timeout.
-The service uses the existing protected controller socket and cannot
-reboot or garbage-collect generations.
-
-Fixtures in `tests/update-runner.py`, `tests/upstream-review.py`,
-`tests/agent-deployment.py`, and `tests/agent-review.py` cover the full mocked
-update/hold/commit workflow, dirty Git preservation, required publisher checks,
-source-evidence rejection, and separate boot/runtime rollback. Full-host
-build/review and an actual timer run are distinct deployment acceptance checks.
-The earlier delayed-update prototype is preserved in commit `ed38a0b`; its unused
-cooldown code is removed from the active tree and can be restored from Git.
-
-## Why a small adapter
-
-Stock `system.autoUpgrade` supplies scheduling and direct `nixos-rebuild`, but
-its local-flake update/commit flags do not preserve this checkout's concurrent
-edits, exact conditional package holds, or protected Phoenix source review.
-Reuse systemd, Nix, Git's merge machinery and `nix-update`; custom code is limited
-to source acceptance, holds and coordination. A custom security fast lane would
-add advisory mapping and exception maintenance, so it is deliberately absent.
-Revisit cooldowns if maintained feeds offer verified security bypass coverage.
+- **Inspect:** `systemctl status phoenix-updates.timer`, `journalctl -u phoenix-updates.service`, `/var/lib/phoenix-updates/last-result.json`. `phoenix-update` runs an immediate serialized check. Failures emit a fixed desktop notification; no credentials or private profiles are collected.
+- **Checks:** Exact-head Community publisher CI and stable payload validation; known-vulnerability Nix evaluation; unprivileged build; immutable source/closure binding; root baseline/profile rechecks. Missing Community checks retain that group while channel updates can proceed. Unchanged failed candidates back off for a day.
+- **Permissions:** The automatic action stages next boot only; it cannot supply a command, closure or verdict, reboot, or garbage-collect. Manual configuration changes retain the existing review gate. Git commands use sanitized metadata to prevent inherited hooks and filters.
+- **Upstream comparison:** Stock `system.autoUpgrade` supplies scheduling and direct rebuild/update/commit flags. Its systemd unit can be extended without patching upstream, but a pre-hook alone cannot coordinate isolated preparation, conditional exceptions, protected deployment and safe checkout publication. The small adapter reuses systemd, Nix lock/build operations and Git integration; it does not implement an advisory framework.
+- **Validation:** Focused updater/controller fixtures cover dirty Git, source/publisher rejection, exception expiry, boot-only activation and no reviewer invocation. Full-host evaluation/build and a real service run are separate checks; mocks alone do not establish deployment success.

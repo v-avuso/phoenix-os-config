@@ -13,7 +13,6 @@ import subprocess
 import tempfile
 import time
 COMMUNITY_CHECKS = {"source-and-node", "rust", "nix", "official-linux-gate"}
-CLI_TAG = re.compile(r"rust-v([0-9]+\.[0-9]+\.[0-9]+)\Z")
 COMMUNITY_VERSION = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+\Z")
 REVISION = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
 SOURCE_LIMIT = 896 * 1024
@@ -156,27 +155,6 @@ def validate_community_checks(revision, result):
                 or check["app"].get("slug") != "github-actions" or check.get("status") != "completed"
                 or check.get("conclusion") != "success"):
                 raise CandidateError("required Community check failed or changed: " + name)
-
-def stable_cli_release(releases):
-    if not isinstance(releases, list):
-        raise CandidateError("Codex CLI release list is malformed")
-    from datetime import datetime
-    eligible = []
-    for release in releases:
-        if not isinstance(release, dict) or release.get("draft") is not False or release.get("prerelease") is not False:
-            continue
-        tag = release.get("tag_name")
-        match = CLI_TAG.fullmatch(tag) if isinstance(tag, str) else None
-        published = release.get("published_at")
-        if not match or not isinstance(published, str):
-            continue
-        try:
-            parsed = datetime.fromisoformat(published.replace("Z", "+00:00"))
-        except ValueError:
-            continue
-        if parsed.tzinfo is not None:
-            eligible.append((parsed.timestamp(), match.group(1), release))
-    return max(eligible, key=lambda item: (item[0], item[1]))[2] if eligible else None
 
 def _read_lock(path):
     lock = json.loads(path.read_text(encoding="utf-8"))

@@ -72,6 +72,8 @@ let
       controller = toString ./deployment.py;
       reviewScript = toString ./deploy-review.py;
       upstreamReviewScript = toString ./upstream-review.py;
+      routineUpdateScript = toString ./routine-update.py;
+      system = pkgs.stdenv.hostPlatform.system;
       python = "${pkgs.python3}/bin/python3";
       setpriv = "${pkgs.util-linux}/bin/setpriv";
       nix = "${pkgs.nix}/bin/nix";

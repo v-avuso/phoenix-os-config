@@ -21,8 +21,7 @@ reviewer and activation gate are deployed and tested. Preserve known-good system
 generations and recovery. Prefer existing tools and compact, testable interfaces.
 
 Protected deployment controller policy: the user has explicitly accepted model
-review residual risk for task-related test, switch and automatic update boot
-staging. Boot changes the next-boot profile without activating the running
+review residual risk for task-related test, switch and manual boot staging. Boot changes the next-boot profile without activating the running
 desktop; it must preserve runtime state even during rollback. A dedicated reviewer with
 protected retained authentication issues a fresh in-memory verdict. The review
 binds full source, activated baseline, closure, target, action, task reason and
@@ -40,5 +39,16 @@ complete changed upstream file implementations and their before/after diffs;
 review. Assess that authority evidence within the stated scope, not an omitted
 repository. Reject dangerous or unclear authority changes. The protected
 controller must validate every scoped verdict AND the complete repository
-verdict before any activation. Digests alone are never approval evidence. No
+verdict before any model-reviewed activation. Digests alone are never approval evidence. No
 batch may omit a file to fit a bound; an oversized individual file fails closed.
+
+Routine updates use a separate deliberately authorized deterministic `update`
+action, without model calls. It may change only the approved input lock graph and
+remove version-satisfied central exceptions; all other source bytes/modes,
+publishers and declared input identities stay fixed against the preceding
+root-owned approved source. Root verifies those rules, freezes and builds as the
+unprivileged builder, binds the resulting closure and rechecks baseline/profile
+before boot staging. It accepts no command, supplied closure or caller verdict.
+Patch contents, new exceptions, trust rules, service scripts and configuration
+changes require the manual review path. This distributor-trust policy does not
+claim to detect malicious releases from an approved publisher.

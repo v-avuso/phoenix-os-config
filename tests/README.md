@@ -104,9 +104,9 @@ nix eval --impure --file tests/desktop-services.nix
   system activation remain runtime acceptance checks.
 
 - **Update fixtures:** disposable Git repositories exercise candidate preparation,
-  satisfied hold cleanup only after protected staging, failed-review preservation,
+  satisfied hold/patch cleanup after deterministic staging, failed-staging preservation,
   unrelated index/worktree edits and deferred user commits. Mocked public sources
-  enforce exact publisher checks. Upstream authority evidence rejects unknown or
+  enforce exact publisher checks; automatic controller fixtures reject source/publisher changes and never invoke AI review. Manual upstream authority evidence rejects unknown or
   oversized sources. None runs the live updater or activates NixOS.
 
 The `nix build` and `nix eval` commands above load the full flake and require Nix

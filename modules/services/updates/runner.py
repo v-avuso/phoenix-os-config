@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Six-hour source updates; isolated preparation, protected boot, safe Git import.
+"""Scheduled source updates; isolated preparation, protected boot, safe Git import.
 
 Nix/Git own lock construction and integration. No advisory classification or
 caller-written deployment verdict. An affected dirty file always defers updates.
@@ -19,8 +19,7 @@ import urllib.request
 import uuid
 
 POLICY = 'config/updates.json'
-CLI = 'modules/development/ai/codex-package.nix'
-ALLOWED = {'flake.lock', POLICY, CLI}
+ALLOWED = {'flake.lock', POLICY}
 NUMERIC = re.compile(r'[0-9]+(?:\.[0-9]+){1,3}\Z')
 REV = re.compile(r'[0-9a-f]{40}\Z')
 SOURCES = {'nixpkgs': ('NixOS', 'nixpkgs', 'nixos-26.05'),
@@ -45,7 +44,7 @@ def fetch(url):
 def validate_policy(policy):
     if not isinstance(policy, dict) or policy.get('version') != 1:
         raise ValueError('unsupported update policy')
-    if set(policy) - {'version', 'packageSources', 'holds', '_comments'}:
+    if set(policy) - {'version', 'packageSources', 'holds', 'patches', '_comments'}:
         raise ValueError('unknown policy fields')
     expected = {'firefox', 'codex-desktop', 'codex-cli'}
     if set(policy.get('packageSources', {})) != expected:
@@ -53,7 +52,7 @@ def validate_policy(policy):
     sources = policy['packageSources']
     if (sources['firefox'] not in {'nixpkgs', 'nixpkgs-unstable'} or
         sources['codex-desktop'] != {'native': 'codex-desktop-linux', 'sandbox': 'codex-desktop-sandbox'} or
-        sources['codex-cli'] != 'codex-cli'):
+        sources['codex-cli'] not in {'nixpkgs', 'nixpkgs-unstable'}):
         raise ValueError('unsupported package adapter')
     holds = policy.get('holds')
     if not isinstance(holds, dict) or any(not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_+-]*', app) for app in holds):
@@ -66,17 +65,29 @@ def validate_policy(policy):
         if threshold is not None and (not isinstance(threshold, str) or not NUMERIC.fullmatch(threshold)):
             raise ValueError('resume version must be a stable numeric version or null')
         pin = hold['pin']
-        if app not in {'codex-desktop', 'codex-cli'} and (not isinstance(pin, str) or not REV.fullmatch(pin)):
+        if app != 'codex-desktop' and (not isinstance(pin, str) or not REV.fullmatch(pin)):
             raise ValueError('package hold requires a full Nixpkgs revision')
-        if hold.get('source', 'nixpkgs') not in {'nixpkgs', 'nixpkgs-unstable'}:
-            raise ValueError('unsupported held package source')
+        if hold.get('source', 'nixpkgs') not in {'nixpkgs', 'nixpkgs-unstable'} or (app not in {'firefox', 'codex-cli', 'codex-desktop'} and hold.get('source', 'nixpkgs') != 'nixpkgs'):
+            raise ValueError('ordinary holds must observe their stable package source')
         if app == 'codex-desktop' and (not isinstance(pin, dict) or set(pin) != {'native', 'sandbox'} or
             any(not isinstance(v, str) or not REV.fullmatch(v) for v in pin.values())):
             raise ValueError('desktop hold requires both exact source revisions')
-        if app == 'codex-cli' and (not isinstance(pin, dict) or set(pin) != {'version', 'hash'} or
-            not isinstance(pin['version'], str) or not NUMERIC.fullmatch(pin['version']) or
-            not re.fullmatch(r'sha256-[A-Za-z0-9+/]{43}=', str(pin['hash']))):
-            raise ValueError('CLI hold requires stable version and SRI SHA-256')
+    patches = policy.get('patches', {})
+    if not isinstance(patches, dict):
+        raise ValueError('patches must be a package-keyed object')
+    for app, fix in patches.items():
+        if (not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_+-]*', app) or app == 'codex-desktop' or
+            not isinstance(fix, dict) or set(fix) - {'reason', 'patchFiles', 'removeAtVersion', 'source'} or
+            not isinstance(fix.get('reason'), str) or not fix['reason'].strip() or
+            not isinstance(fix.get('patchFiles'), list) or not fix['patchFiles'] or
+            any(not isinstance(path, str) or not re.fullmatch(r'config/update-patches/[A-Za-z0-9_+-]+\.patch', path)
+                for path in fix['patchFiles'])):
+            raise ValueError('temporary patch requires reason and central patch files')
+        threshold = fix.get('removeAtVersion')
+        if threshold is not None and (not isinstance(threshold, str) or not NUMERIC.fullmatch(threshold)):
+            raise ValueError('patch removal version must be stable numeric or null')
+        if fix.get('source', 'nixpkgs') not in {'nixpkgs', 'nixpkgs-unstable'} or (app not in {'firefox', 'codex-cli'} and fix.get('source', 'nixpkgs') != 'nixpkgs'):
+            raise ValueError('ordinary patches must observe their stable package source')
     return policy
 
 
@@ -151,6 +162,8 @@ def integrate(config, c, home, head, commit, paths):
     update-ref's compare-and-swap. No stash, reset, hooks or user-change commits.
     """
     repo = config['repo']
+    if c.git(config['git'], repo, home, 'symbolic-ref', '--quiet', '--short', 'HEAD').decode().strip() != config.get('sourceBranch', 'main'):
+        raise ValueError('configured update branch is not checked out')
     if c.git(config['git'], repo, home, 'rev-parse', 'HEAD').decode().strip() != head:
         raise ValueError('main advanced; candidate retained')
     if c._status_paths(config['git'], repo, home) & paths:
@@ -160,6 +173,8 @@ def integrate(config, c, home, head, commit, paths):
     fd = os.open(lock, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     alternate = Path(str(index) + '.phoenix-' + uuid.uuid4().hex)
     try:
+        if c.git(config['git'], repo, home, 'symbolic-ref', '--quiet', '--short', 'HEAD').decode().strip() != config.get('sourceBranch', 'main'):
+            raise ValueError('configured update branch changed before index lock')
         alternate.write_bytes(index.read_bytes())
         env = dict(c.git_env(repo, home), PATH=config['path'], GIT_INDEX_FILE=str(alternate))
         command = c.git_command(config['git'], repo, home)
@@ -183,15 +198,34 @@ def integrate(config, c, home, head, commit, paths):
         alternate.unlink(missing_ok=True)
 
 
+def cleanup_branches(config, c, home, keep=()):
+    """Remove only recognizable service-authored candidates with no worktree."""
+    if not config.get('cleanupBranches', True):
+        return
+    repo = config['repo']
+    checked_out = {line[7:] for line in c.git(config['git'], repo, home, 'worktree', 'list', '--porcelain').decode().splitlines()
+                   if line.startswith('branch ')}
+    branches = c.git(config['git'], repo, home, 'for-each-ref', '--format=%(refname:short)', 'refs/heads/codex/updates/').decode().splitlines()
+    legacy = 'modules/development/ai/codex-package.nix'
+    for branch in branches:
+        suffix = branch.removeprefix('codex/updates/')
+        if branch in keep or 'refs/heads/' + branch in checked_out or not re.fullmatch(r'(?:[0-9a-f]{32}|[0-9]{8}-[0-9]{6}(?:-[0-9]+)?)', suffix):
+            continue
+        author = c.git(config['git'], repo, home, 'show', '-s', '--format=%ae', branch).decode().strip()
+        paths = set(c.git(config['git'], repo, home, 'diff-tree', '--no-commit-id', '--name-only', '-r', branch).decode().splitlines())
+        if author == 'phoenix-updates@localhost' and paths and paths <= ALLOWED | {legacy}:
+            c.git(config['git'], repo, home, 'branch', '-D', branch)
+
+
 class UpdateDenied(ValueError):
     def __init__(self, result):
-        super().__init__('protected boot review/staging failed: ' + str(result.get('summary', result.get('code', 'protocol')))[:1000])
+        super().__init__('deterministic boot staging failed: ' + str(result.get('summary', result.get('code', 'protocol')))[:1000])
         self.nodes = result.get('affectedInputNodes', [])
 
 
 def controller(config, c, home, tree, commit, base, profile):
     files, modes = c._manifest(config['git'], tree, home, commit)
-    request = dict(files=files, modes=modes, commit=commit, target=config['target'], action='boot',
+    request = dict(files=files, modes=modes, commit=commit, target=config['target'], action='update',
                    expectedBase=base, expectedProfile=profile,
                    reason='Automatically update supported stable system and selected fresh applications; respect explicit holds and preserve runtime state')
     body = json.dumps(request).encode() + b'\n'
@@ -208,7 +242,7 @@ def controller(config, c, home, tree, commit, base, profile):
                 raise ValueError('controller response lost or oversized')
             response.extend(block)
     result = json.loads(response)
-    if result.get('ok') is not True or result.get('action') != 'boot':
+    if result.get('ok') is not True or result.get('action') != 'update':
         raise UpdateDenied(result)
     return result
 
@@ -223,13 +257,16 @@ def atomic_json(path, value):
         Path(name).unlink(missing_ok=True)
 
 
-def run(config, c, retry=False):
+def run(config, c):
     repo = Path(config['repo']).resolve(strict=True)
     state = Path(config['state'])
     home = state / 'command-home'
     home.mkdir(exist_ok=True)
     Path(config['nixHome']).mkdir(exist_ok=True)
-    head = c.git(config['git'], repo, home, 'rev-parse', 'HEAD').decode().strip()
+    source_branch = config.get('sourceBranch', 'main')
+    if c.git(config['git'], repo, home, 'symbolic-ref', '--quiet', '--short', 'HEAD').decode().strip() != source_branch:
+        return dict(status='deferred', reason='configured update branch is not checked out')
+    head = c.git(config['git'], repo, home, 'rev-parse', 'refs/heads/' + source_branch).decode().strip()
     # Never turn unreviewed user commits into unattended system deployments.
     base = str(Path(config['baseline']).resolve(strict=True))
     profile = str(Path(config['systemProfile']).resolve(strict=True))
@@ -245,8 +282,11 @@ def run(config, c, retry=False):
             except Exception:
                 return dict(status='deferred', reason='staged update awaits affected local edits', candidate=pending['candidate'])
             pending_path.unlink()
+            if config.get('cleanupBranches', True):
+                cleanup_branches(config, c, home)
             return dict(status='staged', candidate=pending['candidate'], source=pending['source'])
         pending_path.unlink()  # A newer manual deployment superseded this candidate.
+        cleanup_branches(config, c, home)
     inventory = c._commit_inventory(config['git'], repo, home, head)
     if not any(inventory == c._inventory(Path(source)) for source in approved):
         return {'status': 'deferred', 'reason': 'main is not the active or staged reviewed source'}
@@ -266,14 +306,8 @@ def run(config, c, retry=False):
     selected = {alias: revision(alias, stable_branch if alias == 'nixpkgs' else None)
                 for alias in SOURCES if alias != 'codex-desktop-sandbox'}
     selected['codex-desktop-sandbox'] = selected['codex-desktop-linux']
-    blocked_path = state / 'blocked-inputs.json'
-    blocked = json.loads(blocked_path.read_text()) if blocked_path.exists() else {}
-    blocked = {alias: record for alias, record in blocked.items() if selected.get(alias) == record['revision']}
-    if blocked_path.exists():
-        atomic_json(blocked_path, blocked)
-    selected = {alias: rev for alias, rev in selected.items() if alias not in blocked}
     versions = {}
-    notes = ['Retained %s after protected rejection: %s' % (alias, record['reason']) for alias, record in blocked.items()]
+    notes = []
     desktop_revision = selected.get('codex-desktop-linux')
     try:
         if desktop_revision is None:
@@ -284,18 +318,13 @@ def run(config, c, retry=False):
         selected.pop('codex-desktop-linux', None)
         selected.pop('codex-desktop-sandbox', None)
         notes.append('Community source held: required upstream checks unavailable or unsuccessful')
-    release = c.stable_cli_release([fetch('https://api.github.com/repos/openai/codex/releases/latest')])
-    if release is not None:
-        versions['codex-cli'] = c.CLI_TAG.fullmatch(release['tag_name']).group(1)
-        if not compare_version(config, c, versions['codex-cli'], '0.159.0'):
-            versions.pop('codex-cli')
     holds = policy['holds']
     releasing = []
-    for app, hold in holds.items():
-        if app in {'codex-cli', 'codex-desktop'} or hold.get('resumeAtVersion') is None:
+    for app, hold in [*holds.items(), *policy.get('patches', {}).items()]:
+        if app == 'codex-desktop' or hold.get('resumeAtVersion', hold.get('removeAtVersion')) is None:
             continue
-        alias = policy['packageSources']['firefox'] if app == 'firefox' else hold.get('source', 'nixpkgs')
-        ref = 'github:NixOS/nixpkgs/' + selected.get(alias, lock_node(before, alias)['locked']['rev']) + '#legacyPackages.x86_64-linux.' + app + '.version'
+        alias = policy['packageSources'][app] if app in {'firefox', 'codex-cli'} else hold.get('source', 'nixpkgs')
+        ref = 'github:NixOS/nixpkgs/' + selected.get(alias, lock_node(before, alias)['locked']['rev']) + '#legacyPackages.x86_64-linux.' + ('codex' if app == 'codex-cli' else app) + '.version'
         versions[app] = c._run([config['nix'], 'eval', '--raw', '--no-write-lock-file', ref], env=nix_env(config), timeout=900).decode().strip()
     for app, hold in holds.items():
         version = versions.get(app)
@@ -304,8 +333,6 @@ def run(config, c, retry=False):
         elif app == 'codex-desktop':
             selected.pop('codex-desktop-linux', None)
             selected.pop('codex-desktop-sandbox', None)
-        elif app == 'codex-cli':
-            versions.pop('codex-cli', None)
         # Firefox is pinned per package by the Nix declaration, independently of
         # the shared channel's compositor and other application dependencies.
     if 'codex-desktop' in versions:
@@ -322,14 +349,13 @@ def run(config, c, retry=False):
                     releasing.remove('codex-desktop')
                 break
     selected = {alias: rev for alias, rev in selected.items() if lock_node(before, alias)['locked']['rev'] != rev}
-    current_cli = re.search(r'version = "([0-9.]+)";', c.git(config['git'], repo, home, 'show', head + ':' + CLI).decode())
-    cli_version = versions.get('codex-cli')
-    if cli_version and current_cli and not compare_version(config, c, cli_version, current_cli.group(1)):
-        cli_version = None
-    if current_cli and cli_version == current_cli.group(1):
-        cli_version = None
-    fingerprint = hashlib.sha256(json.dumps(dict(head=head, selected=selected, cli=cli_version, releasing=releasing, base=base, profile=profile), sort_keys=True).encode()).hexdigest()
-    if not selected and not cli_version and not releasing:
+    removing_patches = [app for app, fix in policy.get('patches', {}).items()
+                        if (app not in holds or app in releasing) and versions.get(app) and fix.get('removeAtVersion') and
+                        compare_version(config, c, versions[app], fix['removeAtVersion'])]
+    fingerprint = hashlib.sha256(json.dumps(dict(head=head, selected=selected, releasing=releasing,
+        removingPatches=removing_patches, base=base, profile=profile), sort_keys=True).encode()).hexdigest()
+    if not selected and not releasing and not removing_patches:
+        cleanup_branches(config, c, home)
         return dict(status='unchanged', notes=notes)
     attempt = state / 'attempt.json'
     if attempt.exists():
@@ -337,7 +363,13 @@ def run(config, c, retry=False):
         if previous.get('fingerprint') == fingerprint and time.time() - previous.get('time', 0) < 86400:
             return {'status': 'deferred', 'reason': 'unchanged failed candidate; retry tomorrow', 'notes': notes}
     attempt.write_text(json.dumps(dict(fingerprint=fingerprint, time=time.time())))
-    branch = 'codex/updates/' + uuid.uuid4().hex
+    stamp = time.strftime('%Y%m%d-%H%M%S')
+    branch = 'codex/updates/' + stamp
+    existing = set(c.git(config['git'], repo, home, 'for-each-ref', '--format=%(refname:short)', 'refs/heads/codex/updates/').decode().splitlines())
+    suffix = 0
+    while branch in existing:
+        suffix += 1
+        branch = 'codex/updates/' + stamp + '-' + str(suffix)
     tree = state / 'worktrees' / branch.rsplit('/', 1)[-1]
     tree.parent.mkdir(exist_ok=True)
     c.git(config['git'], repo, home, 'worktree', 'add', '-b', branch, str(tree), head)
@@ -349,17 +381,11 @@ def run(config, c, retry=False):
                     'github:%s/%s/%s' % (owner, source_repo, rev), '--output-lock-file', 'flake.lock'],
                    cwd=tree, env=nix_env(config), timeout=1800)
         validate_lock(c, before, c._read_lock(tree / 'flake.lock'), selected)
-        if cli_version:
-            c._run([config['nixUpdate'], '--flake', '--version', cli_version, 'codex-cli'],
-                   cwd=tree, env=nix_env(config), timeout=1800)
-            actual = c._run([config['nix'], 'eval', '--raw', '--no-write-lock-file',
-                            '.#packages.x86_64-linux.codex-cli.version'],
-                           cwd=tree, env=nix_env(config), timeout=900).decode().strip()
-            if actual != cli_version:
-                raise ValueError('CLI updater did not persist the verified stable version')
         for app in releasing:
             del policy['holds'][app]
-        if releasing:
+        for app in removing_patches:
+            del policy['patches'][app]
+        if releasing or removing_patches:
             (tree / POLICY).write_text(json.dumps(policy, indent=2) + '\n')
         paths = c._working_paths(config['git'], tree, home, head)
         if not paths or not paths <= ALLOWED:
@@ -369,29 +395,12 @@ def run(config, c, retry=False):
               'commit', '-m', 'feat(updates): refresh supported package sources', '-m',
               'Advance published channels and verified stable application releases without a local cooldown.\n'
               'Respect exact holds; remove only satisfied resume thresholds.\n'
-              'Deployment must pass the protected build/source review before boot staging; keep the running system unchanged.')
+              'Deployment must pass deterministic source and build checks before boot staging; keep the running system unchanged.')
         commit = c.git(config['git'], tree, home, 'rev-parse', 'HEAD').decode().strip()
         # Recheck policy/HEAD immediately before asking the protected controller.
         if c.git(config['git'], repo, home, 'rev-parse', 'HEAD').decode().strip() != head or c._status_paths(config['git'], repo, home) & paths:
             return dict(status='deferred', reason='checkout changed', candidate=commit, branch=branch)
-        try:
-            result = controller(config, c, home, tree, commit, base, profile)
-        except UpdateDenied as denial:
-            nodes = denial.nodes
-            if retry or not isinstance(nodes, list) or not nodes or any(not isinstance(n, str) for n in nodes):
-                raise
-            affected = {alias for alias in selected if c._closure(before, [alias]) & set(nodes) or
-                        c._closure(c._read_lock(tree / 'flake.lock'), [alias]) & set(nodes)}
-            if affected & {'codex-desktop-linux', 'codex-desktop-sandbox'}:
-                affected |= {'codex-desktop-linux', 'codex-desktop-sandbox'} & selected.keys()
-            if not affected:
-                raise
-            blocked.update({alias: dict(revision=selected[alias], reason=str(denial)[:500]) for alias in affected})
-            atomic_json(blocked_path, blocked)
-            # The controller denied staging, so no profile/checkout changed.
-            # Retry once with independent groups; retain denied exact revisions
-            # quietly until a different public head becomes available.
-            return run(config, c, retry=True)
+        result = controller(config, c, home, tree, commit, base, profile)
 
         try:
             integrate(config, c, home, head, commit, paths)
@@ -400,7 +409,7 @@ def run(config, c, retry=False):
             # main checkout was preserved; never pretend normal switch has pins.
             pending = dict(status='staged-pending-integration', candidate=commit, branch=branch,
                            source=result['source'], head=head, paths=sorted(paths),
-                           reason='checkout changed during protected review')
+                           reason='checkout changed during deterministic build/staging')
             (state / 'pending.json').write_text(json.dumps(pending))
             return pending
         attempt.unlink(missing_ok=True)
@@ -409,6 +418,8 @@ def run(config, c, retry=False):
         c.git(config['git'], repo, home, 'worktree', 'remove', '--force', str(tree))
         if commit is None:
             c.git(config['git'], repo, home, 'branch', '-D', branch)
+        elif config.get('cleanupBranches', True):
+            cleanup_branches(config, c, home, keep=(branch,) if pending_path.exists() else ())
 
 
 def main():

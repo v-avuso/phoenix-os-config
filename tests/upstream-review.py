@@ -59,12 +59,17 @@ class EvidenceTests(unittest.TestCase):
 
     def test_cli_effective_version_and_guard_contract(self):
         recipe = 'modules/development/ai/agent/reviewer-codex.nix'
-        before = {recipe: 'version = "0.159.0";'}
-        after = {recipe: 'version = "0.160.0";'}
-        held = dict(after, **{'config/updates.json': json.dumps({'holds': {'codex-cli': {'pin': {'version': '0.159.0'}}}})})
-        self.assertEqual(upstream.cli_version(held), '0.160.0')
-        self.assertEqual(upstream.cli_evidence(after, held, lambda _: self.fail('user hold changed reviewer')), [])
+        user_recipe = 'modules/development/ai/codex.nix'
+        before = {recipe: 'version = "0.159.0";', user_recipe: 'package = unstable.codex;'}
+        after_user = dict(before, **{
+            user_recipe: 'package = newerUnstable.codex;',
+            'config/updates.json': json.dumps({'holds': {'codex-cli': {'pin': 'a' * 40}}}),
+        })
+        self.assertEqual(upstream.cli_version(after_user), '0.159.0')
+        self.assertEqual(upstream.cli_evidence(before, after_user,
+                         lambda _: self.fail('user CLI update fetched reviewer source')), [])
         self.assertEqual(upstream.cli_evidence({}, {}, lambda _: self.fail('absent adapter fetched')), [])
+        after_reviewer = dict(before, **{recipe: 'version = "0.160.0";'})
         with tempfile.TemporaryDirectory() as directory:
             roots = {version: Path(directory)/version for version in ['0.159.0', '0.160.0']}
             paths = ['codex-rs/exec/src/lib.rs', 'codex-rs/exec/src/event_processor_with_human_output.rs',
@@ -73,11 +78,11 @@ class EvidenceTests(unittest.TestCase):
                 for name in paths:
                     path = root/name; path.parent.mkdir(parents=True, exist_ok=True)
                     path.write_text('context compacted\nversion ' + version + '\n')
-            batches = upstream.cli_evidence(before, after, roots.__getitem__)
+            batches = upstream.cli_evidence(before, after_reviewer, roots.__getitem__)
             self.assertEqual(sum(b.count("Exact candidate implementation:") for b in batches), 4)
             self.assertTrue(all('Exact candidate implementation:' in b and 'version 0.160.0' in b for b in batches))
             (roots['0.160.0']/paths[1]).write_text('unknown reporting contract')
             with self.assertRaisesRegex(ValueError, 'compaction guard'):
-                upstream.cli_evidence(before, after, roots.__getitem__)
+                upstream.cli_evidence(before, after_reviewer, roots.__getitem__)
 
 if __name__ == '__main__': unittest.main()

@@ -41,16 +41,16 @@ FIELDS = {'files', 'modes', 'commit', 'target', 'action', 'reason'}
 def request_valid(request, target):
     if not isinstance(request, dict):
         raise ValueError('unsupported request fields')
-    expected = FIELDS | ({'expectedBase', 'expectedProfile'} if request.get('action') == 'boot' else set())
+    expected = FIELDS | ({'expectedBase', 'expectedProfile'} if request.get('action') in {'boot', 'update'} else set())
     if set(request) != expected:
         raise ValueError('unsupported request fields')
-    if request['action'] not in {'test', 'switch', 'boot'} or request['target'] != target:
+    if request['action'] not in {'test', 'switch', 'boot', 'update'} or request['target'] != target:
         raise ValueError('unsupported action/target')
     if not isinstance(request['reason'], str) or not 1 <= len(request['reason'].strip()) <= 2000:
         raise ValueError('concrete task reason required')
     if not isinstance(request['commit'], str) or not re.fullmatch('[0-9a-f]{40,64}', request['commit']):
         raise ValueError('invalid informational commit')
-    if request['action'] == 'boot':
+    if request['action'] in {'boot', 'update'}:
         store_path(request['expectedBase'], 'source')
         store_path(request['expectedProfile'], 'closure')
     files, modes = request['files'], request['modes']
@@ -94,8 +94,20 @@ def activation_executable(closure):
     return str(executable)
 
 
+def frozen_github_reference(owner, repo, branch=None, directory=None):
+    """Address the declared GitHub branch, including GitHub's default branch."""
+    from urllib.parse import quote
+    reference = 'github:%s/%s' % (owner, repo)
+    if branch is not None:
+        reference += '/' + quote(branch, safe='')
+    if directory:
+        reference += '?dir=' + quote(directory, safe='/')
+    return reference
+
+
 def activate(config, closure, action, run):
-    command = [closure + '/bin/switch-to-configuration', action]
+    activation_action = 'boot' if action == 'update' else action
+    command = [closure + '/bin/switch-to-configuration', activation_action]
     if action == 'test':
         previous = str(Path('/run/current-system').resolve(strict=True))
         try:
@@ -151,6 +163,17 @@ def as_user(config, user, argv, run, **kwargs):
                 '--clear-groups', '--no-new-privs', *argv], **kwargs)
 
 
+def collect_upstream(upstream, action, before, after, resolve_locked, resolve_cli):
+    """Manual deployments retain evidence for locked inputs and the reviewer CLI."""
+    if action == 'update':
+        return []
+    batches = []
+    if before.get('flake.lock') != after.get('flake.lock'):
+        batches.extend(upstream.evidence(before, after, resolve_locked))
+    batches.extend(upstream.cli_evidence(before, after, resolve_cli))
+    return batches
+
+
 def process(config, request, uid, pid):
     state = {'stage': 'request'}
     try:
@@ -203,7 +226,7 @@ def process_inner(config, request, uid, pid, state):
         state['stage'] = 'baseline'
         baseline = str(Path(config['baseline']).resolve(strict=True))
         profile = str(Path('/nix/var/nix/profiles/system').resolve(strict=True))
-        if request['action'] == 'boot' and (request['expectedBase'] != baseline or request['expectedProfile'] != profile):
+        if request['action'] in {'boot', 'update'} and (request['expectedBase'] != baseline or request['expectedProfile'] != profile):
             raise ValueError('update baseline/profile changed before review')
         store_path(baseline, 'source')
         old = review.baseline_files(Path(baseline))
@@ -214,12 +237,89 @@ def process_inner(config, request, uid, pid, state):
         # immutable source is the preceding approved dependency baseline; do not
         # repeatedly spend reviews on the same already-staged upstream changes.
         previous_dependencies = review.baseline_files(Path(profile_source))
-        state['stage'] = 'upstream-evidence'
         upstream_batches = []
-        spec = importlib.util.spec_from_file_location('upstream_review', config['upstreamReviewScript'])
-        upstream = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(upstream)
-        if previous_dependencies.get('flake.lock') != request['files'].get('flake.lock'):
+        if request['action'] == 'update':
+            state['stage'] = 'routine-policy'
+            update_spec = importlib.util.spec_from_file_location('routine_update', config['routineUpdateScript'])
+            update = importlib.util.module_from_spec(update_spec)
+            update_spec.loader.exec_module(update)
+
+            def evaluate_package(alias, revision, attribute, system):
+                del alias  # The lock validator has already bound the selected root alias.
+                ref = 'github:NixOS/nixpkgs/%s#legacyPackages.%s.%s.version' % (revision, system, attribute)
+                return as_user(config, config['builderUser'], [config['nix'], 'eval', '--raw',
+                    '--no-write-lock-file', ref], review.run, env=env, timeout=900).decode().strip()
+
+            def verify_current_source(alias, node):
+                original, locked = node.get('original', {}), node.get('locked', {})
+                if alias is not None:
+                    branches = {
+                        'nixpkgs': original.get('ref'),
+                        'nixpkgs-unstable': 'nixos-unstable',
+                        'codex-desktop-linux': 'main',
+                        'codex-desktop-sandbox': 'main',
+                    }
+                    branch = branches[alias]
+                else:
+                    if original.get('type') != 'github':
+                        raise ValueError('changed dependency source type requires manual review')
+                    branch = original.get('rev') or original.get('ref')
+                owner, repo = original.get('owner'), original.get('repo')
+                if (original.get('type') != 'github' or not isinstance(owner, str) or
+                        not isinstance(repo, str) or (branch is not None and not isinstance(branch, str)) or
+                        not re.fullmatch(r'[A-Za-z0-9_.-]+', owner) or
+                        not re.fullmatch(r'[A-Za-z0-9_.-]+', repo) or
+                        (branch is not None and not re.fullmatch(r'[A-Za-z0-9_./-]+', branch))):
+                    raise ValueError('changed input has no supported frozen GitHub source')
+                reference = frozen_github_reference(owner, repo, branch, original.get('dir'))
+                metadata = json.loads(as_user(config, config['builderUser'],
+                    [config['nix'], 'flake', 'metadata', '--json', '--no-write-lock-file', reference],
+                    review.run, env=env, timeout=600))
+                exact = metadata.get('locked', {})
+                if any(exact.get(key) != locked.get(key) for key in ('owner', 'repo', 'rev', 'narHash')):
+                    raise ValueError('candidate input is not the current declared publisher head')
+                store_path(metadata['path'], 'source')
+                if alias in {'codex-desktop-linux', 'codex-desktop-sandbox'}:
+                    update.validate_community_payload(metadata['path'])
+                    update.validate_community_checks(locked['rev'])
+
+            def desktop_package_version(candidate_lock):
+                node = update._node(candidate_lock, 'codex-desktop-linux')
+                locked = node['locked']
+                reference = 'github:%s/%s/%s?narHash=%s' % (
+                    locked['owner'], locked['repo'], locked['rev'], locked['narHash'])
+                metadata = json.loads(as_user(config, config['builderUser'],
+                    [config['nix'], 'flake', 'metadata', '--json', '--no-write-lock-file', reference],
+                    review.run, env=env, timeout=600))
+                exact = metadata.get('locked', {})
+                if any(exact.get(key) != locked.get(key) for key in ('owner', 'repo', 'rev', 'narHash')):
+                    raise ValueError('community version source differs from candidate lock')
+                store_path(metadata['path'], 'source')
+                payload = json.loads((Path(metadata['path']) / 'nix/upstream-linux-packages.json').read_text())
+                version = payload.get('version') if isinstance(payload, dict) else None
+                if not isinstance(version, str) or not update.VERSION.fullmatch(version):
+                    raise ValueError('community source has no stable version')
+                return version
+
+            def compare_versions(left, right):
+                if not update.VERSION.fullmatch(left) or not update.VERSION.fullmatch(right):
+                    raise ValueError('invalid stable version comparison')
+                a, b = [int(part) for part in left.split('.')], [int(part) for part in right.split('.')]
+                width = max(len(a), len(b))
+                a.extend([0] * (width - len(a)))
+                b.extend([0] * (width - len(b)))
+                return (a > b) - (a < b)
+
+            previous_modes = review.source_modes(Path(profile_source), previous_dependencies)
+            update.validate_source(previous_dependencies, previous_modes, request['files'], request['modes'],
+                                   config['system'], compare_versions, evaluate_package, desktop_package_version,
+                                   verify_current_source)
+        else:
+            state['stage'] = 'upstream-evidence'
+        if request['action'] != 'update':
+            spec = importlib.util.spec_from_file_location('upstream_review', config['upstreamReviewScript'])
+            upstream = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(upstream)
             def resolve_locked(locked):
                 from urllib.parse import quote
                 reference = 'github:%s/%s/%s?narHash=%s' % (locked['owner'], locked['repo'],
@@ -231,15 +331,15 @@ def process_inner(config, request, uid, pid, state):
                     raise ValueError('resolved upstream source does not match lock')
                 store_path(metadata['path'], 'source')
                 return metadata['path']
-            upstream_batches = upstream.evidence(previous_dependencies, request['files'], resolve_locked)
-        def resolve_cli(version):
-            record = json.loads(as_user(config, config['builderUser'],
-                [config['nix'], 'flake', 'prefetch', '--json', 'github:openai/codex/rust-v' + version],
-                review.run, env=env, timeout=600))
-            store_path(record['storePath'], 'source')
-            return record['storePath']
-        upstream_batches.extend(upstream.cli_evidence(previous_dependencies, request['files'], resolve_cli))
-        if len(upstream_batches) > upstream.MAX_BATCHES:
+            def resolve_cli(version):
+                record = json.loads(as_user(config, config['builderUser'],
+                    [config['nix'], 'flake', 'prefetch', '--json', 'github:openai/codex/rust-v' + version],
+                    review.run, env=env, timeout=600))
+                store_path(record['storePath'], 'source')
+                return record['storePath']
+            upstream_batches = collect_upstream(upstream, request['action'], previous_dependencies,
+                                                request['files'], resolve_locked, resolve_cli)
+        if request['action'] != 'update' and len(upstream_batches) > upstream.MAX_BATCHES:
             raise ValueError('combined upstream evidence exceeds batch bound')
         state['stage'] = 'build'
         print(json.dumps(dict(event='building', uid=uid, pid=pid, source=source_store)), flush=True)
@@ -257,60 +357,62 @@ def process_inner(config, request, uid, pid, state):
         binding = {key: request[key] for key in ('commit', 'target', 'action', 'reason')}
         binding.update(source=source_store, base=baseline, profile=profile,
                        profileSource=profile_source, closure=closure, nonce=secrets.token_hex(32))
-        work = temporary / 'review'
-        work.mkdir(mode=0o700)
-        reviewer = pwd.getpwnam(config['reviewerUser'])
-        os.chown(work, reviewer.pw_uid, reviewer.pw_gid)
-        payload = {'binding': binding, 'files': request['files'],
-                   'diff': review.source_diff(old, request['files'], review.source_modes(Path(baseline), old), request['modes']), 'upstreamBatches': upstream_batches,
-                   'upstreamNodes': [getattr(batch, 'nodes', []) for batch in upstream_batches]}
-        state['stage'] = 'review'
-        print(json.dumps(dict(event='reviewing', uid=uid, pid=pid, source=source_store, closure=closure)), flush=True)
-        output = as_user(config, config['reviewerUser'], [config['python'], '-I', config['controller'],
-                         config['configPath'], 'worker', str(work)], review.run,
-                         data=json.dumps(payload).encode(), timeout=min(7200, 700 * (len(upstream_batches) + 1)),
-                         env={'HOME': config['reviewHome'], 'PATH': '/nonexistent'})
-        state['stage'] = 'verdict'
-        result = json.loads(output)
-        if not isinstance(result, dict) or result.get('status') not in {'verdict', 'error'}:
-            raise DeploymentFailure('verdict', 'worker-envelope-invalid')
-        if result['status'] == 'error':
-            # Only static worker classifications are allowed out of this boundary.
-            code = result.get('code')
-            if code not in {'reviewer-invocation-failed', 'schema-invalid', 'binding-mismatch',
-                            'context-compacted', 'review-context-oversized', 'upstream-model-denied'}:
-                code = 'worker-envelope-invalid'
-            raise DeploymentFailure('review', code)
-        verdict = result.get('verdict')
-        if 'upstreamDenialIndex' in result:
-            index = result['upstreamDenialIndex']
-            if type(index) is not int or not 0 <= index < len(upstream_batches):
-                raise DeploymentFailure('verdict', 'upstream-denial-index')
+        if request['action'] != 'update':
+            work = temporary / 'review'
+            work.mkdir(mode=0o700)
+            reviewer = pwd.getpwnam(config['reviewerUser'])
+            os.chown(work, reviewer.pw_uid, reviewer.pw_gid)
+            payload = {'binding': binding, 'files': request['files'],
+                       'diff': review.source_diff(old, request['files'], review.source_modes(Path(baseline), old), request['modes']), 'upstreamBatches': upstream_batches,
+                       'upstreamNodes': [getattr(batch, 'nodes', []) for batch in upstream_batches]}
+            state['stage'] = 'review'
+            print(json.dumps(dict(event='reviewing', uid=uid, pid=pid, source=source_store, closure=closure)), flush=True)
+            output = as_user(config, config['reviewerUser'], [config['python'], '-I', config['controller'],
+                             config['configPath'], 'worker', str(work)], review.run,
+                             data=json.dumps(payload).encode(), timeout=min(7200, 700 * (len(upstream_batches) + 1)),
+                             env={'HOME': config['reviewHome'], 'PATH': '/nonexistent'})
+            state['stage'] = 'verdict'
+            result = json.loads(output)
+            if not isinstance(result, dict) or result.get('status') not in {'verdict', 'error'}:
+                raise DeploymentFailure('verdict', 'worker-envelope-invalid')
+            if result['status'] == 'error':
+                code = result.get('code')
+                if code not in {'reviewer-invocation-failed', 'schema-invalid', 'binding-mismatch',
+                                'context-compacted', 'review-context-oversized', 'upstream-model-denied'}:
+                    code = 'worker-envelope-invalid'
+                raise DeploymentFailure('review', code)
+            verdict = result.get('verdict')
+            if 'upstreamDenialIndex' in result:
+                index = result['upstreamDenialIndex']
+                if type(index) is not int or not 0 <= index < len(upstream_batches):
+                    raise DeploymentFailure('verdict', 'upstream-denial-index')
+                try:
+                    review.validate_verdict(verdict, upstream_binding(binding, upstream_batches[index], index, getattr(upstream_batches[index], 'nodes', [])))
+                except review.ReviewDenied as error:
+                    denial = DeploymentDenied(error.verdict['summary'])
+                    denial.affected_nodes = getattr(upstream_batches[index], 'nodes', [])
+                    raise denial from None
+                except review.ReviewVerdictError as error:
+                    raise DeploymentFailure('verdict', error.code) from None
+                raise DeploymentFailure('verdict', 'upstream-denial-approved')
             try:
-                review.validate_verdict(verdict, upstream_binding(binding, upstream_batches[index], index, getattr(upstream_batches[index], 'nodes', [])))
+                upstream_verdicts = result.get('upstreamVerdicts', [])
+                if not isinstance(upstream_verdicts, list) or len(upstream_verdicts) != len(upstream_batches):
+                    raise DeploymentFailure('verdict', 'upstream-verdict-count')
+                for index, (batch, upstream_verdict) in enumerate(zip(upstream_batches, upstream_verdicts)):
+                    review.validate_verdict(upstream_verdict, upstream_binding(binding, batch, index, getattr(batch, 'nodes', [])))
+                review.validate_verdict(verdict, binding)
             except review.ReviewDenied as error:
-                denial = DeploymentDenied(error.verdict['summary'])
-                denial.affected_nodes = getattr(upstream_batches[index], 'nodes', [])
-                raise denial from None
+                raise DeploymentDenied(error.verdict['summary']) from None
             except review.ReviewVerdictError as error:
                 raise DeploymentFailure('verdict', error.code) from None
-            raise DeploymentFailure('verdict', 'upstream-denial-approved')
-        try:
-            upstream_verdicts = result.get('upstreamVerdicts', [])
-            if not isinstance(upstream_verdicts, list) or len(upstream_verdicts) != len(upstream_batches):
-                raise DeploymentFailure('verdict', 'upstream-verdict-count')
-            for index, (batch, upstream_verdict) in enumerate(zip(upstream_batches, upstream_verdicts)):
-                review.validate_verdict(upstream_verdict, upstream_binding(binding, batch, index, getattr(batch, 'nodes', [])))
-            review.validate_verdict(verdict, binding)
-        except review.ReviewDenied as error:
-            raise DeploymentDenied(error.verdict['summary']) from None
-        except review.ReviewVerdictError as error:
-            raise DeploymentFailure('verdict', error.code) from None
         state['stage'] = 'baseline-recheck'
         if str(Path(config['baseline']).resolve(strict=True)) != baseline:
             raise ValueError('activated baseline changed during review')
         if str(Path('/nix/var/nix/profiles/system').resolve(strict=True)) != profile:
             raise ValueError('boot profile changed during review')
+        if str((Path(profile) / 'etc/phoenix-agent/activated-source').resolve(strict=True)) != profile_source:
+            raise ValueError('approved profile source changed during review')
         print(json.dumps(dict(event='approved', uid=uid, pid=pid, source=source_store,
                               closure=closure, action=request['action'], target=request['target'])), flush=True)
         # Upstream transient service owns activation even if the new system
@@ -485,7 +587,7 @@ def main():
     parser.add_argument('config')
     parser.add_argument('mode', choices=['serve', 'worker', 'bootstrap', 'activate'])
     parser.add_argument('directory', nargs='?')
-    parser.add_argument('action', nargs='?', choices=['test', 'switch', 'boot'])
+    parser.add_argument('action', nargs='?', choices=['test', 'switch', 'boot', 'update'])
     parser.add_argument('--expected-base')
     parser.add_argument('--expected-source')
     parser.add_argument('--expected-profile')

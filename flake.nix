@@ -92,8 +92,9 @@
       vm = mkHost ./hosts/vm/configuration.nix;
     in
     {
-      packages.${system}.codex-cli = nixpkgs.legacyPackages.${system}.callPackage
-        ./modules/development/ai/codex-package.nix { };
+      # Keep a stable attribute for version checks; the actual package recipe
+      # and its companion/bubblewrap/ripgrep layout come from Nixpkgs.
+      packages.${system}.codex-cli = inputs.nixpkgs-unstable.legacyPackages.${system}.codex;
       nixosConfigurations = {
         inherit metal vm;
 

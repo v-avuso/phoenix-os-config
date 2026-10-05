@@ -27,7 +27,7 @@ class RunnerTests(unittest.TestCase):
         self.git('config', 'user.name', 'fixture')
         self.git('config', 'user.email', 'fixture@localhost')
         self.git('config', 'commit.gpgSign', 'false')
-        for name in ('flake.nix', 'flake.lock', 'config/updates.json', runner.CLI):
+        for name in ('flake.nix', 'flake.lock', 'config/updates.json'):
             path = self.repo / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text('{}\n' if name.startswith('flake') else (ROOT / name).read_text())
@@ -148,7 +148,7 @@ class RunnerTests(unittest.TestCase):
         (self.repo/'flake.lock').write_text(json.dumps(lock))
         policy = json.loads((self.repo/runner.POLICY).read_text())
         if hold:
-            policy['holds']['codex-cli'] = {'pin': {'version':'0.159.0','hash':'sha256-Ndpl1+hkTijqCk1OPYwVtAxrSSNW1M8hmGx+NB+Dok4='},
+            policy['holds']['codex-cli'] = {'pin': 'a'*40,
                 'reason':'wait for fix','resumeAtVersion':'0.160.0'}
             (self.repo/runner.POLICY).write_text(json.dumps(policy))
         self.git('add','.'); self.git('commit','-qm','pipeline baseline')
@@ -158,21 +158,17 @@ class RunnerTests(unittest.TestCase):
         (profile/'etc/phoenix-agent/activated-source').symlink_to(approved)
         state=self.root/'state'; state.mkdir()
         nix=self.root/'nix'; nix.write_text("""#!%s
-import json,pathlib,re,sys
+import json,pathlib,sys
 if sys.argv[1] == 'eval':
  if '--expr' in sys.argv: print(1)
- else: print(re.search(r'version = \"([0-9.]+)\";',pathlib.Path('%s').read_text()).group(1))
+ else: print('0.160.0')
 else:
  path=pathlib.Path('flake.lock'); data=json.loads(path.read_text())
  alias=sys.argv[sys.argv.index('--override-input')+1]
  data['nodes'][alias]['locked']['rev']=sys.argv[sys.argv.index('--override-input')+2].rsplit('/',1)[-1]
  path.write_text(json.dumps(data))
-""" % (sys.executable,runner.CLI)); nix.chmod(0o755)
-        updater=self.root/'nix-update'; updater.write_text("""#!%s
-from pathlib import Path
-p=Path('%s');p.write_text(p.read_text().replace('version = \"0.159.0\";', 'version = \"0.160.0\";'))
-""" % (sys.executable,runner.CLI)); updater.chmod(0o755)
-        self.config.update(state=str(state),nixHome=str(state/'nix-home'),nix=str(nix),nixUpdate=str(updater),
+""" % sys.executable); nix.chmod(0o755)
+        self.config.update(state=str(state),nixHome=str(state/'nix-home'),nix=str(nix),
             baseline=str(approved),systemProfile=str(profile),target='metal',controllerSocket='/fixture')
 
     def public_fetch(self,url):
@@ -201,29 +197,50 @@ p=Path('%s');p.write_text(p.read_text().replace('version = \"0.159.0\";', 'versi
         self.assertNotIn('codex-cli',json.loads((self.repo/runner.POLICY).read_text())['holds'])
         self.assertEqual(self.git('diff','--cached','--name-only').strip(),'user-note')
         self.assertEqual(self.git('show','--format=','--name-only','HEAD').strip().splitlines(),
-                         ['config/updates.json','flake.lock',runner.CLI])
+                         ['config/updates.json','flake.lock'])
 
-    def test_verified_component_denial_retains_only_that_revision(self):
+    def test_different_checked_out_branch_defers_before_network(self):
         self.setup_pipeline()
-        calls = []
-        def controlled(config,c,home,tree,commit,base,profile):
-            calls.append(c._read_lock(tree/'flake.lock'))
-            if len(calls) == 1:
-                raise runner.UpdateDenied(dict(affectedInputNodes=['codex-desktop-linux'], summary='unsafe host executor'))
-            for alias in ['codex-desktop-linux', 'codex-desktop-sandbox']:
-                self.assertEqual(runner.lock_node(calls[-1], alias)['locked']['rev'], '1'*40)
-            self.assertEqual(runner.lock_node(calls[-1], 'nixpkgs')['locked']['rev'], '2'*40)
-            return dict(ok=True,action='boot',source='/reviewed/source')
+        self.git('checkout','-qb','feature')
+        with patch.object(runner,'revision') as network:
+            self.assertEqual(runner.run(self.config,candidate)['status'],'deferred')
+            network.assert_not_called()
+
+    def test_patch_threshold_removes_only_satisfied_entry(self):
+        self.setup_pipeline()
+        policy=json.loads((self.repo/runner.POLICY).read_text())
+        policy['patches']={'codex-cli': {'reason':'temporary fix',
+            'patchFiles':['config/update-patches/codex-fix.patch'], 'removeAtVersion':'0.160.0'}}
+        (self.repo/runner.POLICY).write_text(json.dumps(policy))
+        self.git('add','.');self.git('commit','-qm','approved fix')
+        self.head=self.git('rev-parse','HEAD').strip()
+        approved=Path(self.config['baseline']);shutil.rmtree(approved)
+        shutil.copytree(self.repo,approved,ignore=shutil.ignore_patterns('.git'))
         with patch.object(runner,'revision',return_value='2'*40), patch.object(runner,'community',return_value='26.930.31730'), \
-             patch.object(runner,'fetch',side_effect=self.public_fetch),patch.object(runner,'controller',side_effect=controlled):
+             patch.object(runner,'fetch',side_effect=self.public_fetch),patch.object(runner,'controller',return_value={'source':'/fixture'}):
             result=runner.run(self.config,candidate)
         self.assertEqual(result['status'],'staged')
-        self.assertEqual(len(calls),2)
-        blocked=json.loads((Path(self.config['state'])/'blocked-inputs.json').read_text())
-        self.assertEqual(set(blocked),{'codex-desktop-linux','codex-desktop-sandbox'})
-        self.assertTrue(any('unsafe host executor' in note for note in result['notes']))
+        self.assertEqual(json.loads((self.repo/runner.POLICY).read_text())['patches'],{})
+        self.assertEqual(self.git('branch','--list','codex/updates/*').strip(),'')
 
-    def test_failed_review_keeps_hold_and_current_pins(self):
+    def test_cleanup_deletes_owned_stale_candidates_but_preserves_debug_and_other_branches(self):
+        self.setup_pipeline()
+        original=self.head
+        (self.repo/'flake.lock').write_text((self.repo/'flake.lock').read_text()+' ')
+        self.git('add','flake.lock')
+        self.git('-c','user.email=phoenix-updates@localhost','commit','-qm','service candidate')
+        self.git('branch','codex/updates/'+'a'*32)
+        self.git('branch','codex/updates/user-work')
+        self.git('reset','--hard',original)
+        self.config['cleanupBranches']=False
+        runner.cleanup_branches(self.config,candidate,self.home)
+        self.assertTrue(self.git('branch','--list','codex/updates/'+'a'*32).strip())
+        self.config['cleanupBranches']=True
+        runner.cleanup_branches(self.config,candidate,self.home)
+        self.assertEqual(self.git('branch','--list','codex/updates/'+'a'*32).strip(),'')
+        self.assertTrue(self.git('branch','--list','codex/updates/user-work').strip())
+
+    def test_failed_staging_keeps_hold_and_current_pins(self):
         self.setup_pipeline(hold=True)
         original=(self.repo/'flake.lock').read_bytes()
         with patch.object(runner,'revision',return_value='2'*40), patch.object(runner,'community',return_value='26.930.31730'), \

@@ -2,11 +2,12 @@
   "version": 1,
   "_comments": {
     "firefox": "Selected because it is used frequently and benefits from newer browser features. This freshness choice is not a security claim; stable Firefox also receives upstream security updates.",
-    "codex-desktop": "Keep Native and Sandboxed sources independently pinned; accept only exact stable payload metadata and required successful upstream checks.",
-    "codex-cli": "Keep the Phoenix executable-layout and Btrfs workaround; update only through its maintained exported package attribute and verified stable releases.",
+    "codex-desktop": "Frequently and deeply used; prefer current stable desktop features. Native and Sandbox follow matching Community source heads with exact successful publisher checks.",
+    "codex-cli": "Frequently and deeply used; prefer current tested Nixpkgs unstable features. Protected deployment reviewer is independently pinned and is not upgraded by this policy.",
     "holds": "Add an exact immutable pin, a reason and optional first allowed stable resumeAtVersion. Omitting/null threshold means indefinite; no date or Git revision automatically releases a hold. Kando preserves its existing 2.3.0 adapter requirement.",
-    "ordinaryHolds": "Other holds may name a top-level Nixpkgs package attribute, e.g. kando. pin is a full Nixpkgs revision; source defaults to nixpkgs (or explicitly nixpkgs-unstable). Package pins override channel updates; omit resumeAtVersion for an indefinite hold.",
-    "desktopHolds": "Community pin={native:<revision>,sandbox:<revision>}; deliberately update both matching flake.lock pins when adding a downgrade. Evaluation rejects mismatches, so a hold cannot be silently overwritten."
+    "ordinaryHolds": "Nixpkgs package attribute (e.g. kando), or codex-cli for codex: pin is a full Nixpkgs revision, reason required, resumeAtVersion is the first acceptable numeric stable version. Default source nixpkgs; Firefox/Codex CLI use packageSources. Null means indefinite.",
+    "desktopHolds": "Community pin={native:<revision>,sandbox:<revision>}; deliberately update both matching flake.lock pins when adding a downgrade. Evaluation rejects mismatches, so a hold cannot be silently overwritten.",
+    "patches": "Temporary bug fixes: package attribute -> reason, patchFiles [config/update-patches/name.patch], optional removeAtVersion (first version without patch), optional source. Null/omitted threshold keeps the patch. Feature patches stay next to their application module. See docs/UPDATES.md for examples."
   },
   "packageSources": {
     "firefox": "nixpkgs-unstable",
@@ -14,7 +15,7 @@
       "native": "codex-desktop-linux",
       "sandbox": "codex-desktop-sandbox"
     },
-    "codex-cli": "codex-cli"
+    "codex-cli": "nixpkgs-unstable"
   },
   "holds": {
     "kando": {
@@ -22,5 +23,6 @@
       "reason": "The existing Kando schema/gesture adapter explicitly requires 2.3.0. Preserve that compatibility pin during unattended system updates; remove after validating a newer adapter.",
       "resumeAtVersion": null
     }
-  }
+  },
+  "patches": {}
 }
