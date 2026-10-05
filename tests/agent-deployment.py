@@ -67,7 +67,7 @@ class DeploymentTests(unittest.TestCase):
             temporary.assert_not_called()
 
     def test_controller_never_activates_failed_or_forged_review(self):
-        for mode in ['rejected', 'forged', 'model-failed', 'malformed', 'closure-mismatch', 'compacted', 'oversized', 'missing-upstream', 'forged-upstream', 'denied-upstream']:
+        for mode in ['rejected', 'forged', 'model-failed', 'malformed', 'closure-mismatch', 'compacted', 'oversized', 'missing-upstream', 'forged-upstream', 'denied-upstream', 'bound-denial-upstream', 'forged-denial-upstream']:
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 baseline = root / 'baseline'
@@ -122,17 +122,21 @@ class DeploymentTests(unittest.TestCase):
                             approved=True,summary='fixture') for i,b in enumerate(['first','second'])]
                         if mode == 'forged-upstream': envelope['upstreamVerdicts'][0]['evidenceDigest']='forged'
                         else: envelope['upstreamVerdicts'][0]['approved']=False
+                    if mode in {'bound-denial-upstream', 'forged-denial-upstream'}:
+                        envelope = dict(status='verdict', upstreamDenialIndex=0,
+                            verdict=dict(deploy.upstream_binding(binding,'first',0), approved=False, summary='fixture'))
+                        if mode == 'forged-denial-upstream': envelope['verdict']['nonce']='forged'
                     return json.dumps(envelope).encode()
                 account = mock.Mock(pw_uid=os.getuid(), pw_gid=os.getgid())
                 with mock.patch.object(Path, 'resolve', resolve), contextlib.redirect_stdout(io.StringIO()), mock.patch.object(deploy, 'load_review', return_value=review), mock.patch.object(deploy, 'as_user', side_effect=user_command), mock.patch.object(deploy, 'store_path'), mock.patch.object(deploy, 'activation_executable'), mock.patch.object(deploy.pwd, 'getpwnam', return_value=account):
                     with self.assertRaises(deploy.DeploymentFailure) as failure:
                         deploy.process(config, request, os.getuid(), 22)
                 self.assertIn(failure.exception.stage, {'verdict', 'review', 'closure-binding'})
-                if mode == 'rejected':
+                if mode in {'rejected', 'bound-denial-upstream'}:
                     self.assertIsInstance(failure.exception, deploy.DeploymentDenied)
                     self.assertEqual(failure.exception.summary, 'fixture')
                     self.assertEqual(failure.exception.code, 'model-denied')
-                elif mode == 'forged':
+                elif mode in {'forged', 'forged-denial-upstream'}:
                     self.assertEqual(failure.exception.code, 'binding-mismatch')
                 self.assertFalse(any(call.args[0][0] == 'systemd-run' for call in review.run.call_args_list))
 

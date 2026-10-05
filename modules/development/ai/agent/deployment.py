@@ -280,6 +280,17 @@ def process_inner(config, request, uid, pid, state):
                 code = 'worker-envelope-invalid'
             raise DeploymentFailure('review', code)
         verdict = result.get('verdict')
+        if 'upstreamDenialIndex' in result:
+            index = result['upstreamDenialIndex']
+            if type(index) is not int or not 0 <= index < len(upstream_batches):
+                raise DeploymentFailure('verdict', 'upstream-denial-index')
+            try:
+                review.validate_verdict(verdict, upstream_binding(binding, upstream_batches[index], index))
+            except review.ReviewDenied as error:
+                raise DeploymentDenied(error.verdict['summary']) from None
+            except review.ReviewVerdictError as error:
+                raise DeploymentFailure('verdict', error.code) from None
+            raise DeploymentFailure('verdict', 'upstream-denial-approved')
         try:
             upstream_verdicts = result.get('upstreamVerdicts', [])
             if not isinstance(upstream_verdicts, list) or len(upstream_verdicts) != len(upstream_batches):
@@ -287,8 +298,8 @@ def process_inner(config, request, uid, pid, state):
             for index, (batch, upstream_verdict) in enumerate(zip(upstream_batches, upstream_verdicts)):
                 review.validate_verdict(upstream_verdict, upstream_binding(binding, batch, index))
             review.validate_verdict(verdict, binding)
-        except review.ReviewDenied:
-            raise DeploymentDenied(verdict['summary']) from None
+        except review.ReviewDenied as error:
+            raise DeploymentDenied(error.verdict['summary']) from None
         except review.ReviewVerdictError as error:
             raise DeploymentFailure('verdict', error.code) from None
         state['stage'] = 'baseline-recheck'
@@ -341,8 +352,11 @@ def worker(config, directory):
         if upstream_verdicts:
             result['upstreamVerdicts'] = upstream_verdicts
     except review.ReviewDenied as error:
-        result = (dict(status='error', code='upstream-model-denied') if 'scope' in error.verdict
-                  else dict(status='verdict', verdict=error.verdict))
+        result = dict(status='verdict', verdict=error.verdict)
+        if 'scope' in error.verdict:
+            result['upstreamDenialIndex'] = index
+        elif upstream_verdicts:
+            result['upstreamVerdicts'] = upstream_verdicts
     except review.ReviewVerdictError as error:
         result = dict(status='error', code=error.code)
     except Exception:

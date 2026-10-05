@@ -203,7 +203,7 @@ def controller(config, c, home, tree, commit, base, profile):
             response.extend(block)
     result = json.loads(response)
     if result.get('ok') is not True or result.get('action') != 'boot':
-        raise ValueError('protected boot review/staging failed: ' + str(result.get('code', 'protocol')))
+        raise ValueError('protected boot review/staging failed: ' + str(result.get('summary', result.get('code', 'protocol')))[:1000])
     return result
 
 
@@ -381,7 +381,7 @@ def main():
         try:
             result = run(config, c)
         except Exception as error:
-            result = dict(status='failed', reason=str(error)[:300])
+            result = dict(status='failed', reason=str(error)[:1000])
         destination = state / 'last-result.json'
         fd, name = tempfile.mkstemp(dir=state, prefix='.result-')
         with os.fdopen(fd, 'w') as output:
