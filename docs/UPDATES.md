@@ -53,6 +53,7 @@
 
 ## Operations and implementation
 
+- **Rollout status:** Implementation, focused fixtures and metal build pass. Initial protected deployment and one bounded retry failed with `reviewer-invocation-failed`; no activation occurred. The existing timer is paused. Repair the protected reviewer through an authorized maintenance path, then deploy, restart the controller and verify one real update before resuming scheduling. The installed gate currently exposes no bounded provider-error diagnostic.
 - **Inspect:** `systemctl status phoenix-updates.timer`, `journalctl -u phoenix-updates.service`, `/var/lib/phoenix-updates/last-result.json`. `phoenix-update` runs an immediate serialized check. Failures emit a fixed desktop notification; no credentials or private profiles are collected.
 - **Checks:** Exact-head Community publisher CI and stable payload validation; known-vulnerability Nix evaluation; unprivileged build; immutable source/closure binding; root baseline/profile rechecks. Missing Community checks retain that group while channel updates can proceed. Unchanged failed candidates back off for a day.
 - **Permissions:** The automatic action stages next boot only; it cannot supply a command, closure or verdict, reboot, or garbage-collect. Manual configuration changes retain the existing review gate. Git commands use sanitized metadata to prevent inherited hooks and filters.

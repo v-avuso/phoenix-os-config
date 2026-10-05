@@ -256,6 +256,8 @@ def validate_source(before_files, before_modes, after_files, after_modes, system
     mutable_policy = lambda p: {key: value for key, value in p.items() if key not in {"holds", "patches"}}
     if mutable_policy(before_policy) != mutable_policy(after_policy):
         raise ValueError("update policy fields changed")
+    # Resolve publisher heads once per request, including multi-exception expiry.
+    lock = validate_lock(before_files, after_files, verify_current)
     for name in ("holds", "patches"):
         old, new = before_policy.get(name, {}), after_policy.get(name, {})
         if not set(new) <= set(old):
@@ -267,13 +269,12 @@ def validate_source(before_files, before_modes, after_files, after_modes, system
             threshold = old[package].get("resumeAtVersion") if name == "holds" else old[package].get("removeAtVersion")
             if threshold is None:
                 raise ValueError("indefinite update exception cannot be removed")
-            observed = _version(package, before_policy, validate_lock(before_files, after_files, verify_current), system,
+            observed = _version(package, before_policy, lock, system,
                                 evaluate, desktop_version)
             if compare(observed, threshold) < 0:
                 raise ValueError("update exception threshold is not satisfied")
             if name == "patches" and package in after_policy.get("holds", {}):
                 raise ValueError("patch removal waits for the package hold to be satisfied")
-    lock = validate_lock(before_files, after_files, verify_current)
     allowed = {"flake.lock", "config/updates.json"}
     for path in allowed:
         if path in before_files and path in after_files and before_modes.get(path) != after_modes.get(path):
