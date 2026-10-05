@@ -115,7 +115,9 @@ def validate_lock(before_files, after_files, verify_current=None):
             raise ValueError("unstable channel declaration changed")
     allowed_locked = {"type", "owner", "repo", "dir", "rev", "narHash", "lastModified", "revCount", "dirtyRev"}
     for name, node in new_nodes.items():
-        if name == after["root"]:
+        if name == after["root"] or node == old_nodes.get(name):
+            # Unchanged, already-approved inputs may use other fetcher formats
+            # (e.g. Git URLs). Only changed dependencies need publisher checks.
             continue
         if not isinstance(node, dict) or not isinstance(node.get("locked"), dict) or set(node["locked"]) - allowed_locked:
             raise ValueError("unsupported locked metadata")

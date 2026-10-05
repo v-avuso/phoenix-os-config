@@ -300,6 +300,22 @@ class DeploymentTests(unittest.TestCase):
             routine.validate_source(before, before_modes, after, dict(after_modes, **{'flake.lock': '100755'}),
                                     'x86_64-linux', compare, unexpected, unexpected)
 
+    def test_routine_retains_unchanged_other_fetcher_inputs(self):
+        before, _, after, _ = self.routine_sources()
+        for files in (before, after):
+            lock = json.loads(files['flake.lock'])
+            lock['nodes']['retained-git'] = {
+                'original': {'type': 'git', 'url': 'https://example.invalid/tool'},
+                'locked': {'type': 'git', 'url': 'https://example.invalid/tool',
+                           'rev': 'a' * 40, 'narHash': 'sha256-retained', 'ref': 'main'}}
+            files['flake.lock'] = json.dumps(lock)
+        routine.validate_lock(before, after)
+        lock = json.loads(after['flake.lock'])
+        lock['nodes']['retained-git']['locked']['rev'] = 'b' * 40
+        after['flake.lock'] = json.dumps(lock)
+        with self.assertRaises(ValueError):
+            routine.validate_lock(before, after)
+
     def test_routine_candidate_removes_only_satisfied_effective_holds(self):
         before, before_modes, after, after_modes = self.routine_sources()
         policy = json.loads(before['config/updates.json'])
