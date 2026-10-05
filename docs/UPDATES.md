@@ -1,74 +1,111 @@
-# Stable update preparation
+# Automatic updates
 
-This directory contains an isolated policy/candidate component. It is not
-imported by the running configuration, and no automatic updater is installed
-or running. The candidate service declaration is disabled by default and also
-remains unimported. The current protected controller rejects boot requests, so
-this component cannot claim that a generation was staged or activated.
+`config/updates.json` owns package selection and temporary holds. The NixOS
+module is connected through `modules/services/default.nix`. It checks every six
+hours with up to fifteen minutes of jitter and catches up after power-off.
 
-The intended cadence is daily with a three-day default cooldown. The initial
-one-day group is `firefox`, `codex-desktop`, and `codex-cli`; there is no
-14-day group. Ages apply to first observation of an upstream stable snapshot,
-not to the release date of each package. An independent observer must verify
-publication, exact refs, source integrity, and package-specific release
-evidence before passing pins to the candidate component. A revision string
-alone is not proof of publication. The one-day group is an optional wait-time
-preference; normal stable updates still carry upstream security fixes through
-the default three-day path.
+The system follows supported `nixos-26.05`; Firefox uses tested
+`nixos-unstable` for useful freshness in a deeply used daily application.
+Stable Firefox also receives security maintenance. The shared unstable input
+also supplies compatible Hyprland/Caelestia/Timewall dependencies, so advancing
+it can affect those applications. Community desktop and CLI follow their own
+checked stable upstream releases, rather than Nixpkgs unstable. Each choice has
+an explanation in the JSON comments and package declarations. No local cooldown
+or daily LLM vulnerability research is used. Existing protected deployment
+review still runs on actual source changes.
 
-Policy holds take precedence over cooldowns. A hold records a reason, an exact
-pin, and a review date; the date only prompts review and never releases it.
-Optional `resumeAtVersion` enables a narrowly conditional release. For example,
-a hypothetical Firefox fix might use `resumeAtVersion = "142.0"` after credible
-stable-release evidence identifies that threshold. A caller must verify the
-actual payload version is stable, in the same release family, and at or above
-the threshold for each exact candidate revision. Policy code accepts only
-that caller-verified app/threshold/revision decision; it does not compare
-versions. Unknown or mismatched evidence remains held. Omit the field or set it
-to `null` for an indefinite hold. Remove a hold deliberately from policy after
-review; never treat the resume threshold as proof that the issue is fixed.
+Each run starts from a committed source identical to the active or next-boot
+reviewed source. It prepares an isolated Git worktree and commits only
+`flake.lock`, the CLI recipe, and satisfied hold removals. Nix constructs locks;
+maintained `nix-update` updates the conventional CLI recipe. Unchanged candidates
+skip builds/review. Failed unchanged candidates retry at most daily. Community
+requires its exact stable payload and successful `source-and-node`, `rust`,
+`nix`, and `official-linux-gate` checks; missing checks retain that application
+while independent channel updates can continue. Explicitly pinned framework
+inputs retain their existing pins; this is not a blanket unlock of every input.
 
-The source map is deliberately explicit:
+The protected controller builds and reviews the exact source/closure, including
+bounded evidence from changed upstream module/build/containment code. Excessive,
+unsupported, or uncertain evidence is rejected, never truncated. Ordinary
+Nixpkgs package maintenance retains distribution trust; this is not a malware
+scanner or a comprehensive CVE scan. Known-vulnerability evaluation remains
+enabled. The source transport admits 896 KiB, but the existing complete
+serialized review limit remains 1 MiB and observed compaction rejects verdicts.
 
-| Application | Pinned source | Package interface / limitation |
-| --- | --- | --- |
-| `firefox` | independent `nixpkgs-updates-fast` input on `nixos-26.05` | Requires final Home Manager `programs.firefox.package` wiring; profiles and policies stay intact. |
-| `codex-desktop` | `codex-desktop-linux` accepted source for Native | Sandboxed remains separately pinned as `codex-desktop-sandbox`; preserving both runtime interfaces and reviewed source evidence is integration work. |
-| `codex-cli` | no input pin in this component | Requires a conventional exported package attribute consumed by `nix-update`; no handwritten Nix expression rewriting is provided. |
+A successful candidate is staged for next boot without restarting applications
+or rebooting. Git imports it using an index lock and compare-and-swap, preserving
+unrelated staged/unstaged edits. A changed HEAD or dirty affected file defers
+updates. If the checkout changes during review, boot staging can succeed while
+Git integration waits: the result explicitly records that state and retries
+when safe. New committed user work must be deployed first; the updater does not
+silently deploy it. Never automatically stash, reset, or resolve user conflicts.
 
-Adding an age cohort requires a named, independently pinned source and package
-mapping. Recognizing an application identifier in policy does not mean its
-adapter exists. The current default lock command persists exact selected
-revisions through Nix and checks that only the selected input closures change;
-it does not hand-edit `flake.lock`.
+`phoenix-switch` applies integrated pins sooner, followed by an application
+restart. Some changes require reboot. Boot staging alone does not patch running
+software. Normal builds still use the ordinary checkout. Keep supported-release
+upgrades deliberate: following one stable branch forever does not extend its
+support lifetime. Retain existing generations for rollback.
 
-Candidate preparation starts only from an exact protected approved commit
-whose tracked file contents match the immutable approved source. It uses a
-temporary Git worktree and commits only allowlisted updater paths; it does not
-change the normal checkout's HEAD, index, or files. Unrelated dirty and staged
-edits stay intact. A dirty affected file, changed main HEAD, failed
-observation, invalid lock graph, or failed controller request cannot be
-reported as staged. Even after a successful controller response, the isolated
-commit still requires coordinator-owned merge-back, so ordinary
-`phoenix-switch` does not yet include it. Merge-back must revalidate current
-committed policy and holds before applying a candidate; a newly committed hold
-invalidates a candidate even without a text conflict.
+## Holds
 
-The Community source adapter must additionally validate the exact stable
-payload manifest and, for the exact source revision, successful completed
-GitHub Actions contexts `source-and-node`, `rust`, `nix`, and
-`official-linux-gate`. Missing, pending, failed, or changed contexts keep the
-current Community version. These public checks are publisher acceptance
-evidence, not malware proof or a substitute for inspecting source changes and
-containment behavior. The current component validates supplied payload/check
-records but does not fetch them or perform the bounded pagination itself.
+JSON `_comments` is documentation, not executable policy. Keys normally name
+simple top-level Nixpkgs attributes, e.g. `kando`; special adapters are
+`firefox`, `codex-desktop`, and `codex-cli`. Use a real immutable pin, a reason,
+and optionally the **first version allowed again**:
 
-Before this can become the requested normal workflow, integration must provide
-the verified daily observer and policy/hold reload, the three package adapters,
-fast Nixpkgs and Firefox wiring, CLI package metadata, Native/Sandbox source
-review, current-checkout policy revalidation and safe merge-back, controller
-boot support with staging failure restoration, and final module import. The
-candidate service has no request producer yet, and its controller interface is
-intentionally fixed to the existing socket, `action = "boot"`, and a fixed
-updater reason. No reboot, garbage collection, cooling change, vulnerability
-scanner, or automatic install is implemented here.
+```json
+"firefox": {
+  "pin": "<reviewed 40-character Nixpkgs revision>",
+  "reason": "Regression; upstream expects the fix in the stated version",
+  "resumeAtVersion": "<actual numeric stable fix version>"
+}
+```
+
+Ordinary Nixpkgs holds use the same revision format and may specify
+`"source": "nixpkgs-unstable"` for resume observation; default is `nixpkgs`.
+Firefox observes its configured source and always pins only Firefox, letting
+other packages advance. Kando starts with its already-existing 2.3.0 compatibility
+pin and no resume threshold: its adapter explicitly requires that version.
+
+CLI `pin` is `{ "version": "<stable version>", "hash": "<matching sha256 SRI>" }`.
+Community `pin` is `{ "native": "<source revision>", "sandbox": "<source revision>" }`;
+set both corresponding `flake.lock` pins as part of a deliberate downgrade.
+Evaluation rejects a mismatch, so a manual lock update cannot override a hold.
+Use Nix's input override with `--output-lock-file flake.lock` to persist exact
+selected revisions; do not hand-edit lock graph hashes.
+
+Omit `resumeAtVersion` or set it to `null` for an indefinite hold. Never invent a
+sentinel version. A verified stable version at or above the threshold permits
+ordinary checks; unknown/prerelease versions stay held. Successful staging and
+Git integration automatically remove satisfied entries in the update commit.
+Failed review/build leaves current pins and holds unchanged. The threshold is an
+expected fix, not proof of functional correctness; review indefinite holds when
+upstream supplies a fix. Old held metadata may miss later vulnerability flags.
+
+## Operation and validation
+
+Inspect `systemctl status phoenix-updates.timer`,
+`journalctl -u phoenix-updates.service`, and
+`/var/lib/phoenix-updates/last-result.json`. Failures issue a fixed desktop
+notification; credentials, profiles and CVE classifications are not collected.
+Run `phoenix-update` as the desktop user for an immediate serialized check.
+The service uses the existing protected controller socket and cannot
+reboot or garbage-collect generations.
+
+Fixtures in `tests/update-runner.py`, `tests/upstream-review.py`,
+`tests/agent-deployment.py`, and `tests/agent-review.py` cover the full mocked
+update/hold/commit workflow, dirty Git preservation, required publisher checks,
+source-evidence rejection, and separate boot/runtime rollback. Full-host
+build/review and an actual timer run are distinct deployment acceptance checks.
+The earlier delayed-update prototype is preserved in commit `ed38a0b`; its unused
+cooldown code is removed from the active tree and can be restored from Git.
+
+## Why a small adapter
+
+Stock `system.autoUpgrade` supplies scheduling and direct `nixos-rebuild`, but
+its local-flake update/commit flags do not preserve this checkout's concurrent
+edits, exact conditional package holds, or protected Phoenix source review.
+Reuse systemd, Nix, Git's merge machinery and `nix-update`; custom code is limited
+to source acceptance, holds and coordination. A custom security fast lane would
+add advisory mapping and exception maintenance, so it is deliberately absent.
+Revisit cooldowns if maintained feeds offer verified security bypass coverage.

@@ -168,7 +168,7 @@ if upstream changes the marker. Byte admission does not guarantee every source
 fits; model overflow or compaction fails closed. The private backend's server
 internals remain outside this guarantee.
 
-`test` and `switch` submit bounded source files and a reason through a fixed
+`test`, `switch`, and update `boot` submit bounded source files and a reason through a fixed
 root-owned socket; callers cannot submit commands, closures or approvals. The
 controller reconstructs the snapshot, builds as an unprivileged dedicated user,
 verifies the resulting closure records that exact source, then obtains a fresh
@@ -177,7 +177,11 @@ verdict binds source, installed baseline, closure, target, action, reason and a
 nonce, stays in memory and is rechecked immediately before activation.
 
 `test` activates now. `switch` deliberately updates the system profile and next
-boot too. Neither requests routine Polkit after one-time installation/bootstrap.
+boot too. Update `boot` stages the next-boot profile without touching the running
+desktop and binds the observed active source and boot profile to prevent stale
+background staging. None requests routine Polkit after installation/bootstrap.
+The updater also requires exact bounded evidence for changed locked module and
+containment sources; see [automatic updates](UPDATES.md).
 Failed activation attempts restore the previous boot profile and runtime
 separately; rollback is best effort, not transactional recovery. Saved reports
 never authorize deployment. Codex Auto-review remains separate and does not

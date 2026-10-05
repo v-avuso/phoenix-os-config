@@ -49,7 +49,7 @@ class DeploymentTests(unittest.TestCase):
         request = self.request()
         request['files']['flake.nix'] = 'x' * (512 * 1024 + 1)
         deploy.request_valid(request, 'metal')
-        self.assertEqual(deploy.SOURCE_LIMIT, 768 * 1024)
+        self.assertEqual(deploy.SOURCE_LIMIT, 896 * 1024)
         self.assertEqual(deploy.LIMIT, 1024 * 1024)
 
     def test_mutable_source_and_fake_closure_rejected(self):
@@ -187,6 +187,28 @@ class DeploymentTests(unittest.TestCase):
             deploy.activate(config, '/nix/store/system', 'test', run)
         self.assertEqual(run.call_args.args[0], ['/nix/store/system/bin/switch-to-configuration', 'test'])
         self.assertEqual(run.call_count, 1)
+
+    def test_boot_requests_require_observed_base_and_profile(self):
+        request = dict(self.request(), action='boot')
+        with self.assertRaises(ValueError):
+            deploy.request_valid(request, 'metal')
+        request.update(expectedBase='/trusted/source', expectedProfile='/trusted/profile')
+        with mock.patch.object(deploy, 'store_path') as validation:
+            deploy.request_valid(request, 'metal')
+        self.assertEqual(validation.call_count, 2)
+
+    def test_boot_never_activates_or_rolls_back_the_running_desktop(self):
+        config = dict(nixEnv='nix-env', activationEnvironment={})
+        with mock.patch.object(Path, 'resolve', return_value=Path('/old')):
+            run = mock.Mock()
+            deploy.activate(config, '/new', 'boot', run)
+            self.assertEqual(run.call_count, 2)
+            self.assertEqual(run.call_args.args[0], ['/new/bin/switch-to-configuration', 'boot'])
+            run = mock.Mock(side_effect=[None, ValueError('staging failed'), None, None])
+            with self.assertRaisesRegex(ValueError, 'staging failed'):
+                deploy.activate(config, '/new', 'boot', run)
+            self.assertFalse(any('test' in call.args[0] or 'switch' in call.args[0] for call in run.call_args_list))
+            self.assertEqual(run.call_args.args[0], ['/old/bin/switch-to-configuration', 'boot'])
 
     def test_failed_test_restores_runtime_only(self):
         run = mock.Mock(side_effect=[ValueError('failed'), None])

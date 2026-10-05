@@ -22,7 +22,7 @@ import tempfile
 import time
 
 # Resource bounds, not token estimates or a larger model context claim.
-SOURCE_LIMIT = 768 * 1024
+SOURCE_LIMIT = 896 * 1024
 REVIEW_INPUT_LIMIT = 1024 * 1024
 OUTPUT_LIMIT = 2 * 1024 * 1024
 
@@ -275,7 +275,7 @@ def main():
     parser.add_argument("--base", help="optional full commit SHA for an additional informational diff")
     parser.add_argument("--reason", required=True, help="concrete authorized task purpose")
     parser.add_argument("--target", choices=["metal", "vm"], required=True)
-    parser.add_argument("--action", choices=(["test", "switch"] if config.get("clientOnly") else ["review", "build", "test", "switch"]), default=("test" if config.get("clientOnly") else "review"))
+    parser.add_argument("--action", choices=(["test", "switch", "boot"] if config.get("clientOnly") else ["review", "build", "test", "switch", "boot"]), default=("test" if config.get("clientOnly") else "review"))
     args = parser.parse_args()
     if (args.base and not re.fullmatch(r"[0-9a-f]{40,64}", args.base)) or not 1 <= len(args.reason.strip()) <= 2000:
         parser.error("base must be a full commit SHA and reason must be 1–2000 characters")
@@ -295,9 +295,12 @@ def main():
         source = temporary / "source"
         source.mkdir()
         commit, files = snapshot(config, source)
-        if args.action in {"test", "switch"}:
+        if args.action in {"test", "switch", "boot"}:
             request = dict(files=files, modes=source_modes(source, files), commit=commit,
                            reason=args.reason.strip(), target=args.target, action=args.action)
+            if args.action == "boot":
+                request.update(expectedBase=str(Path('/etc/phoenix-agent/activated-source').resolve(strict=True)),
+                               expectedProfile=str(Path('/nix/var/nix/profiles/system').resolve(strict=True)))
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
                 connection.settimeout(7200)
                 connection.connect(config["deploymentSocket"])

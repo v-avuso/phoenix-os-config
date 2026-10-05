@@ -102,7 +102,7 @@ class ReviewTests(unittest.TestCase):
             (baseline / "complete.nix").write_text("x" * (review.SOURCE_LIMIT + 1))
             with self.assertRaisesRegex(ValueError, "review context bound"):
                 review.baseline_files(baseline)
-        self.assertEqual(review.SOURCE_LIMIT, 768 * 1024)
+        self.assertEqual(review.SOURCE_LIMIT, 896 * 1024)
         self.assertEqual(review.REVIEW_INPUT_LIMIT, 1024 * 1024)
         self.assertEqual(review.OUTPUT_LIMIT, 2 * 1024 * 1024)
 

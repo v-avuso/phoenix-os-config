@@ -69,6 +69,7 @@ let
       baseline = "/etc/phoenix-agent/activated-source";
       controller = toString ./deployment.py;
       reviewScript = toString ./deploy-review.py;
+      upstreamReviewScript = toString ./upstream-review.py;
       python = "${pkgs.python3}/bin/python3";
       setpriv = "${pkgs.util-linux}/bin/setpriv";
       nix = "${pkgs.nix}/bin/nix";

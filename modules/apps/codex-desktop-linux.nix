@@ -11,6 +11,8 @@
 let
   upstream = inputs.codex-desktop-linux;
   cfg = config.programs.codexDesktopLinux;
+  updatePolicy = builtins.fromJSON (builtins.readFile ../../config/updates.json);
+  desktopHold = updatePolicy.holds.codex-desktop or null;
   linuxFeatures = import (upstream + "/nix/linux-features.nix") { inherit (pkgs) lib; };
   base = upstream.packages.${pkgs.stdenv.hostPlatform.system}.codex-desktop.override {
     enableComputerUseUi = cfg.computerUseUi.enable;
@@ -41,6 +43,13 @@ let
   };
 in
 {
+  # These independently reviewed sources include NixOS modules and containment
+  # adapters. Hold their exact locks; never silently undo a deliberate downgrade.
+  assertions = pkgs.lib.optional (desktopHold != null) {
+    assertion = inputs.codex-desktop-linux.rev == desktopHold.pin.native
+      && inputs.codex-desktop-sandbox.rev == desktopHold.pin.sandbox;
+    message = "Community hold requires matching native and sandbox flake.lock revisions; see config/updates.json comments.";
+  };
   imports = [
     inputs.codex-desktop-linux.nixosModules.default
   ];

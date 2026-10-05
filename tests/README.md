@@ -15,6 +15,8 @@ python3 -B tests/agent-gui.py
 python3 -B tests/agent-gui-profile.py
 python3 -B tests/agent-gui-lifecycle.py
 python3 -B tests/agent-deployment.py
+python3 -B tests/update-runner.py
+python3 -B tests/upstream-review.py
 python3 -B tests/agent-gui-http.py
 node tests/agent-gui-http-hook.cjs
 python3 -B tests/agent-gui-connection.py
@@ -100,6 +102,12 @@ nix eval --impure --file tests/desktop-services.nix
   GUI socket fixtures need sandbox execution permission; they need no OS root.
   Separate sign-in, real model turns, desktop portal behavior and authenticated
   system activation remain runtime acceptance checks.
+
+- **Update fixtures:** disposable Git repositories exercise candidate preparation,
+  satisfied hold cleanup only after protected staging, failed-review preservation,
+  unrelated index/worktree edits and deferred user commits. Mocked public sources
+  enforce exact publisher checks. Upstream authority evidence rejects unknown or
+  oversized sources. None runs the live updater or activates NixOS.
 
 The `nix build` and `nix eval` commands above load the full flake and require Nix
 daemon access; builds may download dependencies. None activates the system.

@@ -21,7 +21,7 @@ import sys
 import tempfile
 
 LIMIT = 1024 * 1024
-SOURCE_LIMIT = 768 * 1024
+SOURCE_LIMIT = 896 * 1024
 class DeploymentFailure(ValueError):
     def __init__(self, stage, code):
         self.stage, self.code = stage, code
@@ -38,14 +38,20 @@ FIELDS = {'files', 'modes', 'commit', 'target', 'action', 'reason'}
 
 
 def request_valid(request, target):
-    if not isinstance(request, dict) or set(request) != FIELDS:
+    if not isinstance(request, dict):
         raise ValueError('unsupported request fields')
-    if request['action'] not in {'test', 'switch'} or request['target'] != target:
+    expected = FIELDS | ({'expectedBase', 'expectedProfile'} if request.get('action') == 'boot' else set())
+    if set(request) != expected:
+        raise ValueError('unsupported request fields')
+    if request['action'] not in {'test', 'switch', 'boot'} or request['target'] != target:
         raise ValueError('unsupported action/target')
     if not isinstance(request['reason'], str) or not 1 <= len(request['reason'].strip()) <= 2000:
         raise ValueError('concrete task reason required')
     if not isinstance(request['commit'], str) or not re.fullmatch('[0-9a-f]{40,64}', request['commit']):
         raise ValueError('invalid informational commit')
+    if request['action'] == 'boot':
+        store_path(request['expectedBase'], 'source')
+        store_path(request['expectedProfile'], 'closure')
     files, modes = request['files'], request['modes']
     if not isinstance(files, dict) or not isinstance(modes, dict) or set(files) != set(modes):
         raise ValueError('invalid source manifest')
@@ -114,8 +120,12 @@ def activate(config, closure, action, run):
         recovery = [
             ([config['nixEnv'], '--profile', profile, '--set', previous], 60, None),
             ([previous + '/bin/switch-to-configuration', 'boot'], 600, config['activationEnvironment']),
-            ([previous_runtime + '/bin/switch-to-configuration', 'test'], 600, config['activationEnvironment']),
         ]
+        # Boot staging never touched the running system or mutable desktop
+        # baselines, including on failure. Do not turn rollback into activation.
+        if action == 'switch':
+            recovery.append(([previous_runtime + '/bin/switch-to-configuration', 'test'],
+                             600, config['activationEnvironment']))
         for argv, timeout, env in recovery:
             try:
                 run(argv, timeout=timeout, **({'env': env} if env is not None else {}))
@@ -191,8 +201,29 @@ def process_inner(config, request, uid, pid, state):
             raise ValueError('stored source differs from request')
         state['stage'] = 'baseline'
         baseline = str(Path(config['baseline']).resolve(strict=True))
+        profile = str(Path('/nix/var/nix/profiles/system').resolve(strict=True))
+        if request['action'] == 'boot' and (request['expectedBase'] != baseline or request['expectedProfile'] != profile):
+            raise ValueError('update baseline/profile changed before review')
         store_path(baseline, 'source')
         old = review.baseline_files(Path(baseline))
+        state['stage'] = 'upstream-evidence'
+        upstream_diff = ''
+        if old.get('flake.lock') != request['files'].get('flake.lock'):
+            spec = importlib.util.spec_from_file_location('upstream_review', config['upstreamReviewScript'])
+            upstream = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(upstream)
+            def resolve_locked(locked):
+                from urllib.parse import quote
+                reference = 'github:%s/%s/%s?narHash=%s' % (locked['owner'], locked['repo'],
+                    locked['rev'], quote(locked['narHash'], safe=''))
+                metadata = json.loads(as_user(config, config['builderUser'],
+                    [config['nix'], 'flake', 'metadata', '--json', '--no-write-lock-file', reference],
+                    review.run, env=env, timeout=600))
+                if any(metadata['locked'].get(k) != locked.get(k) for k in ('owner', 'repo', 'rev', 'narHash')):
+                    raise ValueError('resolved upstream source does not match lock')
+                store_path(metadata['path'], 'source')
+                return metadata['path']
+            upstream_diff = upstream.evidence(old, request['files'], resolve_locked)
         state['stage'] = 'build'
         print(json.dumps(dict(event='building', uid=uid, pid=pid, source=source_store)), flush=True)
         closure = as_user(config, config['builderUser'], [config['nix'], 'build', '--no-link', '--print-out-paths',
@@ -213,7 +244,7 @@ def process_inner(config, request, uid, pid, state):
         reviewer = pwd.getpwnam(config['reviewerUser'])
         os.chown(work, reviewer.pw_uid, reviewer.pw_gid)
         payload = {'binding': binding, 'files': request['files'],
-                   'diff': review.source_diff(old, request['files'], review.source_modes(Path(baseline), old), request['modes'])}
+                   'diff': review.source_diff(old, request['files'], review.source_modes(Path(baseline), old), request['modes']) + upstream_diff}
         state['stage'] = 'review'
         print(json.dumps(dict(event='reviewing', uid=uid, pid=pid, source=source_store, closure=closure)), flush=True)
         output = as_user(config, config['reviewerUser'], [config['python'], '-I', config['controller'],
@@ -241,6 +272,8 @@ def process_inner(config, request, uid, pid, state):
         state['stage'] = 'baseline-recheck'
         if str(Path(config['baseline']).resolve(strict=True)) != baseline:
             raise ValueError('activated baseline changed during review')
+        if str(Path('/nix/var/nix/profiles/system').resolve(strict=True)) != profile:
+            raise ValueError('boot profile changed during review')
         print(json.dumps(dict(event='approved', uid=uid, pid=pid, source=source_store,
                               closure=closure, action=request['action'], target=request['target'])), flush=True)
         # Upstream transient service owns activation even if the new system
@@ -257,7 +290,7 @@ def process_inner(config, request, uid, pid, state):
                     '--unit=phoenix-deploy-activation-' + binding['nonce'],
                     config['python'], '-I', config['controller'], config['configPath'],
                     'activate', closure, request['action'], '--expected-base', baseline,
-                    '--expected-source', source_store], timeout=2200)
+                    '--expected-source', source_store, '--expected-profile', profile], timeout=2200)
 
         return dict(ok=True, source=source_store, closure=closure, action=request['action'])
 
@@ -396,9 +429,10 @@ def main():
     parser.add_argument('config')
     parser.add_argument('mode', choices=['serve', 'worker', 'bootstrap', 'activate'])
     parser.add_argument('directory', nargs='?')
-    parser.add_argument('action', nargs='?', choices=['test', 'switch'])
+    parser.add_argument('action', nargs='?', choices=['test', 'switch', 'boot'])
     parser.add_argument('--expected-base')
     parser.add_argument('--expected-source')
+    parser.add_argument('--expected-profile')
     args = parser.parse_args()
     config = json.loads(Path(args.config).read_text())
     config['configPath'] = args.config
@@ -412,6 +446,8 @@ def main():
         store_path(args.expected_source, 'source')
         if str(Path(config['baseline']).resolve(strict=True)) != args.expected_base:
             raise DeploymentFailure('activation', 'baseline-changed')
+        if not args.expected_profile or str(Path('/nix/var/nix/profiles/system').resolve(strict=True)) != args.expected_profile:
+            raise DeploymentFailure('activation', 'profile-changed')
         if str((Path(args.directory) / 'etc/phoenix-agent/activated-source').resolve(strict=True)) != args.expected_source:
             raise DeploymentFailure('activation', 'source-mismatch')
         activate(config, args.directory, args.action, load_review(config).run)

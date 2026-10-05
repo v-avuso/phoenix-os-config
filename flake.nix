@@ -4,6 +4,9 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
 
+    # Firefox is deeply and frequently used; newer features/fixes are useful.
+    # This input also supplies Hyprland/Caelestia/Timewall dependencies whose
+    # compositor interfaces must stay compatible; it is not Firefox-only.
     nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
 
     home-manager = {
@@ -44,11 +47,13 @@
 
     nix-vscode-extensions.url = "github:nix-community/nix-vscode-extensions";
 
-    # The upstream Linux port wraps OpenAI's signed Linux desktop payload.
+    # ChatGPT Community is deeply and frequently used: follow checked stable
+    # upstream payloads for fresh features. It has its own source, rather than
+    # being selected from the unstable Nixpkgs package set.
     codex-desktop-linux.url = "github:ilysenko/codex-desktop-linux";
 
-    # Keep Native's known-good module/package while the contained GUI needs a
-    # newer desktop protocol. Advance Native through its own reviewed upgrade.
+    # Independently locked Native/Sandbox sources retain their runtime contracts.
+    # Advance stable payloads only after upstream checks and Phoenix review.
     codex-desktop-sandbox = {
       url = "github:ilysenko/codex-desktop-linux/664436c7d0f3f7919a626c25999424f92bf4a044";
       inputs.nixpkgs.follows = "codex-desktop-linux/nixpkgs";
@@ -87,6 +92,8 @@
       vm = mkHost ./hosts/vm/configuration.nix;
     in
     {
+      packages.${system}.codex-cli = nixpkgs.legacyPackages.${system}.callPackage
+        ./modules/development/ai/codex-package.nix { };
       nixosConfigurations = {
         inherit metal vm;
 

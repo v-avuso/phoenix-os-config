@@ -21,7 +21,9 @@ reviewer and activation gate are deployed and tested. Preserve known-good system
 generations and recovery. Prefer existing tools and compact, testable interfaces.
 
 Protected deployment controller policy: the user has explicitly accepted model
-review residual risk for task-related test and switch. A dedicated reviewer with
+review residual risk for task-related test, switch and automatic update boot
+staging. Boot changes the next-boot profile without activating the running
+desktop; it must preserve runtime state even during rollback. A dedicated reviewer with
 protected retained authentication issues a fresh in-memory verdict. The review
 binds full source, activated baseline, closure, target, action, task reason and
 nonce. The controller builds with a separate unprivileged identity, verifies the

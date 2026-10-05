@@ -85,6 +85,8 @@ or all mutable settings.
 
 ## Operational guides
 
+- [Automatic updates](docs/UPDATES.md): six-hour checks, source selection,
+  conditional holds, safe Git integration and next-boot staging.
 - [Fan control](docs/FAN_CONTROL.md): safety ownership, hardware discovery,
   reconciliation, and fallback checks.
 - [YubiKey PAM](docs/YUBIKEY_PAM.md): enrollment, local authentication, and
