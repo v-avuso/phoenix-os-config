@@ -392,7 +392,7 @@ def run(config, c):
             raise ValueError('update changed unexpected files')
         c.git(config['git'], tree, home, 'add', '--', *sorted(paths))
         c.git(config['git'], tree, home, '-c', 'user.name=Phoenix Update Service', '-c', 'user.email=phoenix-updates@localhost',
-              'commit', '-m', 'feat(updates): refresh supported package sources', '-m',
+              'commit', '-m', 'chore(updates): update service - refresh supported package sources', '-m',
               'Advance published channels and verified stable application releases without a local cooldown.\n'
               'Respect exact holds; remove only satisfied resume thresholds.\n'
               'Deployment must pass deterministic source and build checks before boot staging; keep the running system unchanged.')
