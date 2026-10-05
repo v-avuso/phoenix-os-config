@@ -183,6 +183,12 @@ def integrate(config, c, home, head, commit, paths):
         alternate.unlink(missing_ok=True)
 
 
+class UpdateDenied(ValueError):
+    def __init__(self, result):
+        super().__init__('protected boot review/staging failed: ' + str(result.get('summary', result.get('code', 'protocol')))[:1000])
+        self.nodes = result.get('affectedInputNodes', [])
+
+
 def controller(config, c, home, tree, commit, base, profile):
     files, modes = c._manifest(config['git'], tree, home, commit)
     request = dict(files=files, modes=modes, commit=commit, target=config['target'], action='boot',
@@ -203,11 +209,21 @@ def controller(config, c, home, tree, commit, base, profile):
             response.extend(block)
     result = json.loads(response)
     if result.get('ok') is not True or result.get('action') != 'boot':
-        raise ValueError('protected boot review/staging failed: ' + str(result.get('summary', result.get('code', 'protocol')))[:1000])
+        raise UpdateDenied(result)
     return result
 
 
-def run(config, c):
+def atomic_json(path, value):
+    fd, name = tempfile.mkstemp(dir=path.parent, prefix='.state-')
+    try:
+        with os.fdopen(fd, 'w') as output:
+            json.dump(value, output)
+        os.replace(name, path)
+    finally:
+        Path(name).unlink(missing_ok=True)
+
+
+def run(config, c, retry=False):
     repo = Path(config['repo']).resolve(strict=True)
     state = Path(config['state'])
     home = state / 'command-home'
@@ -249,16 +265,24 @@ def run(config, c):
         raise ValueError('fresh source must explicitly follow the tested unstable channel')
     selected = {alias: revision(alias, stable_branch if alias == 'nixpkgs' else None)
                 for alias in SOURCES if alias != 'codex-desktop-sandbox'}
+    selected['codex-desktop-sandbox'] = selected['codex-desktop-linux']
+    blocked_path = state / 'blocked-inputs.json'
+    blocked = json.loads(blocked_path.read_text()) if blocked_path.exists() else {}
+    blocked = {alias: record for alias, record in blocked.items() if selected.get(alias) == record['revision']}
+    if blocked_path.exists():
+        atomic_json(blocked_path, blocked)
+    selected = {alias: rev for alias, rev in selected.items() if alias not in blocked}
     versions = {}
-    notes = []
-    desktop_revision = selected['codex-desktop-linux']
-    selected['codex-desktop-sandbox'] = desktop_revision
+    notes = ['Retained %s after protected rejection: %s' % (alias, record['reason']) for alias, record in blocked.items()]
+    desktop_revision = selected.get('codex-desktop-linux')
     try:
+        if desktop_revision is None:
+            raise ValueError('Community revision retained after protected rejection')
         versions['codex-desktop'] = community(c, desktop_revision)
     except Exception:
         # A publisher's pending checks do not prevent independent Nixpkgs fixes.
-        selected.pop('codex-desktop-linux')
-        selected.pop('codex-desktop-sandbox')
+        selected.pop('codex-desktop-linux', None)
+        selected.pop('codex-desktop-sandbox', None)
         notes.append('Community source held: required upstream checks unavailable or unsuccessful')
     release = c.stable_cli_release([fetch('https://api.github.com/repos/openai/codex/releases/latest')])
     if release is not None:
@@ -271,7 +295,7 @@ def run(config, c):
         if app in {'codex-cli', 'codex-desktop'} or hold.get('resumeAtVersion') is None:
             continue
         alias = policy['packageSources']['firefox'] if app == 'firefox' else hold.get('source', 'nixpkgs')
-        ref = 'github:NixOS/nixpkgs/' + selected[alias] + '#legacyPackages.x86_64-linux.' + app + '.version'
+        ref = 'github:NixOS/nixpkgs/' + selected.get(alias, lock_node(before, alias)['locked']['rev']) + '#legacyPackages.x86_64-linux.' + app + '.version'
         versions[app] = c._run([config['nix'], 'eval', '--raw', '--no-write-lock-file', ref], env=nix_env(config), timeout=900).decode().strip()
     for app, hold in holds.items():
         version = versions.get(app)
@@ -350,7 +374,25 @@ def run(config, c):
         # Recheck policy/HEAD immediately before asking the protected controller.
         if c.git(config['git'], repo, home, 'rev-parse', 'HEAD').decode().strip() != head or c._status_paths(config['git'], repo, home) & paths:
             return dict(status='deferred', reason='checkout changed', candidate=commit, branch=branch)
-        result = controller(config, c, home, tree, commit, base, profile)
+        try:
+            result = controller(config, c, home, tree, commit, base, profile)
+        except UpdateDenied as denial:
+            nodes = denial.nodes
+            if retry or not isinstance(nodes, list) or not nodes or any(not isinstance(n, str) for n in nodes):
+                raise
+            affected = {alias for alias in selected if c._closure(before, [alias]) & set(nodes) or
+                        c._closure(c._read_lock(tree / 'flake.lock'), [alias]) & set(nodes)}
+            if affected & {'codex-desktop-linux', 'codex-desktop-sandbox'}:
+                affected |= {'codex-desktop-linux', 'codex-desktop-sandbox'} & selected.keys()
+            if not affected:
+                raise
+            blocked.update({alias: dict(revision=selected[alias], reason=str(denial)[:500]) for alias in affected})
+            atomic_json(blocked_path, blocked)
+            # The controller denied staging, so no profile/checkout changed.
+            # Retry once with independent groups; retain denied exact revisions
+            # quietly until a different public head becomes available.
+            return run(config, c, retry=True)
+
         try:
             integrate(config, c, home, head, commit, paths)
         except Exception:

@@ -32,6 +32,7 @@ class DeploymentDenied(DeploymentFailure):
     def __init__(self, summary):
         super().__init__('review', 'model-denied')
         self.summary = summary[:1000]
+        self.affected_nodes = []
 
 
 FIELDS = {'files', 'modes', 'commit', 'target', 'action', 'reason'}
@@ -261,7 +262,8 @@ def process_inner(config, request, uid, pid, state):
         reviewer = pwd.getpwnam(config['reviewerUser'])
         os.chown(work, reviewer.pw_uid, reviewer.pw_gid)
         payload = {'binding': binding, 'files': request['files'],
-                   'diff': review.source_diff(old, request['files'], review.source_modes(Path(baseline), old), request['modes']), 'upstreamBatches': upstream_batches}
+                   'diff': review.source_diff(old, request['files'], review.source_modes(Path(baseline), old), request['modes']), 'upstreamBatches': upstream_batches,
+                   'upstreamNodes': [getattr(batch, 'nodes', []) for batch in upstream_batches]}
         state['stage'] = 'review'
         print(json.dumps(dict(event='reviewing', uid=uid, pid=pid, source=source_store, closure=closure)), flush=True)
         output = as_user(config, config['reviewerUser'], [config['python'], '-I', config['controller'],
@@ -285,9 +287,11 @@ def process_inner(config, request, uid, pid, state):
             if type(index) is not int or not 0 <= index < len(upstream_batches):
                 raise DeploymentFailure('verdict', 'upstream-denial-index')
             try:
-                review.validate_verdict(verdict, upstream_binding(binding, upstream_batches[index], index))
+                review.validate_verdict(verdict, upstream_binding(binding, upstream_batches[index], index, getattr(upstream_batches[index], 'nodes', [])))
             except review.ReviewDenied as error:
-                raise DeploymentDenied(error.verdict['summary']) from None
+                denial = DeploymentDenied(error.verdict['summary'])
+                denial.affected_nodes = getattr(upstream_batches[index], 'nodes', [])
+                raise denial from None
             except review.ReviewVerdictError as error:
                 raise DeploymentFailure('verdict', error.code) from None
             raise DeploymentFailure('verdict', 'upstream-denial-approved')
@@ -296,7 +300,7 @@ def process_inner(config, request, uid, pid, state):
             if not isinstance(upstream_verdicts, list) or len(upstream_verdicts) != len(upstream_batches):
                 raise DeploymentFailure('verdict', 'upstream-verdict-count')
             for index, (batch, upstream_verdict) in enumerate(zip(upstream_batches, upstream_verdicts)):
-                review.validate_verdict(upstream_verdict, upstream_binding(binding, batch, index))
+                review.validate_verdict(upstream_verdict, upstream_binding(binding, batch, index, getattr(batch, 'nodes', [])))
             review.validate_verdict(verdict, binding)
         except review.ReviewDenied as error:
             raise DeploymentDenied(error.verdict['summary']) from None
@@ -328,9 +332,9 @@ def process_inner(config, request, uid, pid, state):
         return dict(ok=True, source=source_store, closure=closure, action=request['action'])
 
 
-def upstream_binding(binding, batch, index):
+def upstream_binding(binding, batch, index, nodes=None):
     return dict(binding, scope='upstream-authority-' + str(index),
-                evidenceDigest=hashlib.sha256(batch.encode()).hexdigest())
+                evidenceDigest=hashlib.sha256(batch.encode()).hexdigest(), affectedInputNodes=nodes or [])
 
 
 def worker(config, directory):
@@ -346,7 +350,7 @@ def worker(config, directory):
             scoped.mkdir(mode=0o700)
             (scoped / 'source').symlink_to(payload['binding']['source'], target_is_directory=True)
             upstream_verdicts.append(review.review(config,
-                upstream_binding(payload['binding'], batch, index), {}, batch, scoped))
+                upstream_binding(payload['binding'], batch, index, payload.get('upstreamNodes', [[]]*len(payload['upstreamBatches']))[index]), {}, batch, scoped))
         verdict = review.review(config, payload['binding'], payload['files'], payload['diff'], temporary)
         result = dict(status='verdict', verdict=verdict)
         if upstream_verdicts:
@@ -395,6 +399,7 @@ def serve(config):
             result = dict(ok=False, stage=stage, code=code, error='Deployment failed at ' + stage + ' (' + code + ').')
             if isinstance(error, DeploymentDenied):
                 result['summary'] = error.summary
+                result['affectedInputNodes'] = error.affected_nodes
         try:
             connection.sendall(json.dumps(result).encode() + b'\n')
         except OSError:

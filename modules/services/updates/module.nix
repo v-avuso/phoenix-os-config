@@ -100,7 +100,7 @@ in
         ReadWritePaths = [ user.repoDirectory "/var/lib/phoenix-updates" ];
         MemoryMax = "4G";
         CPUQuota = "200%";
-        RuntimeMaxSec = "2h";
+        TimeoutStartSec = "2h";
       };
       unitConfig.OnFailure = "phoenix-updates-notify.service";
     };

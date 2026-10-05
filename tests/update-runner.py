@@ -203,6 +203,26 @@ p=Path('%s');p.write_text(p.read_text().replace('version = \"0.159.0\";', 'versi
         self.assertEqual(self.git('show','--format=','--name-only','HEAD').strip().splitlines(),
                          ['config/updates.json','flake.lock',runner.CLI])
 
+    def test_verified_component_denial_retains_only_that_revision(self):
+        self.setup_pipeline()
+        calls = []
+        def controlled(config,c,home,tree,commit,base,profile):
+            calls.append(c._read_lock(tree/'flake.lock'))
+            if len(calls) == 1:
+                raise runner.UpdateDenied(dict(affectedInputNodes=['codex-desktop-linux'], summary='unsafe host executor'))
+            for alias in ['codex-desktop-linux', 'codex-desktop-sandbox']:
+                self.assertEqual(runner.lock_node(calls[-1], alias)['locked']['rev'], '1'*40)
+            self.assertEqual(runner.lock_node(calls[-1], 'nixpkgs')['locked']['rev'], '2'*40)
+            return dict(ok=True,action='boot',source='/reviewed/source')
+        with patch.object(runner,'revision',return_value='2'*40), patch.object(runner,'community',return_value='26.930.31730'), \
+             patch.object(runner,'fetch',side_effect=self.public_fetch),patch.object(runner,'controller',side_effect=controlled):
+            result=runner.run(self.config,candidate)
+        self.assertEqual(result['status'],'staged')
+        self.assertEqual(len(calls),2)
+        blocked=json.loads((Path(self.config['state'])/'blocked-inputs.json').read_text())
+        self.assertEqual(set(blocked),{'codex-desktop-linux','codex-desktop-sandbox'})
+        self.assertTrue(any('unsafe host executor' in note for note in result['notes']))
+
     def test_failed_review_keeps_hold_and_current_pins(self):
         self.setup_pipeline(hold=True)
         original=(self.repo/'flake.lock').read_bytes()

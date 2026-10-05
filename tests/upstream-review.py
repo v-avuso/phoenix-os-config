@@ -20,7 +20,9 @@ class EvidenceTests(unittest.TestCase):
                 (root / 'package').write_text('binary-looking ordinary package')
             records = [dict(type='github', owner='NixOS', repo='nixpkgs', rev=rev*40, narHash='sha256-value') for rev in ['a', 'b']]
             files = [{'flake.lock': json.dumps({'nodes': {'nixpkgs': {'locked': record}}})} for record in records]
-            result = ''.join(upstream.evidence(*files, lambda record: roots[record['rev'] == 'b'*40]))
+            batches = upstream.evidence(*files, lambda record: roots[record['rev'] == 'b'*40])
+            self.assertEqual(batches[0].nodes, ['nixpkgs'])
+            result = ''.join(batches)
             self.assertIn('-old authority', result)
             self.assertIn('+new authority', result)
             self.assertIn('Exact candidate implementation:', result)

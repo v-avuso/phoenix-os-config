@@ -21,7 +21,13 @@ maintained `nix-update` updates the conventional CLI recipe. Unchanged candidate
 skip builds/review. Failed unchanged candidates retry at most daily. Community
 requires its exact stable payload and successful `source-and-node`, `rust`,
 `nix`, and `official-linux-gate` checks; missing checks retain that application
-while independent channel updates can continue. Explicitly pinned framework
+while independent channel updates can continue. A verified scoped upstream
+review denial records the root-generated affected input nodes, bound to its
+verdict. The updater retains those exact published revisions and retries once
+with independent groups. Native/Sandbox desktop sources are held together.
+Changed public heads become eligible again automatically; this transient cache
+is separate from explicit version holds and never authorizes deployment.
+Unknown, unbound or complete-configuration denials do not trigger that fallback. Explicitly pinned framework
 inputs retain their existing pins; this is not a blanket unlock of every input.
 
 The protected controller builds and reviews the exact source/closure, including
@@ -105,6 +111,7 @@ Inspect `systemctl status phoenix-updates.timer`,
 `/var/lib/phoenix-updates/last-result.json`. Failures issue a fixed desktop
 notification; credentials, profiles and CVE classifications are not collected.
 Run `phoenix-update` as the desktop user for an immediate serialized check.
+The oneshot service has a two-hour start timeout.
 The service uses the existing protected controller socket and cannot
 reboot or garbage-collect generations.
 

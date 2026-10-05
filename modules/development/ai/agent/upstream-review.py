@@ -14,6 +14,13 @@ import re
 LIMIT = 768 * 1024
 MAX_BATCHES = 24
 
+class Evidence(str):
+    """Root-generated lineage; never derive input names by parsing source text."""
+    def __new__(cls, text, nodes):
+        result = super().__new__(cls, text)
+        result.nodes = sorted(nodes)
+        return result
+
 
 def relevant(owner, repo, name):
     if (owner, repo) == ('openai', 'codex') and name == 'MODULE.bazel.lock':
@@ -51,7 +58,7 @@ def inventory(root, owner, repo):
 def evidence(before_files, after_files, resolve):
     before = json.loads(before_files['flake.lock'])['nodes']
     after = json.loads(after_files['flake.lock'])['nodes']
-    batches, output, size = [], [], 0
+    batches, output, size, nodes = [], [], 0, set()
     for node in sorted(before.keys() | after.keys()):
         old, new = before.get(node, {}).get('locked'), after.get(node, {}).get('locked')
         if old == new:
@@ -94,14 +101,15 @@ def evidence(before_files, after_files, resolve):
             if length > LIMIT:
                 raise ValueError('one upstream implementation exceeds review bound')
             if size + length > LIMIT:
-                batches.append(''.join(output))
+                batches.append(Evidence(''.join(output), nodes))
                 if len(batches) >= MAX_BATCHES:
                     raise ValueError('upstream evidence exceeds batch bound')
-                output, size = [], 0
+                output, size, nodes = [], 0, set()
             size += length
             output.append(change)
+            nodes.add(node)
     if output:
-        batches.append(''.join(output))
+        batches.append(Evidence(''.join(output), nodes))
     return batches
 
 
@@ -139,7 +147,7 @@ def cli_evidence(before, after, resolve):
     # marker is only a preflight; it does not establish the isolation contract.
     previous = inventory(old_root, 'openai', 'codex')
     current = inventory(new_root, 'openai', 'codex')
-    batches, output, size = [], [], 0
+    batches, output, size, nodes = [], [], 0, set()
     for name in sorted(previous.keys() | current.keys()):
         if previous.get(name, (None,))[0] == current.get(name, (None,))[0]:
             continue
@@ -159,11 +167,11 @@ def cli_evidence(before, after, resolve):
         if length > LIMIT:
             raise ValueError('CLI authority evidence exceeds review bound')
         if size + length > LIMIT:
-            batches.append(''.join(output))
+            batches.append(Evidence(''.join(output), nodes))
             if len(batches) >= MAX_BATCHES:
                 raise ValueError('CLI authority evidence exceeds batch bound')
-            output, size = [], 0
-        output.append(text); size += length
+            output, size, nodes = [], 0, set()
+        output.append(text); size += length; nodes.add('reviewer-cli')
     if output:
-        batches.append(''.join(output))
+        batches.append(Evidence(''.join(output), nodes))
     return batches
