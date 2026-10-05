@@ -248,8 +248,7 @@ def run(config, c):
         selected.pop('codex-desktop-linux')
         selected.pop('codex-desktop-sandbox')
         notes.append('Community source held: required upstream checks unavailable or unsuccessful')
-    releases = fetch('https://api.github.com/repos/openai/codex/releases?per_page=100')
-    release = c.stable_cli_release(releases)
+    release = c.stable_cli_release([fetch('https://api.github.com/repos/openai/codex/releases/latest')])
     if release is not None:
         versions['codex-cli'] = c.CLI_TAG.fullmatch(release['tag_name']).group(1)
         if not compare_version(config, c, versions['codex-cli'], '0.159.0'):

@@ -157,8 +157,8 @@ p=Path('%s');p.write_text(p.read_text().replace('version = \"0.159.0\";', 'versi
             baseline=str(approved),systemProfile=str(profile),target='metal',controllerSocket='/fixture')
 
     def public_fetch(self,url):
-        if 'releases?' in url:
-            return [{'tag_name':'rust-v0.160.0','draft':False,'prerelease':False,'published_at':'2026-10-05T00:00:00Z'}]
+        if 'releases/latest' in url:
+            return {'tag_name':'rust-v0.160.0','draft':False,'prerelease':False,'published_at':'2026-10-05T00:00:00Z'}
         import base64
         payload={'version':'26.930.31730'}
         for arch in ('amd64','arm64'):
