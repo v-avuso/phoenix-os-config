@@ -26,6 +26,28 @@ class ReviewTests(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 review.validate_verdict(bad, binding)
 
+    def test_actual_scoped_review_schema_preserves_string_binding(self):
+        deployment_spec = importlib.util.spec_from_file_location('deployment', Path(__file__).resolve().parents[1] / 'modules/development/ai/agent/deployment.py')
+        deployment = importlib.util.module_from_spec(deployment_spec); deployment_spec.loader.exec_module(deployment)
+        with tempfile.TemporaryDirectory() as directory:
+            temporary = Path(directory)
+            config = self.review_config(temporary)
+            (temporary/'source').mkdir()
+            binding = deployment.upstream_binding({'source':'frozen','nonce':'fresh'}, 'exact evidence', 0, ['codex-desktop-linux'])
+            self.assertEqual(json.loads(binding['affectedInputNodes']), ['codex-desktop-linux'])
+            verdict = dict(binding, approved=False, summary='unsafe scoped authority')
+            def native_fixture(argv, **kwargs):
+                schema = json.loads((temporary/'work/schema.json').read_text())
+                for key, value in binding.items():
+                    self.assertIsInstance(value, str)
+                    self.assertEqual(schema['properties'][key], {'type':'string','enum':[value]})
+                (temporary/'work/verdict.json').write_text(json.dumps(verdict))
+                return b''
+            with mock.patch.object(review, 'run', side_effect=native_fixture):
+                with self.assertRaises(review.ReviewDenied) as denial:
+                    review.review(config,binding,{},'exact evidence',temporary)
+                self.assertEqual(denial.exception.verdict, verdict)
+
     def test_bounded_process(self):
         self.assertEqual(review.run([sys.executable, "-c", "print('ok')"]), b"ok\n")
         self.assertEqual(review.run([sys.executable, "-c", "import sys; print(\"path\"); print(\"log\", file=sys.stderr)"]), b"path\n")

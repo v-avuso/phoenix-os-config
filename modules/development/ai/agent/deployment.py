@@ -334,7 +334,7 @@ def process_inner(config, request, uid, pid, state):
 
 def upstream_binding(binding, batch, index, nodes=None):
     return dict(binding, scope='upstream-authority-' + str(index),
-                evidenceDigest=hashlib.sha256(batch.encode()).hexdigest(), affectedInputNodes=nodes or [])
+                evidenceDigest=hashlib.sha256(batch.encode()).hexdigest(), affectedInputNodes=json.dumps(nodes or [], separators=(',', ':')))
 
 
 def worker(config, directory):
