@@ -56,12 +56,12 @@ class EvidenceTests(unittest.TestCase):
                 self.assertEqual(sum(b.count('Exact candidate implementation: x/module%d.nix'%i) for b in batches),1)
 
     def test_cli_effective_version_and_guard_contract(self):
-        recipe = 'modules/development/ai/codex-package.nix'
+        recipe = 'modules/development/ai/agent/reviewer-codex.nix'
         before = {recipe: 'version = "0.159.0";'}
         after = {recipe: 'version = "0.160.0";'}
         held = dict(after, **{'config/updates.json': json.dumps({'holds': {'codex-cli': {'pin': {'version': '0.159.0'}}}})})
-        self.assertEqual(upstream.cli_version(held), '0.159.0')
-        self.assertEqual(upstream.cli_evidence(before, held, lambda _: self.fail('held version fetched')), [])
+        self.assertEqual(upstream.cli_version(held), '0.160.0')
+        self.assertEqual(upstream.cli_evidence(after, held, lambda _: self.fail('user hold changed reviewer')), [])
         self.assertEqual(upstream.cli_evidence({}, {}, lambda _: self.fail('absent adapter fetched')), [])
         with tempfile.TemporaryDirectory() as directory:
             roots = {version: Path(directory)/version for version in ['0.159.0', '0.160.0']}
@@ -72,7 +72,7 @@ class EvidenceTests(unittest.TestCase):
                     path = root/name; path.parent.mkdir(parents=True, exist_ok=True)
                     path.write_text('context compacted\nversion ' + version + '\n')
             batches = upstream.cli_evidence(before, after, roots.__getitem__)
-            self.assertEqual(len(batches), 4)
+            self.assertEqual(sum(b.count("Exact candidate implementation:") for b in batches), 4)
             self.assertTrue(all('Exact candidate implementation:' in b and 'version 0.160.0' in b for b in batches))
             (roots['0.160.0']/paths[1]).write_text('unknown reporting contract')
             with self.assertRaisesRegex(ValueError, 'compaction guard'):

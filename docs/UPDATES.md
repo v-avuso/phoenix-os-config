@@ -29,15 +29,19 @@ complete evidence from changed upstream module/build/containment code, split
 at file boundaries into at most 24 separately bound reviews, followed by the
 complete configuration review. Dependency evidence compares against the
 root-owned preceding next-boot source, so already staged upstream changes are
-not reviewed repeatedly before reboot. CLI upgrades also supply exact official
-source evidence for the execution and compaction reporting interfaces used by
-the protected reviewer; an unknown guard contract blocks deployment. This is
-source evidence, not proof that a release binary reproduces that source.
+not reviewed repeatedly before reboot. The protected reviewer CLI is pinned separately from the everyday CLI, so routine
+CLI updates do not replace review isolation or trigger expensive publisher-code
+reviews. Deliberate reviewer upgrades must supply exact official
+source evidence for changed publisher runtime authority, including configuration,
+rule loading, execution and sandbox authority used by the protected reviewer; an unknown guard contract blocks deployment. This is
+source evidence, not proof that a release binary reproduces that source;
+Bazel repository-cache lock metadata is outside this runtime authority scope.
 These checks can consume additional model compute on
 actual source changes, especially the initial backlog. Excessive,
 unsupported, or uncertain evidence is rejected, never truncated. Ordinary
 Nixpkgs package maintenance retains distribution trust; this is not a malware
-scanner or a comprehensive CVE scan. Known-vulnerability evaluation remains
+scanner or a comprehensive CVE scan. The reviewer pin requires deliberate security
+maintenance; routine user CLI updates and holds do not update that control-plane pin. Known-vulnerability evaluation remains
 enabled. The source transport admits 896 KiB, but the existing complete
 serialized review limit remains 1 MiB and observed compaction rejects verdicts.
 

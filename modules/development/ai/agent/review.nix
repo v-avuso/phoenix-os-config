@@ -2,16 +2,18 @@
   config,
   pkgs,
   user,
-  codexCliPackage,
   inputs,
   ...
 }:
 let
+  # The privileged reviewer is a separate control-plane dependency. Everyday
+  # CLI freshness must not silently replace the code enforcing review isolation.
+  reviewerCodexPackage = pkgs.callPackage ./reviewer-codex.nix { };
   reviewConfig = pkgs.writeText "phoenix-review.json" (
     builtins.toJSON {
       repo = user.repoDirectory;
       reviewHome = "${user.homeDirectory}/.local/state/phoenix-agent-review";
-      codex = "${codexCliPackage}/bin/codex";
+      codex = "${reviewerCodexPackage}/bin/codex";
       git = "${pkgs.git}/bin/git";
       nix = "${pkgs.nix}/bin/nix";
       bwrap = "${pkgs.bubblewrap}/bin/bwrap";
@@ -47,9 +49,9 @@ let
     fi
     cd /
     if [ "$#" -eq 0 ] && [ -f "$CODEX_HOME/auth.json" ]; then
-      exec ${codexCliPackage}/bin/codex login status
+      exec ${reviewerCodexPackage}/bin/codex login status
     fi
-    exec ${codexCliPackage}/bin/codex login "$@"
+    exec ${reviewerCodexPackage}/bin/codex login "$@"
   '';
   reviewLogin = pkgs.writeShellScriptBin "phoenix-review-login" ''
     export CODEX_HOME="${user.homeDirectory}/.local/state/phoenix-agent-review"
@@ -76,7 +78,7 @@ let
       nixStore = "${pkgs.nix}/bin/nix-store";
       nixEnv = "${pkgs.nix}/bin/nix-env";
       systemdRun = "${pkgs.systemd}/bin/systemd-run";
-      codex = "${codexCliPackage}/bin/codex";
+      codex = "${reviewerCodexPackage}/bin/codex";
       bwrap = "${pkgs.bubblewrap}/bin/bwrap";
       caBundle = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
       policy = toString ./review-policy.md;
