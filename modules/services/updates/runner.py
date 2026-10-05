@@ -94,8 +94,10 @@ def nix_env(config):
                 GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL='/dev/null', GIT_TERMINAL_PROMPT='0')
 
 
-def revision(alias):
+def revision(alias, branch=None):
     owner, repo, ref = SOURCES[alias]
+    if branch is not None:
+        ref = branch
     result = fetch('https://api.github.com/repos/%s/%s/commits/%s' % (owner, repo, ref))
     value = result.get('sha')
     if not isinstance(value, str) or not REV.fullmatch(value):
@@ -236,7 +238,18 @@ def run(config, c):
     if c._status_paths(config['git'], repo, home) & ALLOWED:
         return {'status': 'deferred', 'reason': 'updater-owned file has local changes'}
     policy = validate_policy(json.loads(c.git(config['git'], repo, home, 'show', head + ':' + POLICY)))
-    selected = {alias: revision(alias) for alias in SOURCES if alias != 'codex-desktop-sandbox'}
+    before = c._read_lock(repo / 'flake.lock')
+    for alias, (owner, source_repo, _branch) in SOURCES.items():
+        original = lock_node(before, alias)['original']
+        if original.get('type') != 'github' or original.get('owner') != owner or original.get('repo') != source_repo:
+            raise ValueError('update source differs from the supported publisher adapter')
+    stable_branch = lock_node(before, 'nixpkgs')['original'].get('ref')
+    if not isinstance(stable_branch, str) or not re.fullmatch(r'nixos-[0-9]{2}\.[0-9]{2}', stable_branch):
+        raise ValueError('stable source must explicitly follow a reviewed NixOS release branch')
+    if lock_node(before, 'nixpkgs-unstable')['original'].get('ref') != 'nixos-unstable':
+        raise ValueError('fresh source must explicitly follow the tested unstable channel')
+    selected = {alias: revision(alias, stable_branch if alias == 'nixpkgs' else None)
+                for alias in SOURCES if alias != 'codex-desktop-sandbox'}
     versions = {}
     notes = []
     desktop_revision = selected['codex-desktop-linux']
@@ -272,7 +285,6 @@ def run(config, c):
             versions.pop('codex-cli', None)
         # Firefox is pinned per package by the Nix declaration, independently of
         # the shared channel's compositor and other application dependencies.
-    before = c._read_lock(repo / 'flake.lock')
     if 'codex-desktop' in versions:
         # Never silently downgrade the independently accepted Native or Sandbox
         # payload just because an upstream source branch moved or was restored.

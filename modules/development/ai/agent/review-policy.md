@@ -31,3 +31,14 @@ closure records this source, and performs upstream activation without another
 Polkit prompt. No caller approval, persistent verdict, executable identity claim,
 or arbitrary privileged command is accepted. Review changes to this boundary
 especially carefully. Preserve music/user state and known-good generations.
+
+Exact upstream authority reviews are separate scopes (`upstream-authority-N`),
+bound to the same frozen repository source, baseline, closure, target, action,
+reason and nonce plus the exact evidence digest. In those scopes, `diff` contains
+complete changed upstream file implementations and their before/after diffs;
+`full_source` is empty because the complete repository receives its own separate
+review. Assess that authority evidence within the stated scope, not an omitted
+repository. Reject dangerous or unclear authority changes. The protected
+controller must validate every scoped verdict AND the complete repository
+verdict before any activation. Digests alone are never approval evidence. No
+batch may omit a file to fit a bound; an oversized individual file fails closed.

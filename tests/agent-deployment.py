@@ -67,13 +67,22 @@ class DeploymentTests(unittest.TestCase):
             temporary.assert_not_called()
 
     def test_controller_never_activates_failed_or_forged_review(self):
-        for mode in ['rejected', 'forged', 'model-failed', 'malformed', 'closure-mismatch', 'compacted', 'oversized']:
+        for mode in ['rejected', 'forged', 'model-failed', 'malformed', 'closure-mismatch', 'compacted', 'oversized', 'missing-upstream', 'forged-upstream', 'denied-upstream']:
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 baseline = root / 'baseline'
                 baseline.mkdir()
                 (baseline / 'flake.nix').write_text('{}')
                 (baseline / 'flake.lock').write_text('{}')
+                profile = root / 'profile'
+                profile_marker = profile / 'etc/phoenix-agent'
+                profile_marker.mkdir(parents=True)
+                (profile_marker / 'activated-source').symlink_to(baseline)
+                original_resolve = Path.resolve
+                def resolve(path, *args, **kwargs):
+                    if path == Path('/nix/var/nix/profiles/system'):
+                        return profile
+                    return original_resolve(path, *args, **kwargs)
                 frozen, closure = root / 'frozen', root / 'closure'
                 marker = closure / 'etc/phoenix-agent'
                 marker.mkdir(parents=True)
@@ -82,7 +91,14 @@ class DeploymentTests(unittest.TestCase):
                 review.run = mock.Mock(return_value=b'')
                 config = dict(target='metal', work=directory, builderUser='builder', reviewerUser='reviewer',
                               reviewHome='/protected/auth', nix='nix', nixStore='nix-store', baseline=str(baseline),
-                              python='python', controller='controller', configPath='config', systemdRun='systemd-run')
+                              python='python', controller='controller', configPath='config', systemdRun='systemd-run',
+                              upstreamReviewScript=str(Path(__file__).resolve().parents[1] / 'modules/development/ai/agent/upstream-review.py'))
+                request = self.request()
+                if mode.endswith('upstream'):
+                    upstream = root/'upstream.py'
+                    upstream.write_text('MAX_BATCHES = 24\ndef evidence(before, after, resolve): return ["first", "second"]\ndef cli_evidence(before, after, resolve): return []\n')
+                    config['upstreamReviewScript'] = str(upstream)
+                    request['files']['flake.lock'] = '{"updated":true}'
                 def user_command(config, user, argv, run, **kwargs):
                     if argv[:3] == ['nix', 'store', 'add-path']:
                         shutil.copytree(argv[3], frozen)
@@ -100,11 +116,17 @@ class DeploymentTests(unittest.TestCase):
                     verdict = dict(binding, approved=(mode != 'rejected'), summary='fixture')
                     if mode == 'forged':
                         verdict['nonce'] = 'wrong'
-                    return json.dumps(dict(status='verdict', verdict=verdict)).encode()
+                    envelope = dict(status='verdict', verdict=verdict)
+                    if mode in {'forged-upstream', 'denied-upstream'}:
+                        envelope['upstreamVerdicts'] = [dict(deploy.upstream_binding(binding,b,i),
+                            approved=True,summary='fixture') for i,b in enumerate(['first','second'])]
+                        if mode == 'forged-upstream': envelope['upstreamVerdicts'][0]['evidenceDigest']='forged'
+                        else: envelope['upstreamVerdicts'][0]['approved']=False
+                    return json.dumps(envelope).encode()
                 account = mock.Mock(pw_uid=os.getuid(), pw_gid=os.getgid())
-                with contextlib.redirect_stdout(io.StringIO()), mock.patch.object(deploy, 'load_review', return_value=review), mock.patch.object(deploy, 'as_user', side_effect=user_command), mock.patch.object(deploy, 'store_path'), mock.patch.object(deploy, 'activation_executable'), mock.patch.object(deploy.pwd, 'getpwnam', return_value=account):
+                with mock.patch.object(Path, 'resolve', resolve), contextlib.redirect_stdout(io.StringIO()), mock.patch.object(deploy, 'load_review', return_value=review), mock.patch.object(deploy, 'as_user', side_effect=user_command), mock.patch.object(deploy, 'store_path'), mock.patch.object(deploy, 'activation_executable'), mock.patch.object(deploy.pwd, 'getpwnam', return_value=account):
                     with self.assertRaises(deploy.DeploymentFailure) as failure:
-                        deploy.process(config, self.request(), os.getuid(), 22)
+                        deploy.process(config, request, os.getuid(), 22)
                 self.assertIn(failure.exception.stage, {'verdict', 'review', 'closure-binding'})
                 if mode == 'rejected':
                     self.assertIsInstance(failure.exception, deploy.DeploymentDenied)
@@ -257,6 +279,33 @@ class DeploymentTests(unittest.TestCase):
             deploy.as_user({'setpriv': '/trusted/setpriv'}, 'reviewer', ['/trusted/codex'], run)
         self.assertEqual(run.call_args.args[0], ['/trusted/setpriv', '--reuid', '44', '--regid', '45',
                                                '--clear-groups', '--no-new-privs', '/trusted/codex'])
+
+
+    def test_scoped_upstream_verdicts_bind_every_evidence_batch(self):
+        binding={'source':'immutable-source','base':'baseline','closure':'immutable-closure','nonce':'fresh'}
+        first=deploy.upstream_binding(binding,'first exact implementation',0)
+        second=deploy.upstream_binding(binding,'second exact implementation',1)
+        self.assertNotEqual(first['evidenceDigest'],second['evidenceDigest'])
+        self.assertNotEqual(first['scope'],second['scope'])
+        review=deploy.load_review({'reviewScript':str(Path(__file__).resolve().parents[1]/'modules/development/ai/agent/deploy-review.py')})
+        verdict=dict(first,approved=True,summary='fixture')
+        review.validate_verdict(verdict,first)
+        with self.assertRaises(review.ReviewVerdictError): review.validate_verdict(verdict,second)
+
+    def test_worker_reviews_all_upstream_batches_before_complete_repository(self):
+        review=deploy.load_review({'reviewScript':str(Path(__file__).resolve().parents[1]/'modules/development/ai/agent/deploy-review.py')})
+        binding={'source':'/immutable/source','nonce':'fresh'}
+        payload=dict(binding=binding,files={},diff='complete configuration',upstreamBatches=['first implementation','second implementation'])
+        with tempfile.TemporaryDirectory() as directory:
+            output=io.StringIO()
+            def approve(config,binding,files,diff,temporary):return dict(binding,approved=True,summary='fixture')
+            with mock.patch.object(deploy,'load_review',return_value=review),mock.patch.object(review,'review',side_effect=approve) as calls, \
+                 mock.patch('sys.stdin',io.StringIO(json.dumps(payload))),contextlib.redirect_stdout(output):
+                deploy.worker({},directory)
+            result=json.loads(output.getvalue())
+            self.assertEqual(calls.call_count,3)
+            self.assertEqual(len(result['upstreamVerdicts']),2)
+            self.assertNotIn('scope',result['verdict'])
 
 
 if __name__ == '__main__':

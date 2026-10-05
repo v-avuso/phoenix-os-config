@@ -206,12 +206,19 @@ def process_inner(config, request, uid, pid, state):
             raise ValueError('update baseline/profile changed before review')
         store_path(baseline, 'source')
         old = review.baseline_files(Path(baseline))
+        store_path(profile, 'closure')
+        profile_source = str((Path(profile) / 'etc/phoenix-agent/activated-source').resolve(strict=True))
+        store_path(profile_source, 'source')
+        # Boot staging may advance several times before reboot. Its root-owned
+        # immutable source is the preceding approved dependency baseline; do not
+        # repeatedly spend reviews on the same already-staged upstream changes.
+        previous_dependencies = review.baseline_files(Path(profile_source))
         state['stage'] = 'upstream-evidence'
-        upstream_diff = ''
-        if old.get('flake.lock') != request['files'].get('flake.lock'):
-            spec = importlib.util.spec_from_file_location('upstream_review', config['upstreamReviewScript'])
-            upstream = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(upstream)
+        upstream_batches = []
+        spec = importlib.util.spec_from_file_location('upstream_review', config['upstreamReviewScript'])
+        upstream = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(upstream)
+        if previous_dependencies.get('flake.lock') != request['files'].get('flake.lock'):
             def resolve_locked(locked):
                 from urllib.parse import quote
                 reference = 'github:%s/%s/%s?narHash=%s' % (locked['owner'], locked['repo'],
@@ -223,7 +230,16 @@ def process_inner(config, request, uid, pid, state):
                     raise ValueError('resolved upstream source does not match lock')
                 store_path(metadata['path'], 'source')
                 return metadata['path']
-            upstream_diff = upstream.evidence(old, request['files'], resolve_locked)
+            upstream_batches = upstream.evidence(previous_dependencies, request['files'], resolve_locked)
+        def resolve_cli(version):
+            record = json.loads(as_user(config, config['builderUser'],
+                [config['nix'], 'flake', 'prefetch', '--json', 'github:openai/codex/rust-v' + version],
+                review.run, env=env, timeout=600))
+            store_path(record['storePath'], 'source')
+            return record['storePath']
+        upstream_batches.extend(upstream.cli_evidence(previous_dependencies, request['files'], resolve_cli))
+        if len(upstream_batches) > upstream.MAX_BATCHES:
+            raise ValueError('combined upstream evidence exceeds batch bound')
         state['stage'] = 'build'
         print(json.dumps(dict(event='building', uid=uid, pid=pid, source=source_store)), flush=True)
         closure = as_user(config, config['builderUser'], [config['nix'], 'build', '--no-link', '--print-out-paths',
@@ -238,18 +254,19 @@ def process_inner(config, request, uid, pid, state):
         if str((Path(closure) / 'etc/phoenix-agent/activated-source').resolve(strict=True)) != source_store:
             raise ValueError('closure does not record exact reviewed source')
         binding = {key: request[key] for key in ('commit', 'target', 'action', 'reason')}
-        binding.update(source=source_store, base=baseline, closure=closure, nonce=secrets.token_hex(32))
+        binding.update(source=source_store, base=baseline, profile=profile,
+                       profileSource=profile_source, closure=closure, nonce=secrets.token_hex(32))
         work = temporary / 'review'
         work.mkdir(mode=0o700)
         reviewer = pwd.getpwnam(config['reviewerUser'])
         os.chown(work, reviewer.pw_uid, reviewer.pw_gid)
         payload = {'binding': binding, 'files': request['files'],
-                   'diff': review.source_diff(old, request['files'], review.source_modes(Path(baseline), old), request['modes']) + upstream_diff}
+                   'diff': review.source_diff(old, request['files'], review.source_modes(Path(baseline), old), request['modes']), 'upstreamBatches': upstream_batches}
         state['stage'] = 'review'
         print(json.dumps(dict(event='reviewing', uid=uid, pid=pid, source=source_store, closure=closure)), flush=True)
         output = as_user(config, config['reviewerUser'], [config['python'], '-I', config['controller'],
                          config['configPath'], 'worker', str(work)], review.run,
-                         data=json.dumps(payload).encode(), timeout=700,
+                         data=json.dumps(payload).encode(), timeout=min(7200, 700 * (len(upstream_batches) + 1)),
                          env={'HOME': config['reviewHome'], 'PATH': '/nonexistent'})
         state['stage'] = 'verdict'
         result = json.loads(output)
@@ -259,11 +276,16 @@ def process_inner(config, request, uid, pid, state):
             # Only static worker classifications are allowed out of this boundary.
             code = result.get('code')
             if code not in {'reviewer-invocation-failed', 'schema-invalid', 'binding-mismatch',
-                            'context-compacted', 'review-context-oversized'}:
+                            'context-compacted', 'review-context-oversized', 'upstream-model-denied'}:
                 code = 'worker-envelope-invalid'
             raise DeploymentFailure('review', code)
         verdict = result.get('verdict')
         try:
+            upstream_verdicts = result.get('upstreamVerdicts', [])
+            if not isinstance(upstream_verdicts, list) or len(upstream_verdicts) != len(upstream_batches):
+                raise DeploymentFailure('verdict', 'upstream-verdict-count')
+            for index, (batch, upstream_verdict) in enumerate(zip(upstream_batches, upstream_verdicts)):
+                review.validate_verdict(upstream_verdict, upstream_binding(binding, batch, index))
             review.validate_verdict(verdict, binding)
         except review.ReviewDenied:
             raise DeploymentDenied(verdict['summary']) from None
@@ -295,6 +317,11 @@ def process_inner(config, request, uid, pid, state):
         return dict(ok=True, source=source_store, closure=closure, action=request['action'])
 
 
+def upstream_binding(binding, batch, index):
+    return dict(binding, scope='upstream-authority-' + str(index),
+                evidenceDigest=hashlib.sha256(batch.encode()).hexdigest())
+
+
 def worker(config, directory):
     review = load_review(config)
     payload = json.load(sys.stdin)
@@ -302,10 +329,20 @@ def worker(config, directory):
     # Source modes are read by the shared reviewer from this immutable link.
     (temporary / 'source').symlink_to(payload['binding']['source'], target_is_directory=True)
     try:
+        upstream_verdicts = []
+        for index, batch in enumerate(payload.get('upstreamBatches', [])):
+            scoped = temporary / ('upstream-' + str(index))
+            scoped.mkdir(mode=0o700)
+            (scoped / 'source').symlink_to(payload['binding']['source'], target_is_directory=True)
+            upstream_verdicts.append(review.review(config,
+                upstream_binding(payload['binding'], batch, index), {}, batch, scoped))
         verdict = review.review(config, payload['binding'], payload['files'], payload['diff'], temporary)
         result = dict(status='verdict', verdict=verdict)
+        if upstream_verdicts:
+            result['upstreamVerdicts'] = upstream_verdicts
     except review.ReviewDenied as error:
-        result = dict(status='verdict', verdict=error.verdict)
+        result = (dict(status='error', code='upstream-model-denied') if 'scope' in error.verdict
+                  else dict(status='verdict', verdict=error.verdict))
     except review.ReviewVerdictError as error:
         result = dict(status='error', code=error.code)
     except Exception:

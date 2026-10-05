@@ -124,7 +124,7 @@ class RunnerTests(unittest.TestCase):
     def setup_pipeline(self, hold=False):
         lock = {'version': 7, 'root': 'root', 'nodes': {'root': {'inputs': {a:a for a in runner.SOURCES}}}}
         for alias,(owner,repo,ref) in runner.SOURCES.items():
-            lock['nodes'][alias] = {'original': {'owner':owner,'repo':repo,'ref':ref},
+            lock['nodes'][alias] = {'original': {'type':'github','owner':owner,'repo':repo,'ref':ref},
                 'locked': {'owner':owner,'repo':repo,'rev':'1'*40}, 'inputs': {}}
         (self.repo/'flake.lock').write_text(json.dumps(lock))
         policy = json.loads((self.repo/runner.POLICY).read_text())

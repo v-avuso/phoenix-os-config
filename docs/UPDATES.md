@@ -25,7 +25,16 @@ while independent channel updates can continue. Explicitly pinned framework
 inputs retain their existing pins; this is not a blanket unlock of every input.
 
 The protected controller builds and reviews the exact source/closure, including
-bounded evidence from changed upstream module/build/containment code. Excessive,
+complete evidence from changed upstream module/build/containment code, split
+at file boundaries into at most 24 separately bound reviews, followed by the
+complete configuration review. Dependency evidence compares against the
+root-owned preceding next-boot source, so already staged upstream changes are
+not reviewed repeatedly before reboot. CLI upgrades also supply exact official
+source evidence for the execution and compaction reporting interfaces used by
+the protected reviewer; an unknown guard contract blocks deployment. This is
+source evidence, not proof that a release binary reproduces that source.
+These checks can consume additional model compute on
+actual source changes, especially the initial backlog. Excessive,
 unsupported, or uncertain evidence is rejected, never truncated. Ordinary
 Nixpkgs package maintenance retains distribution trust; this is not a malware
 scanner or a comprehensive CVE scan. Known-vulnerability evaluation remains
