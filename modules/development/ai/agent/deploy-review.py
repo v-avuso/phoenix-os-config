@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Frozen committed-source review, optional build and authenticated temporary test.
+"""Frozen working-tree review, optional build and authenticated temporary test.
 
 Verdicts exist only in this invocation; on-disk reports never authorize anything.
 Run on the trusted host, whose authentication is not mounted into worker sandboxes.
@@ -7,6 +7,7 @@ Run on the trusted host, whose authentication is not mounted into worker sandbox
 import argparse
 import difflib
 from datetime import datetime, timezone
+import errno
 import fcntl
 import json
 import os
@@ -70,22 +71,81 @@ def git(config, *args):
                 "-C", config["repo"], *args], env=env)
 
 
+def worktree_file(repo, name):
+    """Read one regular working-tree file without following symlink components."""
+    path = Path(name)
+    if path.is_absolute() or path.as_posix() != name or any(part in {"", ".", "..", ".git"} for part in path.parts):
+        raise ValueError("unsafe source path")
+    root_fd = os.open(repo, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW)
+    parent_fd = root_fd
+    try:
+        for part in path.parts[:-1]:
+            next_fd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW,
+                              dir_fd=parent_fd)
+            if parent_fd != root_fd:
+                os.close(parent_fd)
+            parent_fd = next_fd
+        try:
+            file_fd = os.open(path.parts[-1], os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW, dir_fd=parent_fd)
+        except FileNotFoundError:
+            return None
+        try:
+            before = os.fstat(file_fd)
+            if not stat.S_ISREG(before.st_mode):
+                raise ValueError("symlinks and submodules require a separate reviewed deployment path")
+            data = bytearray()
+            while True:
+                block = os.read(file_fd, min(65536, SOURCE_LIMIT + 1 - len(data)))
+                if not block:
+                    break
+                data.extend(block)
+                if len(data) > SOURCE_LIMIT:
+                    raise ValueError("source exceeds bounded review context; split/reduce scope before deployment")
+            after = os.fstat(file_fd)
+            if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns,
+                    before.st_mode & 0o777) != \
+                    (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns,
+                     after.st_mode & 0o777):
+                raise ValueError("working-tree source changed during snapshot; retry deployment")
+            return bytes(data), ("100755" if before.st_mode & 0o111 else "100644")
+        finally:
+            os.close(file_fd)
+    except OSError as error:
+        if error.errno == errno.ENOENT:
+            return None
+        if error.errno in {errno.ELOOP, errno.EISDIR}:
+            raise ValueError("symlinks and submodules require a separate reviewed deployment path") from None
+        raise
+    finally:
+        if parent_fd != root_fd:
+            os.close(parent_fd)
+        os.close(root_fd)
+
+
 def snapshot(config, destination):
-    if git(config, "status", "--porcelain", "--untracked-files=all", "--ignore-submodules=all").strip():
-        raise ValueError("commit all work before review; dirty/untracked files are never silently omitted")
     commit = git(config, "rev-parse", "--verify", "HEAD^{commit}").decode().strip()
+    if git(config, "ls-files", "-u", "-z"):
+        raise ValueError("resolve unmerged paths before deployment")
+    names = set(git(config, "ls-files", "--cached", "-z").split(b"\0"))
+    names.update(git(config, "ls-files", "--others", "--exclude-standard", "-z").split(b"\0"))
     entries = git(config, "ls-tree", "-rz", "--full-tree", commit).split(b"\0")
-    files, total = {}, 0
     for entry in filter(None, entries):
         metadata, raw_name = entry.split(b"\t", 1)
         mode, kind, oid = metadata.decode().split()
-        name = raw_name.decode("utf-8")
-        path = Path(name)
         if mode not in {"100644", "100755"} or kind != "blob":
             raise ValueError("symlinks and submodules require a separate reviewed deployment path")
-        if path.is_absolute() or any(part in {"..", ".git"} for part in path.parts):
-            raise ValueError("unsafe source path")
-        content = git(config, "cat-file", "blob", oid)
+        names.add(raw_name)
+    names.discard(b"")
+    if len(names) > 2000:
+        raise ValueError("source contains too many files for bounded review; reduce scope before deployment")
+    files, total = {}, 0
+    repo = Path(config["repo"])
+    for raw_name in sorted(names):
+        name = raw_name.decode("utf-8")
+        loaded = worktree_file(repo, name)
+        if loaded is None:
+            continue
+        content, mode = loaded
         total += len(content)
         if total > SOURCE_LIMIT:
             raise ValueError("source exceeds bounded review context; split/reduce scope before deployment")
@@ -93,6 +153,7 @@ def snapshot(config, destination):
             files[name] = content.decode("utf-8")
         except UnicodeError:
             raise ValueError("binary source requires separate review; never omit it") from None
+        path = Path(name)
         target = destination / path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(content)

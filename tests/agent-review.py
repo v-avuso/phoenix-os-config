@@ -195,7 +195,7 @@ class ReviewTests(unittest.TestCase):
                 review.audit(config, binding, "built")
             self.assertEqual((home / "auth.json").read_text(), "credential-must-not-log")
 
-    def test_frozen_blobs_and_dirty_rejection(self):
+    def test_snapshot_includes_working_tree_and_git_visible_untracked_files(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             repo, frozen = root / "repo", root / "frozen"
@@ -220,17 +220,32 @@ class ReviewTests(unittest.TestCase):
             self.assertEqual(files["kept"], "must-review")
             self.assertEqual((frozen / "kept").read_text(), "must-review")
             self.assertEqual(files["large"], "x" * (512 * 1024 + 1))
-            (repo / "dirty").write_text("untracked")
-            with self.assertRaises(ValueError):
-                review.snapshot(config, root / "unused")
-            (repo / "dirty").unlink()
+            (repo / "kept").write_text("working tree edit")
+            (repo / "untracked").write_text("include me")
+            (repo / "untracked").chmod(0o755)
+            (repo / ".gitignore").write_text("private-note\n")
+            (repo / "private-note").write_text("ignored data")
+            execute("add", ".gitignore")
+            edited, files = review.snapshot(config, root / "edited")
+            self.assertEqual(edited, commit, "HEAD remains informational provenance")
+            self.assertEqual(files["kept"], "working tree edit")
+            self.assertEqual(files["untracked"], "include me")
+            self.assertNotIn("private-note", files)
+            self.assertEqual((root / "edited/kept").read_text(), "working tree edit")
+            self.assertTrue((root / "edited/untracked").stat().st_mode & 0o111)
+            (repo / "kept").unlink()
+            _, files = review.snapshot(config, root / "deleted")
+            self.assertNotIn("kept", files)
+            self.assertEqual((repo / "kept").exists(), False)
+            (repo / "kept").write_text("working tree edit")
+            (repo / "untracked").unlink()
+            (repo / "private-note").unlink()
+            (repo / ".gitignore").unlink()
             (repo / "large").write_text("x" * (review.SOURCE_LIMIT + 1))
-            execute("add", "."); execute("commit", "-m", "oversized fixture")
             with self.assertRaisesRegex(ValueError, "source exceeds bounded review context"):
                 review.snapshot(config, root / "unused")
             (repo / "large").write_text("x")
             (repo / "escape").symlink_to("/etc/passwd")
-            execute("add", "."); execute("commit", "-m", "symlink")
             with self.assertRaises(ValueError):
                 review.snapshot(config, root / "unused")
 

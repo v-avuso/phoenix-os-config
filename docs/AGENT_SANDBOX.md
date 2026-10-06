@@ -20,8 +20,8 @@ recorded in acceptance; component tests alone are insufficient.
 | `codex-sandbox-exec COMMAND...` | Tool execution inside the managed sandbox |
 | `phoenix-review-login` | One-time reviewer sign-in; existing login reports saved status |
 | `phoenix-deploy-bootstrap` | One-time graphical installation of protected reviewer authentication |
-| `phoenix-deploy-review --target metal --reason "…" --action test` | Authenticate/build frozen committed source and activate now |
-| `phoenix-deploy-review --target metal --reason "…" --action switch` | Authenticate/build and activate now plus next boot |
+| `phoenix-deploy-review --target metal --reason "…" --action test` | Authenticate/build a frozen working-tree snapshot and activate now |
+| `phoenix-deploy-review --target metal --reason "…" --action switch` | Authenticate/build a working-tree snapshot and activate now plus next boot |
 
 Launchers start their required services automatically. The current declaration favours the
 sandboxed GUI entry; fuzzy matching and usage history still affect search order.
@@ -149,8 +149,11 @@ model selector; the separate deployment reviewer uses GPT-6.1 Sol / medium.
   change-focused review and compute budget. Repeated `reviewer-invocation-failed`
   errors blocked deployment; their cause remains unknown. Exact AI cost was not
   measured, so do not attribute the entire usage window to this reviewer.
-- **Manual deployment:** Clean committed source, immutable source/closure binding,
-  isolated unprivileged builder, baseline/profile rechecks and rollback remain.
+- **Manual deployment:** The snapshot includes tracked working-tree edits and
+  Git-visible untracked files; Git-ignored files are excluded. `HEAD` is recorded
+  as informational provenance, while the frozen file manifest and immutable
+  source/closure binding identify the deployed contents. The isolated unprivileged
+  builder, baseline/profile rechecks and rollback remain.
   `phoenix-switch`/`phoenix-test` use graphical Polkit authentication via a fixed
   immutable operator command. The ordinary user socket refuses manual actions
   when model review is disabled; disabling review never grants unattended root.
