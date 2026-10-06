@@ -1,0 +1,71 @@
+--- a/util.c
++++ b/util.c
+@@ -44,6 +44,7 @@
+ #define SSH_SK_USER_PRESENCE_REQD 0x01
+ #define SSH_SK_USER_VERIFICATION_REQD 0x04
+ #define SSH_SK_RESIDENT_KEY 0x20
++#define MAX_UV_ATTEMPTS 3
+ 
+ struct opts {
+   fido_opt_t up;
+@@ -1226,6 +1227,8 @@
+     if (get_authenticators(cfg, devlist, ndevs, assert,
+                            is_resident(devices[i].keyHandle), authlist)) {
+       for (size_t j = 0; authlist[j] != NULL; j++) {
++        unsigned int uv_failures = 0;
++
+         /* options used during authentication */
+         parse_opts(cfg, devices[i].attributes, &opts);
+ 
+@@ -1261,11 +1264,46 @@
+                      cfg->cue_prompt != NULL ? cfg->cue_prompt : DEFAULT_CUE);
+           }
+         }
+-        r = fido_dev_get_assert(authlist[j], assert, pin);
+-        if (pin) {
+-          explicit_bzero(pin, strlen(pin));
+-          free(pin);
+-          pin = NULL;
++        for (;;) {
++          r = fido_dev_get_assert(authlist[j], assert, pin);
++          if (pin) {
++            explicit_bzero(pin, strlen(pin));
++            free(pin);
++            pin = NULL;
++          }
++          /* A device action timeout is not a failed fingerprint match. */
++          if (opts.uv == FIDO_OPT_TRUE &&
++              (r == FIDO_ERR_USER_ACTION_TIMEOUT ||
++               r == FIDO_ERR_ACTION_TIMEOUT ||
++               (r == FIDO_ERR_UV_INVALID &&
++                uv_failures + 1 < MAX_UV_ATTEMPTS))) {
++            if (r == FIDO_ERR_UV_INVALID) {
++              uv_failures++;
++              converse(pamh, PAM_TEXT_INFO,
++                       "Fingerprint did not match. Try again.");
++            } else {
++              debug_dbg(cfg,
++                        "FIDO user action timed out; retrying biometric request");
++              sleep(1);
++            }
++            fido_assert_free(&assert);
++            assert = prepare_assert(cfg, &devices[i], &opts);
++            if (assert == NULL) {
++              debug_dbg(cfg, "Failed to prepare assertion for retry");
++              goto out;
++            }
++            continue;
++          }
++
++          /* Preserve the key's explicit blocked state for the PAM agent. */
++          if (opts.uv == FIDO_OPT_TRUE && r == FIDO_ERR_UV_BLOCKED) {
++            converse(pamh, PAM_TEXT_INFO,
++                     "Fingerprint blocked.");
++          } else if (opts.uv == FIDO_OPT_TRUE && r == FIDO_ERR_UV_INVALID) {
++            converse(pamh, PAM_TEXT_INFO,
++                     "Three attempts failed.");
++          }
++          break;
+         }
+         if (r == FIDO_OK) {
+           if (opts.pin == FIDO_OPT_TRUE || opts.uv == FIDO_OPT_TRUE) {

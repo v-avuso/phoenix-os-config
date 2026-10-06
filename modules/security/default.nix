@@ -261,8 +261,66 @@
     su.u2f.enable = true;
     su-l.u2f.enable = true;
 
-    # Polkit inherits U2F from the global setting; NixOS also adjusts its
-    # socket-activated helper sandbox for HID access and read-only home access.
+    # Retry timed-out Bio requests without counting them as fingerprint misses,
+    # then allow up to three failed fingerprint matches before the FIDO2 PIN.
+    # A single failed PIN falls through to the NixOS account password.
+    # NixOS marks the per-service `rules` interface experimental; its pinned
+    # implementation must be checked when updating nixpkgs.
+    "polkit-1" = {
+      u2f.enable = false;
+      rules.auth =
+        let
+          service = config.security.pam.services."polkit-1";
+          beforeUnix = service.rules.auth.unix.order - 30;
+          u2fArgs = config.security.pam.u2f.settings;
+          # Keep the upstream module everywhere else. Polkit gets the narrow
+          # local patch that retries authenticator action timeouts indefinitely,
+          # distinguishes fingerprint errors, and allows three UV attempts.
+          polkitPamU2f = pkgs.pam_u2f.overrideAttrs (old: {
+            patches = (old.patches or [ ]) ++ [ ./patches/pam-u2f-polkit-retries.patch ];
+          });
+          u2fModule = "${polkitPamU2f}/lib/security/pam_u2f.so";
+          u2fFallbackMessage = pkgs.writeText "polkit-u2f-fallback-message"
+            "Enter account password.";
+          u2fPinMessage = pkgs.writeText "polkit-u2f-pin-message"
+            "Enter FIDO2 PIN.";
+          mkU2fRule = order: settings: cuePrompt: {
+            inherit order;
+            control = "sufficient";
+            modulePath = u2fModule;
+            inherit settings;
+            args = lib.optional (cuePrompt != null) "cue_prompt=${cuePrompt}";
+          };
+          biometricRule = mkU2fRule (beforeUnix - 20)
+            (u2fArgs // { pinverification = 0; userverification = 1; })
+            "Touch security key for fingerprint verification.";
+          pinNotice = {
+            order = beforeUnix - 15;
+            control = "optional";
+            modulePath = "${pkgs.linux-pam}/lib/security/pam_echo.so";
+            args = [ "file=${u2fPinMessage}" ];
+          };
+          pinRule = mkU2fRule (beforeUnix - 10)
+            (u2fArgs // { pinverification = 1; userverification = 0; cue = false; })
+            null;
+        in
+        {
+          # Suppress the normal single generated U2F rule for Polkit.
+          u2f.enable = false;
+          u2f-biometric = biometricRule;
+          u2f-pin-notice = pinNotice;
+          u2f-pin-fallback = pinRule;
+          u2f-fallback-notice = {
+            order = beforeUnix;
+            control = "optional";
+            modulePath = "${pkgs.linux-pam}/lib/security/pam_echo.so";
+            args = [ "file=${u2fFallbackMessage}" ];
+          };
+        };
+    };
+
+    # Polkit's socket-activated helper retains its existing HID access and
+    # read-only home sandbox adjustments from the NixOS module.
   } // lib.optionalAttrs config.services.desktopManager.plasma6.enable {
     # Plasma 6.6 lacks KScreenLocker's native `kde-u2f` authenticator. Use its
     # non-interactive fingerprint PAM channel only on hosts with Plasma enabled.
