@@ -93,6 +93,8 @@ or all mutable settings.
   password fallback.
 - [Configuration and state](docs/CONFIGURATION_STATE.md): declarative baselines,
   live experiments, and settings persistence.
+- [Media workflow](docs/MEDIA_WORKFLOW.md): fallback-tagged yt-dlp downloads,
+  conservative AcoustID/MusicBrainz matching, and Picard review.
 - [Validation](docs/VALIDATION.md): build checks and one combined manual
   acceptance pass after authorized activation.
 

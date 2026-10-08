@@ -1,9 +1,12 @@
-{ ... }:
+{ config, lib, ... }:
 
 {
   services.xserver.enable = true;
 
   services.displayManager.sddm.enable = true;
+
+  # Phoenix Secret Service provider; its PAM hook only unlocks with a matching password.
+  services.gnome.gnome-keyring.enable = lib.mkIf (config.networking.hostName == "phoenix") true;
 
   # Caelestia consumes UPower and PowerProfiles directly; these are shared
   # desktop services rather than implicit dependencies of the VM's Plasma.

@@ -1,0 +1,150 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage:
+  download music <URL> [yt-dlp options...]
+  download music -v <URL> [yt-dlp options...]
+  download video <URL> [yt-dlp options...]
+  download video -v <URL> [yt-dlp options...]
+  dlm <URL> [yt-dlp options...]
+  dlm -v <URL> [yt-dlp options...]
+  dlv <URL> [yt-dlp options...]
+  dlv -v <URL> [yt-dlp options...]
+
+Aliases: m = music, v = video
+
+Music downloads use the exact URL and best available audio-only stream.
+yt-dlp embeds clean fallback title, artist/uploader, upload year, source URL,
+and thumbnail without creating info JSON or inventing release metadata.
+Existing Opus is copied; other audio is encoded to Opus at 160 kbit/s VBR.
+Music is saved under /home/v/sync/music/_unsorted/.
+
+Video arguments are forwarded to yt-dlp; its default destination is
+/home/v/Downloads/videos/.
+
+Use -v or --verbose with music downloads to show yt-dlp and ingestion diagnostics.
+Video downloads keep yt-dlp's progress display and report the merge phase; -v
+or --verbose also shows detailed yt-dlp and FFmpeg diagnostics.
+EOF
+}
+
+fail() {
+  printf 'download: %s\n' "$1" >&2
+  printf '\n' >&2
+  usage >&2
+  exit 2
+}
+
+if [[ $# -eq 1 && ( "$1" == --help || "$1" == -h ) ]]; then
+  usage
+  exit 0
+fi
+
+command_name=${0##*/}
+verbose=0
+while [[ $# -gt 0 && ( "$1" == -v || "$1" == --verbose ) ]]; do
+  verbose=1
+  shift
+done
+case "$command_name" in
+  dlm) set -- music "$@" ;;
+  dlv) set -- video "$@" ;;
+esac
+
+[[ $# -gt 0 ]] || fail "missing mode (music or video)"
+mode=$1
+shift
+
+yt_dlp_bin=${PHOENIX_YT_DLP_BIN:-yt-dlp}
+video_directory=${PHOENIX_VIDEO_DIRECTORY:-/home/v/Downloads/videos/}
+music_directory=${PHOENIX_MUSIC_DIRECTORY:-/home/v/sync/music/_unsorted/}
+
+case "$mode" in
+  music|m) media_mode=audio; destination=$music_directory ;;
+  video|v) media_mode=video; destination=$video_directory ;;
+  *) fail "unknown mode: $mode" ;;
+esac
+[[ $# -gt 0 ]] || fail "missing URL or yt-dlp option"
+media_args=()
+keep_video=0
+for arg in "$@"; do
+  case "$arg" in
+    -v|--verbose) verbose=1 ;;
+    -k|--keep-video) keep_video=1; media_args+=("$arg") ;;
+    --no-keep-video) keep_video=0; media_args+=("$arg") ;;
+    *) media_args+=("$arg") ;;
+  esac
+done
+[[ ${#media_args[@]} -gt 0 ]] || fail "missing URL or yt-dlp option"
+staging_parent="${XDG_CACHE_HOME:-$HOME/.cache}/phoenix-media"
+mkdir -p -- "$staging_parent"
+temporary_files=$(mktemp -d "$staging_parent/$media_mode.XXXXXXXX")
+if (( keep_video )); then
+  printf 'Diagnostic staging retained in %s\n' "$temporary_files" >&2
+else
+  trap 'rm -rf -- "$temporary_files"' EXIT
+fi
+python_bin=${PHOENIX_MEDIA_PYTHON:-python3}
+helper=${PHOENIX_MEDIA_CLI_HELPER:-${BASH_SOURCE[0]%/*}/media-cli.py}
+"$python_bin" "$helper" policy-args "$media_mode" > "$temporary_files/policy-args"
+mapfile -d '' -t codec_args < "$temporary_files/policy-args"
+diagnostic_output="$temporary_files/yt-dlp.log"
+result_file="$temporary_files/result-paths.txt"
+# Common source tags deliberately omit untrusted release metadata.
+yt_args=(
+  --embed-metadata --no-embed-info-json
+  --parse-metadata '%(artist,channel,uploader,creator|)s:%(artist)s'
+  --parse-metadata '%(artist)s - %(title)s:(?i)^(?P<artist>.+?) - (?P=artist) - (?P<title>.+)$'
+  --parse-metadata '%(artist|)s:%(meta_artist)s'
+  --parse-metadata '%(title)s:%(meta_title)s'
+  --parse-metadata '%(upload_date>%Y|)s:%(meta_date)s'
+  --parse-metadata '%(original_url,webpage_url)s:%(meta_purl)s'
+  --parse-metadata ':(?P<meta_description>)'
+  --parse-metadata ':(?P<meta_comment>)'
+  --parse-metadata ':(?P<meta_synopsis>)'
+  --parse-metadata ':(?P<meta_genre>)'
+  --parse-metadata ':(?P<meta_album>)'
+  --parse-metadata ':(?P<meta_album_artist>)'
+  --parse-metadata ':(?P<meta_track>)'
+  --parse-metadata ':(?P<meta_track_number>)'
+  --parse-metadata ':(?P<meta_disc>)'
+  --parse-metadata ':(?P<meta_disc_number>)'
+  --output-na-placeholder ''
+  --paths "$destination"
+)
+if [[ "$media_mode" == audio ]]; then
+  yt_args+=(
+    --embed-thumbnail --convert-thumbnails jpg
+    --output '%(artist&{} - |)s%(title)s.%(ext)s'
+    --exec "after_move:${PHOENIX_MEDIA_INGEST_COMMAND:-phoenix-media-ingest} %(filepath)q --album-hint %(album|__phoenix_none__)q --release-date-hint %(release_date|__phoenix_none__)q"
+  )
+else
+  yt_args+=(--output '%(title)s.%(ext)s' --print-to-file 'after_move:%(filepath)s' "$result_file")
+fi
+yt_args+=("${media_args[@]}" "${codec_args[@]}" --paths "thumbnail:$temporary_files" --no-overwrites)
+runner_args=(run-download --output "$diagnostic_output" --temporary-root "$temporary_files")
+[[ "$media_mode" != video ]] || runner_args+=(--video)
+if (( verbose )); then
+  runner_args+=(--verbose)
+  yt_args=(--verbose "${yt_args[@]}")
+else
+  yt_args=(
+    --quiet --progress --newline --progress-delta 1
+    --print 'before_dl:PHOENIX_PLAN %(requested_formats|null)j' --no-simulate
+    --progress-template 'postprocess:PHOENIX_PP %(progress)j'
+    --progress-template 'download:PHOENIX_DL {"status":%(progress.status|null)j,"downloaded_bytes":%(progress.downloaded_bytes|0)j,"total_bytes":%(progress.total_bytes|null)j,"total_bytes_estimate":%(progress.total_bytes_estimate|null)j,"_speed_str":%(progress._speed_str|null)j,"format_id":%(info.format_id|null)j,"vcodec":%(info.vcodec|null)j,"acodec":%(info.acodec|null)j}'
+    "${yt_args[@]}"
+  )
+fi
+if "$python_bin" "$helper" "${runner_args[@]}" -- "$yt_dlp_bin" "${yt_args[@]}"; then
+  status=0
+else
+  status=$?
+fi
+if [[ "$media_mode" == audio ]]; then
+  "$python_bin" "$helper" summarize --output "$diagnostic_output" --exit-code "$status"
+else
+  "$python_bin" "$helper" summarize-video --result-file "$result_file" --exit-code "$status"
+fi

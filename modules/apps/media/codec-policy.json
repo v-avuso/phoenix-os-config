@@ -1,0 +1,11 @@
+{
+  "audio": {
+    "format": "bestaudio[acodec=opus]/bestaudio/best",
+    "codec": "opus",
+    "quality": "160K"
+  },
+  "video": {
+    "format": "bestvideo[vcodec~='^(av01|av1)']+bestaudio[acodec=opus]/bestvideo[vcodec~='^(av01|av1)']+bestaudio/bestvideo+bestaudio[acodec=opus]/bestvideo+bestaudio/best",
+    "container": "webm/mkv"
+  }
+}
