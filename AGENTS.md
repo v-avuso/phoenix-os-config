@@ -5,7 +5,15 @@
 - Nix files describe current configuration; README provides orientation and
   docs/VISION.md describes future direction. Preserve cooling, authentication,
   and recovery constraints documented in operational guides.
+- Keep modules reasonably self-contained: colocate their implementation,
+  documentation, tests, fixtures and engineering guidance. Reserve root-level
+  `docs/` and `tests/` for repository-wide and genuinely cross-module concerns;
+  root README may briefly describe and link to modules.
+- Prefer modules reusable in other NixOS configurations with minimal adaptation.
+  Favor encapsulation at low or moderate effort; avoid disproportionate abstraction.
 - Keep agent policy and adapters under `modules/development/ai/agent`.
+- For media pipeline work, explicitly read `modules/apps/media/AGENTS.md`;
+  root-started sessions must not assume subtree guidance was loaded.
 - Follow docs/CONFIGURATION_STATE.md for application ownership.
   Registered Caelestia/VSCodium experiments survive boot; explicit switch/test
   reasserts baselines. Promote reviewed settings to Nix beforehand.
