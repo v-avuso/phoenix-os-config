@@ -18,9 +18,11 @@ Aliases: m = music, v = video
 Music downloads use the exact URL and best available audio-only stream.
 yt-dlp embeds clean fallback title, artist/uploader, upload year, source URL,
 and thumbnail without creating info JSON or inventing release metadata.
-Existing Opus is copied; other audio is encoded to Opus at 160 kbit/s VBR.
+Existing Opus is copied; other audio uses capped, source-aware Opus VBR.
 Music is saved under /home/v/sync/music/_unsorted/.
 
+Video defaults to AV1 + Opus in WebM. Only incompatible streams are encoded.
+Use --original with video to retain source codecs without transcoding.
 Video arguments are forwarded to yt-dlp; its default destination is
 /home/v/Downloads/videos/.
 
@@ -69,14 +71,17 @@ esac
 [[ $# -gt 0 ]] || fail "missing URL or yt-dlp option"
 media_args=()
 keep_video=0
+original=0
 for arg in "$@"; do
   case "$arg" in
     -v|--verbose) verbose=1 ;;
+    --original) original=1 ;;
     -k|--keep-video) keep_video=1; media_args+=("$arg") ;;
     --no-keep-video) keep_video=0; media_args+=("$arg") ;;
     *) media_args+=("$arg") ;;
   esac
 done
+[[ "$media_mode" != audio || "$original" == 0 ]] || fail "--original is supported for video downloads"
 [[ ${#media_args[@]} -gt 0 ]] || fail "missing URL or yt-dlp option"
 staging_parent="${XDG_CACHE_HOME:-$HOME/.cache}/phoenix-media"
 mkdir -p -- "$staging_parent"
@@ -88,13 +93,16 @@ else
 fi
 python_bin=${PHOENIX_MEDIA_PYTHON:-python3}
 helper=${PHOENIX_MEDIA_CLI_HELPER:-${BASH_SOURCE[0]%/*}/media-cli.py}
-"$python_bin" "$helper" policy-args "$media_mode" > "$temporary_files/policy-args"
+export PHOENIX_MEDIA_CLI_HELPER="$helper"
+policy_flags=()
+(( ! original )) || policy_flags+=(--original)
+"$python_bin" "$helper" policy-args "$media_mode" "${policy_flags[@]}" > "$temporary_files/policy-args"
 mapfile -d '' -t codec_args < "$temporary_files/policy-args"
 diagnostic_output="$temporary_files/yt-dlp.log"
 result_file="$temporary_files/result-paths.txt"
 # Common source tags deliberately omit untrusted release metadata.
 yt_args=(
-  --embed-metadata --no-embed-info-json
+  --no-embed-metadata --no-embed-chapters --no-embed-info-json
   --parse-metadata '%(artist,channel,uploader,creator|)s:%(artist)s'
   --parse-metadata '%(artist)s - %(title)s:(?i)^(?P<artist>.+?) - (?P=artist) - (?P<title>.+)$'
   --parse-metadata '%(artist|)s:%(meta_artist)s'
@@ -116,12 +124,30 @@ yt_args=(
 )
 if [[ "$media_mode" == audio ]]; then
   yt_args+=(
-    --embed-thumbnail --convert-thumbnails jpg
+    --write-thumbnail --convert-thumbnails jpg
     --output '%(artist&{} - |)s%(title)s.%(ext)s'
     --exec "after_move:${PHOENIX_MEDIA_INGEST_COMMAND:-phoenix-media-ingest} %(filepath)q --album-hint %(album|__phoenix_none__)q --release-date-hint %(release_date|__phoenix_none__)q"
   )
 else
   yt_args+=(--output '%(title)s.%(ext)s' --print-to-file 'after_move:%(filepath)s' "$result_file")
+fi
+# yt-dlp's playlist selection is global, so leave mixed-provider calls alone.
+x_status=0
+other_url=0
+playlist_items_explicit=0
+x_status_pattern='^https?://(www\.|m\.|mobile\.)?(x\.com|twitter\.com)/((i/web|[^/]+)/status|statuses)/[0-9]+([/?#].*)?$'
+for arg in "${media_args[@]}"; do
+  case "$arg" in
+    --playlist-items|--playlist-items=*|-I|-I?*) playlist_items_explicit=1 ;;
+  esac
+  if [[ "$arg" =~ $x_status_pattern ]]; then
+    x_status=1
+  elif [[ "$arg" == http://* || "$arg" == https://* ]]; then
+    other_url=1
+  fi
+done
+if (( x_status && ! other_url && ! playlist_items_explicit )); then
+  yt_args+=(--playlist-items 1)
 fi
 yt_args+=("${media_args[@]}" "${codec_args[@]}" --paths "thumbnail:$temporary_files" --no-overwrites)
 runner_args=(run-download --output "$diagnostic_output" --temporary-root "$temporary_files")

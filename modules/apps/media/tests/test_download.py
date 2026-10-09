@@ -40,6 +40,8 @@ class DownloadCommandTests(unittest.TestCase):
             "if os.environ.get('FAKE_STDERR') and (not is_video or '--verbose' in args): print(os.environ['FAKE_STDERR'], file=sys.stderr)\n"
             "if os.environ.get('FAKE_PROGRESS'): print(os.environ['FAKE_PROGRESS'])\n"
             "if os.environ.get('FAKE_MERGE'): print(os.environ['FAKE_MERGE'])\n"
+            "if os.environ.get('PIPELINE_ERROR'):\n"
+            " print('ERROR: Postprocessing: ' + os.environ['PIPELINE_ERROR'], file=sys.stderr); sys.exit(1)\n"
             "if os.environ.get('FAIL'):\n"
             " print('ERROR: [youtube] Requested video is unavailable', file=sys.stderr)\n"
             " for i, arg in enumerate(args[:-1]):\n"
@@ -105,9 +107,9 @@ class DownloadCommandTests(unittest.TestCase):
             args = json.loads(self.log.read_text())
             index = args.index(extra[0])
             self.assertEqual(extra, args[index:index + len(extra)])
-            self.assertIn("--extract-audio", args)
-            self.assertEqual("opus", args[args.index("--audio-format") + 1])
-            self.assertEqual("160K", args[args.index("--audio-quality") + 1])
+            self.assertNotIn("--extract-audio", args)
+            self.assertIn("PhoenixCodecs:mode=audio;original=false", args)
+            self.assertIn("--write-thumbnail", args)
             self.assertIn("bestaudio[acodec=opus]/bestaudio/best", args)
             self.assertIn("--progress", args)
             self.assertIn("--no-embed-info-json", args)
@@ -115,6 +117,46 @@ class DownloadCommandTests(unittest.TestCase):
             self.assertIn("%(artist,channel,uploader,creator|)s:%(artist)s", args)
             self.assertIn("%(original_url,webpage_url)s:%(meta_purl)s", args)
             self.assertFalse(any("%(id)" in arg for arg in args))
+
+    def test_x_status_defaults_to_first_playlist_item_for_audio_and_video(self):
+        urls = ("https://x.com/artist/status/123", "https://twitter.com/artist/status/123?ref=share",
+                "https://mobile.twitter.com/i/web/status/123", "https://www.x.com/i/status/123/video/1")
+        for command in (self.dlm, self.dlv):
+            for url in urls:
+                with self.subTest(command=command.name, url=url):
+                    result = self.run_command(url, command=command)
+                    self.assertEqual(0, result.returncode, result.stderr)
+                    args = json.loads(self.log.read_text())
+                    self.assertEqual("1", args[args.index("--playlist-items") + 1])
+
+    def test_explicit_x_playlist_selection_overrides_default(self):
+        for command in (self.dlm, self.dlv):
+            for selection in (("--playlist-items", "2,3"), ("--playlist-items=2:5",), ("-I", "2"), ("-I2",)):
+                with self.subTest(command=command.name, selection=selection):
+                    result = self.run_command("https://x.com/artist/status/123", *selection, command=command)
+                    self.assertEqual(0, result.returncode, result.stderr)
+                    args = json.loads(self.log.read_text())
+                    self.assertEqual(list(selection), [arg for arg in args if arg in selection])
+                    self.assertEqual(selection.count("--playlist-items"), args.count("--playlist-items"))
+
+    def test_non_x_and_mixed_provider_urls_have_no_playlist_default(self):
+        for urls in (("https://www.youtube.com/watch?v=123",), ("https://vimeo.com/123",),
+                     ("https://x.com/artist",), ("https://x.com.evil.test/artist/status/123",),
+                     ("https://example.test/x.com/artist/status/123",),
+                     ("https://x.com/artist/status/123", "https://youtu.be/123")):
+            for command in (self.dlm, self.dlv):
+                with self.subTest(urls=urls, command=command.name):
+                    result = self.run_command(*urls, command=command)
+                    self.assertEqual(0, result.returncode, result.stderr)
+                    self.assertNotIn("--playlist-items", json.loads(self.log.read_text()))
+
+    def test_original_bypasses_codec_policy_and_is_not_forwarded(self):
+        result = self.run_command("video", "--original", "https://youtu.be/source")
+        self.assertEqual(0, result.returncode, result.stderr)
+        args = json.loads(self.log.read_text())
+        self.assertNotIn("--original", args)
+        self.assertIn("PhoenixCodecs:mode=video;original=true", args)
+        self.assertEqual("bestvideo+bestaudio/best", args[args.index("--format") + 1])
 
     def test_default_ingester_and_custom_destination_are_safe(self):
         env = dict(self.env)
@@ -435,6 +477,12 @@ class DownloadCommandTests(unittest.TestCase):
         self.assertEqual(0, result.returncode)
         self.assertIn("Downloading [██████████] 100%", result.stdout)
 
+    def test_opaque_single_file_video_completes_download_progress(self):
+        events = 'PHOENIX_PLAN null\nPHOENIX_DL {"status":"finished","vcodec":null,"acodec":null}'
+        result = self.run_command("video", "https://example.com/source", env=dict(self.env, FAKE_PROGRESS=events))
+        self.assertEqual(0, result.returncode)
+        self.assertIn("Downloading [██████████] 100%", result.stdout)
+
     def test_audio_and_video_share_progress_and_hide_completion_speed(self):
         event = 'PHOENIX_DL {"status":"finished","vcodec":"none","acodec":"opus","_speed_str":"8MiB/s"}'
         for mode in ("music", "video"):
@@ -467,6 +515,30 @@ class DownloadCommandTests(unittest.TestCase):
         self.assertIn("--force-overwrites", actual)
         self.assertEqual("--no-overwrites", actual[-3])
 
+    def test_optimizer_logs_are_private_in_normal_mode_and_visible_in_verbose_mode(self):
+        diagnostic = 'PHOENIX_ENCODE ' + json.dumps({"status": "diagnostic", "stderr": "INFO optimizer internals\nDEBUG full command"})
+        env = dict(self.env, FAKE_PROGRESS=diagnostic)
+        normal = self.run_command("video", "https://youtu.be/video", env=env)
+        self.assertEqual(0, normal.returncode)
+        self.assertNotIn("optimizer internals", normal.stdout + normal.stderr)
+        logs = list((self.root / "state/phoenix-media/downloads").glob("*.log"))
+        self.assertTrue(any("optimizer internals" in log.read_text() for log in logs))
+        verbose = self.run_command("video", "https://youtu.be/video", "--verbose", env=env)
+        self.assertIn("INFO optimizer internals", verbose.stdout)
+        self.assertIn("DEBUG full command", verbose.stdout)
+
+    def test_processing_failures_are_distinct_and_encoding_is_not_overall_success(self):
+        completed = 'PHOENIX_ENCODE ' + json.dumps({"status": "finished", "encoder": "Opus", "elapsed": 1.7})
+        for error in ("Encoding failed: encoder error", "Metadata processing failed: invalid header",
+                      "Artwork processing failed: invalid picture", "Media validation failed: truncated output"):
+            with self.subTest(error=error):
+                result = self.run_command("video", "https://youtu.be/video",
+                    env=dict(self.env, FAKE_PROGRESS=completed, PIPELINE_ERROR=error))
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn("✗ Processing failed: " + error, result.stderr)
+                self.assertNotIn("✓ Downloaded:", result.stdout)
+                self.assertNotIn("finished (1.7s)", result.stdout)
+
     def test_video_verbose_mode_exposes_ffmpeg_diagnostics_and_download_failures(self):
         env = dict(
             self.env,
@@ -484,7 +556,7 @@ class DownloadCommandTests(unittest.TestCase):
         )
         self.assertEqual(23, failure.returncode)
         self.assertIn("ERROR: [youtube] Requested video is unavailable", failure.stderr)
-        self.assertIn("✗ Video download failed (yt-dlp exit 23).", failure.stderr)
+        self.assertIn("✗ Video download failed: [youtube] Requested video is unavailable", failure.stderr)
 
 
 if __name__ == "__main__":

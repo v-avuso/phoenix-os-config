@@ -93,7 +93,7 @@ or all mutable settings.
   password fallback.
 - [Configuration and state](docs/CONFIGURATION_STATE.md): declarative baselines,
   live experiments, and settings persistence.
-- [Media workflow](docs/MEDIA_WORKFLOW.md): fallback-tagged yt-dlp downloads,
+- [Media workflow](modules/apps/media/MEDIA_WORKFLOW.md): fallback-tagged yt-dlp downloads,
   conservative AcoustID/MusicBrainz matching, and Picard review.
 - [Validation](docs/VALIDATION.md): build checks and one combined manual
   acceptance pass after authorized activation.
@@ -113,3 +113,8 @@ The long-term aim is a secure, recoverable workstation with explicit ownership,
 backups, and stronger application isolation. Those are goals, not claims that
 all are implemented. [Vision](docs/VISION.md) keeps future direction separate
 from current operation; move concrete work into the backlog when ready.
+
+Media commands (`dlm`, `dlv`) and their codec, staging and metadata policies are
+documented in [Media workflow](modules/apps/media/MEDIA_WORKFLOW.md). Video defaults to AV1/Opus
+WebM with selective stream copying and NVIDIA encoding; unsuccessful optimization
+retains the validated source. `--original` bypasses conversion.

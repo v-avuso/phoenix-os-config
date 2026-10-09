@@ -68,8 +68,9 @@ let
     runtimeInputs = [
       ytDlpPackage
       mediaPython
-      # FFmpeg extracts/copies Opus, encodes other audio, embeds tags/artwork, and merges video streams.
-      pkgs.ffmpeg
+      # Full FFmpeg adds VMAF for upstream ab-av1 search and completed-output gates.
+      pkgs.ffmpeg-full
+      pkgs.ab-av1
     ];
     text = ''
       export PHOENIX_VIDEO_DIRECTORY=${videoDirectory}/
@@ -78,6 +79,9 @@ let
       export PHOENIX_MEDIA_PYTHON=${mediaPython}/bin/python3
       export PHOENIX_MEDIA_CLI_HELPER=${./media-cli.py}
       export PHOENIX_MEDIA_CODEC_POLICY=${codecPolicy}
+      export PHOENIX_MEDIA_PLUGIN_DIRECTORY=${./plugins}
+      export PHOENIX_MEDIA_FFMPEG_DIRECTORY=${pkgs.ffmpeg-full}/bin
+      export PHOENIX_MEDIA_AB_AV1=${pkgs.ab-av1}/bin/ab-av1
     ''
     + builtins.readFile ./download;
   };
@@ -99,7 +103,7 @@ in
   options.phoenix.media.audioBitrateKbps = lib.mkOption {
     type = lib.types.ints.positive;
     default = 160;
-    description = "Target Opus VBR bitrate in kbit/s when transcoding non-Opus audio. Existing Opus streams are copied.";
+    description = "Maximum Opus VBR bitrate in kbit/s for non-Opus audio; a reliable lower source audio bitrate is used when available. Existing Opus streams are copied.";
   };
 
   config = {

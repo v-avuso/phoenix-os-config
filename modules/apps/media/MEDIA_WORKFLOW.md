@@ -33,13 +33,15 @@ dlm --verbose <URL> [yt-dlp options...]
 The URL goes directly to yt-dlp; there is no search or recording substitution.
 `codec-policy.json` centrally defines the source selection and output preferences.
 Audio prefers the best existing Opus stream, then best audio, then a combined
-source if necessary. Supported yt-dlp `--extract-audio --audio-format opus`
-extracts only audio, copies an existing Opus bitstream, and converts other codecs
-with libopus at 160 kbit/s, using its default unconstrained VBR and audio mode.
-The Nix option `phoenix.media.audioBitrateKbps` sets this target (default `160`);
-it applies only to transcoding. Existing Opus streams are copied unchanged.
-There is no source-bitrate mapping: source codec bitrates do not establish
-quality equivalence with Opus.
+source if necessary. The shared Phoenix yt-dlp postprocessor extracts audio,
+copies existing Opus packets, and converts other codecs with libopus VBR.
+`phoenix.media.audioBitrateKbps` caps the bitrate (default `160` kbit/s): a
+reliable positive FFprobe **audio stream** bitrate is used when lower, otherwise
+the configured default applies. If merging removed the stream bitrate, FFprobe
+measures the average from audio packet bytes and their timestamp span; missing/invalid
+packet durations fall back to the configured default. Aggregate file/video bitrate
+and extractor estimates are never used. This policy applies to both music and video.
+There are no codec-specific equivalence tables.
 Encoding other lossy codecs is an explicit user preference, not a promise of
 smaller files or improved source quality. Attached thumbnail artwork is not a
 moving video stream.
@@ -53,7 +55,20 @@ Title, artist, source URL, and thumbnail are embedded before ingestion, with no
 info JSON sidecar or embedded info JSON. Untrusted album, disc, track, and genre
 fields are cleared. Authoritative MusicBrainz enrichment overrides fallback
 music tags. Filenames are human-readable and omit source IDs. Thunar's unexplained
-Year 2006 display is not evidence of a corrupt embedded date tag.
+Year 2006 display is not evidence of a corrupt embedded date tag. Inspection of
+existing X WebM/Matroska downloads found `DATE=2026` and correct artists; older
+videos without year tags also exist. Phoenix maps extractor `upload_date` to
+`meta_date` as a year and uses yt-dlp's FFmpeg metadata postprocessor for both
+audio and video. The source year is left unset when unavailable. The exact packaged Thunar media-tags plugin 0.6.0 reads TagLib's year and
+substitutes `2006` when that value is zero (`audio-tags-page.c`,
+`audio_tags_page_taglib_file_changed`). A read-only probe with its linked
+TagLib 2.2.1 returned zero for the inspected WebM/Matroska files, including
+those with FFprobe `DATE=2026`. Thus the reported 2006 is a viewer fallback,
+not the embedded upload year. Viewer/TagLib compatibility is deferred; no
+speculative tag workaround or rewriting of existing files is applied.
+
+Disposable regression checks and runtime prerequisites are in
+[tests/README.md](tests/README.md).
 
 Audio and video share progress, retry handling, private staging, diagnostic logs,
 and error handling. Completion prints the actual final filename and directory,
@@ -151,16 +166,62 @@ Playlist regeneration is not implemented yet.
 through to yt-dlp and default to `/home/v/Downloads/videos/`. The default output
 template is `%(title)s.%(ext)s` (without the YouTube ID), and `--no-overwrites`
 protects existing files even if a forwarded option requests forced overwrites.
-The wrapper keeps yt-dlp's normal `Best` selection and suppresses extractor
-chatter. Supported yt-dlp progress templates emit records to a small terminal
+The wrapper prefers AV1 video and Opus audio sources. A shared Phoenix yt-dlp
+postprocessor attempts **AV1 + Opus in WebM** after merge, then applies metadata
+and validates the final file before moving it. Audio artwork follows metadata. Compatible streams are copied individually. Video
+conversion uses the locked upstream `ab-av1` sampled quality search, preferring
+NVIDIA AV1 NVENC when an actual device/driver probe succeeds. `ffmpeg-full` supplies
+VMAF, NVENC, SVT-AV1 and Opus in one maintained package. The adapter uses upstream
+`crf-search` (NVENC values map to CQ), then performs **one final encode** through
+the existing stream-selective FFmpeg path. There is no local bitrate-search algorithm.
+
+Search targets VMAF **96** with a maximum encoded percentage of **100**, minimum
+three 10-second samples, the upstream default sample-every interval, eight VMAF
+threads and no persistent cache. The one-point search margin responds to observed
+sample/full-score variance. The completed file must independently measure
+**VMAF >=95 and total size <=100% of the source** before publication. Estimates
+are not guarantees: an infeasible search, unexpected optimizer failure, oversized
+full output or below-target full score removes the candidate and retains the
+validated original with its real codecs and container/extension. Quality limits
+are never lowered. A valid download is not discarded for failed optional
+compression. Corrupt source/output, required audio conversion, metadata/artwork
+and publication failures remain errors. No second video encode is attempted on
+optimizer/encoder failure. `--original` bypasses conversion explicitly. Existing
+AV1 streams are copied without search. Multi-video sources needing conversion
+retain the valid original rather than scoring the wrong track.
+
+NVENC uses P7/HQ, VBR with no fixed bitrate, full-resolution multipass, 32-frame
+lookahead and spatial/temporal AQ (strength 8); CQ is selected per source.
+Software fallback uses SVT-AV1 preset 6 with eight logical processors and an
+upstream-selected CRF under the same constraints. Resolution and timestamps/frame
+rate are retained; 10-bit sources remain 10-bit. Search and full VMAF verification
+show elapsed activity through the shared renderer, while final encoding shows
+percentage/ETA. The complete FFmpeg argument list and search summary appear in
+the private diagnostics log. Quality scores do not prove imperceptibility.
+See [codec quality validation](MEDIA_CODEC_VALIDATION.md) for the acceptance evidence.
+Global/stream metadata and chapters follow FFmpeg's mappings. Unmapped auxiliary
+streams (such as embedded subtitles or attachments) are not copied.
+
+`dlv --original <URL>` selects the best source streams and bypasses codec
+conversion; merging can still remux their container. Both modes validate media
+structure, duration and complete playback before publication. Destination
+collisions fail without overwriting the existing output. The wrapper suppresses
+extractor chatter. Supported yt-dlp progress templates emit records to a small terminal
 adapter. It aggregates the selected stream sizes into a ten-block progress bar. When
 sizes are unavailable, video/audio are weighted 90/10; completion is withheld
 until every selected stream finishes. One download line updates in place on a
-TTY, followed by the separate merge phase. Redirected output prints only
-completed download/merge results. Only the `Merger` postprocessor gets a merge label;
+TTY, followed by the separate merge phase. Redirected output prints completed downloads/merges, concise original fallback
+reasons and the final overall result. Encoding shares the renderer, uses
+media timestamps for percentages, and shows ETA once useful timing is available.
+Unknown duration shows activity without a percentage. Playback validation is a
+separate phase; encoding stays below 100% and does not announce overall success.
+Metadata and artwork have their own phase labels, and the final staged file is
+validated again before publication. Only the `Merger` postprocessor gets a merge label;
 `MoveFiles` does not. During a merge, the TTY shows elapsed seconds until one
 completion line replaces it. Errors and warnings remain visible. Add `-v` or `--verbose` for
-yt-dlp and FFmpeg diagnostics. For example:
+yt-dlp, FFmpeg and ab-av1 diagnostics. Internal optimizer INFO/debug output is
+retained in the private log and shown only in verbose mode. Errors identify
+download, encoding, metadata/artwork or validation stages. For example:
 
 ```sh
 download video -S "res:1080" <URL>
@@ -168,6 +229,13 @@ download video <URL> -P /some/other/directory
 dlv -F <URL>
 dlv --verbose <URL>
 ```
+
+For X/Twitter status URLs, `dlm` and `dlv` default to yt-dlp's
+`--playlist-items 1`. This can exclude additional media in the requested post;
+extractor ordering is not guaranteed, so it does not reliably identify the
+requested post over a quoted post. An explicit `--playlist-items` (or `-I`)
+overrides the default. Other providers are unchanged. Mixed-provider calls receive
+no automatic limit because yt-dlp applies this option to the entire invocation.
 
 Music and video retry recognizable transport failures (including HTTP 403,
 408, 429, 5xx, timeout, and reset) with fresh yt-dlp processes: three complete
@@ -259,17 +327,13 @@ timeout as location-dependent access scanning, rather than evidence of a corrupt
 file. It also supports investigating scanning as the historical merge-delay
 mechanism, without claiming a captured slow merge. ClamAV settings are unchanged.
 
-## Codec policy boundary
+## Earlier codec policy and recovery
 
-Video selection first seeks source AV1 + Opus, merging compatible streams into
-WebM without encoding. If unavailable, the best other source codecs are preserved;
-compatible fallback merging uses MKV where WebM cannot contain those codecs.
-Single combined sources may retain their original container. Mandatory AV1/Opus
-conversion is deferred: yt-dlp's container `--recode-video webm` alone neither
-selects AV1 nor reliably converts an already-WebM file with different codecs.
-A correct conditional encoder would need codec inspection, selective stream-copy,
-quality settings, long-running progress, and rollback checks. That exceeds this
-bounded downloader task; no speculative transcoding layer has been added.
+Before preferred-output enforcement, fallback video downloads retained source
+codecs and could use MKV or the original container. The current selective
+AV1/Opus policy above supersedes that behavior; `--original` retains the earlier
+source-codec behavior explicitly. Container-only `--recode-video webm` does not
+provide this codec guarantee.
 
 The existing X AAC/MP4 failure was caused by remux-only processing followed by
 an ingestion extension rejection. It has been recovered to Opus and routed to

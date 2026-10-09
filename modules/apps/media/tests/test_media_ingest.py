@@ -513,7 +513,7 @@ class WorkerTests(unittest.TestCase):
 
     def test_no_beets_library_database_or_beets_package_dependency_remains(self):
         module = (SCRIPT.parent / "default.nix").read_text()
-        docs = (SCRIPT.parents[3] / "docs" / "MEDIA_WORKFLOW.md").read_text()
+        docs = (SCRIPT.parent / "MEDIA_WORKFLOW.md").read_text()
         desktop = (SCRIPT.parents[2] / "desktop.nix").read_text()
         self.assertNotIn("beets", module.casefold())
         self.assertNotIn("library.db", module)
