@@ -8,8 +8,10 @@
 }:
 let
   cfg = config.phoenix.agent;
+  adminScript = pkgs.writeText "phoenix-admin.py" (builtins.replaceStrings
+    [ "@reservationAdapter@" ] [ (toString ./reservation-client.py) ] (builtins.readFile ./admin.py));
   admin = pkgs.writeShellScriptBin "phoenix-admin" ''
-    exec ${pkgs.python3}/bin/python3 -I ${./admin.py} "$@"
+    exec ${pkgs.python3}/bin/python3 -I ${adminScript} "$@"
   '';
   brokerConfig = pkgs.writeText "phoenix-admin.json" (
     builtins.toJSON ({

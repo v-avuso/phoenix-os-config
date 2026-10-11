@@ -1,10 +1,10 @@
-# Testing reservation engine preparation
+# Exclusive testing reservations
 
-`phoenix.agent.reservations.enable` defaults to **false**. When enabled it adds
-reservation management to the existing admin broker and packages
-`phoenix-reservation`. Deployment enforcement and activation descriptor lifetime
-integration are **pending**: a reservation currently coordinates only clients
-using this management API. Do not enable it on the daily driver yet.
+`phoenix.agent.reservations.enable` defaults to **false**. When enabled, management
+uses the existing admin broker, and test/switch/boot plus configured mapped fixed
+admin operations require a private task capability. Build/dry-build remain independent.
+Implementation fixtures pass; live VM/Polkit/systemd acceptance is still pending.
+Keep this experimental feature off on the daily driver.
 
 The engine supplies SQLite state and kernel flock exclusion; the management
 adapter adds no daemon, arbitrary executable dispatch, or OS mutation.
@@ -58,22 +58,22 @@ flock determines execution exclusion. The next successful entry replaces it.
 passes the gate descriptor and waits/reaps the foreground child. Keep rollback
 inside the same operation context. On parent death an explicitly inherited
 open descriptor retains the gate. **A parent flock alone does not protect detached
-activation descendants.** Future adapters must prove descriptor propagation and
+activation descendants.** Adapters must prove descriptor propagation and
 child lifetime for their exact activation path, or use a fixed foreground helper
 that retains it until all mutation and rollback activity completes. The engine
 cannot infer detached descendant completion or authenticate operator recovery.
 
 Acquire before the testing workflow, retain the capability in a caller-private
 file, validate it for each mutation, renew while needed and release at completion.
-Capabilities must not appear in logs, branch labels or argv. Future management
-must use the existing admin socket/fixed authenticated operator helper because
+Capabilities must not appear in logs, branch labels or argv. Management
+uses the existing admin socket/fixed authenticated operator helper because
 the synchronous deployment socket can be occupied during builds and reviews.
 
 Run disposable tests with `python3 tests/reservations.py` from this directory.
 These prove engine behavior with real SQLite/flock and controlled identity/time;
 they do not prove packaged integration, Polkit authentication or live activation.
 
-## Management (prepared, opt-in)
+## Management (opt-in)
 
 Exact qualified commands map to resources through `reservations.mapping`; clients
 cannot select resources or execution. Config bounds may be reduced, except queued
@@ -135,5 +135,97 @@ success uses `ok=true,reservation=RESULT`, denial uses `ok=false,error=...`.
 Run `python3 tests/reservation-management.py` here alongside engine fixtures.
 These exercise real Unix sockets, SQLite and FIFO with explicitly fake OS
 baseline/root/Polkit identities. Nix evaluation verifies packaging; native GUI
-Polkit, protected identity, deployment enforcement and complete activation/runtime
-end-to-end acceptance remain pending. No live service or account is used.
+Polkit, protected identity/OpenShell and live VM/systemd activation/runtime
+acceptance remain pending. No live service or account is used.
+
+## Deployment and runtime workflow
+
+Acquire before requesting activation, renew during a long build/review or runtime
+validation, and release only when the task finishes. Management uses the separate
+admin socket, so deployment's synchronous build/review does not block renewal.
+A successful activation advances that same owner's baseline and leaves the lease
+owned for runtime validation; it does not automatically release it.
+
+```sh
+phoenix-reservation acquire --task TASK --command deployment.test --capability-file /private/task.json --wait 60
+phoenix-test --worktree /absolute/registered/worktree --reason "authorized task purpose" --reservation-file /private/task.json
+phoenix-reservation renew --capability-file /private/task.json --seconds 900
+# Complete runtime validation first.
+phoenix-reservation release --capability-file /private/task.json
+```
+
+Native operators add `--operator` when acquiring/managing a lease. Disabled AI
+still requires normal native deployment Polkit authentication. Agent sockets keep
+their configured kernel UID boundary. The deployment client reads only an explicit
+caller-owned regular 0600 file with one link and no symlink; only generation and
+capability cross the private socket/stdin, never argv, logs, or model input.
+
+A failed AI review records its frozen source/closure/nonce and original caller
+metadata without a bearer. An explicit critical override requires a fresh operator
+reservation and existing critical Polkit authentication:
+
+```sh
+phoenix-reservation --operator acquire --task RECOVERY --command deployment.override --capability-file /private/recovery.json
+phoenix-deploy-review --security-override PENDING_NONCE --reservation-file /private/recovery.json
+```
+
+The authenticated operator's lease replaces no agent authority silently. The exact
+pending source/closure/action and current base/profile checks remain mandatory.
+If the original agent still owns the resource, wait for its release or use explicit
+operator force recovery before acquiring. Changed baselines require a fresh request.
+
+Routine deterministic updates continue making zero AI calls. After publisher,
+source, build and closure checks, the server acquires a bounded root-owned update
+lease immediately before staging boot. It cancels a queued ticket and reports busy
+rather than waiting or generating human authentication prompts; normal next-run
+retry remains the existing updater's responsibility. The actual service releases
+this internal lease after completion. Callers cannot supply a lease for `update`.
+
+## Activation lifetime and recovery
+
+Both actual activation entry points (reservations ON and OFF) also hold the fixed
+root-owned `/var/lib/phoenix-deploy/activation.lock` through mutation and rollback.
+It is distinct from controller build/review serialization and never renamed with
+resource mappings. This prevents a new configuration changing the resource name
+or disabling reservations from overlapping a still-running guarded old helper.
+Foreground children inherit this guard too. It does not retroactively guard an
+already-installed older helper lacking the lock: the first live acceptance requires
+an explicitly quiescent activation boundary. Never reset or rename a live guard.
+
+The actual transient activation service opens a fixed root-owned 0600 envelope
+from a private root 0700 spool; unit argv contains only its random nonce. It owns
+the resource gate throughout mutation and failure rollback. Foreground children
+inherit the gate; timeout/cancellation kills and reaps only that operation's child
+process group before recovery. The helper independently owns the gate, including
+when the deployment controller disappears. Expiry/release/revocation does not free
+an active mutation gate, activate another system, or trigger speculative rollback.
+Successful work after owner expiry/revocation remains successful, but cannot
+refresh another owner; a contender with the old baseline must cancel/reacquire.
+
+Immutable spool GC roots keep source, candidate closure and previous runtime
+available after controller death. A completing helper removes only its own nonce
+record and generated roots. Orphans before service dispatch are deliberately
+retained; at 64 envelope records, new activation refuses with
+`spool-recovery-required`. An operator must inspect matching
+`phoenix-deploy-activation-NONCE` service state and ensure no activation/rollback
+is running before deleting only that reviewed nonce's `.json`, `.source`,
+`.closure`, and `.runtime` entries under `/var/lib/phoenix-deploy/activation`.
+Never clear the whole directory or active roots. Forced reservation recovery alone
+does not stop a service or remove spool roots.
+
+Optional mappings such as `admin.wakeup-set = "system-testing"` gate only the
+existing fixed operation; they add no executable dispatch. Supply its private file
+with `phoenix-admin --reservation-file FILE --reason PURPOSE wakeup-set ...`.
+Unmapped commands reject unused reservation extras. All deployment actions,
+critical override and rollback must share one configured resource.
+
+## Disposable verification
+
+Run `python3 -B modules/development/ai/agent/tests/reservation-deployment.py` with
+the existing engine, management, deployment, broker and command fixtures. The
+activation fixture runs the actual helper/engine in subprocesses with explicit
+root ownership, Nix/store, activation and host baseline stubs. It checks controller
+death, expiry/revocation during mutation, rollback exclusion, process-group timeout,
+owner baseline advancement/runtime hold, fresh contender baseline and mapped broker
+socket rejection. It does not prove live systemd cgroup, graphical Polkit or VM
+activation acceptance; those remain the final isolated acceptance window.

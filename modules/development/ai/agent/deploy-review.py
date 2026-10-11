@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import errno
 import fcntl
 import json
+import importlib.util
 import os
 from pathlib import Path
 import re
@@ -28,7 +29,7 @@ REVIEW_INPUT_LIMIT = 1024 * 1024
 OUTPUT_LIMIT = 2 * 1024 * 1024
 
 
-def run(argv, *, cwd=None, env=None, data=None, timeout=60, fail_on_compaction=False):
+def run(argv, *, cwd=None, env=None, data=None, timeout=60, fail_on_compaction=False, pass_fds=()):
     """Bound both execution and output; terminate the whole child process group."""
     with tempfile.TemporaryFile() as output, tempfile.TemporaryFile() as errors, tempfile.TemporaryFile() as input_file:
         if data:
@@ -36,7 +37,7 @@ def run(argv, *, cwd=None, env=None, data=None, timeout=60, fail_on_compaction=F
         input_file.seek(0)
         process = subprocess.Popen(argv, cwd=cwd, env=env, stdin=input_file,
                                    stdout=output, stderr=errors,
-                                   start_new_session=True)
+                                   start_new_session=True, pass_fds=pass_fds)
         deadline = time.monotonic() + timeout
         try:
             while process.poll() is None:
@@ -452,17 +453,29 @@ def main():
     selectors.add_argument("--branch", help="local branch with exactly one existing worktree")
     selectors.add_argument("--worktree", help="existing worktree of the configured repository")
     parser.add_argument("--base", help="optional full commit SHA for an additional informational diff")
+    parser.add_argument("--reservation-file", help="explicit caller-private testing capability file")
     parser.add_argument("--reason", help="concrete authorized task purpose")
     parser.add_argument("--target", choices=["metal", "vm"])
     parser.add_argument("--action", choices=(["test", "switch", "boot"] if config.get("clientOnly") else ["review", "build", "test", "switch", "boot"]), default=("test" if config.get("clientOnly") else "review"))
     parser.add_argument("--security-override", metavar="PENDING_NONCE", help="authenticate an explicit exact-state review override")
     args = parser.parse_args()
+    reservation = None
+    if args.reservation_file:
+        if not config.get('reservationAdapter') or (args.action in {'review', 'build'} and not args.security_override):
+            parser.error('reservation file is supported only for enabled manual activation')
+        spec = importlib.util.spec_from_file_location('reservation_client', config['reservationAdapter'])
+        adapter = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(adapter)
+        reservation = adapter.read_capability(args.reservation_file)
+    if config.get('reservationAdapter') and (args.action in {'test', 'switch', 'boot'} or args.security_override) and reservation is None:
+        parser.error('activation requires --reservation-file; acquire a task reservation first')
     if args.security_override:
         if not re.fullmatch(r"[a-f0-9]{64}", args.security_override) or not config.get("overrideCommand"):
             parser.error("security override unavailable or invalid pending nonce")
         print("CRITICAL: Authenticating an explicit override of a failed security review. "
               "Only the protected pending source, closure and action will be used.", file=sys.stderr, flush=True)
-        result = json.loads(run([*config["overrideCommand"], args.security_override], timeout=2400))
+        result = json.loads(run([*config["overrideCommand"], args.security_override],
+                                data=json.dumps(reservation).encode() if reservation is not None else None, timeout=2400))
         if result.get("ok") is not True:
             raise ValueError("authenticated security override failed")
         print(json.dumps(result, indent=2))
@@ -499,6 +512,8 @@ def main():
             branch = git(config, "rev-parse", "--abbrev-ref", "HEAD").decode().strip()
             request = dict(files=files, modes=source_modes(source, files), commit=commit,
                            reason=args.reason.strip(), target=args.target, action=args.action)
+            if reservation is not None:
+                request['reservation'] = reservation
             warn_deployment_diff(config, files, request['modes'])
             if branch != "HEAD" and re.fullmatch(r"[A-Za-z0-9._/+@-]{1,200}", branch):
                 request['branch'] = branch

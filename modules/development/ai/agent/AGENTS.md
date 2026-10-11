@@ -80,15 +80,21 @@
   sandbox activation rejects with host guidance because host wrappers/D-Bus are
   not mounted. Do not mount authentication or bypass containment to fix this.
   Enabled-review socket routing is packaged, but live runtime acceptance remains
-  unverified; identity and testing reservations remain later work.
+  unverified; identity and reservation live acceptance remain later work.
 - `phoenix-admin --reason "authorized diagnostic purpose" OPERATION ...` requires
   a bounded nonempty reason without control characters. The broker verifies it
   before dispatch and audits its hash only. Never include secrets in reasons.
 
-### Testing reservations (management prepared; deployment integration pending)
+### Testing reservations (implemented; live acceptance pending)
 
-- The opt-in management implementation is documented in `reservations.md`; keep it
-  disabled until deployment integration and end-to-end acceptance pass.
+- The opt-in implementation is documented in `reservations.md`; keep it disabled
+  until isolated live VM/Polkit/systemd acceptance passes.
+- Put mutation/rollback gate ownership inside the actual transient activation helper;
+  a controller flock or FD passed to systemd-run cannot bind the service lifetime.
+  Exercise controller death and operation-child timeout before claiming exclusion.
+- Preserve the fixed actual-service activation guard across resource mapping changes
+  and reservation ON/OFF transitions. Resource-specific locks alone can split across
+  generations; the first installation from an unguarded version needs quiescence.
 - Integrate a host-wide broker-owned testing reservation spanning activation and runtime
   validation, not just the deployment command. Agents acquire it before testing,
   report completion and release it afterward. Competing test/switch/boot/rollback

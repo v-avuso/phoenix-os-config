@@ -1,4 +1,4 @@
-"""Broker-private testing reservations; preparation only, no callers enabled.
+"""Broker-private testing reservation policy and mutation gates.
 
 All identities, baseline readers and semantic mappings must come from the server.
 This module performs no authentication and never executes a caller-selected command.
@@ -11,6 +11,7 @@ import os
 import re
 from pathlib import Path
 import secrets
+import signal
 import sqlite3
 import stat
 import subprocess
@@ -296,7 +297,7 @@ class Operation:
         self.uid, self.generation, self.capability = uid, generation, capability
         self.operation_id = operation_id
 
-    def run_child(self, argv, *, timeout, **kwargs):
+    def run_child(self, argv, *, timeout, guard_fds=(), **kwargs):
         """Server-selected argv only; finite timeout, child always reaped.
 
         Rollback remains the adapter's responsibility inside the operation context.
@@ -304,7 +305,35 @@ class Operation:
         """
         if not 0<timeout<=14400 or 'pass_fds' in kwargs or 'start_new_session' in kwargs:
             raise Rejected('invalid child lifetime')
-        return subprocess.run(argv, timeout=timeout, pass_fds=(self.gate_fd,), **kwargs)
+        if not isinstance(guard_fds, tuple) or any(type(fd) is not int or fd < 0 for fd in guard_fds):
+            raise Rejected('invalid execution guard descriptors')
+        capture = kwargs.pop('capture_output', False)
+        check = kwargs.pop('check', False)
+        data = kwargs.pop('input', None)
+        if capture:
+            if 'stdout' in kwargs or 'stderr' in kwargs:
+                raise Rejected('conflicting output capture')
+            kwargs.update(stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if data is not None:
+            if 'stdin' in kwargs:
+                raise Rejected('conflicting input')
+            kwargs['stdin'] = subprocess.PIPE
+        with subprocess.Popen(argv, pass_fds=(self.gate_fd, *guard_fds), start_new_session=True, **kwargs) as child:
+            try:
+                stdout, stderr = child.communicate(data, timeout=timeout)
+            except BaseException:
+                # Stop only this operation's process group before rollback starts.
+                # The helper independently retains the gate throughout recovery.
+                try:
+                    os.killpg(child.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                child.communicate()
+                raise
+            result = subprocess.CompletedProcess(argv, child.returncode, stdout, stderr)
+            if check:
+                result.check_returncode()
+            return result
 
     def advance_baseline(self):
         """Call only after the server proves its own successful mutation."""

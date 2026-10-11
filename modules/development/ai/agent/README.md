@@ -50,10 +50,10 @@
   OpenShell can select only mounted workspaces; managed external worktrees are
   absent by default. Disabled AI requires native host Polkit; sandbox clients fail with host guidance. See [agent instructions](AGENTS.md#source-selection) for usage,
   dirty-source behavior and existing-worktree constraints.
-- **Planned coordination:** Longer testing reservations, individual task/caller
-  identity and disruption checks remain future work. The current deployment lock
-  spans a command, not an agent's later runtime validation; see
-  [planned coordination](AGENTS.md#planned-testing-reservation-not-implemented).
+- **Testing coordination:** Default-off reservations span activation and later runtime
+  validation. Private task capabilities, a service-owned mutation/rollback gate and
+  current baseline checks enforce exclusivity; see [reservations](reservations.md).
+  Live VM/Polkit/systemd acceptance remains pending.
 
 - **Operator identity prerequisite:** Immutable deployment configuration separates
   `operatorUid` (retained reviewer-login ownership and authenticated manual/critical
@@ -67,5 +67,5 @@
   together before restricting broker callers.
 
 - [Testing reservations](reservations.md): default-off management through the existing
-  admin broker and fixed authenticated operator helpers; deployment enforcement and
-  complete runtime acceptance remain pending.
+  admin broker and fixed authenticated operator helpers, deployment lifetime gating
+  and runtime ownership; complete live acceptance remains pending.

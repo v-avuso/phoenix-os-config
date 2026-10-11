@@ -4,6 +4,7 @@
   user,
   inputs,
   lib,
+  phoenixReservationSettings ? null,
   ...
 }:
 let
@@ -40,6 +41,7 @@ let
     builtins.toJSON {
       repo = user.repoDirectory;
       sourceSelector = toString sourceSelector;
+      reservationAdapter = if config.phoenix.agent.reservations.enable then toString ./reservation-client.py else null;
       modelReviewEnabled = cfg.securityReview.enable;
       operatorCommand = lib.optionals (!cfg.securityReview.enable) operatorCommand;
       inherit overrideCommand;
@@ -67,6 +69,7 @@ let
     builtins.toJSON {
       repo = user.repoDirectory;
       sourceSelector = toString sourceSelector;
+      reservationAdapter = if config.phoenix.agent.reservations.enable then toString ./reservation-client.py else null;
       modelReviewEnabled = cfg.securityReview.enable;
       operatorCommand = lib.optionals (!cfg.securityReview.enable) operatorCommand;
       inherit overrideCommand;
@@ -97,7 +100,7 @@ let
     exec ${pkgs.util-linux}/bin/flock "$CODEX_HOME/migration.lock" ${reviewLoginCommand} "$@"
   '';
   deploymentConfig = pkgs.writeText "phoenix-deployment.json" (
-    builtins.toJSON {
+    builtins.toJSON ({
       modelReviewEnabled = cfg.securityReview.enable;
       clientUid = if config.phoenix.agent.identity.enable then config.phoenix.agent.identity.uid else config.users.users.${user.name}.uid;
       operatorUid = config.users.users.${user.name}.uid;
@@ -127,12 +130,14 @@ let
       policy = toString ./review-policy.md;
       model = "gpt-6.1-sol";
       effort = "medium";
+      activationLock = "/var/lib/phoenix-deploy/activation.lock";
+      activationSpool = "/var/lib/phoenix-deploy/activation";
       activationEnvironment = {
         PATH = "/run/current-system/sw/bin:/run/current-system/sw/sbin";
         HOME = "/root";
         LOCALE_ARCHIVE = "${pkgs.glibcLocales}/lib/locale/locale-archive";
       };
-    }
+    } // lib.optionalAttrs config.phoenix.agent.reservations.enable { reservations = phoenixReservationSettings; })
   );
   bootstrap = pkgs.writeShellScriptBin "phoenix-deploy-bootstrap" ''
     exec /run/wrappers/bin/pkexec --disable-internal-agent ${pkgs.python3}/bin/python3 -I ${./deployment.py} ${deploymentConfig} bootstrap
@@ -202,6 +207,7 @@ in
       ]
       ++ [
         "d /var/lib/phoenix-deploy 0711 root root -"
+        "d /var/lib/phoenix-deploy/activation 0700 root root -"
         "d /var/lib/phoenix-deploy/requests 0711 root root -"
         "d /var/lib/phoenix-deploy-review 0700 phoenix-deploy-review phoenix-deploy-review -"
         "d /run/phoenix-deploy 0755 root root -"

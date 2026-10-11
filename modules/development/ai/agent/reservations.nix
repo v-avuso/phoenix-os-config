@@ -43,7 +43,7 @@ let
   };
 in {
   options.phoenix.agent.reservations = {
-    enable = lib.mkEnableOption "experimental exclusive reservation management (deployment enforcement pending)";
+    enable = lib.mkEnableOption "experimental exclusive testing reservations and deployment enforcement";
     mapping = lib.mkOption {
       type = lib.types.attrsOf (lib.types.strMatching "[a-z][a-z0-9-]{0,127}");
       default = mapping;
@@ -59,6 +59,10 @@ in {
   };
   config = lib.mkIf cfg.enable {
     assertions = [
+      { assertion = lib.all (name: (cfg.mapping.${"deployment.${name}"} or null) == (cfg.mapping."deployment.test" or ""))
+          [ "switch" "boot" "update" "override" "rollback" ] && builtins.hasAttr "deployment.test" cfg.mapping;
+        message = "Deployment, rollback and override must share the configured testing resource."; }
+
       { assertion = cfg.mapping != {} && builtins.length (builtins.attrNames cfg.mapping) <= 64 &&
           lib.all (name: builtins.match "[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*" name != null) (builtins.attrNames cfg.mapping);
         message = "Reservations require 1..64 exact qualified semantic commands."; }

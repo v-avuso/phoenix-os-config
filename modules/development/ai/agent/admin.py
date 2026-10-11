@@ -189,7 +189,7 @@ def handle(connection, broker, config):
         if len(data) > MAX_REQUEST or not data.endswith(b"\n"):
             raise Rejected("oversized or incomplete request")
         request = json.loads(data)
-        if isinstance(request, dict) and "reservation" in request and broker.reservations is not None:
+        if isinstance(request, dict) and "reservation" in request and "args" not in request and broker.reservations is not None:
             operator = uid == 0
             expected = {"reservation", "operator_uid"} if operator else {"reservation"}
             if set(request) != expected or (operator and (type(request["operator_uid"]) is not int or request["operator_uid"] != config["reservations"]["operator_uid"])):
@@ -208,7 +208,7 @@ def handle(connection, broker, config):
         else:
             if uid != config["client_uid"]:
                 raise Rejected("caller UID is not authorized")
-            if not isinstance(request, dict) or set(request) != {"args", "reason"}:
+            if not isinstance(request, dict) or set(request) not in ({"args", "reason"}, {"args", "reason", "reservation"}):
                 raise Rejected("expected args and concrete task reason")
             reason = request["reason"]
             if not isinstance(reason, str) or not 1 <= len(reason.strip()) <= 2000 or any(ord(c) < 32 or ord(c) == 127 for c in reason):
@@ -217,7 +217,25 @@ def handle(connection, broker, config):
             args = request["args"]
             if isinstance(args, list) and args and isinstance(args[0], str) and args[0] in OPERATIONS:
                 operation = args[0]
-            output = broker.dispatch(args)
+            command = 'admin.' + operation
+            mapped = broker.reservations is not None and command in config['reservations']['mapping']
+            if mapped:
+                value = request.get('reservation')
+                if not isinstance(value, dict) or set(value) != {'generation', 'capability'} or type(value['generation']) is not int or not isinstance(value['capability'], str) or not re.fullmatch('[a-f0-9]{64}', value['capability']):
+                    raise Rejected('mapped operation requires valid reservation')
+                try:
+                    with broker.reservations.engine.operation(uid, command=command, **value) as gate:
+                        output = broker.dispatch(args)
+                        try:
+                            gate.advance_baseline()
+                        except broker.reservations.module.Rejected:
+                            pass  # Mutation completed; expired owner gains no future authority.
+                except broker.reservations.module.Rejected:
+                    raise Rejected('reservation owner, resource or baseline denied') from None
+            else:
+                if 'reservation' in request:
+                    raise Rejected('unused reservation is not accepted')
+                output = broker.dispatch(args)
             if len(output.encode()) > MAX_OUTPUT:
                 raise Rejected("diagnostic exceeded aggregate output limit")
             response = {"ok": True, "output": output}
@@ -251,11 +269,14 @@ def serve(config):
             handle(connection, broker, config)
 
 
-def client(args, reason, socket_path="/run/phoenix-admin/socket"):
+def client(args, reason, reservation=None, socket_path="/run/phoenix-admin/socket"):
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
         connection.settimeout(15)
         connection.connect(socket_path)
-        request = json.dumps({"args": args, "reason": reason}).encode() + b"\n"
+        envelope = {"args": args, "reason": reason}
+        if reservation is not None:
+            envelope["reservation"] = reservation
+        request = json.dumps(envelope).encode() + b"\n"
         if len(request) > MAX_REQUEST:
             raise SystemExit("request too large")
         connection.sendall(request)
@@ -273,9 +294,19 @@ if __name__ == "__main__":
             serve(json.load(stream))
     else:
         parser = argparse.ArgumentParser(description=__doc__)
+        parser.add_argument("--reservation-file")
         parser.add_argument("--reason", required=True, help="concrete authorized task purpose; do not include secrets")
         parser.add_argument("args", nargs="+", help="named operation and semantic arguments")
         args = parser.parse_args()
         if not 1 <= len(args.reason.strip()) <= 2000 or any(ord(c) < 32 or ord(c) == 127 for c in args.reason):
             parser.error("reason must be 1–2000 characters without control characters")
-        client(args.args, args.reason.strip())
+        reservation = None
+        if args.reservation_file:
+            adapter_path = "@reservationAdapter@"
+            if adapter_path.startswith('@'):
+                parser.error('reservation client adapter is unavailable')
+            spec = importlib.util.spec_from_file_location('reservation_client', adapter_path)
+            adapter = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(adapter)
+            reservation = adapter.read_capability(args.reservation_file)
+        client(args.args, args.reason.strip(), reservation)

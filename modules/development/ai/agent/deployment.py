@@ -18,6 +18,7 @@ import secrets
 import signal
 import socket
 import stat
+import subprocess
 import struct
 import sys
 import tempfile
@@ -41,10 +42,10 @@ class DeploymentDenied(DeploymentFailure):
 FIELDS = {'files', 'modes', 'commit', 'target', 'action', 'reason'}
 
 
-def request_valid(request, target):
+def request_valid(request, target, reservations=False):
     if not isinstance(request, dict):
         raise ValueError('unsupported request fields')
-    expected = FIELDS | ({'branch'} if 'branch' in request else set()) | ({'expectedBase', 'expectedProfile'} if request.get('action') in {'boot', 'update'} else set())
+    expected = FIELDS | ({'reservation'} if reservations and request.get('action') != 'update' else set()) | ({'branch'} if 'branch' in request else set()) | ({'expectedBase', 'expectedProfile'} if request.get('action') in {'boot', 'update'} else set())
     if set(request) != expected:
         raise ValueError('unsupported request fields')
     if request['action'] not in {'test', 'switch', 'boot', 'update'} or request['target'] != target:
@@ -183,13 +184,55 @@ def operator_uid(config):
     return uid
 
 
+@contextlib.contextmanager
+def activation_guard(config):
+    # Constant across generations, resource mappings and the reservation switch.
+    # Separate from the controller's long build/review serialization lock.
+    path = Path(config.get('activationLock', '/var/lib/phoenix-deploy/activation.lock'))
+    parent = path.parent.lstat()
+    if not stat.S_ISDIR(parent.st_mode) or parent.st_uid != 0 or parent.st_mode & 0o022:
+        raise DeploymentFailure('activation', 'unsafe-execution-guard')
+    fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o600 or info.st_nlink != 1:
+            raise DeploymentFailure('activation', 'unsafe-execution-guard')
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise DeploymentFailure('activation', 'mutation-still-running') from None
+        yield fd
+    finally:
+        os.close(fd)  # Do not unlock a child's inherited description.
+
+
+def reservation_manager(config):
+    settings = config['reservations']
+    spec = importlib.util.spec_from_file_location('reservation_adapter', settings['adapter'])
+    adapter = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(adapter)
+    return adapter.Management(settings)
+
+
+def reservation_identity(config, value, uid, command):
+    if not isinstance(value, dict) or set(value) != {'generation', 'capability'} or type(value['generation']) is not int or value['generation'] < 1 or not isinstance(value['capability'], str) or not re.fullmatch('[a-f0-9]{64}', value['capability']):
+        raise DeploymentFailure('reservation', 'invalid-capability')
+    manager = reservation_manager(config)
+    # A non-mutating validation uses the same independent gate as activation.
+    with manager.engine.operation(uid, command=command, **value):
+        pass
+    return manager
+
+
 def process(config, request, uid, pid, operator=False):
     state = {'stage': 'request'}
     try:
-        request_valid(request, config['target'])
+        request_valid(request, config['target'], bool(config.get('reservations')))
         if not config.get('modelReviewEnabled', True) and request['action'] != 'update':
             if not operator or os.geteuid() != 0 or uid != operator_uid(config):
                 raise DeploymentFailure('authentication', 'operator-authentication-required')
+        if config.get('reservations') and request['action'] != 'update':
+            reservation_identity(config, request['reservation'], uid, 'deployment.' + request['action'])
         if config.get('work'):
             with (Path(config['work']).parent / 'deployment.lock').open('a') as lock:
                 fcntl.flock(lock, fcntl.LOCK_EX)
@@ -207,7 +250,7 @@ def process(config, request, uid, pid, operator=False):
 
 
 def process_inner(config, request, uid, pid, state):
-    request_valid(request, config['target'])
+    request_valid(request, config['target'], bool(config.get('reservations')))
     review_required = request['action'] != 'update' and config.get('modelReviewEnabled', True)
     state['stage'] = 'freeze'
     review = load_review(config)
@@ -345,6 +388,8 @@ def process_inner(config, request, uid, pid, state):
         if str((Path(closure) / 'etc/phoenix-agent/activated-source').resolve(strict=True)) != source_store:
             raise ValueError('closure does not record exact reviewed source')
         binding = {key: request[key] for key in ('commit', 'target', 'action', 'reason')}
+        if config.get('reservations') and request['action'] != 'update':
+            binding.update(reservation=request['reservation'], reservationUid=uid)
         binding.update(source=source_store, base=baseline, profile=profile,
                        profileSource=profile_source, closure=closure, nonce=secrets.token_hex(32))
         security = load_security(config) if review_required and config.get('securityReviewState') else None
@@ -359,7 +404,8 @@ def process_inner(config, request, uid, pid, state):
             work.mkdir(mode=0o700)
             reviewer = pwd.getpwnam(config['reviewerUser'])
             os.chown(work, reviewer.pw_uid, reviewer.pw_gid)
-            payload = {'binding': binding, 'files': request['files'], 'baseline': context_old,
+            review_binding = {key: value for key, value in binding.items() if key not in {'reservation', 'reservationUid'}}
+            payload = {'binding': review_binding, 'files': request['files'], 'baseline': context_old,
                        'diff': review.source_diff(context_old, request['files'],
                                 review.source_modes(Path(context_base), context_old), request['modes'])}
             state['stage'] = 'review'
@@ -385,30 +431,30 @@ def process_inner(config, request, uid, pid, state):
                     raise DeploymentFailure('review', code)
                 if set(result) != {'status', 'verdict'}:
                     raise DeploymentFailure('verdict', 'worker-envelope-invalid')
-                review.validate_verdict(result.get('verdict'), binding)
+                review.validate_verdict(result.get('verdict'), review_binding)
             except review.ReviewDenied as error:
                 denial = DeploymentDenied(error.verdict['summary'])
                 if security:
-                    denial.pending_nonce = security.pending(config, binding, uid, branch, denial.code, denial.summary, review.run)
+                    denial.pending_nonce = security.pending(config, {key: value for key, value in binding.items() if key != 'reservation'}, uid, branch, denial.code, denial.summary, review.run)
                     denial.pending_metadata = pending_metadata(binding)
                 raise denial from None
             except review.ReviewVerdictError as error:
                 failure = DeploymentFailure('verdict', error.code)
                 if security:
-                    failure.pending_nonce = security.pending(config, binding, uid, branch, error.code,
+                    failure.pending_nonce = security.pending(config, {key: value for key, value in binding.items() if key != 'reservation'}, uid, branch, error.code,
                                                              'Security review did not complete (' + error.code + ').', review.run)
                     failure.pending_metadata = pending_metadata(binding)
                 raise failure from None
             except DeploymentFailure as error:
                 if security:
-                    error.pending_nonce = security.pending(config, binding, uid, branch, error.code,
+                    error.pending_nonce = security.pending(config, {key: value for key, value in binding.items() if key != 'reservation'}, uid, branch, error.code,
                                                            'Security review did not complete (' + error.code + ').', review.run)
                     error.pending_metadata = pending_metadata(binding)
                 raise
             except Exception:
                 failure = DeploymentFailure('review', 'reviewer-invocation-failed')
                 if security:
-                    failure.pending_nonce = security.pending(config, binding, uid, branch, failure.code,
+                    failure.pending_nonce = security.pending(config, {key: value for key, value in binding.items() if key != 'reservation'}, uid, branch, failure.code,
                                                              'Security review could not complete.', review.run)
                     failure.pending_metadata = pending_metadata(binding)
                 raise failure from None
@@ -443,14 +489,92 @@ def activate_bound(config, binding, temporary, review, state, uid, pid):
     store_path(previous_runtime, 'closure')
     review.run([config['nixStore'], '--add-root', str(temporary / 'rollback-runtime-root'),
                 '--indirect', '--realise', previous_runtime])
-    review.run([config['systemdRun'], '--quiet', '--wait', '--collect',
-                '--service-type=exec', '--property=RuntimeMaxSec=2100', '--property=TimeoutStopSec=15s',
-                '--unit=phoenix-deploy-activation-' + binding['nonce'],
-                config['python'], '-I', config['controller'], config['configPath'],
-                'activate', closure, binding['action'], '--expected-base', baseline,
-                '--expected-source', source_store, '--expected-profile', profile], timeout=2200)
+    if config.get('reservations'):
+        # This spool survives controller death; only the actual service removes it.
+        spool = Path(config['activationSpool'])
+        if len(list(spool.glob('*.json'))) >= 64:
+            raise DeploymentFailure('activation', 'spool-recovery-required')
+        manager = reservation_manager(config)
+        routine = binding['action'] == 'update'
+        if routine:
+            ticket = manager.engine.acquire(0, 'routine-update', 'deployment.update', manager.engine.baseline())
+            value = {key: ticket[key] for key in ('generation', 'capability')}
+            if ticket['state'] != 'owned':
+                manager.engine.cancel(0, **value)
+                raise DeploymentFailure('reservation', 'routine-resource-busy')
+            binding = dict(binding, reservation=value, reservationUid=0, routineReservation=True)
+        reservation_identity(config, binding['reservation'], binding['reservationUid'],
+                             'deployment.' + binding['action'])
+        envelope = spool / (binding['nonce'] + '.json')
+        fd = os.open(envelope, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, 'w') as stream:
+            json.dump(binding, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        # GC roots belong to the durable envelope, not the dying request context.
+        for name, target in [('source', source_store), ('closure', closure), ('runtime', previous_runtime)]:
+            review.run([config['nixStore'], '--add-root', str(spool / (binding['nonce'] + '.' + name)),
+                        '--indirect', '--realise', target])
+        review.run([config['systemdRun'], '--quiet', '--wait', '--collect',
+                    '--service-type=exec', '--property=RuntimeMaxSec=2100', '--property=TimeoutStopSec=15s',
+                    '--unit=phoenix-deploy-activation-' + binding['nonce'],
+                    config['python'], '-I', config['controller'], config['configPath'],
+                    'activate-reserved', binding['nonce']], timeout=2200)
+    else:
+        review.run([config['systemdRun'], '--quiet', '--wait', '--collect',
+                    '--service-type=exec', '--property=RuntimeMaxSec=2100', '--property=TimeoutStopSec=15s',
+                    '--unit=phoenix-deploy-activation-' + binding['nonce'],
+                    config['python'], '-I', config['controller'], config['configPath'],
+                    'activate', closure, binding['action'], '--expected-base', baseline,
+                    '--expected-source', source_store, '--expected-profile', profile], timeout=2200)
 
     return dict(ok=True, source=source_store, closure=closure, action=binding['action'])
+
+
+def activate_reserved(config, nonce):
+    if os.geteuid() != 0 or not re.fullmatch('[a-f0-9]{64}', nonce or ''):
+        raise ValueError('reserved activation requires fixed root entry point')
+    spool = Path(config['activationSpool'])
+    info = spool.lstat()
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o077:
+        raise ValueError('unsafe activation spool')
+    path = spool / (nonce + '.json')
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    with os.fdopen(fd) as stream:
+        info = os.fstat(stream.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o600 or info.st_nlink != 1 or info.st_size > 16384:
+            raise ValueError('unsafe activation envelope')
+        binding = json.load(stream)
+    if binding['nonce'] != nonce or binding['target'] != config['target'] or binding['action'] not in {'test', 'switch', 'boot', 'update'}:
+        raise ValueError('invalid activation envelope')
+    manager = reservation_manager(config)
+    value = binding['reservation']
+    try:
+        with activation_guard(config) as guard_fd, manager.engine.operation(binding['reservationUid'], command='deployment.' + binding['action'], **value) as operation:
+            recheck_bound(config, binding)
+            store_path(binding['closure'], 'closure')
+            store_path(binding['source'], 'source')
+            activation_executable(binding['closure'])
+            if str((Path(binding['closure']) / 'etc/phoenix-agent/activated-source').resolve(strict=True)) != binding['source']:
+                raise DeploymentFailure('activation', 'source-mismatch')
+            # Foreground children inherit the gate; systemd owns this helper's lifetime.
+            def run(argv, *, timeout, **kwargs):
+                operation.run_child(argv, timeout=timeout, guard_fds=(guard_fd,), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, **kwargs)
+                return b''
+            activate(config, binding['closure'], binding['action'], run)
+            try:
+                operation.advance_baseline()
+            except manager.module.Rejected:
+                print(json.dumps({'event': 'activated-reservation-ended', 'generation': value['generation']}), flush=True)
+    finally:
+        if binding.get('routineReservation'):
+            try:
+                manager.engine.release(0, **value)
+            except manager.module.Rejected:
+                pass
+        path.unlink(missing_ok=True)
+        for name in ('source', 'closure', 'runtime'):
+            (spool / (nonce + '.' + name)).unlink(missing_ok=True)
 
 
 def worker(config, directory):
@@ -470,13 +594,18 @@ def worker(config, directory):
     print(json.dumps(result))
 
 
-def override(config, nonce, uid, pid):
+def override(config, nonce, uid, pid, reservation=None):
     if os.geteuid() != 0 or not config.get('modelReviewEnabled', True) or uid != operator_uid(config):
         raise ValueError('security override requires authenticated root and enabled review')
     with (Path(config['work']).parent / 'deployment.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         security, review = load_security(config), load_review(config)
         binding = security.load_pending(config, nonce, config['clientUid'], store_path)
+        if config.get('reservations'):
+            reservation_identity(config, reservation, uid, 'deployment.override')
+            binding = dict(binding, reservation=reservation, reservationUid=uid)
+        elif reservation is not None:
+            raise ValueError('unused reservation is not accepted')
         activation_executable(binding['closure'])
         if str((Path(binding['closure']) / 'etc/phoenix-agent/activated-source').resolve(strict=True)) != binding['source']:
             raise DeploymentFailure('override', 'source-mismatch')
@@ -624,7 +753,7 @@ def bootstrap_transfer(config, home_fd):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('config')
-    parser.add_argument('mode', choices=['serve', 'worker', 'bootstrap', 'activate', 'operator', 'override'])
+    parser.add_argument('mode', choices=['serve', 'worker', 'bootstrap', 'activate', 'activate-reserved', 'operator', 'override'])
     parser.add_argument('directory', nargs='?')
     parser.add_argument('action', nargs='?', choices=['test', 'switch', 'boot', 'update'])
     parser.add_argument('--expected-base')
@@ -634,8 +763,14 @@ def main():
     config = json.loads(Path(args.config).read_text())
     config['configPath'] = args.config
     if args.mode == 'override':
+        reservation = None
+        if config.get('reservations'):
+            data = sys.stdin.buffer.read(4097)
+            if len(data) > 4096:
+                raise ValueError('override reservation exceeds bound')
+            reservation = json.loads(data)
         with contextlib.redirect_stdout(sys.stderr):
-            result = override(config, args.directory, int(os.environ.get('PKEXEC_UID', '0')), os.getpid())
+            result = override(config, args.directory, int(os.environ.get('PKEXEC_UID', '0')), os.getpid(), reservation)
         print(json.dumps(result))
     elif args.mode == 'operator':
         # This route is entered only via the immutable graphical Polkit command.
@@ -651,21 +786,26 @@ def main():
         with contextlib.redirect_stdout(sys.stderr):
             result = process(config, request, int(os.environ.get('PKEXEC_UID', '0')), os.getpid(), operator=True)
         print(json.dumps(result))
+    elif args.mode == 'activate-reserved':
+        activate_reserved(config, args.directory)
     elif args.mode == 'activate':
         if os.getuid() != 0 or args.action is None:
             raise ValueError('activation is root-controller only')
-        store_path(args.directory, 'closure')
-        activation_executable(args.directory)
-        if not args.expected_base or not args.expected_source:
-            raise DeploymentFailure('activation', 'missing-binding')
-        store_path(args.expected_source, 'source')
-        if str(Path(config['baseline']).resolve(strict=True)) != args.expected_base:
-            raise DeploymentFailure('activation', 'baseline-changed')
-        if not args.expected_profile or str(Path('/nix/var/nix/profiles/system').resolve(strict=True)) != args.expected_profile:
-            raise DeploymentFailure('activation', 'profile-changed')
-        if str((Path(args.directory) / 'etc/phoenix-agent/activated-source').resolve(strict=True)) != args.expected_source:
-            raise DeploymentFailure('activation', 'source-mismatch')
-        activate(config, args.directory, args.action, load_review(config).run)
+        with activation_guard(config) as guard_fd:
+            store_path(args.directory, 'closure')
+            activation_executable(args.directory)
+            if not args.expected_base or not args.expected_source:
+                raise DeploymentFailure('activation', 'missing-binding')
+            store_path(args.expected_source, 'source')
+            if str(Path(config['baseline']).resolve(strict=True)) != args.expected_base:
+                raise DeploymentFailure('activation', 'baseline-changed')
+            if not args.expected_profile or str(Path('/nix/var/nix/profiles/system').resolve(strict=True)) != args.expected_profile:
+                raise DeploymentFailure('activation', 'profile-changed')
+            if str((Path(args.directory) / 'etc/phoenix-agent/activated-source').resolve(strict=True)) != args.expected_source:
+                raise DeploymentFailure('activation', 'source-mismatch')
+            review = load_review(config)
+            activate(config, args.directory, args.action, lambda argv, **kwargs: review.run(argv, pass_fds=(guard_fd,), **kwargs))
+
     elif args.mode == 'worker':
         worker(config, args.directory)
     elif args.mode == 'bootstrap':
