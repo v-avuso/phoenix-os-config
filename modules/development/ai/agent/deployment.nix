@@ -8,6 +8,10 @@
 }:
 let
   cfg = config.services.phoenixDeployment;
+  sourceSelector = pkgs.writeScript "phoenix-source" (
+    builtins.replaceStrings [ "#!/usr/bin/env python3" ]
+      [ "#!${pkgs.python3}/bin/python3" ] (builtins.readFile ../../../../commands/phoenix-source)
+  );
   operatorCommand = [
     "/run/wrappers/bin/pkexec"
     "--disable-internal-agent"
@@ -35,6 +39,7 @@ let
   reviewConfig = pkgs.writeText "phoenix-review.json" (
     builtins.toJSON {
       repo = user.repoDirectory;
+      sourceSelector = toString sourceSelector;
       modelReviewEnabled = cfg.securityReview.enable;
       operatorCommand = lib.optionals (!cfg.securityReview.enable) operatorCommand;
       inherit overrideCommand;
@@ -61,6 +66,7 @@ let
   clientConfig = pkgs.writeText "phoenix-deployment-client.json" (
     builtins.toJSON {
       repo = user.repoDirectory;
+      sourceSelector = toString sourceSelector;
       modelReviewEnabled = cfg.securityReview.enable;
       operatorCommand = lib.optionals (!cfg.securityReview.enable) operatorCommand;
       inherit overrideCommand;

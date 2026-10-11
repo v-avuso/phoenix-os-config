@@ -448,6 +448,9 @@ def main():
     config = json.loads(Path(sys.argv[1]).read_text())
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("config")
+    selectors = parser.add_mutually_exclusive_group()
+    selectors.add_argument("--branch", help="local branch with exactly one existing worktree")
+    selectors.add_argument("--worktree", help="existing worktree of the configured repository")
     parser.add_argument("--base", help="optional full commit SHA for an additional informational diff")
     parser.add_argument("--reason", help="concrete authorized task purpose")
     parser.add_argument("--target", choices=["metal", "vm"])
@@ -469,6 +472,10 @@ def main():
     if not args.target:
         parser.error("target is required for deployment")
     config = json.loads(Path(args.config).read_text())
+    if args.branch is not None or args.worktree is not None:
+        selector = ["--branch", args.branch] if args.branch is not None else ["--worktree", args.worktree]
+        config["repo"] = run([config["sourceSelector"], "--repo", config["repo"],
+                              "--git", config["git"], *selector]).decode().strip()
     if args.action in {"review", "build"}:
         if not config.get("modelReviewEnabled", True):
             raise ValueError("AI review is explicitly disabled; use authenticated test/switch/boot")

@@ -44,6 +44,9 @@ class Commands(unittest.TestCase):
                 "    {'command': Path(sys.argv[0]).name, 'args': sys.argv[1:], 'cwd': os.getcwd()}))\n"
             )
             executable.chmod(0o755)
+        selector = self.bin / "phoenix-source"
+        selector.write_text((ROOT / "commands/phoenix-source").read_text())
+        selector.chmod(0o755)
         target = self.bin / "phoenix-target"
         target.write_text((ROOT / "commands/phoenix-target").read_text())
         target.chmod(0o755)
@@ -103,6 +106,57 @@ class Commands(unittest.TestCase):
                 result = self.run_command("phoenix-rebuild", action, env=env)
                 self.assertEqual(result.returncode, status)
                 self.assertFalse(self.record.exists())
+
+    def git(self, *args):
+        return subprocess.run(["git", "-C", str(self.repo), *args], check=True,
+                              capture_output=True, text=True).stdout
+
+    def make_worktree(self):
+        self.git("init", "-b", "main")
+        self.git("add", "flake.nix")
+        self.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                 "commit", "-m", "fixture")
+        other = self.base / "other worktree"
+        self.git("worktree", "add", "-b", "feature", str(other))
+        (other / "flake.nix").write_text("{ dirty = true; }\n")
+        return other
+
+    def test_explicit_sources_include_dirty_worktree_without_checkout_switch(self):
+        other = self.make_worktree()
+        for selector in (("--branch", "feature"), ("--worktree", str(other))):
+            for action in ("build", "dry-build", "test", "switch", "boot"):
+                result = self.run_command("phoenix-rebuild", action, "--print", *selector,
+                                          "--option", "example", "value with spaces",
+                                          env={"PHOENIX_TARGET": "vm"})
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn(f"{other}#vm", shlex.split(result.stdout))
+                self.assertEqual(shlex.split(result.stdout)[-3:],
+                                 ["--option", "example", "value with spaces"])
+        self.assertEqual(self.git("branch", "--show-current").strip(), "main")
+        self.assertIn("dirty", (other / "flake.nix").read_text())
+        self.assertFalse(self.record.exists())
+
+    def test_invalid_source_selectors_fail_before_execution(self):
+        self.make_worktree()
+        self.git("branch", "unmounted")
+        for args in (("--branch", "unknown"), ("--branch", "unmounted"),
+                     ("--worktree", str(self.base)), ("--branch",),
+                     ("--branch", "feature", "--worktree", str(self.repo))):
+            result = self.run_command("phoenix-rebuild", "build", *args)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(self.record.exists())
+
+    def test_ambiguous_branch_and_forwarded_selector_value(self):
+        other = self.make_worktree()
+        duplicate = self.base / "duplicate"
+        self.git("worktree", "add", "--force", str(duplicate), "feature")
+        result = self.run_command("phoenix-rebuild", "--branch", "feature", "--print", "build")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("ambiguous", result.stderr)
+        result = self.run_command("phoenix-rebuild", "--worktree", str(other), "--print", "build",
+                                  "--option", "example", "--branch")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(shlex.split(result.stdout)[-3:], ["--option", "example", "--branch"])
 
     def test_target_detection_and_override_precedence(self):
         detector = self.bin / "systemd-detect-virt"

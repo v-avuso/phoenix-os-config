@@ -18,6 +18,44 @@ spec.loader.exec_module(review)
 
 
 class ReviewTests(unittest.TestCase):
+    def test_selected_worktree_reaches_authenticated_snapshot(self):
+        root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            repo = base / "repo"
+            repo.mkdir()
+            def git(*args):
+                subprocess.run(["git", "-C", str(repo), *args], check=True,
+                               capture_output=True)
+            git("init", "-b", "main")
+            (repo / "flake.nix").write_text("{}")
+            (repo / "flake.lock").write_text("{}")
+            git("add", "flake.nix", "flake.lock")
+            git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                "commit", "-m", "fixture")
+            other = base / "other worktree"
+            git("worktree", "add", "-b", "feature", str(other))
+            (other / "flake.nix").write_text("dirty selected content")
+            executable = base / "selector"
+            executable.write_text((root / "commands/phoenix-source").read_text().replace(
+                "#!/usr/bin/env python3", "#!" + sys.executable))
+            executable.chmod(0o755)
+            config = base / "config.json"
+            config.write_text(json.dumps(dict(repo=str(repo), git=shutil.which("git"),
+                sourceSelector=str(executable), clientOnly=True, modelReviewEnabled=False)))
+            original_snapshot = review.snapshot
+            def snapshot(cfg, destination):
+                self.assertEqual(cfg["repo"], str(other))
+                _, files = original_snapshot(cfg, destination)
+                self.assertEqual(files["flake.nix"], "dirty selected content")
+                raise RuntimeError("stop before authentication or activation")
+            for selector in (("--branch", "feature"), ("--worktree", str(other))):
+                with mock.patch.object(sys, "argv", ["deploy-review", str(config), *selector,
+                        "--target", "vm", "--reason", "fixture", "--action", "test"]), \
+                     mock.patch.object(review, "snapshot", side_effect=snapshot), \
+                     self.assertRaisesRegex(RuntimeError, "stop before authentication"):
+                    review.main()
+
     def test_verdict_binding(self):
         binding = {"source": "/nix/store/source", "nonce": "fresh", "target": "metal", "closure": "/nix/store/bound-system"}
         good = dict(binding, approved=True, summary="reviewed")

@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+"""Resolve an existing Phoenix source checkout without changing Git state."""
+import argparse
+from pathlib import Path
+import subprocess
+import sys
+
+
+def resolve(repo, branch=None, worktree=None, git="git"):
+    def run(*args):
+        result = subprocess.run([git, "-C", str(repo), *args], capture_output=True)
+        if result.returncode:
+            raise ValueError("configured checkout is not an accessible Git repository")
+        return result.stdout
+
+    if branch == "" or worktree == "":
+        raise ValueError("source selector requires a nonempty value")
+    if branch is not None or worktree is not None:
+        records = run("worktree", "list", "--porcelain", "-z").split(b"\0\0")
+        matches = []
+        for record in records:
+            fields = record.split(b"\0")
+            paths = [field[9:] for field in fields if field.startswith(b"worktree ")]
+            if not paths:
+                continue
+            path = Path(paths[0].decode(sys.getfilesystemencoding(), "surrogateescape")).resolve()
+            if branch is not None:
+                match = b"branch refs/heads/" + branch.encode() in fields
+            else:
+                match = path == Path(worktree).expanduser().resolve()
+            if match:
+                matches.append(path)
+        if len(matches) != 1:
+            raise ValueError("source selector must match exactly one existing worktree; "
+                             "unknown, unmounted or ambiguous branch/worktree (no checkout is created)")
+        repo = matches[0]
+    if not (Path(repo) / "flake.nix").is_file():
+        raise ValueError("selected Phoenix checkout has no flake.nix")
+    return str(repo)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--repo", required=True)
+    parser.add_argument("--git", default="git")
+    selectors = parser.add_mutually_exclusive_group()
+    selectors.add_argument("--branch")
+    selectors.add_argument("--worktree")
+    args = parser.parse_args()
+    try:
+        print(resolve(args.repo, args.branch, args.worktree, args.git))
+    except (ValueError, OSError) as error:
+        parser.error(str(error))

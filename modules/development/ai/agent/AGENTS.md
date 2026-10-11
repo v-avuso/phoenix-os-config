@@ -29,13 +29,27 @@
   approved immutable source/closure. Include permitted uncommitted changes; later
   edits must not alter a reviewed deployment. Reviewer Git branches are unnecessary.
 
-### Planned interface and testing reservation (not implemented)
+### Source selection
 
-- Extend the shared Phoenix dispatcher, rather than duplicating wrappers, to resolve
-  an optional branch/worktree selector. Resolve an existing worktree explicitly so
-  its uncommitted changes are included; a bare branch ref names committed content
-  only. Reject ambiguous selections. Preserve the configured-checkout default until
-  an explicit main-default migration is agreed; never silently switch the checkout.
+- `phoenix-build --branch NAME` (also dry-build/test/switch/boot) or
+  `phoenix-rebuild --worktree /absolute/path --print build` selects an existing
+  worktree of the configured repository without switching the user's checkout.
+  Put dispatcher selectors before forwarded nixos-rebuild options. Keep the
+  configured `repoDirectory` / `PHOENIX_REPO_ROOT` default when no selector is given.
+- `--branch NAME` must match exactly one existing local-branch worktree;
+  unknown, unmounted and ambiguous branches fail. `--worktree PATH` must name a
+  registered worktree of the configured repository. No checkout is created.
+  Dirty tracked content is included; ordinary Git-flake builds omit untracked
+  files until staged. Never use `path:.` to work around this.
+- For authenticated immutable deployment, use
+  `phoenix-deploy-review --worktree /absolute/path --target metal --action test --reason "authorized task purpose"`
+  (or `--branch NAME`). Its existing snapshot
+  includes permitted Git-visible dirty/new content. Selection does not turn legacy
+  `phoenix-test` / switch / boot into broker-mediated deployments; those retain
+  their nixos-rebuild privilege route. Branch labels confer no authority.
+
+### Planned testing reservation (not implemented)
+
 - Add a host-wide broker-owned testing reservation spanning activation and runtime
   validation, not just the deployment command. Agents acquire it before testing,
   report completion and release it afterward. Competing test/switch/boot/rollback

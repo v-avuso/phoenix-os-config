@@ -4,7 +4,8 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  phoenix-rebuild [--print] <switch|test|boot|build|dry-build> [nixos-rebuild args...]
+  phoenix-rebuild [--print] [--branch NAME | --worktree PATH] <action> [nixos-rebuild args...]
+  phoenix-<action> [--print] [--branch NAME | --worktree PATH] [nixos-rebuild args...]
 
 Runs nixos-rebuild against the auto-selected PhoeNix OS flake target.
 Set PHOENIX_TARGET=vm or PHOENIX_TARGET=metal to override detection.
@@ -12,20 +13,28 @@ EOF
 }
 
 print_only=false
-
-case "${1:-}" in
-  --print)
-    print_only=true
-    shift
-    ;;
-  -h|--help|"")
-    usage
-    exit 0
-    ;;
-esac
-
-action="${1:-}"
-shift || true
+selector=()
+action=""
+if [ "$#" -eq 0 ]; then usage; exit 0; fi
+# Consume only dispatcher options at the front. Once the rebuild option tail
+# starts, preserve it exactly (including values resembling source selectors).
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --print) print_only=true; shift ;;
+    --branch|--worktree)
+      if [ "${#selector[@]}" -ne 0 ] || [ "$#" -lt 2 ] || [ -z "$2" ]; then
+        printf 'phoenix-rebuild: supply one --branch or --worktree with a value\n' >&2
+        exit 2
+      fi
+      selector=("$1" "$2"); shift 2 ;;
+    -h|--help)
+      if [ -n "$action" ]; then break; fi
+      usage; exit 0 ;;
+    *)
+      if [ -n "$action" ]; then break; fi
+      action="$1"; shift ;;
+  esac
+done
 
 case "$action" in
   switch|test|boot|build|dry-build)
@@ -46,6 +55,10 @@ if [ -z "$repo_root" ] || [ ! -f "$repo_root/flake.nix" ]; then
   printf 'phoenix-rebuild: configured Phoenix checkout is unavailable: %s\n' "${repo_root:-<unset>}" >&2
   printf 'Set PHOENIX_REPO_ROOT or update repoDirectory in config/user.nix.\n' >&2
   exit 127
+fi
+
+if [ "${#selector[@]}" -gt 0 ]; then
+  repo_root="$(phoenix-source --repo "$repo_root" "${selector[@]}")"
 fi
 
 target="$(phoenix-target)"

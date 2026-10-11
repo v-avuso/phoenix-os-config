@@ -12,9 +12,16 @@ let
     text = builtins.readFile ./phoenix-target;
   };
 
+  phoenixSource = pkgs.writeScriptBin "phoenix-source" (
+    builtins.replaceStrings [ "#!/usr/bin/env python3" ]
+      [ "#!${pkgs.python3}/bin/python3" ] (builtins.readFile ./phoenix-source)
+  );
+
   phoenixRebuild = pkgs.writeShellApplication {
     name = "phoenix-rebuild";
     runtimeInputs = [
+      pkgs.git
+      phoenixSource
       pkgs.bash
       pkgs.nix
       pkgs.coreutils
