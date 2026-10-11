@@ -11,6 +11,12 @@
 - Freeze Git-visible working-tree changes before builds, including new files and
   deletions. A clean commit is not an activation prerequisite. Ignore branch names
   as authority; only root-owned exact source/closure/policy checkpoints authorize reuse.
+- When changing the review boundary, exercise controller → worker → adapter →
+  checkpoint together in `tests/agent-deployment.py`, not only mocked worker
+  envelopes. Keep fixture ownership/store/build/model/activation stubs explicit;
+  passing fixtures do not establish retained-auth or live OS acceptance. Check
+  incremental context against the smallest-diff checkpoint heuristic, not an
+  assumed latest approval.
 - Preserve retained authentication. Diagnose readiness and typed failure stages
   before asking for sign-in; never log tokens, account responses or raw auth stderr.
 - New containment/shutdown behavior stays opt-in until active workload cleanup,

@@ -655,6 +655,150 @@ class DeploymentTests(unittest.TestCase):
                         self.assertEqual(bound['action'],'test');self.assertEqual(bound['target'],'metal')
                         self.assertEqual(security.pending.call_args.args[2],1000)
 
+    def test_controller_worker_adapter_and_checkpoints_as_one_disposable_workflow(self):
+        """Exercise production integration; OS/store/model/activation are explicit stubs."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            owner = Path(__file__).resolve().parents[1] / 'modules/development/ai/agent'
+            baseline = root / 'baseline'
+            baseline.mkdir()
+            initial = {'flake.nix': '{}\n', 'flake.lock': '{}\n', 'context.nix': 'needed context\n'}
+            for name, text in initial.items():
+                (baseline / name).write_text(text)
+            profile = root / 'profile'
+            (profile / 'etc/phoenix-agent').mkdir(parents=True)
+            (profile / 'etc/phoenix-agent/activated-source').symlink_to(baseline)
+            state = root / 'security'
+            state.mkdir()
+            auth = root / 'auth'
+            auth.mkdir()
+            (auth / 'auth.json').write_text('fixture-only')
+            review = deploy.load_review({'reviewScript': str(owner / 'deploy-review.py')})
+            security = self.security()
+            config = dict(target='metal', work=directory, builderUser='builder', reviewerUser='reviewer',
+                reviewHome=str(auth), nix='nix', nixStore='nix-store', baseline=str(baseline),
+                python='python', controller=str(owner / 'deployment.py'), configPath='fixture', systemdRun='systemd-run',
+                reviewScript=str(owner / 'deploy-review.py'), securityReviewScript=str(owner / 'security-review.py'),
+                securityReviewState=str(state), policy=str(owner / 'review-policy.md'), codex='codex', bwrap='bwrap',
+                caBundle='/fixture/cert', model='gpt-6.1-sol', effort='medium', modelReviewEnabled=True)
+            frozen_sources, closures, prompts = {}, {}, []
+            decision = 'context'
+
+            def command(argv, **kwargs):
+                if argv[0] == 'nix-store':
+                    Path(argv[argv.index('--add-root') + 1]).symlink_to(argv[-1])
+                    return b''
+                self.assertEqual(argv[0], 'bwrap')
+                prompt = kwargs['data'].decode()
+                prompts.append(prompt)
+                self.assertNotIn('upstreamBatches', prompt)
+                payload = json.loads(prompt.split('Source data follows:\n', 1)[1].split('\nResolved context', 1)[0])
+                self.assertNotIn('unrequested secret content', prompt)
+                if decision == 'error':
+                    raise ValueError('SECRET credential stderr must not escape')
+                verdict = dict(payload['binding'], approved=decision != 'deny', summary='fixture security decision')
+                # Bubblewrap work mount is immediately before its /work destination.
+                work = Path(argv[argv.index('/work') - 1])
+                schema = json.loads((work / 'schema.json').read_text())
+                if 'context' in schema['properties']:
+                    verdict['context'] = []
+                    if decision == 'context':
+                        verdict.update(approved=None, context=[dict(source='baseline', path='context.nix', start=1, end=1)])
+                else:
+                    self.assertIn('needed context', prompt)
+                (work / 'verdict.json').write_text(json.dumps(verdict))
+                return b''
+
+            def user_command(config, user, argv, run, **kwargs):
+                if argv[:3] == ['nix', 'store', 'add-path']:
+                    files = review.baseline_files(Path(argv[3]))
+                    key = json.dumps(files, sort_keys=True)
+                    if key not in frozen_sources:
+                        frozen = root / ('frozen-' + str(len(frozen_sources)))
+                        shutil.copytree(argv[3], frozen)
+                        frozen_sources[key] = frozen
+                    return str(frozen_sources[key]).encode()
+                if argv[:2] == ['nix', 'build']:
+                    frozen = Path(argv[-1].split('#')[0][5:])
+                    if frozen not in closures:
+                        closure = root / ('closure-' + str(len(closures)))
+                        (closure / 'etc/phoenix-agent').mkdir(parents=True)
+                        (closure / 'etc/phoenix-agent/activated-source').symlink_to(frozen)
+                        closures[frozen] = closure
+                    return str(closures[frozen]).encode()
+                self.assertEqual(user, 'reviewer')
+                output = io.StringIO()
+                with mock.patch('sys.stdin', io.StringIO(kwargs['data'].decode())), contextlib.redirect_stdout(output):
+                    deploy.worker(config, argv[-1])
+                return output.getvalue().encode()
+
+            original_resolve = Path.resolve
+
+            def resolve(path, *args, **kwargs):
+                if path == Path('/nix/var/nix/profiles/system'):
+                    return profile
+                return original_resolve(path, *args, **kwargs)
+
+            request = dict(self.request(), files=dict(initial, **{'flake.nix': '{ changed = true; }\n' + '# unchanged approved context\n' * 12,
+                'private.nix': 'unrequested secret content\n'}), branch='feature')
+            # An unchanged private file belongs in both frozen states, never prompt data.
+            (baseline / 'private.nix').write_text(request['files']['private.nix'])
+            request['modes'] = {name: '100644' for name in request['files']}
+            account = mock.Mock(pw_uid=os.getuid(), pw_gid=os.getgid())
+            with mock.patch.object(deploy, 'load_review', return_value=review), mock.patch.object(deploy, 'load_security', return_value=security), \
+                 mock.patch.object(review, 'run', side_effect=command), mock.patch.object(deploy, 'as_user', side_effect=user_command), \
+                 mock.patch.object(deploy, 'store_path'), mock.patch.object(deploy, 'activation_executable'), \
+                 mock.patch.object(deploy.pwd, 'getpwnam', return_value=account), mock.patch.object(Path, 'resolve', resolve), \
+                 mock.patch.object(security, 'state_directory', return_value=state), \
+                 mock.patch.object(security, 'read_record', side_effect=lambda path: json.loads(path.read_text())), \
+                 mock.patch.object(deploy.os, 'geteuid', return_value=0), \
+                 mock.patch.object(deploy, 'activate_bound', return_value={'ok': True}) as activation, contextlib.redirect_stdout(io.StringIO()) as journal:
+                self.assertTrue(deploy.process(config, request, 1000, 22)['ok'])
+                self.assertEqual(len(prompts), 2)
+                self.assertIn('-{}', prompts[0])
+                self.assertIn('+{ changed = true; }', prompts[0])
+                self.assertTrue(deploy.process(config, request, 1000, 22)['ok'])
+                self.assertEqual(len(prompts), 2, 'exact source/closure approval reuses zero AI')
+                decision = 'approve'
+                request['files']['flake.nix'] = request['files']['flake.nix'].replace(
+                    'changed = true;', 'changed = true; extra = true;')
+                self.assertTrue(deploy.process(config, request, 1000, 22)['ok'])
+                self.assertIn('-{ changed = true; }', prompts[-1], 'approved checkpoint supplies incremental diff')
+                self.assertNotIn('-{}', prompts[-1])
+                decision = 'deny'
+                request['files']['flake.nix'] = '{ denied = true; }\n'
+                before = activation.call_count
+                with self.assertRaises(deploy.DeploymentDenied) as denied:
+                    deploy.process(config, request, 1000, 22)
+                self.assertEqual(activation.call_count, before)
+                nonce = denied.exception.pending_nonce
+                pending = security.load_pending(config, nonce, 1000, deploy.store_path)
+                # Later mutable caller changes cannot replace the protected override.
+                request['files']['flake.nix'] = 'mutated after freeze'
+                self.assertTrue(deploy.override(config, nonce, 1000, 22)['ok'])
+                self.assertEqual(activation.call_args.args[1]['source'], pending['source'])
+                self.assertEqual(activation.call_args.args[1]['closure'], pending['closure'])
+                request['files']['flake.nix'] = '{ denied = true; }\n'
+                before = len(prompts)
+                self.assertTrue(deploy.process(config, request, 1000, 22)['ok'])
+                self.assertEqual(len(prompts), before, 'human exact approval is reusable without AI')
+                request['files']['flake.nix'] = 'mutated after freeze'
+                decision = 'error'
+                before = activation.call_count
+                with self.assertRaises(deploy.DeploymentFailure) as failed:
+                    deploy.process(config, request, 1000, 22)
+                self.assertEqual(failed.exception.code, 'reviewer-invocation-failed')
+                self.assertNotIn('SECRET', str(failed.exception))
+                self.assertNotIn('SECRET', security.load_pending(config, failed.exception.pending_nonce, 1000, deploy.store_path)['summary'])
+                self.assertTrue(failed.exception.pending_nonce)
+                self.assertEqual(activation.call_count, before)
+                before = len(prompts)
+                config['modelReviewEnabled'] = False
+                self.assertTrue(deploy.process(config, request, 1000, 22, operator=True)['ok'])
+                self.assertEqual(len(prompts), before, 'authenticated disabled review uses zero AI')
+                self.assertNotIn('SECRET', journal.getvalue())
+                self.assertNotIn('unrequested secret content', journal.getvalue())
+
     def security(self):
         return deploy.load_security({'securityReviewScript': str(Path(__file__).resolve().parents[1]/'modules/development/ai/agent/security-review.py')})
 
