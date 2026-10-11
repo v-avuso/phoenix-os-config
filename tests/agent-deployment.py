@@ -30,7 +30,7 @@ class DeploymentTests(unittest.TestCase):
         deploy.request_valid(good, 'metal')
         for mutation in [dict(approved=True), dict(closure='/nix/store/evil'),
                          dict(argv=['sh']), dict(action='boot'), dict(action='update'), dict(action='sh'),
-                         dict(target='vm'), dict(reason=''), dict(commit='HEAD')]:
+                         dict(target='vm'), dict(reason=''), dict(reason='line\nbreak'), dict(reason='x'*2001), dict(commit='HEAD')]:
             with self.subTest(mutation=mutation), self.assertRaises(ValueError):
                 deploy.request_valid(dict(good, **mutation), 'metal')
 
