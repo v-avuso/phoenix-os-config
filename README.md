@@ -83,6 +83,8 @@ fresh installation, and private-state restoration. A NixOS rollback restores
 system configuration; it does not restore documents, databases, credentials,
 or all mutable settings.
 
+[Media viewers](modules/apps/README.md): local audio/video in mpv and images in swayimg.
+
 ## Operational guides
 
 - [Automatic updates](docs/UPDATES.md): six-hour checks, source selection,
