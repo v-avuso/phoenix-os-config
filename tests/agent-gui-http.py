@@ -127,6 +127,30 @@ class DesktopHTTP(unittest.TestCase):
             with self.assertRaises(ValueError):
                 worker.apply_routing(opener, request)
 
+    def test_routing_failure_has_safe_stage_without_upstream_secrets(self):
+        for code, category in ((401, "http-unauthorized"), (403, "http-forbidden")):
+            error = worker.urllib.error.HTTPError("https://secret.invalid/?token=secret", code,
+                                                  "secret-token", {}, io.BytesIO(b"secret-body"))
+            output, journal = [], io.StringIO()
+            with patch.object(worker.sys, "stdin", type("Input", (), {"buffer": io.BytesIO(b'{"url":"https://chatgpt.com/backend-api/me"}\n')})()), \
+                 patch.object(worker, "apply_routing", side_effect=error), \
+                 patch.object(worker, "emit", output.append), patch.object(worker.sys, "stderr", journal):
+                self.assertEqual(worker.main(), 1)
+            self.assertEqual(output, [{"error": {"stage": "routing-discovery", "category": category}}])
+            self.assertNotIn("secret", journal.getvalue() + json.dumps(output))
+            self.assertIn("retained login preserved", journal.getvalue())
+
+    def test_worker_diagnostic_is_strictly_validated_before_rpc(self):
+        config = {"python": "/fixture/python", "launcher": "/fixture/launcher",
+                  "launcher_config": "/fixture/config", "workdir": "/tmp", "home": "/tmp", "path": "/unused"}
+        for category in ("http-forbidden", "secret-token"):
+            frame = {"error": {"stage": "routing-discovery", "category": category}}
+            result = subprocess.CompletedProcess([], 1, stdout=json.dumps(frame).encode() + b"\n")
+            with patch.object(relay.subprocess, "run", return_value=result), self.assertRaises(ValueError) as raised:
+                relay.worker_json(config, worker.ACCOUNTS_URL)
+            self.assertNotIn("secret", str(raised.exception))
+            self.assertEqual(isinstance(raised.exception, relay.WorkerDiagnostic), category == "http-forbidden")
+
     def test_identity_contains_only_public_account_and_actual_profile(self):
         token = relay.desktop_identity("public-account", {"id": "actual-user", "email": "fixture@example.invalid"})
         claims = json.loads(base64.urlsafe_b64decode(token.split(".")[1] + "=="))

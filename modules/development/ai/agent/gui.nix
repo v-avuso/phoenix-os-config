@@ -212,6 +212,7 @@ in
   system.build.phoenixAgentGui = launcher;
   system.build.phoenixAgentGuiWrapper = wrapped;
   home-manager.users.${user.name} = {
+    _module.args.phoenixAgentGuiHyprLua = builtins.readFile ./gui-window.lua;
     systemd.user.sockets.phoenix-agent-gui = socket "Fixed sandbox app-server relay for ChatGPT Community" "phoenix-agent-gui";
     systemd.user.services."phoenix-agent-gui@" =
       service "OpenShell app-server stdio relay" ./gui-relay.py;

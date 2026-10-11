@@ -127,6 +127,60 @@ else:
                 for stream in (process.stdin, process.stdout, process.stderr):
                     stream.close()
 
+    def test_failed_routing_reports_stage_and_preserves_opaque_auth(self):
+        source = '''import json,sys
+if sys.argv[2:] == ["--phoenix-gui-http"]:
+    json.loads(sys.stdin.readline())
+    print(json.dumps({"error":{"stage":"routing-discovery","category":"http-forbidden"}}),flush=True)
+    sys.exit(1)
+for line in sys.stdin:
+    request=json.loads(line)
+    print(json.dumps({"id":request["id"],"result":{"authToken":"opaque-must-not-enter-gui"}}),flush=True)
+'''
+        with tempfile.TemporaryDirectory() as directory:
+            config = self.config(directory, source)
+            sock, process = self.start_stdio_relay(config)
+            try:
+                sock.sendall(b'{"id":1,"method":"getAuthStatus","params":{"refreshToken":false}}\n')
+                received = sock.recv(65536)
+                response = json.loads(received)
+                self.assertIn("stage=routing-discovery category=http-forbidden", response["error"]["message"])
+                self.assertNotIn("opaque-must-not-enter-gui", received.decode())
+                self.assertIn("retained login", response["error"]["message"])
+            finally:
+                sock.close()
+                process.wait(timeout=5)
+                journal = process.stderr.read().decode()
+                process.stderr.close()
+            self.assertNotIn("opaque-must-not-enter-gui", journal)
+            self.assertIn("stage=routing-discovery", journal)
+
+    def test_http_failure_diagnostics_are_whitelisted(self):
+        for category in ("http-forbidden", "secret-untrusted-error"):
+            source = "import json,sys\njson.loads(sys.stdin.readline())\nprint(json.dumps(" + repr({"error": {"stage": "routing-discovery", "category": category}}) + "),flush=True)\n"
+            with tempfile.TemporaryDirectory() as directory:
+                config = self.config(directory, source)
+                parent, child = socket.socketpair()
+                process = subprocess.Popen([sys.executable, "-I", str(AGENT / "gui-http-relay.py"), str(config)],
+                    stdin=child, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                child.close()
+                try:
+                    parent.settimeout(5)
+                    parent.sendall(b"GET https://chatgpt.com/backend-api/test HTTP/1.1\r\nHost: local\r\n\r\n")
+                    response = self.receive_to_eof(parent)
+                    self.assertIn(b"502", response)
+                    self.assertNotIn(b"secret", response)
+                    self.assertEqual(b"stage=routing-discovery" in response, category == "http-forbidden")
+                    process.wait(timeout=5)
+                    self.assertEqual(process.returncode, 0, process.stderr.read())
+                finally:
+                    parent.close()
+                    if process.poll() is None:
+                        process.kill()
+                        process.wait()
+                    process.stdout.close()
+                    process.stderr.close()
+
     def test_http_disconnect_cancels_fixed_worker(self):
         source = '''import base64,json,pathlib,signal,sys,time
 assert sys.argv[2:] == ["--phoenix-gui-http"]

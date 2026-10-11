@@ -11,6 +11,8 @@ import functools
 import re
 import subprocess
 import sys
+import socket
+import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -109,14 +111,41 @@ def apply_routing(opener, request):
         request.add_header("X-OpenAI-Account-Routing-Override", override)
 
 
+# Fixed vocabulary is shared with the relay's strict parser. Never include an
+# exception message, response body, URL, account identity or caller headers.
+def failure_category(error):
+    if isinstance(error, urllib.error.HTTPError):
+        if error.code == 401:
+            return "http-unauthorized"
+        if error.code == 403:
+            return "http-forbidden"
+        return "http-rejected"
+    reason = error.reason if isinstance(error, urllib.error.URLError) else error
+    if isinstance(reason, (TimeoutError, socket.timeout)):
+        return "timeout"
+    if isinstance(reason, ssl.SSLError):
+        return "tls"
+    if isinstance(error, urllib.error.URLError):
+        return "transport"
+    if isinstance(error, subprocess.SubprocessError):
+        return "cli-identity"
+    if isinstance(error, OSError):
+        return "local-io"
+    return "invalid-data"
+
+
 def main():
+    stage = "request-validation"
+    started = False
     try:
         line = sys.stdin.buffer.readline(LIMIT * 2 + HEADER_LIMIT + 1)
         if len(line) > LIMIT * 2 + HEADER_LIMIT or not line.endswith(b"\n"):
             raise ValueError("Invalid desktop HTTP frame")
         request = validate(json.loads(line))
         opener = urllib.request.build_opener(NoRedirect(), urllib.request.ProxyHandler({}))
+        stage = "routing-discovery"
         apply_routing(opener, request)
+        stage = "backend-request"
         try:
             response = opener.open(request, timeout=60)
         except urllib.error.HTTPError as error:
@@ -127,6 +156,8 @@ def main():
             headers = {key.lower(): value for key, value in response.headers.items()
                        if key.lower() in {"content-type", "cache-control", "retry-after"}}
             emit({"status": response.status, "headers": headers})
+            started = True
+            stage = "response-stream"
             total = 0
             while chunk := response.read1(65536):
                 total += len(chunk)
@@ -134,10 +165,15 @@ def main():
                     raise ValueError("Desktop HTTP response is too large")
                 emit({"chunk": base64.b64encode(chunk).decode("ascii")})
             emit({"done": True})
-    except (KeyError, TypeError, ValueError, OSError, urllib.error.URLError, subprocess.SubprocessError):
+    except (KeyError, TypeError, ValueError, OSError, urllib.error.URLError, subprocess.SubprocessError) as error:
         # Reflect neither upstream error text nor request headers: credentials
         # and task content must never reach stderr/journal on adapter failure.
-        print("Desktop backend request failed within the sandbox", file=sys.stderr)
+        category = failure_category(error)
+        print(f"Sandbox desktop HTTP failed: stage={stage} category={category}; "
+              "retained login preserved; inspect gateway policy/credential diagnostics before signing in",
+              file=sys.stderr)
+        if not started:
+            emit({"error": {"stage": stage, "category": category}})
         return 1
     return 0
 

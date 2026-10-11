@@ -4,6 +4,7 @@
   lib,
   pkgs,
   phoenixKandoHyprLua,
+  phoenixAgentGuiHyprLua ? "",
   ...
 }:
 
@@ -162,6 +163,7 @@ let
   hyprUser = ''
     ${idleBlankLua}
     ${phoenixKandoHyprLua}
+    ${phoenixAgentGuiHyprLua}
 
     hl.monitor({
       output = "DP-1",

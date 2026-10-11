@@ -13,6 +13,10 @@ import uuid
 MAX_RPC_FRAME = 16 * 1024 * 1024
 
 
+class WorkerDiagnostic(ValueError):
+    """Only a validated fixed-vocabulary worker failure is safe for RPC."""
+
+
 def desktop_identity(account, profile, selected=None):
     """Public routing claims, never a credential accepted by OpenAI.
 
@@ -45,10 +49,22 @@ def worker_json(config, url):
         input=json.dumps(request).encode() + b"\n", stdout=subprocess.PIPE, stderr=sys.stderr,
         cwd=config["workdir"], timeout=180,
         env={"HOME": config["home"], "XDG_RUNTIME_DIR": f"/run/user/{os.getuid()}", "PATH": config["path"]})
-    if result.returncode or len(result.stdout) > 2 * 1024 * 1024:
+    if len(result.stdout) > 2 * 1024 * 1024:
         raise ValueError("Sandbox routing discovery failed")
     frames = [json.loads(line) for line in result.stdout.splitlines()]
-    if not frames or frames[0].get("status") != 200 or frames[-1].get("done") is not True:
+    if not all(isinstance(frame, dict) for frame in frames):
+        raise ValueError("Sandbox routing discovery metadata invalid")
+    if frames and isinstance(frames[0].get("error"), dict):
+        diagnostic = frames[0]["error"]
+        stage, category = diagnostic.get("stage"), diagnostic.get("category")
+        if stage in {"request-validation", "routing-discovery", "backend-request", "response-stream"} and category in {
+                "http-unauthorized", "http-forbidden", "http-rejected", "timeout", "tls", "transport",
+                "cli-identity", "local-io", "invalid-data"}:
+            raise WorkerDiagnostic(f"Sandbox desktop HTTP failed: stage={stage} category={category}")
+    if frames and type(frames[0].get("status")) is int and frames[0]["status"] >= 400:
+        category = {401: "http-unauthorized", 403: "http-forbidden"}.get(frames[0]["status"], "http-rejected")
+        raise WorkerDiagnostic(f"Sandbox desktop HTTP failed: stage=backend-request category={category}")
+    if result.returncode or not frames or frames[0].get("status") != 200 or frames[-1].get("done") is not True:
         raise ValueError("Sandbox routing discovery unavailable")
     body = b"".join(base64.b64decode(frame["chunk"], validate=True) for frame in frames[1:-1])
     return json.loads(body)
@@ -213,12 +229,15 @@ def relay(config):
                             routing = routing or account_routing(account, selected)
                             result["workspaceRouting"] = routing
                     line = json.dumps(response).encode() + b"\n"
-            except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired):
+            except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
                 # A failed routing repair cannot silently claim usable auth or
                 # expose an upstream handle; return a bounded protocol failure.
                 if method:
+                    # Only worker_json's verified fixed vocabulary may reach RPC.
+                    detail = str(error) if isinstance(error, WorkerDiagnostic) else "Sandbox desktop routing unavailable"
+                    print(detail + "; retained login preserved", file=sys.stderr, flush=True)
                     line = json.dumps({"id": response.get("id"), "error": {
-                        "code": -32000, "message": "Sandbox desktop routing unavailable; retained login was preserved"}}).encode() + b"\n"
+                        "code": -32000, "message": detail + "; retained login was preserved; inspect gateway diagnostics"}}).encode() + b"\n"
             if len(line) > MAX_RPC_FRAME:
                 stop_for_oversized_frame()
                 break

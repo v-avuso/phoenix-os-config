@@ -22,6 +22,7 @@ def serve(config):
         def dispatch(self):
             process = None
             started = False
+            diagnostic = "Sandbox desktop backend unavailable"
             try:
                 length = int(self.headers.get("Content-Length", "0"))
                 if length < 0 or length > LIMIT or self.headers.get("Transfer-Encoding"):
@@ -63,6 +64,14 @@ def serve(config):
                         line, pending = pending.split(b"\n", 1)
                         frame = json.loads(line)
                         if not started:
+                            error = frame.get("error")
+                            if isinstance(error, dict):
+                                stage, category = error.get("stage"), error.get("category")
+                                if stage in {"request-validation", "routing-discovery", "backend-request", "response-stream"} and category in {
+                                        "http-unauthorized", "http-forbidden", "http-rejected", "timeout", "tls", "transport",
+                                        "cli-identity", "local-io", "invalid-data"}:
+                                    diagnostic = f"Sandbox desktop HTTP failed: stage={stage} category={category}; retained login preserved"
+                                raise ValueError("Worker failed before response")
                             status = frame["status"]
                             if not isinstance(status, int) or not 100 <= status <= 599:
                                 raise ValueError("Invalid worker HTTP status")
@@ -86,7 +95,7 @@ def serve(config):
             except (OSError, ValueError, KeyError, TypeError):
                 if not started:
                     try:
-                        self.send_error(502, "Sandbox desktop backend unavailable")
+                        self.send_error(502, diagnostic)
                     except OSError:
                         pass
             finally:
