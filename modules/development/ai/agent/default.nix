@@ -328,6 +328,7 @@ in
   imports = [
     ./identity.nix
     ./broker.nix
+    ./reservations.nix
     ./shutdown-ordering.nix
   ];
   options.phoenix.agent = {

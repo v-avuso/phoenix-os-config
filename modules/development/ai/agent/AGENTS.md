@@ -85,9 +85,11 @@
   a bounded nonempty reason without control characters. The broker verifies it
   before dispatch and audits its hash only. Never include secrets in reasons.
 
-### Planned testing reservation (not implemented)
+### Testing reservations (management prepared; deployment integration pending)
 
-- Add a host-wide broker-owned testing reservation spanning activation and runtime
+- The opt-in management implementation is documented in `reservations.md`; keep it
+  disabled until deployment integration and end-to-end acceptance pass.
+- Integrate a host-wide broker-owned testing reservation spanning activation and runtime
   validation, not just the deployment command. Agents acquire it before testing,
   report completion and release it afterward. Competing test/switch/boot/rollback
   operations must respect the same reservation; builds without activation may proceed.

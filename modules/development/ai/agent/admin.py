@@ -2,6 +2,7 @@
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -31,6 +32,13 @@ class Rejected(ValueError):
 class Broker:
     def __init__(self, config):
         self.config = config
+        self.reservations = None
+        if "reservations" in config:
+            settings = config["reservations"]
+            spec = importlib.util.spec_from_file_location("phoenix_reservation_management", settings["adapter"])
+            adapter = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(adapter)
+            self.reservations = adapter.Management(settings)
         self.sys = Path(config.get("sys_root", "/sys"))
         self.tracing = Path(config.get("tracing_root", "/sys/kernel/tracing"))
 
@@ -174,31 +182,48 @@ def handle(connection, broker, config):
         # SO_PEERCRED proves a kernel UID, not executable or agent identity.
         # The same-user host has this capability too; its fixed scope is the
         # boundary. Store hashes cannot distinguish malware launching Codex.
-        if uid != config["client_uid"]:
+        if uid != config["client_uid"] and not (uid == 0 and broker.reservations is not None):
             raise Rejected("caller UID is not authorized")
         with connection.makefile("rb") as stream:
             data = stream.readline(MAX_REQUEST + 1)
         if len(data) > MAX_REQUEST or not data.endswith(b"\n"):
             raise Rejected("oversized or incomplete request")
         request = json.loads(data)
-        if not isinstance(request, dict) or set(request) != {"args", "reason"}:
-            raise Rejected("expected args and concrete task reason")
-        reason = request["reason"]
-        if not isinstance(reason, str) or not 1 <= len(reason.strip()) <= 2000 or any(ord(c) < 32 or ord(c) == 127 for c in reason):
-            raise Rejected("reason must be 1–2000 characters without control characters")
-        reason_hash = hashlib.sha256(reason.strip().encode()).hexdigest()
-        args = request["args"]
-        if isinstance(args, list) and args and isinstance(args[0], str) and args[0] in OPERATIONS:
-            operation = args[0]
-        output = broker.dispatch(args)
-        if len(output.encode()) > MAX_OUTPUT:
-            raise Rejected("diagnostic exceeded aggregate output limit")
-        response = {"ok": True, "output": output}
-        outcome = "allowed"
+        if isinstance(request, dict) and "reservation" in request and broker.reservations is not None:
+            operator = uid == 0
+            expected = {"reservation", "operator_uid"} if operator else {"reservation"}
+            if set(request) != expected or (operator and (type(request["operator_uid"]) is not int or request["operator_uid"] != config["reservations"]["operator_uid"])):
+                raise Rejected("invalid reservation envelope")
+            named = request["reservation"]
+            if isinstance(named, dict) and isinstance(named.get("operation"), str) and named["operation"] in {"acquire", "poll", "cancel", "renew", "release", "status", "force-unlock"}:
+                operation = "reservation." + named["operation"]
+            if operation == "reservation.force-unlock" and isinstance(named.get("reason"), str):
+                reason_hash = hashlib.sha256(named["reason"].encode()).hexdigest()
+            try:
+                result = broker.reservations.dispatch(named, request["operator_uid"] if operator else uid, operator)
+            except broker.reservations.module.Rejected as error:
+                raise Rejected(str(error)) from None
+            response = {"ok": True, "reservation": result}
+            outcome = "allowed"
+        else:
+            if uid != config["client_uid"]:
+                raise Rejected("caller UID is not authorized")
+            if not isinstance(request, dict) or set(request) != {"args", "reason"}:
+                raise Rejected("expected args and concrete task reason")
+            reason = request["reason"]
+            if not isinstance(reason, str) or not 1 <= len(reason.strip()) <= 2000 or any(ord(c) < 32 or ord(c) == 127 for c in reason):
+                raise Rejected("reason must be 1–2000 characters without control characters")
+            reason_hash = hashlib.sha256(reason.strip().encode()).hexdigest()
+            args = request["args"]
+            if isinstance(args, list) and args and isinstance(args[0], str) and args[0] in OPERATIONS:
+                operation = args[0]
+            output = broker.dispatch(args)
+            if len(output.encode()) > MAX_OUTPUT:
+                raise Rejected("diagnostic exceeded aggregate output limit")
+            response = {"ok": True, "output": output}
+            outcome = "allowed"
     except (ValueError, OSError, socket.timeout) as error:
         response = {"ok": False, "error": str(error)}
-        # Avoid reflective decoder/path errors in persistent logs. Client
-        # receives the useful failure, while the journal gets a fixed class.
         outcome = "timeout" if isinstance(error, (socket.timeout, TimeoutError)) else "denied"
     audit = {"uid": uid, "pid": pid, "operation": operation, "outcome": outcome,
              "elapsed_ms": int((time.monotonic() - started) * 1000)}

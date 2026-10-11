@@ -65,3 +65,7 @@
   from invoking an allowed launcher. A future migration must prove retained auth,
   app-server/TTY transport, workspace DAC and agent-owned rootless Podman mapping
   together before restricting broker callers.
+
+- [Testing reservations](reservations.md): default-off management through the existing
+  admin broker and fixed authenticated operator helpers; deployment enforcement and
+  complete runtime acceptance remain pending.

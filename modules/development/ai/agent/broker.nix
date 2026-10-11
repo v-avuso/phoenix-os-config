@@ -3,6 +3,7 @@
   lib,
   pkgs,
   user,
+  phoenixReservationSettings ? null,
   ...
 }:
 let
@@ -11,7 +12,7 @@ let
     exec ${pkgs.python3}/bin/python3 -I ${./admin.py} "$@"
   '';
   brokerConfig = pkgs.writeText "phoenix-admin.json" (
-    builtins.toJSON {
+    builtins.toJSON ({
       client_uid = if cfg.identity.enable then cfg.identity.uid else config.users.users.${user.name}.uid;
       wakeup_devices = cfg.wakeupDevices;
       status_services = [
@@ -24,7 +25,7 @@ let
       journalctl = "${pkgs.systemd}/bin/journalctl";
       systemctl = "${pkgs.systemd}/bin/systemctl";
       dmesg = "${pkgs.util-linux}/bin/dmesg";
-    }
+    } // lib.optionalAttrs cfg.reservations.enable { reservations = phoenixReservationSettings; })
   );
 in
 {
@@ -66,7 +67,8 @@ in
         PrivateTmp = true;
         PrivateDevices = true;
         ProtectKernelTunables = true;
-        ReadWritePaths = map (address: "-/sys/bus/pci/devices/${address}/power/wakeup") cfg.wakeupDevices;
+        ReadWritePaths = map (address: "-/sys/bus/pci/devices/${address}/power/wakeup") cfg.wakeupDevices
+          ++ lib.optionals cfg.reservations.enable [ "/var/lib/phoenix-reservations" ];
         ProtectKernelModules = true;
         ProtectKernelLogs = false; # dmesg is an intentional read capability.
         ProtectControlGroups = true;

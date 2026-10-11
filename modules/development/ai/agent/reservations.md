@@ -1,8 +1,13 @@
 # Testing reservation engine preparation
 
-`reservations.py` is **not enabled or integrated**. It supplies local state and
-execution exclusion for future authenticated deployment/admin adapters; it adds
-no socket, daemon, executable dispatch, or OS mutation.
+`phoenix.agent.reservations.enable` defaults to **false**. When enabled it adds
+reservation management to the existing admin broker and packages
+`phoenix-reservation`. Deployment enforcement and activation descriptor lifetime
+integration are **pending**: a reservation currently coordinates only clients
+using this management API. Do not enable it on the daily driver yet.
+
+The engine supplies SQLite state and kernel flock exclusion; the management
+adapter adds no daemon, arbitrary executable dispatch, or OS mutation.
 
 ## Ownership and API
 
@@ -67,3 +72,68 @@ the synchronous deployment socket can be occupied during builds and reviews.
 Run disposable tests with `python3 tests/reservations.py` from this directory.
 These prove engine behavior with real SQLite/flock and controlled identity/time;
 they do not prove packaged integration, Polkit authentication or live activation.
+
+## Management (prepared, opt-in)
+
+Exact qualified commands map to resources through `reservations.mapping`; clients
+cannot select resources or execution. Config bounds may be reduced, except queued
+liveness must remain 25..30 seconds to cover a broker diagnostic (up to 10 seconds),
+15-second socket timeout and a short polling margin. The broker uses root-owned
+`/var/lib/phoenix-reservations` (0700), database/gates 0600. The explicit immutable
+`engine` and `adapter` store paths avoid sibling-import assumptions.
+
+```sh
+phoenix-reservation --capability-file /absolute/private/task-cap.json --task task-id --command deployment.test --wait 60 acquire
+phoenix-reservation --capability-file /absolute/private/task-cap.json --seconds 900 renew
+phoenix-reservation --capability-file /absolute/private/task-cap.json release
+phoenix-reservation status
+```
+
+Use `--operator` on the native host for the fixed Polkit helper. Under protected
+identity the operator does not gain access to the agent-only admin socket. Each
+high-level operator command authenticates freshly; acquisition and its bounded
+wait use one helper lifetime (server status, acquire, then quick poll/cancel).
+Agent acquisition polls client-side; no broker handler sleeps. Poll queued tickets
+within their liveness window. Renew owned tickets well before expiry (at least
+60 seconds for ordinary callers; allow additional human authentication time for
+operator renew). Reduced leases require correspondingly earlier renewal.
+
+Acquisition requires a new caller-owned file; existing files are never overwritten.
+Capabilities travel only through stdin/socket/private stdout and the explicit
+caller-owned regular 0600 file, with no symlink or multiple-link reads/writes.
+They never appear in argv or broker journal. Release/cancel leaves the file for
+caller-controlled cleanup; it then contains a stale capability. Failure after
+acquisition may leave a ticket; queued liveness and bounded leases recover it.
+
+```sh
+phoenix-reservation --operator --generation 123 --reason 'crashed testing owner' force-unlock
+```
+
+Recovery uses a distinct immutable helper and fresh critical Polkit action. Normal
+helper requests cannot force unlock; recovery helper requests cannot perform
+ordinary management. The client displays generation and SHA-256 reason before
+authentication; the Polkit dialog describes the fixed recovery effect and does
+not promise to display dynamic stdin details. Server recovery checks the exact
+current owner generation, revokes its queue and stores a reason hash. It does not
+stop running work, remove the kernel execution gate or activate/roll back anything.
+
+The server derives baseline JSON from resolved activated source, current runtime
+closure, system profile and profile source. Missing provenance is unsupported;
+changed baseline between status/acquisition explicitly requires reacquisition.
+`status` returns the canonical baseline string, mapping, bounds and secret-free
+owners/queue/operations. The wire envelope is `{"reservation": REQUEST}`; kernel
+SO_PEERCRED selects agent UID. The root-only fixed helper adds configured
+`operator_uid`; the broker never accepts a caller-selected agent UID.
+
+Request fields (no extras): `status`: operation; `acquire`: operation/task/command/
+baseline; `poll`, `cancel`, `release`: operation/generation/capability; `renew` adds
+seconds; operator-only `force-unlock`: operation/generation/reason. The helper's
+high-level acquire takes operation/task/command/wait instead of baseline, captures
+it server-side and composes the bounded wait. All broker requests return quickly;
+success uses `ok=true,reservation=RESULT`, denial uses `ok=false,error=...`.
+
+Run `python3 tests/reservation-management.py` here alongside engine fixtures.
+These exercise real Unix sockets, SQLite and FIFO with explicitly fake OS
+baseline/root/Polkit identities. Nix evaluation verifies packaging; native GUI
+Polkit, protected identity, deployment enforcement and complete activation/runtime
+end-to-end acceptance remain pending. No live service or account is used.
