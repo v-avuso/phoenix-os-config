@@ -175,12 +175,20 @@ def load_security(config):
     return module
 
 
+def operator_uid(config):
+    # Legacy immutable configurations used one UID for both responsibilities.
+    uid = config.get('operatorUid', config.get('clientUid'))
+    if type(uid) is not int or uid < 0:
+        raise ValueError('invalid operator UID')
+    return uid
+
+
 def process(config, request, uid, pid, operator=False):
     state = {'stage': 'request'}
     try:
         request_valid(request, config['target'])
         if not config.get('modelReviewEnabled', True) and request['action'] != 'update':
-            if not operator or os.geteuid() != 0:
+            if not operator or os.geteuid() != 0 or uid != operator_uid(config):
                 raise DeploymentFailure('authentication', 'operator-authentication-required')
         if config.get('work'):
             with (Path(config['work']).parent / 'deployment.lock').open('a') as lock:
@@ -463,12 +471,12 @@ def worker(config, directory):
 
 
 def override(config, nonce, uid, pid):
-    if os.geteuid() != 0 or not config.get('modelReviewEnabled', True):
+    if os.geteuid() != 0 or not config.get('modelReviewEnabled', True) or uid != operator_uid(config):
         raise ValueError('security override requires authenticated root and enabled review')
     with (Path(config['work']).parent / 'deployment.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         security, review = load_security(config), load_review(config)
-        binding = security.load_pending(config, nonce, uid, store_path)
+        binding = security.load_pending(config, nonce, config['clientUid'], store_path)
         activation_executable(binding['closure'])
         if str((Path(binding['closure']) / 'etc/phoenix-agent/activated-source').resolve(strict=True)) != binding['source']:
             raise DeploymentFailure('override', 'source-mismatch')
@@ -553,9 +561,9 @@ def bootstrap(config):
     try:
         migration_lock = os.open('migration.lock', os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW, 0o600, dir_fd=home_fd)
         lock_info = os.fstat(migration_lock)
-        if not stat.S_ISREG(lock_info.st_mode) or lock_info.st_nlink != 1 or lock_info.st_uid not in {0, config['clientUid']}:
+        if not stat.S_ISREG(lock_info.st_mode) or lock_info.st_nlink != 1 or lock_info.st_uid not in {0, operator_uid(config)}:
             raise ValueError('unsafe migration lock')
-        os.fchown(migration_lock, config['clientUid'], -1)
+        os.fchown(migration_lock, operator_uid(config), -1)
         os.fchmod(migration_lock, 0o600)
         fcntl.flock(migration_lock, fcntl.LOCK_EX)
         bootstrap_transfer(config, home_fd)
@@ -570,7 +578,7 @@ def bootstrap_transfer(config, home_fd):
     fd = os.open('auth.json', os.O_RDONLY | os.O_NOFOLLOW, dir_fd=home_fd)
     try:
         info = os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode) or info.st_uid != config['clientUid'] or info.st_nlink != 1 or info.st_size > 65536:
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != operator_uid(config) or info.st_nlink != 1 or info.st_size > 65536:
             raise ValueError('invalid retained reviewer authentication')
         data = os.read(fd, 65537)
         json.loads(data)

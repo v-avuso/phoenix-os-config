@@ -17,6 +17,11 @@
   passing fixtures do not establish retained-auth or live OS acceptance. Check
   incremental context against the smallest-diff checkpoint heuristic, not an
   assumed latest approval.
+- Keep operator authentication/migration ownership separate from broker caller UID.
+  When changing agent identity, test distinct UIDs: operator-owned retained auth
+  and critical override must remain operator authority; pending requests retain
+  their original configured client owner. Prove mapped launch paths before
+  restricting broker callers.
 - Preserve retained authentication. Diagnose readiness and typed failure stages
   before asking for sign-in; never log tokens, account responses or raw auth stderr.
 - New containment/shutdown behavior stays opt-in until active workload cleanup,

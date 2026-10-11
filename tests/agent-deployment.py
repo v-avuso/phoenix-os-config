@@ -220,7 +220,7 @@ class DeploymentTests(unittest.TestCase):
             original = root / 'original'
             original.write_text('{"credential": "never-print"}')
             auth = login / 'auth.json'
-            config = dict(migrationMarker=str(root / 'migrated'), loginHome=str(login), reviewHome=str(state), clientUid=os.getuid(), reviewerUser='reviewer')
+            config = dict(migrationMarker=str(root / 'migrated'), loginHome=str(login), reviewHome=str(state), clientUid=os.getuid() + 1, operatorUid=os.getuid(), reviewerUser='reviewer')
             account = mock.Mock(pw_uid=os.getuid(), pw_gid=os.getgid())
             with contextlib.redirect_stdout(io.StringIO()), mock.patch.object(deploy.os, 'getuid', return_value=0), mock.patch.object(deploy.pwd, 'getpwnam', return_value=account):
                 auth.symlink_to(original)
@@ -241,6 +241,39 @@ class DeploymentTests(unittest.TestCase):
                 self.assertFalse(auth.exists())
                 self.assertTrue(Path(config['migrationMarker']).is_file())
                 deploy.bootstrap(config)
+
+    def test_retained_auth_owned_by_agent_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            (home / 'auth.json').write_text('{}')
+            config = {'operatorUid': os.getuid() + 1, 'clientUid': os.getuid(),
+                      'migrationMarker': str(home / 'migrated')}
+            fd = os.open(home, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                with self.assertRaisesRegex(ValueError, 'retained reviewer authentication'):
+                    deploy.bootstrap_transfer(config, fd)
+            finally:
+                os.close(fd)
+            self.assertTrue((home / 'auth.json').is_file())
+
+    def test_operator_identity_is_separate_and_validated(self):
+        self.assertEqual(deploy.operator_uid({'operatorUid': 1000, 'clientUid': 2000}), 1000)
+        self.assertEqual(deploy.operator_uid({'clientUid': 1000}), 1000)
+        for uid in (None, True, -1, '1000'):
+            with self.assertRaises(ValueError):
+                deploy.operator_uid({'operatorUid': uid, 'clientUid': 1000})
+        with mock.patch.object(deploy.os, 'geteuid', return_value=0):
+            with self.assertRaisesRegex(ValueError, 'authenticated root'):
+                deploy.override({'operatorUid': 1000, 'clientUid': 2000}, 'a' * 64, 2000, 42)
+        config = {'target': 'metal', 'modelReviewEnabled': False, 'operatorUid': 1000, 'clientUid': 2000}
+        request = {'action': 'test', 'target': 'metal', 'worktree': '/fixture', 'reason': 'identity boundary'}
+        with mock.patch.object(deploy.os, 'geteuid', return_value=0), mock.patch.object(deploy, 'request_valid'):
+            with self.assertRaises(deploy.DeploymentFailure) as rejected:
+                deploy.process(config, request, 2000, 42, operator=True)
+            self.assertEqual(rejected.exception.code, 'operator-authentication-required')
+            with mock.patch.object(deploy, 'process_inner', return_value={'ok': True}) as inner:
+                self.assertEqual(deploy.process(config, request, 1000, 42, operator=True), {'ok': True})
+                inner.assert_called_once()
 
     def test_activation_executable_cannot_follow_mutable_symlink(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -487,7 +520,7 @@ class DeploymentTests(unittest.TestCase):
                           reviewHome='/protected/auth', nix='nix', nixStore='nix-store', baseline='/etc/phoenix-agent/activated-source',
                           routineUpdateScript=str(Path(__file__).resolve().parents[1] / 'modules/development/ai/agent/routine-update.py'),
                           system='x86_64-linux', systemdRun='systemd-run', configPath='config', controller='controller',
-                          python='python', activationEnvironment={}, modelReviewEnabled=False)
+                          python='python', activationEnvironment={}, modelReviewEnabled=False, operatorUid=os.getuid(), clientUid=os.getuid())
             request = dict(files=candidate, modes=modes, commit='a' * 40, action='update', target='metal',
                            reason='Stage deterministic stable package updates',
                            expectedBase=str(baseline), expectedProfile=str(profile))
@@ -680,7 +713,7 @@ class DeploymentTests(unittest.TestCase):
                 python='python', controller=str(owner / 'deployment.py'), configPath='fixture', systemdRun='systemd-run',
                 reviewScript=str(owner / 'deploy-review.py'), securityReviewScript=str(owner / 'security-review.py'),
                 securityReviewState=str(state), policy=str(owner / 'review-policy.md'), codex='codex', bwrap='bwrap',
-                caBundle='/fixture/cert', model='gpt-6.1-sol', effort='medium', modelReviewEnabled=True)
+                caBundle='/fixture/cert', model='gpt-6.1-sol', effort='medium', modelReviewEnabled=True, operatorUid=1000, clientUid=1000)
             frozen_sources, closures, prompts = {}, {}, []
             decision = 'context'
 
@@ -895,7 +928,7 @@ class DeploymentTests(unittest.TestCase):
                          profileSource=str(baseline),action='boot',target='metal',nonce='a'*64,branch='main')
             security=mock.Mock();security.load_pending.return_value=binding
             review=mock.Mock()
-            config=dict(work=directory,baseline=str(baseline),modelReviewEnabled=True,nixStore='nix-store',
+            config=dict(work=directory,baseline=str(baseline),modelReviewEnabled=True,operatorUid=1000,clientUid=2000,nixStore='nix-store',
                         systemdRun='systemd-run',python='python',controller='controller',configPath='config')
             original=Path.resolve
             def resolve(path,*args,**kwargs):
@@ -906,6 +939,7 @@ class DeploymentTests(unittest.TestCase):
                  mock.patch.object(deploy,'load_review',return_value=review),mock.patch.object(deploy,'store_path'), \
                  mock.patch.object(deploy,'activation_executable'),mock.patch.object(Path,'resolve',resolve),contextlib.redirect_stdout(io.StringIO()):
                 result=deploy.override(config,'a'*64,1000,22)
+                security.load_pending.assert_called_once_with(config, 'a'*64, 2000, deploy.store_path)
                 self.assertTrue(result['securityOverride'])
                 argv=review.run.call_args.args[0]
                 index=argv.index('activate')

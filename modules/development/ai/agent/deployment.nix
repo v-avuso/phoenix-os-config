@@ -100,6 +100,7 @@ let
     builtins.toJSON {
       modelReviewEnabled = cfg.securityReview.enable;
       clientUid = config.users.users.${user.name}.uid;
+      operatorUid = config.users.users.${user.name}.uid;
       target = if config.networking.hostName == "phoenix-vm" then "vm" else "metal";
       reviewerUser = "phoenix-deploy-review";
       builderUser = "phoenix-deploy-build";

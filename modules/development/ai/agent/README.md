@@ -50,3 +50,14 @@
   identity and disruption checks remain future work. The current deployment lock
   spans a command, not an agent's later runtime validation; see
   [planned coordination](AGENTS.md#planned-testing-reservation-not-implemented).
+
+- **Operator identity prerequisite:** Immutable deployment configuration separates
+  `operatorUid` (retained reviewer-login ownership and authenticated manual/critical
+  override caller) from `clientUid` (kernel socket caller and pending request owner).
+  Legacy immutable configurations retain their validated single UID. Both UIDs still
+  resolve to the operator today; sockets and launchers retain their existing access.
+  A dedicated agent account and protected native/OpenShell launch transport are not
+  implemented. UID checks do not identify an executable or prevent operator malware
+  from invoking an allowed launcher. A future migration must prove retained auth,
+  app-server/TTY transport, workspace DAC and agent-owned rootless Podman mapping
+  together before restricting broker callers.
