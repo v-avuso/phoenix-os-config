@@ -36,6 +36,10 @@ let
       };
       drivers.podman = {
         socket_path = "/run/user/1000/phoenix-openshell-podman.sock";
+        # OpenShell 0.1.2's supervisor uses host networking. Its implicit
+        # host-gateway entry fails with Podman 5.8 rootless IP detection;
+        # use the driver's native override without widening workload networking.
+        host_gateway_ip = "127.0.0.1";
         default_image = "localhost/phoenix-codex:0.1.2";
         image_pull_policy = "never";
         sandbox_runtime_image = "ghcr.io/nvidia/openshell/sandbox@sha256:bf4797b6c511f2d8ba02955dbba4bf76c1f0dd6d83531420c5408d5f1fb9d72f";
@@ -176,62 +180,88 @@ let
   };
   policy = yaml.generate "phoenix-openshell-policy.yaml" policyContents;
   historyRoot = "${state}/history";
-  historyDirectories = map (name: "${user.homeDirectory}/.codex/${name}") [ "sessions" "archived_sessions" "thread-writer-locks" ] ++ [ "${historyRoot}/sqlite" ];
-  sharedPolicy = yaml.generate "phoenix-openshell-shared-history-policy.yaml" (policyContents // {
-    filesystem_policy = policyContents.filesystem_policy // {
-      # The canonical parent is private image state: only the three listed
-      # children are host binds. Opaque auth remains private in this parent.
-      read_write = policyContents.filesystem_policy.read_write ++ historyDirectories ++ [ "${user.homeDirectory}/.codex" ];
-    };
-  });
+  historyDirectories =
+    map (name: "${user.homeDirectory}/.codex/${name}") [
+      "sessions"
+      "archived_sessions"
+      "thread-writer-locks"
+    ]
+    ++ [ "${historyRoot}/sqlite" ];
+  sharedPolicy = yaml.generate "phoenix-openshell-shared-history-policy.yaml" (
+    policyContents
+    // {
+      filesystem_policy = policyContents.filesystem_policy // {
+        # The canonical parent is private image state: only the three listed
+        # children are host binds. Opaque auth remains private in this parent.
+        read_write =
+          policyContents.filesystem_policy.read_write
+          ++ historyDirectories
+          ++ [ "${user.homeDirectory}/.codex" ];
+      };
+    }
+  );
   mountsContents = {
+    podman.mounts =
+      (map (path: {
+        type = "bind";
+        source = path;
+        target = path;
+        read_only = false;
+      }) cfg.workspaces)
+      ++ [
+        {
+          type = "bind";
+          source = "/sys";
+          target = "/sys";
+          read_only = true;
+        }
+        {
+          type = "bind";
+          source = "/run/phoenix-admin";
+          target = "/run/phoenix-admin";
+          read_only = true;
+        }
+        {
+          type = "bind";
+          source = "/run/phoenix-deploy";
+          target = "/run/phoenix-deploy";
+          read_only = true;
+        }
+        # Present the protected source as the reviewed immutable snapshot too.
+        {
+          type = "bind";
+          source = "${./.}";
+          target = "${user.repoDirectory}/modules/development/ai/agent";
+          read_only = true;
+        }
+      ];
+  };
+  driverConfig = pkgs.writeText "phoenix-openshell-mounts.json" (builtins.toJSON mountsContents);
+  sharedDriverConfig = pkgs.writeText "phoenix-openshell-shared-history-mounts.json" (
+    builtins.toJSON {
       podman.mounts =
-        (map (path: {
+        mountsContents.podman.mounts
+        ++ map (path: {
           type = "bind";
           source = path;
           target = path;
           read_only = false;
-        }) cfg.workspaces)
-        ++ [
-          {
-            type = "bind";
-            source = "/sys";
-            target = "/sys";
-            read_only = true;
-          }
-          {
-            type = "bind";
-            source = "/run/phoenix-admin";
-            target = "/run/phoenix-admin";
-            read_only = true;
-          }
-          {
-            type = "bind";
-            source = "/run/phoenix-deploy";
-            target = "/run/phoenix-deploy";
-            read_only = true;
-          }
-          # Present the protected source as the reviewed immutable snapshot too.
-          {
-            type = "bind";
-            source = "${./.}";
-            target = "${user.repoDirectory}/modules/development/ai/agent";
-            read_only = true;
-          }
-        ];
-  };
-  driverConfig = pkgs.writeText "phoenix-openshell-mounts.json" (builtins.toJSON mountsContents);
-  sharedDriverConfig = pkgs.writeText "phoenix-openshell-shared-history-mounts.json" (builtins.toJSON {
-    podman.mounts = mountsContents.podman.mounts ++ map (path: {
-      type = "bind"; source = path; target = path; read_only = false;
-    }) historyDirectories;
-  });
-  historyConfig = pkgs.writeText "phoenix-codex-history.json" (builtins.toJSON {
-    nativeHome = "${user.homeDirectory}/.codex";
-    root = historyRoot;
-    transportHelper = toString ./launch.py;
-  });
-  historyCommand = [ "${pkgs.python3}/bin/python3" "-I" (toString ./history-runtime.py) (toString historyConfig) ];
+        }) historyDirectories;
+    }
+  );
+  historyConfig = pkgs.writeText "phoenix-codex-history.json" (
+    builtins.toJSON {
+      nativeHome = "${user.homeDirectory}/.codex";
+      root = historyRoot;
+      transportHelper = toString ./launch.py;
+    }
+  );
+  historyCommand = [
+    "${pkgs.python3}/bin/python3"
+    "-I"
+    (toString ./history-runtime.py)
+    (toString historyConfig)
+  ];
   launcherConfig = pkgs.writeText "phoenix-openshell-launcher.json" (
     builtins.toJSON {
       openshell = "${packages.cli}/bin/openshell";
@@ -282,7 +312,10 @@ let
   '';
 in
 {
-  imports = [ ./broker.nix ];
+  imports = [
+    ./broker.nix
+    ./shutdown-ordering.nix
+  ];
   options.phoenix.agent = {
     workspaces = lib.mkOption {
       type = lib.types.listOf lib.types.str;

@@ -143,46 +143,93 @@ model selector; the separate deployment reviewer uses GPT-6.1 Sol / medium.
 
 ## Reviewing and deploying configuration
 
-- **AI review disabled:** Explicit user decision on 2026-10-05. Original reviewer
-  (`cb9aa96`, broker `8246b9f`) supplied the whole tracked repository plus diff;
-  update work added changed dependency batches. This scope exceeded the intended
-  change-focused review and compute budget. Repeated `reviewer-invocation-failed`
-  errors blocked deployment; their cause remains unknown. Exact AI cost was not
-  measured, so do not attribute the entire usage window to this reviewer.
-- **Manual deployment:** The snapshot includes tracked working-tree edits and
-  Git-visible untracked files; Git-ignored files are excluded. `HEAD` is recorded
-  as informational provenance, while the frozen file manifest and immutable
-  source/closure binding identify the deployed contents. The isolated unprivileged
-  builder, baseline/profile rechecks and rollback remain.
-  `phoenix-switch`/`phoenix-test` use graphical Polkit authentication via a fixed
-  immutable operator command. The ordinary user socket refuses manual actions
-  when model review is disabled; disabling review never grants unattended root.
-- **Automatic updates:** Separate deterministic `update` action, boot staging only;
-  fixed distributors/declarations/source and satisfied exception removals. No
-  Polkit or AI on routine checks. See [automatic updates](UPDATES.md).
-- **Preserved code/state:** `services.phoenixDeployment.modelReview.enable = false`;
-  reviewer implementation, independent CLI pin and authentication remain. Never
-  reconcile or disclose reviewer credentials. Changed controller units request a
-  graceful reload: finish the current request and response, then systemd restarts
-  with installed code/settings. This also works while idle. The legacy controller
-  needs one authenticated restart during migration; the reload guard avoids
-  signaling code without the handler. Inspect actual running arguments.
-- **Before re-enabling:** Diff-first input, bounded on-demand affected-file/import
-  context, strict call/token limits, no automatic whole-repository expansion.
-  Classify authentication, transport, CLI startup, schema, quota and timeout errors
-  safely; distinguish invocation failure from model denial. Retain protected
-  diagnostics without exposing credentials or private native output. Validate
-  actual model invocation and activation; mocks/builds alone are insufficient.
-- **Source transport versus model input:** Full tracked source remains necessary
-  for exact builds; transporting it to the broker does not require sending it to
-  an LLM. Existing AI code still uses full-source prompts and is not suitable for
-  re-enabling unchanged. A model verdict is fallible; retain rollback generations.
+Authenticated deployment is independent from optional **deployment security review**.
+`services.phoenixDeployment.securityReview.enable` is the single review switch,
+false by default. The former `modelReview.enable` name is a deprecated alias of
+that same option. Turning review off removes its policy, override command and
+reviewer login commands; it retains authenticated deployment and protected state.
+Do not enable live review until the real model, denial/override and activation
+workflow passes isolated acceptance. Current fixtures are not that acceptance.
 
-Install from a clean committed Git flake, so the installed baseline contains
-exactly the tracked source. Never evaluate this checkout through `path:.`: it
-copies ignored artifacts and private local notes into the Nix store. Stage only
-owned new files before Git-flake checks; use a vetted disposable source tree
-when a path source is necessary. An unreviewable baseline fails closed.
+`phoenix-test` and `phoenix-switch` freeze tracked working-tree edits plus
+Git-visible untracked files; ignored files are excluded. A clean commit is **not**
+required. HEAD records provenance, while the immutable source and resulting
+closure identify the actual contents. The unprivileged builder, source/closure
+binding, current baseline/profile rechecks and rollback apply with review on or
+off. Review off requires graphical Polkit authentication; it never grants the
+ordinary agent socket unattended manual deployment.
+
+When enabled, security review receives the diff and changed-file index, not the
+whole repository. It checks dangerous authority, executable hooks, destructive
+behavior and private-data exposure rather than code style. Distributor/package
+updates do not generate automatic dependency-review batches. The controller can
+invoke Codex at most twice: the first response may request up to eight frozen
+baseline/candidate line ranges, totaling at most 128 KiB; the second must conclude.
+There is no arbitrary shell/network context tool. These are controller invocation
+bounds, not a guarantee about Codex's internal API call count or exact AI cost.
+
+Root-owned checkpoints retain the exact approved source, built closure, target
+and policy identity. Branch names only select a nearby approved comparison state;
+they confer no authority. Review success is independent of successful activation.
+An identical approved source/closure reuses approval; a merged candidate with a
+new identity still needs review. No review branches, user Git mutations or automatic
+approval propagation across merges are needed. The activated baseline is trusted
+as the initial comparison state. Retention is bounded to 32 approved/pending records.
+
+Denied or incomplete review returns a secret-safe category and protected pending
+request. `phoenix-deploy-review --security-override <pending-nonce>` requires
+fresh Polkit authentication with a critical warning. It accepts no caller command
+or replacement source; the controller checks the exact source/closure, requester,
+action, target, policy and current deployment baseline. Read the rejection before
+approving. PAM determines available authentication methods, including configured
+fingerprint support. This does not automatically prove a rejection was false.
+
+Source transport has a 4 MiB file-content guard and 32 MiB wire guard; that is build
+input, not AI input. Serialized AI instructions/context have a 1 MiB resource
+limit, bounded output and deadlines. A roughly 24,000-token diff estimate produces
+a warning rather than rejection; it is not an exact token count or bill. Safe
+failure categories distinguish model denial, startup/authentication, timeout,
+context and malformed output. Never expose native auth stderr or credentials.
+
+Routine automatic updates use the separate deterministic `update` action and
+stage next boot without AI or Polkit. See [automatic updates](UPDATES.md).
+Existing reviewer credentials remain protected; do not reconcile or disclose them.
+Changed controllers finish the current request before graceful reload; legacy
+controllers need one authenticated restart during migration.
+
+Never evaluate this checkout through `path:.`: it copies ignored artifacts and
+private notes into the Nix store. Stage only owned new files for Git-flake checks.
+Frozen deployment snapshots already carry new development files without requiring
+premature commits. An unreviewable baseline fails closed.
+
+### Rootless startup compatibility
+
+The pinned OpenShell 0.1.2 driver creates its supervisor in host networking and
+accepts `drivers.podman.host_gateway_ip`. Its empty default sends Podman's magic
+`host-gateway` entry, which failed on the installed rootless Podman with an empty
+internal IP. Configuration sets `127.0.0.1` explicitly through that native driver
+option. Isolated workload networking remains unchanged. This fixes the identified
+startup configuration cause. Installed gateway preflight accepts the generated
+TOML, and a disposable Podman start generated both aliases as loopback. Automatic
+mapping also succeeded during that later trial, so the historical empty-IP failure
+was not reproduced. Rebuilding/restarting the managed gateway and checking
+Ready plus retained-account model access remain runtime acceptance.
+
+### Shutdown ordering trial
+
+`phoenix.agent.shutdownOrdering.enable` is an independent experimental containment
+option, off by default. It adds an override only to the dedicated OpenShell Podman
+API: container scopes stop after the gateway, and conmon stays with that API while
+workload cgroups/resource limits remain. This prevents systemd from independently
+tearing down those scopes while gateway cleanup is running. The existing 45-second
+stop deadline remains a final safety net.
+
+A disposable Podman 5.8.7/crun 1.27.1 trial verified annotation propagation,
+resource limits, TERM handling and a final log line with a 1.96-second concurrent
+stop. It did not run the actual OpenShell supervisor/log RPC or a full shutdown;
+those remain acceptance requirements. See the [disposable regression procedure](../modules/development/ai/agent/shutdown-acceptance.md). Exact pinned OpenShell 0.1.2 has unbounded
+cleanup awaits; which await stalled on October 6 is still unproven. Upgrading to
+0.1.3 does not establish a fix. Do not enable this option just from fixture results.
 
 ## Auditing, trust and recovery
 

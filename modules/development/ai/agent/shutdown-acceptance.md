@@ -1,0 +1,114 @@
+# OpenShell shutdown ordering acceptance
+
+The ordering option stays disabled until actual OpenShell passes this procedure.
+Run only in a disposable NixOS VM with its own user, gateway state, Podman
+storage and persistent journal. Never stop the operator's shared services.
+
+## Prerequisites
+
+Use locked configuration, OpenShell 0.1.2 CLI/gateway and configured pinned
+supervisor/runtime images, Podman 5.8.7 and systemd 259. Provide cached
+`localhost/phoenix-codex:0.1.2`, valid sandbox policy and VM-local TLS; no personal
+credentials/providers. Enable `phoenix.agent.shutdownOrdering.enable` in the
+guest before boot. Record package/image identities, effective units and stop
+deadlines. Preserve the observed 45-second scope fallback; shortening it is not
+a fix. This task environment lacked visible `/dev/kvm` and QEMU. Actual
+OpenShell and VM-manager shutdown have **not** passed this procedure.
+
+## Active workload and captures
+
+Run in a separate guest terminal/harness and retain command-output attachment:
+
+```sh
+openshell sandbox create --name shutdown-acceptance --no-auto-providers \
+  --no-tty --from localhost/phoenix-codex:0.1.2 -- /bin/bash -c '
+trap '\''printf "ACCEPT_TERM\n"; sleep 1; printf "ACCEPT_FINAL\n"; exit 0'\'' TERM
+n=0
+while :; do printf "ACCEPT_TICK_%s\n" "$n"; n=$((n+1)); sleep 1; done
+'
+```
+
+Wait for several numbered lines; confirm workload and supervisor are running.
+Record sandbox ID with `openshell sandbox get shutdown-acceptance --output json`;
+resolve its exact containers through Podman's `openshell.ai/sandbox-id` labels.
+Derive exact `libpod-<container-id>.scope` names; avoid broad container selection.
+Capture CLI output, timestamped workload/supervisor Podman logs, persistent user
+journal for gateway/Podman/exact scopes, and
+`openshell logs shutdown-acceptance --tail --source sandbox`. Record scope
+`Before`, `ControlGroup`, `TimeoutStopUSec`, process cgroups, and actual workload
+`memory.max`/`pids.max` against requested limits.
+
+Workload stdout and supervisor `PushSandboxLogs` are separate channels. Generate
+repeatable policy-mediated activity using a fixture allowed by the guest policy;
+match its supervisor events between local supervisor logs and gateway logs.
+Retain the final shutdown supervisor events for durable comparison. A workload
+final marker or tail disconnect alone does not establish gateway log flush.
+
+## Stop transactions
+
+Exercise ordinary sandbox stop using the supported CLI, then recreate the
+fixture. Submit gateway and both exact scope stops in one guest transaction:
+
+```sh
+# Replace these placeholders only with IDs recorded for this fixture.
+workload_scope='libpod-<workload-id>.scope'
+supervisor_scope='libpod-<supervisor-id>.scope'
+time systemctl --user stop phoenix-openshell-gateway.service \
+  "$workload_scope" "$supervisor_scope"
+```
+
+Check monotonic journal ordering: gateway begins shutdown while both scopes
+exist; driver stops supervisor before workload teardown; dependent scope stop
+jobs do not deliver competing early TERM. Conmon remains in the Podman service
+cgroup; workload resource cgroups remain enabled.
+
+Collect stopped state, then restart only the disposable gateway. Query
+`openshell logs shutdown-acceptance --source sandbox`; compare final supervisor
+events with local logs to prove persistence across gateway exit. If legitimate
+reconciliation removes the sandbox, obtain its durable log evidence through a
+supported gateway interface before removal; otherwise report the missing
+inspection capability rather than claiming success.
+
+Repeat with a fresh active fixture and the VM harness's orderly guest shutdown
+(or termination of this disposable user's manager). Use `--detach` for this
+case if needed, retaining Podman/local logs. Capture serial/journal output and
+inspect persisted logs after reboot. This establishes manager-wide shutdown;
+the three-unit transaction alone does not.
+
+## Acceptance limits
+
+Each cooperative case must satisfy:
+
+- TERM and final markers delivered, terminal status consistent with graceful
+  exit, and no surviving owned workload, supervisor or monitor;
+- final supervisor events persisted in gateway logs, without forced
+  `PushSandboxLogs` termination or unexplained missing events;
+- no supervisor SIGKILL/exit 137, boundary TERM-before-confirmation warning,
+  or delay until the 45-second scope fallback;
+- stop completes within 10 seconds for this one-second trap fixture, evidenced
+  by monotonic timestamps with fallback deadlines unchanged;
+- correct ordering, resource limits retained, and subsequent gateway start
+  succeeds without unintended sandbox resurrection.
+
+Also test disposable TERM-ignoring workload and unavailable control/log peer.
+Record which deadline terminates each phase; cleanup must finish within existing
+fallback plus five seconds of harness margin. Require explicit forced-exit/log
+loss evidence when it occurs. Do not shorten 45 seconds or weaken cgroups. If
+normal shutdown still stalls, instrument the specific awaited phase before
+adding a Rust patch; source inspection does not identify the stalled call.
+
+## Existing evidence and upstream limits
+
+The October 11 isolated trial used an owned transient rootless API,
+`CONTAINERS_CONF_OVERRIDE`, cached Phoenix image and installed crun 1.27.1.
+API-created scope had the expected `Before=<trial-api>.service`; conmon belonged
+to that service; `memory.max=268435456` and `pids.max=64` survived. Concurrent
+API/scope stop completed in 1.96 seconds with TERM/final markers, exit zero and
+service success. Container removed and service inactive. This proves native
+configuration/runtime compatibility, not OpenShell shutdown or gateway drain.
+
+Pinned 0.1.2 supervisor source matched its release tar. Shutdown can signal,
+wait five seconds, terminate, then wait without one overall deadline; log push
+is detached. Exact v0.1.3 and inspected main retain these relevant patterns.
+The observed 45-second supervisor stall's exact await remains unknown. Ordering
+is a supported experiment; upgrade or shorter timeout is not a proven remedy.

@@ -10,6 +10,7 @@ nix shell --inputs-from . nixpkgs#lua --command lua tests/idle-blank.lua home/id
 python3 -B tests/agent-admin.py
 python3 -B tests/agent-launch.py
 python3 -B tests/agent-history.py
+nix eval --impure --file tests/agent-security-options.nix
 python3 -B tests/agent-review.py
 python3 -B tests/agent-gui.py
 python3 -B tests/agent-gui-profile.py
@@ -95,8 +96,12 @@ nix eval --impure --file tests/desktop-services.nix
   Linux tray predicate; actual window close/reopen remains a runtime check.
   Protected deployment fixtures cover immutable source/closure binding, rejection
   before activation, bootstrap file safety and separate boot/runtime rollback.
-  They also reject oversized complete review inputs and any verdict after
-  observed compaction, without omitting source to fit a bound.
+  Security fixtures cover dirty snapshots, exact source/closure/policy cache reuse,
+  diff-only input, two controller invocation bounds, requested frozen context,
+  authenticated pending overrides and secret-safe failures. Oversized AI input
+  and observed compaction fail explicitly; source transport has separate guards.
+  The options fixture checks disabled defaults, fresh override authentication and
+  opt-in shutdown declarations without enabling the live features.
   HTTP fixtures cover destination/header bounds, real identity/routing, streaming
   and cancellation without exposing credentials.
   GUI socket fixtures need sandbox execution permission; they need no OS root.
