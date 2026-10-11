@@ -467,8 +467,10 @@ def main():
             raise ValueError("authenticated security override failed")
         print(json.dumps(result, indent=2))
         return
-    if (args.base and not re.fullmatch(r"[0-9a-f]{40,64}", args.base)) or not args.reason or not 1 <= len(args.reason.strip()) <= 2000:
+    if (args.base and not re.fullmatch(r"[0-9a-f]{40,64}", args.base)) or not args.reason or not 1 <= len(args.reason.strip()) <= 2000 or any(ord(c) < 32 or ord(c) == 127 for c in args.reason):
         parser.error("base must be a full commit SHA and reason must be 1–2000 characters")
+    if config.get("sandboxClient") and config.get("operatorCommand"):
+        parser.error("AI-disabled deployment requires host Polkit authentication; run this command on the native host with the same source and reason")
     if not args.target:
         parser.error("target is required for deployment")
     config = json.loads(Path(args.config).read_text())

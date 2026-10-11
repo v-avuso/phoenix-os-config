@@ -56,6 +56,84 @@ class ReviewTests(unittest.TestCase):
                      self.assertRaisesRegex(RuntimeError, "stop before authentication"):
                     review.main()
 
+    def test_dispatcher_to_actual_snapshot_and_authenticated_stub_is_closed(self):
+        import os
+
+        root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            repo = base / "repo"
+            repo.mkdir()
+
+            def git(*args):
+                subprocess.run(["git", "-C", str(repo), *args], check=True,
+                               capture_output=True)
+
+            git("init", "-b", "main")
+            for name in ("flake.nix", "flake.lock"):
+                (repo / name).write_text("{}")
+            git("add", ".")
+            git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                "commit", "-m", "fixture")
+            other = base / "selected"
+            git("worktree", "add", "-b", "feature", str(other))
+            (other / "flake.nix").write_text("dirty selected content")
+            (other / "new.nix").write_text("new selected content")
+
+            record = base / "request.json"
+            controller = base / "authenticated-stub"
+            controller.write_text(
+                f"#!{sys.executable}\n"
+                "import json, sys\n"
+                "from pathlib import Path\n"
+                "request = json.load(sys.stdin)\n"
+                f"Path({str(record)!r}).write_text(json.dumps(request))\n"
+                "print(json.dumps({'ok': True}))\n"
+            )
+            controller.chmod(0o755)
+            selector = base / "phoenix-source"
+            selector.write_text((root / "commands/phoenix-source").read_text().replace(
+                "#!/usr/bin/env python3", "#!" + sys.executable))
+            selector.chmod(0o755)
+            target = base / "phoenix-target"
+            target.write_text("#!/bin/sh\nprintf metal\n")
+            target.chmod(0o755)
+
+            cfg = base / "config.json"
+            config = dict(repo=str(repo), git=shutil.which("git"),
+                          sourceSelector=str(selector), clientOnly=True,
+                          modelReviewEnabled=False, operatorCommand=[str(controller)])
+            cfg.write_text(json.dumps(config))
+            helper = base / "client"
+            client_script = root / "modules/development/ai/agent/deploy-review.py"
+            helper.write_text(
+                f'#!/bin/sh\nexec {sys.executable} {client_script} {cfg} "$@"\n'
+            )
+            helper.chmod(0o755)
+            env = os.environ | {
+                "PATH": str(base) + ":" + os.environ["PATH"],
+                "PHOENIX_REPO_ROOT": str(repo),
+                "phoenix_deployment_helper": str(helper),
+            }
+            args = ["bash", str(root / "commands/phoenix-rebuild"), "test",
+                    "--branch", "feature", "--reason", "Validate requested dirty source"]
+            result = subprocess.run(args, env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            request = json.loads(record.read_text())
+            self.assertEqual(request["reason"], "Validate requested dirty source")
+            self.assertEqual(request["files"]["flake.nix"], "dirty selected content")
+            self.assertEqual(request["files"]["new.nix"], "new selected content")
+            self.assertEqual((request["target"], request["action"]), ("metal", "test"))
+
+            controller.write_text("#!/bin/sh\nexit 23\n")
+            result = subprocess.run(args, env=env, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            config["sandboxClient"] = True
+            cfg.write_text(json.dumps(config))
+            result = subprocess.run(args, env=env, capture_output=True, text=True)
+            self.assertIn("host Polkit authentication", result.stderr)
+            self.assertNotEqual(result.returncode, 0)
+
     def test_verdict_binding(self):
         binding = {"source": "/nix/store/source", "nonce": "fresh", "target": "metal", "closure": "/nix/store/bound-system"}
         good = dict(binding, approved=True, summary="reviewed")

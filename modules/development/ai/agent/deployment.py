@@ -49,7 +49,7 @@ def request_valid(request, target):
         raise ValueError('unsupported request fields')
     if request['action'] not in {'test', 'switch', 'boot', 'update'} or request['target'] != target:
         raise ValueError('unsupported action/target')
-    if not isinstance(request['reason'], str) or not 1 <= len(request['reason'].strip()) <= 2000:
+    if not isinstance(request['reason'], str) or not 1 <= len(request['reason'].strip()) <= 2000 or any(ord(c) < 32 or ord(c) == 127 for c in request['reason']):
         raise ValueError('concrete task reason required')
     if not isinstance(request['commit'], str) or not re.fullmatch('[0-9a-f]{40,64}', request['commit']):
         raise ValueError('invalid informational commit')

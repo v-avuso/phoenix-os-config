@@ -1,5 +1,6 @@
 {
   pkgs,
+  user,
   codexCliPackage,
   phoenixAdminPackage,
   phoenixAgentCodexConfig,
@@ -11,6 +12,11 @@ let
     paths = [
       codexCliPackage
       phoenixAdminPackage
+      (import ../../../../commands {
+        inherit pkgs user;
+        deploymentHelper = phoenixDeployReviewPackage;
+        includeDesktopCommands = false;
+      })
       phoenixDeployReviewPackage
       pkgs.bashInteractive
       pkgs.coreutils

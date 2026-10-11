@@ -1,5 +1,7 @@
 """Phoenix's closed diagnostic capability set; never executes a shell."""
 
+import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -167,6 +169,7 @@ def handle(connection, broker, config):
     started = time.monotonic()
     operation = "invalid"
     outcome = "denied"
+    reason_hash = None
     try:
         # SO_PEERCRED proves a kernel UID, not executable or agent identity.
         # The same-user host has this capability too; its fixed scope is the
@@ -177,7 +180,14 @@ def handle(connection, broker, config):
             data = stream.readline(MAX_REQUEST + 1)
         if len(data) > MAX_REQUEST or not data.endswith(b"\n"):
             raise Rejected("oversized or incomplete request")
-        args = json.loads(data)
+        request = json.loads(data)
+        if not isinstance(request, dict) or set(request) != {"args", "reason"}:
+            raise Rejected("expected args and concrete task reason")
+        reason = request["reason"]
+        if not isinstance(reason, str) or not 1 <= len(reason.strip()) <= 2000 or any(ord(c) < 32 or ord(c) == 127 for c in reason):
+            raise Rejected("reason must be 1–2000 characters without control characters")
+        reason_hash = hashlib.sha256(reason.strip().encode()).hexdigest()
+        args = request["args"]
         if isinstance(args, list) and args and isinstance(args[0], str) and args[0] in OPERATIONS:
             operation = args[0]
         output = broker.dispatch(args)
@@ -192,6 +202,8 @@ def handle(connection, broker, config):
         outcome = "timeout" if isinstance(error, (socket.timeout, TimeoutError)) else "denied"
     audit = {"uid": uid, "pid": pid, "operation": operation, "outcome": outcome,
              "elapsed_ms": int((time.monotonic() - started) * 1000)}
+    if reason_hash:
+        audit["reason_sha256"] = reason_hash
     if operation == "wakeup-set" and response["ok"]:
         audit["change"] = json.loads(response["output"])
     syslog.syslog(syslog.LOG_INFO, json.dumps(audit))
@@ -214,11 +226,11 @@ def serve(config):
             handle(connection, broker, config)
 
 
-def client(args, socket_path="/run/phoenix-admin/socket"):
+def client(args, reason, socket_path="/run/phoenix-admin/socket"):
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
         connection.settimeout(15)
         connection.connect(socket_path)
-        request = json.dumps(args).encode() + b"\n"
+        request = json.dumps({"args": args, "reason": reason}).encode() + b"\n"
         if len(request) > MAX_REQUEST:
             raise SystemExit("request too large")
         connection.sendall(request)
@@ -234,9 +246,11 @@ if __name__ == "__main__":
     if sys.argv[1:2] == ["--serve"]:
         with open(sys.argv[2]) as stream:
             serve(json.load(stream))
-    elif not sys.argv[1:] or sys.argv[1] in ("-h", "--help"):
-        print("phoenix-admin kernel-journal [1..2000] | dmesg | trace-summary | "
-              "trace-format xhci-hcd|usb|kprobes/event | service-status UNIT | "
-              "wakeup-get PCI | wakeup-set PCI enabled|disabled")
     else:
-        client(sys.argv[1:])
+        parser = argparse.ArgumentParser(description=__doc__)
+        parser.add_argument("--reason", required=True, help="concrete authorized task purpose; do not include secrets")
+        parser.add_argument("args", nargs="+", help="named operation and semantic arguments")
+        args = parser.parse_args()
+        if not 1 <= len(args.reason.strip()) <= 2000 or any(ord(c) < 32 or ord(c) == 127 for c in args.reason):
+            parser.error("reason must be 1–2000 characters without control characters")
+        client(args.args, args.reason.strip())

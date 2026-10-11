@@ -15,6 +15,7 @@ let
   image = import ./image.nix {
     inherit
       pkgs
+      user
       codexCliPackage
       phoenixAdminPackage
       phoenixAgentCodexConfig

@@ -106,9 +106,10 @@ Native conversation that must remain alive.
   socket relay starts only the OpenShell app-server; the GUI gets no Podman,
   diagnostic broker or host service-control socket. GUI network is shared with
   the host; OpenShell's destination limits apply to its backend, not GUI traffic.
-- **Diagnostics:** `phoenix-admin` exposes bounded kernel journal/dmesg,
+- **Diagnostics:** `phoenix-admin --reason "authorized task purpose" OPERATION ...` exposes bounded kernel journal/dmesg,
   selected tracing metadata and selected service status. Kernel logs may contain
-  task data or identifiers; this read capability is intentional.
+  task data or identifiers; this read capability is intentional. Reasons must be
+  nonempty, bounded and contain no control characters; only their hash is audited.
 - **Mutation:** only allowlisted xHCI wakeup settings can change. Metal allows
   `0000:10:00.4`; VM allows none. Cooling and recovery protections remain.
 - **Development:** Nix uses an isolated store/database without the host daemon.
@@ -151,7 +152,17 @@ reviewer login commands; it retains authenticated deployment and protected state
 Do not enable live review until the real model, denial/override and activation
 workflow passes isolated acceptance. Current fixtures are not that acceptance.
 
-`phoenix-test` and `phoenix-switch` freeze tracked working-tree edits plus
+With the deployment module installed, `phoenix-test --reason "task purpose"`
+(also switch/boot) routes through the frozen deployment client. It accepts
+branch/worktree selectors and no nixos-rebuild option tail; build/dry-build still
+forward build options. Without this module, explicitly packaged legacy wrappers
+retain nixos-rebuild activation. A failed configured helper never falls back.
+OpenShell packages these same commands, but disabled-AI activation requires the
+native host's Polkit flow; the sandbox fails with host guidance. Sources must
+be visible in configured workspace mounts; `~/.codex/worktrees` is absent by default. Enabled-review
+socket routing has existing mounts, but remains without live runtime acceptance.
+
+Authenticated Phoenix activation commands freeze tracked working-tree edits plus
 Git-visible untracked files; ignored files are excluded. A clean commit is **not**
 required. HEAD records provenance, while the immutable source and resulting
 closure identify the actual contents. The unprivileged builder, source/closure

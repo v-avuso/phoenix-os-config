@@ -4,6 +4,11 @@ let
   config = flake.nixosConfigurations.metal.config;
   pkgs = flake.inputs.nixpkgs.legacyPackages.x86_64-linux;
   user = import ../config/user.nix { inherit (pkgs) lib; };
+  sandboxCommands = import ../commands {
+    inherit pkgs user;
+    deploymentHelper = config.system.build.phoenixDeploymentSandboxClient;
+    includeDesktopCommands = false;
+  };
   commands = builtins.head (
     builtins.filter (
       package: (package.name or "") == "phoenix-user-commands"
@@ -29,5 +34,18 @@ pkgs.runCommand "phoenix-command-packaging" { } ''
     echo 'build unexpectedly requests privilege' >&2
     exit 1
   fi
+  ${commands}/bin/phoenix-rebuild --print test --reason 'packaged routing fixture' > activation
+  grep -Fq 'phoenix-deploy-review' activation
+  grep -Fq -- '--worktree' activation
+  grep -Fq -- '--reason' activation
+  if grep -Eq 'nixos-rebuild|--sudo' activation; then
+    echo 'activation bypasses frozen deployment helper' >&2; exit 1
+  fi
+  ${sandboxCommands}/bin/phoenix-test --print --reason 'sandbox routing fixture' > sandbox-preview
+  grep -Fq 'phoenix-deploy-review' sandbox-preview
+  if ${sandboxCommands}/bin/phoenix-test --reason 'sandbox routing fixture' > sandbox-output 2>&1; then
+    echo 'sandbox disabled-AI deployment unexpectedly succeeded' >&2; exit 1
+  fi
+  grep -Fq 'host Polkit authentication' sandbox-output
   touch "$out"
 ''

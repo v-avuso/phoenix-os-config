@@ -4,16 +4,19 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  phoenix-rebuild [--print] [--branch NAME | --worktree PATH] <action> [nixos-rebuild args...]
-  phoenix-<action> [--print] [--branch NAME | --worktree PATH] [nixos-rebuild args...]
+  phoenix-rebuild [--print] [--branch NAME | --worktree PATH] [--reason PURPOSE] <action> [nixos-rebuild args...]
+  phoenix-<action> [--print] [--branch NAME | --worktree PATH] [--reason PURPOSE] [nixos-rebuild args...]
 
-Runs nixos-rebuild against the auto-selected PhoeNix OS flake target.
+Configured authenticated test/switch/boot require --reason and accept no nixos-rebuild tail.
+Build/dry-build forward nixos-rebuild arguments.
+Runs the selected workflow against the auto-selected PhoeNix OS flake target.
 Set PHOENIX_TARGET=vm or PHOENIX_TARGET=metal to override detection.
 EOF
 }
 
 print_only=false
 selector=()
+reason=""
 action=""
 if [ "$#" -eq 0 ]; then usage; exit 0; fi
 # Consume only dispatcher options at the front. Once the rebuild option tail
@@ -21,6 +24,11 @@ if [ "$#" -eq 0 ]; then usage; exit 0; fi
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --print) print_only=true; shift ;;
+    --reason)
+      if [ -n "$reason" ] || [ "$#" -lt 2 ]; then
+        printf 'phoenix-rebuild: supply one --reason with a value\n' >&2; exit 2
+      fi
+      reason="$2"; shift 2 ;;
     --branch|--worktree)
       if [ "${#selector[@]}" -ne 0 ] || [ "$#" -lt 2 ] || [ -z "$2" ]; then
         printf 'phoenix-rebuild: supply one --branch or --worktree with a value\n' >&2
@@ -65,6 +73,21 @@ target="$(phoenix-target)"
 
 flake_ref="${repo_root}#${target}"
 
+# Packaging chooses this route explicitly; missing configured helpers fail closed.
+if [[ "$action" =~ ^(test|switch|boot)$ ]] && [ -n "${phoenix_deployment_helper:-}" ]; then
+  if [ "$#" -ne 0 ]; then
+    printf 'phoenix-rebuild: authenticated activation does not support nixos-rebuild options; use build for evaluation/build options\n' >&2; exit 2
+  fi
+  if [ -z "${reason//[[:space:]]/}" ] || [ "${#reason}" -gt 2000 ] || [[ "$reason" =~ [[:cntrl:]] ]]; then
+    printf 'phoenix-rebuild: activation requires --reason (1–2000 characters, no control characters)\n' >&2; exit 2
+  fi
+  cmd=("$phoenix_deployment_helper" --worktree "$repo_root" --target "$target" --action "$action" --reason "$reason")
+  if [ "$print_only" = true ]; then printf '%q ' "${cmd[@]}"; printf '\n'; exit 0; fi
+  exec "${cmd[@]}"
+fi
+if [ -n "$reason" ]; then
+  printf 'phoenix-rebuild: --reason is supported only for configured authenticated activation\n' >&2; exit 2
+fi
 cmd=(nixos-rebuild)
 
 case "$action" in

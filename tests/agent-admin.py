@@ -248,9 +248,27 @@ class BrokerFixture(unittest.TestCase):
                 self.assertEqual(audit["operation"], "invalid")
                 self.assertNotIn("secret", json.dumps(audit))
                 self.assertNotIn("error", audit)
-        response, audit = request(b'["dmesg"]\n', os.getuid() + 1)
+        response, audit = request(b'{"args":["dmesg"],"reason":"fixture"}\n', os.getuid() + 1)
         self.assertFalse(response["ok"])
         self.assertEqual(audit["outcome"], "denied")
+
+    def test_reason_envelope_validates_before_dispatch_and_audits_hash_only(self):
+        for reason in (None, "", " ", "x" * 2001, "line\nbreak", "private-secret"):
+            connection = mock.Mock()
+            connection.getsockopt.return_value = struct.pack(
+                "3i", 123, os.getuid(), os.getgid())
+            request = json.dumps({"args": ["dmesg"], "reason": reason}).encode() + b"\n"
+            connection.makefile.return_value = io.BytesIO(request)
+            with mock.patch.object(self.broker, "dispatch", return_value="fixture") as dispatch, \
+                 mock.patch.object(admin.syslog, "syslog") as log:
+                admin.handle(connection, self.broker, self.config)
+            response = json.loads(connection.sendall.call_args.args[0])
+            self.assertEqual(response["ok"], reason == "private-secret")
+            self.assertEqual(dispatch.called, reason == "private-secret")
+            audit = json.loads(log.call_args.args[1])
+            self.assertNotIn("private-secret", json.dumps(audit))
+            if response["ok"]:
+                self.assertEqual(len(audit["reason_sha256"]), 64)
 
     def test_incomplete_socket_request_and_timeout_are_audited(self):
         for stream in (io.BytesIO(b'["dmesg"]'), None):

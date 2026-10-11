@@ -44,9 +44,23 @@
 - For authenticated immutable deployment, use
   `phoenix-deploy-review --worktree /absolute/path --target metal --action test --reason "authorized task purpose"`
   (or `--branch NAME`). Its existing snapshot
-  includes permitted Git-visible dirty/new content. Selection does not turn legacy
-  `phoenix-test` / switch / boot into broker-mediated deployments; those retain
-  their nixos-rebuild privilege route. Branch labels confer no authority.
+  includes permitted Git-visible dirty/new content. With the deployment module,
+  `phoenix-test --reason "authorized task purpose"` (also switch/boot) uses that
+  same frozen authenticated client. These actions reject nixos-rebuild option
+  tails; build/dry-build still forward them. Without the deployment module the
+  packaged wrappers explicitly retain the legacy nixos-rebuild route. A missing
+  or failed configured helper never falls back. Branch labels confer no authority.
+- OpenShell packages the same commands and deployment client, with its existing
+  deployment socket mount. Sources must be in configured mounted workspaces;
+  external managed worktrees under `~/.codex/worktrees` are not mounted by
+  default and cannot be selected from OpenShell. Disabled AI requires native host Polkit authentication;
+  sandbox activation rejects with host guidance because host wrappers/D-Bus are
+  not mounted. Do not mount authentication or bypass containment to fix this.
+  Enabled-review socket routing is packaged, but live runtime acceptance remains
+  unverified; identity and testing reservations remain later work.
+- `phoenix-admin --reason "authorized diagnostic purpose" OPERATION ...` requires
+  a bounded nonempty reason without control characters. The broker verifies it
+  before dispatch and audits its hash only. Never include secrets in reasons.
 
 ### Planned testing reservation (not implemented)
 

@@ -74,6 +74,7 @@ let
       git = "${pkgs.git}/bin/git";
       deploymentSocket = "/run/phoenix-deploy/control.sock";
       clientOnly = true;
+      sandboxClient = true;
     }
   );
   deployClient = pkgs.writeShellScriptBin "phoenix-deploy-review" ''
@@ -140,6 +141,8 @@ in
 {
   imports = [ ./security-review.nix ];
   config = {
+    system.build.phoenixDeploymentClient = deployReview;
+    system.build.phoenixDeploymentSandboxClient = deployClient;
     _module.args.phoenixDeployReviewPackage = deployClient;
     _module.args.phoenixDeployReviewClientConfig = clientConfig;
     # The upstream default allows all users, while only root is trusted. Keep
