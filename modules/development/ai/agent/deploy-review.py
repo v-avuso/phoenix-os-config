@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Frozen working-tree review, optional build and authenticated temporary test.
 
-Verdicts exist only in this invocation; on-disk reports never authorize anything.
+Reports never authorize anything; protected controller checkpoints bind exact source.
 Run on the trusted host, whose authentication is not mounted into worker sandboxes.
 """
 import argparse
@@ -23,7 +23,7 @@ import tempfile
 import time
 
 # Resource bounds, not token estimates or a larger model context claim.
-SOURCE_LIMIT = 896 * 1024
+SOURCE_LIMIT = 4 * 1024 * 1024
 REVIEW_INPUT_LIMIT = 1024 * 1024
 OUTPUT_LIMIT = 2 * 1024 * 1024
 
@@ -41,10 +41,10 @@ def run(argv, *, cwd=None, env=None, data=None, timeout=60, fail_on_compaction=F
         try:
             while process.poll() is None:
                 if time.monotonic() > deadline or (os.fstat(output.fileno()).st_size + os.fstat(errors.fileno()).st_size) > OUTPUT_LIMIT:
-                    raise ValueError("command exceeded time/output limit")
+                    raise ReviewVerdictError("review-timeout" if time.monotonic() > deadline else "review-output-limit") if fail_on_compaction else ValueError("command exceeded time/output limit")
                 time.sleep(0.05)
             if (os.fstat(output.fileno()).st_size + os.fstat(errors.fileno()).st_size) > OUTPUT_LIMIT:
-                raise ValueError("command exceeded output limit")
+                raise ReviewVerdictError("review-output-limit") if fail_on_compaction else ValueError("command exceeded output limit")
             errors.seek(0)
             error_output = errors.read()
             # Pinned Codex 0.159 non-JSON exec prints this standalone marker for
@@ -55,7 +55,14 @@ def run(argv, *, cwd=None, env=None, data=None, timeout=60, fail_on_compaction=F
             output.seek(0)
             result = output.read()
             if process.returncode:
-                raise ValueError("command failed: " + (result + error_output).decode(errors="replace")[-2000:])
+                if fail_on_compaction:
+                    lowered = error_output.lower()
+                    code = ("review-authentication-failed" if any(marker in lowered for marker in
+                            (b"unauthorized", b"401", b"refresh token", b"not logged in", b"authentication")) else
+                            "review-context-oversized" if any(marker in lowered for marker in
+                            (b"context window", b"context length", b"too many tokens")) else "review-invocation-failed")
+                    raise ReviewVerdictError(code)
+                raise ValueError("command failed")
             return result
         finally:
             if process.poll() is None:
@@ -100,7 +107,7 @@ def worktree_file(repo, name):
                     break
                 data.extend(block)
                 if len(data) > SOURCE_LIMIT:
-                    raise ValueError("source exceeds bounded review context; split/reduce scope before deployment")
+                    raise ValueError("source exceeds transport capacity; reduce source scope before deployment")
             after = os.fstat(file_fd)
             if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns,
                     before.st_mode & 0o777) != \
@@ -148,7 +155,7 @@ def snapshot(config, destination):
         content, mode = loaded
         total += len(content)
         if total > SOURCE_LIMIT:
-            raise ValueError("source exceeds bounded review context; split/reduce scope before deployment")
+            raise ValueError("source exceeds transport capacity; reduce source scope before deployment")
         try:
             files[name] = content.decode("utf-8")
         except UnicodeError:
@@ -174,7 +181,7 @@ def baseline_files(path):
             content = item.read_bytes()
             total += len(content)
             if total > SOURCE_LIMIT:
-                raise ValueError("baseline exceeds review context bound")
+                raise ValueError("baseline exceeds source transport capacity")
             files[str(item.relative_to(path))] = content.decode("utf-8")
     return files
 
@@ -219,7 +226,37 @@ def validate_verdict(verdict, binding):
         raise ReviewDenied(verdict)
 
 
-def review(config, binding, files, diff, temporary):
+CONTEXT_LIMIT = 128 * 1024
+CONTEXT_RANGES = 8
+
+
+def context_index(sources):
+    return {source: {name: len(content.splitlines()) for name, content in sorted(files.items())}
+            for source, files in sources.items()}
+
+
+def resolve_context(requests, sources):
+    """Resolve only explicit in-memory source IDs and line ranges; no filesystem/API."""
+    if not isinstance(requests, list) or not 1 <= len(requests) <= CONTEXT_RANGES:
+        raise ReviewVerdictError("context-request-invalid")
+    contexts = []
+    for request in requests:
+        if not isinstance(request, dict) or set(request) != {"source", "path", "start", "end"}:
+            raise ReviewVerdictError("context-request-invalid")
+        source, path, start, end = (request[key] for key in ("source", "path", "start", "end"))
+        if (not isinstance(source, str) or source not in sources or not isinstance(path, str)
+                or path not in sources[source] or type(start) is not int or type(end) is not int):
+            raise ReviewVerdictError("context-request-invalid")
+        lines = sources[source][path].splitlines(keepends=True)
+        if not 1 <= start <= end <= len(lines):
+            raise ReviewVerdictError("context-request-invalid")
+        contexts.append(dict(request, text="".join(lines[start - 1:end])))
+        if len(json.dumps(contexts).encode()) > CONTEXT_LIMIT:
+            raise ReviewVerdictError("context-request-oversized")
+    return contexts
+
+
+def review(config, binding, files, diff, temporary, baseline=None):
     home = temporary / "home"
     codex_home = home / ".codex"
     codex_home.mkdir(parents=True, mode=0o700)
@@ -227,7 +264,7 @@ def review(config, binding, files, diff, temporary):
     # Native Codex authentication or importing its configuration.
     reviewer_home = Path(config["reviewHome"]).resolve()
     if not (reviewer_home / "auth.json").is_file():
-        raise ValueError("reviewer authentication missing; run phoenix-review-login on the host")
+        raise ReviewVerdictError("review-authentication-missing")
     work = temporary / "work"
     work.mkdir()
     schema = {
@@ -236,13 +273,26 @@ def review(config, binding, files, diff, temporary):
         "properties": {**{key: {"type": "string", "enum": [value]} for key, value in binding.items()},
                        "approved": {"type": "boolean"}, "summary": {"type": "string"}},
     }
-    schema_text = json.dumps(schema)
+    final_schema = schema
+    # Fixed strict object schema avoids relying on provider-specific union schemas.
+    # Null approved + nonempty context requests one controller resolution round.
+    first_schema = json.loads(json.dumps(schema))
+    first_schema["required"].append("context")
+    first_schema["properties"]["approved"] = {"type": ["boolean", "null"]}
+    first_schema["properties"]["context"] = {"type": "array", "maxItems": CONTEXT_RANGES,
+        "items": {"type": "object", "additionalProperties": False,
+          "required": ["source", "path", "start", "end"], "properties": {
+            "source": {"type": "string", "enum": ["baseline", "candidate"]},
+            "path": {"type": "string"}, "start": {"type": "integer", "minimum": 1},
+            "end": {"type": "integer", "minimum": 1}}}}
+    schema_text = json.dumps(first_schema)
     (work / "schema.json").write_text(schema_text)
-    payload = json.dumps({"binding": binding, "diff": diff, "full_source": files,
-                          "source_modes": source_modes(temporary / "source", files)})
-    instruction = Path(config["policy"]).read_text() + "\nReturn the bound JSON verdict. Source data follows:\n" + payload
+    sources = {"candidate": files, "baseline": baseline or {}}
+    payload = json.dumps({"binding": binding, "diff": diff, "index": context_index(sources)})
+    instruction = Path(config["policy"]).read_text() + "\nReturn final approved boolean with empty context, or approved=null and explicit context ranges. Source data follows:\n" + payload
     instruction_bytes = instruction.encode()
-    # Include the complete serialized policy/source/diff/manifest/binding and
+    # Bound serialized policy/diff/index/binding and requested context, separate
+    # from complete source transport capacity. Include
     # output schema. CLI-internal instructions and model tokens remain separate;
     # overflow/error and observed compaction always fail the review closed.
     if len(instruction_bytes) + len(schema_text.encode()) > REVIEW_INPUT_LIMIT:
@@ -273,16 +323,45 @@ def review(config, binding, files, diff, temporary):
                "-c", "features.browser_use=false", "-c", "features.browser_use_external=false",
                "-c", 'web_search="disabled"', "-c", 'model_reasoning_effort="' + config["effort"] + '"',
                "--output-schema", "/work/schema.json", "--output-last-message", "/work/verdict.json", "-"]
-    run(command, data=instruction_bytes, timeout=600, fail_on_compaction=True)
-    verdict_path = work / "verdict.json"
-    if verdict_path.is_symlink() or verdict_path.stat().st_size > 16384:
-        raise ReviewVerdictError("schema-invalid")
-    try:
-        verdict = json.loads(verdict_path.read_text())
-    except (json.JSONDecodeError, UnicodeError):
-        raise ReviewVerdictError("schema-invalid") from None
-    validate_verdict(verdict, binding)
-    return verdict
+    # At most two controller invocations, without batches or automatic retries.
+    # Native CLI may make internal requests; this does not cap those requests.
+    for round_number in range(2):
+        try:
+            run(command, data=instruction_bytes, timeout=600, fail_on_compaction=True)
+        except OSError:
+            raise ReviewVerdictError("review-startup-failed") from None
+        verdict_path = work / "verdict.json"
+        try:
+            if verdict_path.is_symlink() or verdict_path.stat().st_size > 16384:
+                raise ReviewVerdictError("schema-invalid")
+            verdict = json.loads(verdict_path.read_text())
+        except (OSError, json.JSONDecodeError, UnicodeError):
+            raise ReviewVerdictError("schema-invalid") from None
+        if round_number == 0 and (not isinstance(verdict, dict) or "context" not in verdict):
+            raise ReviewVerdictError("schema-invalid")
+        if isinstance(verdict, dict) and "context" in verdict:
+            if round_number or set(verdict) != {*binding, "approved", "summary", "context"}:
+                raise ReviewVerdictError("schema-invalid")
+            if any(verdict[key] != value for key, value in binding.items()):
+                raise ReviewVerdictError("binding-mismatch")
+            if not isinstance(verdict["summary"], str):
+                raise ReviewVerdictError("schema-invalid")
+            if verdict["approved"] is None:
+                context = resolve_context(verdict["context"], sources)
+                instruction_bytes = (instruction + "\nResolved context data follows. Return final verdict only:\n" +
+                                     json.dumps(context)).encode()
+                schema_text = json.dumps(final_schema)
+                if len(instruction_bytes) + len(schema_text.encode()) > REVIEW_INPUT_LIMIT:
+                    raise ReviewVerdictError("review-context-oversized")
+                (work / "schema.json").write_text(schema_text)
+                verdict_path.unlink()
+                continue
+            if verdict["context"] != []:
+                raise ReviewVerdictError("schema-invalid")
+            verdict = {key: value for key, value in verdict.items() if key != "context"}
+        validate_verdict(verdict, binding)
+        return verdict
+    raise ReviewVerdictError("schema-invalid")
 
 
 def audit(config, binding, outcome, verdict=None, closure=None):
@@ -329,17 +408,66 @@ def build_environment(config):
             "NIX_CONFIG": "accept-flake-config = false\n"}
 
 
+LARGE_DIFF_WARNING_TOKENS = 24000
+
+
+def warn_large_diff(config, diff):
+    """Advisory estimate, never an input/token cap or deployment gate."""
+    estimate = (len(diff) + 3) // 4
+    if estimate < LARGE_DIFF_WARNING_TOKENS:
+        return estimate
+    message = ("Large deployment diff: approximately " + str(estimate) +
+               " tokens estimated from characters / 4. The approved checkpoint may change the reviewed diff. "
+               "This warning does not limit deployment.")
+    print(message, file=sys.stderr)
+    executable = config.get('notifySend')
+    if isinstance(executable, str) and Path(executable).is_absolute():
+        try:
+            run([executable, '--app-name=Phoenix deployment', '--urgency=normal',
+                 'Large deployment security review', message], timeout=2)
+        except (OSError, ValueError, subprocess.SubprocessError):
+            pass  # Desktop/session notification failure must never block deployment.
+    return estimate
+
+
+def warn_deployment_diff(config, files, modes):
+    if not config.get('modelReviewEnabled', False):
+        return
+    try:
+        baseline = Path(config['baseline']).resolve(strict=True)
+        # Estimate only public immutable deployment source, without Nix evaluation.
+        if not str(baseline).startswith('/nix/store/'):
+            return
+        old = baseline_files(baseline)
+        warn_large_diff(config, source_diff(old, files, source_modes(baseline, old), modes))
+    except (OSError, ValueError):
+        pass  # The protected controller supplies the defining review/binding checks.
+
+
 def main():
     config = json.loads(Path(sys.argv[1]).read_text())
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("config")
     parser.add_argument("--base", help="optional full commit SHA for an additional informational diff")
-    parser.add_argument("--reason", required=True, help="concrete authorized task purpose")
-    parser.add_argument("--target", choices=["metal", "vm"], required=True)
+    parser.add_argument("--reason", help="concrete authorized task purpose")
+    parser.add_argument("--target", choices=["metal", "vm"])
     parser.add_argument("--action", choices=(["test", "switch", "boot"] if config.get("clientOnly") else ["review", "build", "test", "switch", "boot"]), default=("test" if config.get("clientOnly") else "review"))
+    parser.add_argument("--security-override", metavar="PENDING_NONCE", help="authenticate an explicit exact-state review override")
     args = parser.parse_args()
-    if (args.base and not re.fullmatch(r"[0-9a-f]{40,64}", args.base)) or not 1 <= len(args.reason.strip()) <= 2000:
+    if args.security_override:
+        if not re.fullmatch(r"[a-f0-9]{64}", args.security_override) or not config.get("overrideCommand"):
+            parser.error("security override unavailable or invalid pending nonce")
+        print("CRITICAL: Authenticating an explicit override of a failed security review. "
+              "Only the protected pending source, closure and action will be used.", file=sys.stderr, flush=True)
+        result = json.loads(run([*config["overrideCommand"], args.security_override], timeout=2400))
+        if result.get("ok") is not True:
+            raise ValueError("authenticated security override failed")
+        print(json.dumps(result, indent=2))
+        return
+    if (args.base and not re.fullmatch(r"[0-9a-f]{40,64}", args.base)) or not args.reason or not 1 <= len(args.reason.strip()) <= 2000:
         parser.error("base must be a full commit SHA and reason must be 1–2000 characters")
+    if not args.target:
+        parser.error("target is required for deployment")
     config = json.loads(Path(args.config).read_text())
     if args.action in {"review", "build"}:
         if not config.get("modelReviewEnabled", True):
@@ -359,8 +487,12 @@ def main():
         source.mkdir()
         commit, files = snapshot(config, source)
         if args.action in {"test", "switch", "boot"}:
+            branch = git(config, "rev-parse", "--abbrev-ref", "HEAD").decode().strip()
             request = dict(files=files, modes=source_modes(source, files), commit=commit,
                            reason=args.reason.strip(), target=args.target, action=args.action)
+            warn_deployment_diff(config, files, request['modes'])
+            if branch != "HEAD" and re.fullmatch(r"[A-Za-z0-9._/+@-]{1,200}", branch):
+                request['branch'] = branch
             if args.action == "boot":
                 request.update(expectedBase=str(Path('/etc/phoenix-agent/activated-source').resolve(strict=True)),
                                expectedProfile=str(Path('/nix/var/nix/profiles/system').resolve(strict=True)))
@@ -382,8 +514,16 @@ def main():
                         response.extend(block)
                     result = json.loads(response)
                     if not result.get("ok"):
+                        if result.get("pendingNonce"):
+                            print("CRITICAL: Security review failed for this exact pending deployment: " + json.dumps({key: result[key] for key in
+                                  ('stage', 'code', 'summary', 'pendingNonce', 'pendingSourceFingerprint', 'pendingAction', 'pendingTarget') if key in result}, ensure_ascii=True),
+                                  file=sys.stderr)
+                            print("For an explicit authenticated exact-state override: phoenix-deploy-review --security-override " +
+                                  result['pendingNonce'], file=sys.stderr)
                         if result.get("code") == "model-denied":
                             raise ValueError("Model review denied: " + json.dumps(result.get("summary", ""), ensure_ascii=True))
+                        if result.get("code") in {'review-context-oversized', 'context-request-oversized'}:
+                            raise ValueError("Security review context is too large. Reduce the diff/context request or explicitly authenticate the exact pending override.")
                         raise ValueError(result.get("error", "deployment rejected"))
                     print(json.dumps(result, indent=2))
             return
@@ -397,6 +537,7 @@ def main():
             reference = git(config, "rev-parse", "--verify", args.base + "^{commit}").decode().strip()
             diff += "\nAdditional caller-selected commit reference (not deployed baseline):\n"
             diff += git(config, "diff", "--no-ext-diff", "--no-textconv", reference, commit, "--").decode()
+        warn_large_diff(config, diff)
         store = run([config["nix"], "store", "add-path", str(source)], env=build_environment(config)).decode().strip()
         if not re.fullmatch(r"/nix/store/[a-z0-9]{32}-source", store):
             raise ValueError("unexpected frozen source path")
@@ -404,7 +545,7 @@ def main():
                    "base": baseline, "target": args.target, "action": args.action,
                    "reason": args.reason.strip()}
         try:
-            verdict = review(config, binding, files, diff, temporary)
+            verdict = review(config, binding, files, diff, temporary, old_files)
         except (ValueError, OSError, subprocess.SubprocessError):
             audit(config, binding, "review-failed")
             raise

@@ -69,6 +69,27 @@ class DeploymentTests(unittest.TestCase):
         connection.close.assert_called_once()
         listener.accept.assert_called_once()
 
+    def test_pending_rejection_response_displays_identity_without_journaling_private_text(self):
+        handlers={};connection=mock.Mock();listener=mock.Mock();listener.accept.return_value=(connection,None)
+        connection.getsockopt.return_value=deploy.struct.pack('3i',22,1000,1000)
+        connection.recv.return_value=b'{}\n'
+        denial=deploy.DeploymentDenied('PRIVATE summary')
+        denial.pending_nonce='a'*64
+        denial.pending_metadata=deploy.pending_metadata(dict(source='/nix/store/'+'b'*32+'-source',action='boot',target='metal'))
+        def process(*args):
+            handlers[deploy.signal.SIGUSR1](deploy.signal.SIGUSR1,None)
+            raise denial
+        with mock.patch.object(deploy.os,'getuid',return_value=0),mock.patch.object(deploy.socket,'socket',return_value=listener), \
+             mock.patch.object(deploy.signal,'signal',side_effect=lambda sig,handler:handlers.update({sig:handler})), \
+             mock.patch.object(deploy,'process',side_effect=process),contextlib.redirect_stdout(io.StringIO()) as journal:
+            deploy.serve({'clientUid':1000})
+        result=json.loads(connection.sendall.call_args.args[0])
+        self.assertEqual(result['pendingSourceFingerprint'],'b'*32)
+        self.assertEqual(result['pendingTarget'],'metal');self.assertEqual(result['pendingAction'],'boot')
+        self.assertEqual(result['pendingNonce'],'a'*64)
+        self.assertNotIn('PRIVATE',journal.getvalue())
+        self.assertNotIn('summary',journal.getvalue())
+
     def test_idle_reload_exits_without_starting_another_request(self):
         handlers = {}
         listener = mock.Mock()
@@ -88,8 +109,8 @@ class DeploymentTests(unittest.TestCase):
         request = self.request()
         request['files']['flake.nix'] = 'x' * (512 * 1024 + 1)
         deploy.request_valid(request, 'metal')
-        self.assertEqual(deploy.SOURCE_LIMIT, 896 * 1024)
-        self.assertEqual(deploy.LIMIT, 1024 * 1024)
+        self.assertEqual(deploy.SOURCE_LIMIT, 4 * 1024 * 1024)
+        self.assertEqual(deploy.LIMIT, 32 * 1024 * 1024)
 
     def test_mutable_source_and_fake_closure_rejected(self):
         for path in ['/tmp/source', '/nix/store/short-source', '/nix/store/' + 'a' * 32 + '-source/../source']:
@@ -106,7 +127,7 @@ class DeploymentTests(unittest.TestCase):
             temporary.assert_not_called()
 
     def test_controller_never_activates_failed_or_forged_review(self):
-        for mode in ['rejected', 'forged', 'model-failed', 'malformed', 'closure-mismatch', 'compacted', 'oversized', 'missing-upstream', 'forged-upstream', 'denied-upstream', 'bound-denial-upstream', 'forged-denial-upstream', 'forged-lineage-upstream']:
+        for mode in ['rejected', 'forged', 'model-failed', 'malformed', 'closure-mismatch', 'compacted', 'oversized', 'extra-envelope']:
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 baseline = root / 'baseline'
@@ -133,11 +154,6 @@ class DeploymentTests(unittest.TestCase):
                               python='python', controller='controller', configPath='config', systemdRun='systemd-run',
                               upstreamReviewScript=str(Path(__file__).resolve().parents[1] / 'modules/development/ai/agent/upstream-review.py'))
                 request = self.request()
-                if mode.endswith('upstream'):
-                    upstream = root/'upstream.py'
-                    upstream.write_text('MAX_BATCHES = 24\ndef evidence(before, after, resolve): return ["first", "second"]\ndef cli_evidence(before, after, resolve): return []\n')
-                    config['upstreamReviewScript'] = str(upstream)
-                    request['files']['flake.lock'] = '{"updated":true}'
                 def user_command(config, user, argv, run, **kwargs):
                     if argv[:3] == ['nix', 'store', 'add-path']:
                         shutil.copytree(argv[3], frozen)
@@ -156,27 +172,18 @@ class DeploymentTests(unittest.TestCase):
                     if mode == 'forged':
                         verdict['nonce'] = 'wrong'
                     envelope = dict(status='verdict', verdict=verdict)
-                    if mode in {'forged-upstream', 'denied-upstream'}:
-                        envelope['upstreamVerdicts'] = [dict(deploy.upstream_binding(binding,b,i),
-                            approved=True,summary='fixture') for i,b in enumerate(['first','second'])]
-                        if mode == 'forged-upstream': envelope['upstreamVerdicts'][0]['evidenceDigest']='forged'
-                        else: envelope['upstreamVerdicts'][0]['approved']=False
-                    if mode in {'bound-denial-upstream', 'forged-denial-upstream', 'forged-lineage-upstream'}:
-                        envelope = dict(status='verdict', upstreamDenialIndex=0,
-                            verdict=dict(deploy.upstream_binding(binding,'first',0), approved=False, summary='fixture'))
-                        if mode == 'forged-denial-upstream': envelope['verdict']['nonce']='forged'
-                        if mode == 'forged-lineage-upstream': envelope['verdict']['affectedInputNodes']=['nixpkgs']
+                    if mode == 'extra-envelope': envelope['upstreamVerdicts'] = []
                     return json.dumps(envelope).encode()
                 account = mock.Mock(pw_uid=os.getuid(), pw_gid=os.getgid())
                 with mock.patch.object(Path, 'resolve', resolve), contextlib.redirect_stdout(io.StringIO()), mock.patch.object(deploy, 'load_review', return_value=review), mock.patch.object(deploy, 'as_user', side_effect=user_command), mock.patch.object(deploy, 'store_path'), mock.patch.object(deploy, 'activation_executable'), mock.patch.object(deploy.pwd, 'getpwnam', return_value=account):
                     with self.assertRaises(deploy.DeploymentFailure) as failure:
                         deploy.process(config, request, os.getuid(), 22)
                 self.assertIn(failure.exception.stage, {'verdict', 'review', 'closure-binding'})
-                if mode in {'rejected', 'bound-denial-upstream'}:
+                if mode in {'rejected'}:
                     self.assertIsInstance(failure.exception, deploy.DeploymentDenied)
                     self.assertEqual(failure.exception.summary, 'fixture')
                     self.assertEqual(failure.exception.code, 'model-denied')
-                elif mode in {'forged', 'forged-denial-upstream', 'forged-lineage-upstream'}:
+                elif mode in {'forged'}:
                     self.assertEqual(failure.exception.code, 'binding-mismatch')
                 self.assertFalse(any(call.args[0][0] == 'systemd-run' for call in review.run.call_args_list))
 
@@ -582,43 +589,204 @@ class DeploymentTests(unittest.TestCase):
                                                '--clear-groups', '--no-new-privs', '/trusted/codex'])
 
 
-    def test_scoped_upstream_verdicts_bind_every_evidence_batch(self):
-        binding={'source':'immutable-source','base':'baseline','closure':'immutable-closure','nonce':'fresh'}
-        first=deploy.upstream_binding(binding,'first exact implementation',0)
-        second=deploy.upstream_binding(binding,'second exact implementation',1)
-        self.assertNotEqual(first['evidenceDigest'],second['evidenceDigest'])
-        self.assertNotEqual(first['scope'],second['scope'])
-        review=deploy.load_review({'reviewScript':str(Path(__file__).resolve().parents[1]/'modules/development/ai/agent/deploy-review.py')})
-        verdict=dict(first,approved=True,summary='fixture')
-        review.validate_verdict(verdict,first)
-        with self.assertRaises(review.ReviewVerdictError): review.validate_verdict(verdict,second)
-
-    def test_manual_cli_source_evidence_runs_even_when_flake_lock_is_unchanged(self):
-        upstream = mock.Mock()
-        upstream.evidence.return_value = []
-        upstream.cli_evidence.return_value = ['reviewer CLI evidence']
-        before = {'flake.lock': 'unchanged lock', 'modules/development/ai/agent/reviewer-codex.nix': 'old'}
-        after = dict(before, **{'modules/development/ai/agent/reviewer-codex.nix': 'new'})
-        result = deploy.collect_upstream(upstream, 'boot', before, after, mock.Mock(), mock.Mock())
-        upstream.evidence.assert_not_called()
-        upstream.cli_evidence.assert_called_once_with(before, after, upstream.cli_evidence.call_args.args[2])
-        self.assertEqual(result, ['reviewer CLI evidence'])
-        self.assertEqual(deploy.collect_upstream(upstream, 'update', before, after, mock.Mock(), mock.Mock()), [])
-
-    def test_worker_reviews_all_upstream_batches_before_complete_repository(self):
+    def test_worker_makes_one_security_scope_without_upstream_batches(self):
         review=deploy.load_review({'reviewScript':str(Path(__file__).resolve().parents[1]/'modules/development/ai/agent/deploy-review.py')})
         binding={'source':'/immutable/source','nonce':'fresh'}
-        payload=dict(binding=binding,files={},diff='complete configuration',upstreamBatches=['first implementation','second implementation'])
+        payload=dict(binding=binding,files={},baseline={},diff='local diff',upstreamBatches=['untrusted omitted batch'])
         with tempfile.TemporaryDirectory() as directory:
             output=io.StringIO()
-            def approve(config,binding,files,diff,temporary):return dict(binding,approved=True,summary='fixture')
+            def approve(config,binding,files,diff,temporary,baseline):return dict(binding,approved=True,summary='fixture')
             with mock.patch.object(deploy,'load_review',return_value=review),mock.patch.object(review,'review',side_effect=approve) as calls, \
                  mock.patch('sys.stdin',io.StringIO(json.dumps(payload))),contextlib.redirect_stdout(output):
                 deploy.worker({},directory)
             result=json.loads(output.getvalue())
-            self.assertEqual(calls.call_count,3)
-            self.assertEqual(len(result['upstreamVerdicts']),2)
-            self.assertNotIn('scope',result['verdict'])
+            self.assertEqual(calls.call_count,1)
+            self.assertEqual(set(result), {'status','verdict'})
+            self.assertEqual(calls.call_args.args[3],'local diff')
+
+    def test_controller_cache_hit_skips_ai_and_denial_records_exact_pending_state(self):
+        for cached in [False, True]:
+            with self.subTest(cached=cached), tempfile.TemporaryDirectory() as directory:
+                root=Path(directory);baseline=root/'baseline';baseline.mkdir()
+                for name in ('flake.nix','flake.lock'):(baseline/name).write_text('{}')
+                profile=root/'profile';marker=profile/'etc/phoenix-agent';marker.mkdir(parents=True)
+                (marker/'activated-source').symlink_to(baseline)
+                frozen=root/'frozen';closure=root/'closure';marker=closure/'etc/phoenix-agent';marker.mkdir(parents=True)
+                (marker/'activated-source').symlink_to(frozen)
+                review=deploy.load_review({'reviewScript':str(Path(__file__).resolve().parents[1]/'modules/development/ai/agent/deploy-review.py')})
+                review.run=mock.Mock(return_value=b'')
+                security=mock.Mock();security.choose_checkpoint.return_value=(cached,str(baseline),{'flake.nix':'{}','flake.lock':'{}'})
+                security.pending.return_value='a'*64
+                config=dict(target='metal',work=directory,builderUser='builder',reviewerUser='reviewer',reviewHome='/protected',
+                    nix='nix',nixStore='nix-store',baseline=str(baseline),python='python',controller='controller',configPath='config',
+                    systemdRun='systemd-run',securityReviewState='/protected/state')
+                commands=[]
+                def user_command(config,user,argv,run,**kwargs):
+                    commands.append((user,argv))
+                    if argv[:3]==['nix','store','add-path']:
+                        shutil.copytree(argv[3],frozen);return str(frozen).encode()
+                    if argv[:2]==['nix','build']:return str(closure).encode()
+                    payload=json.loads(kwargs['data'])
+                    self.assertEqual(payload['baseline'],{'flake.nix':'{}','flake.lock':'{}'})
+                    self.assertNotIn('upstreamBatches',payload)
+                    return json.dumps(dict(status='verdict',verdict=dict(payload['binding'],approved=False,summary='security harm'))).encode()
+                original=Path.resolve
+                def resolve(path,*args,**kwargs):
+                    if path==Path('/nix/var/nix/profiles/system'):return profile
+                    return original(path,*args,**kwargs)
+                account=mock.Mock(pw_uid=os.getuid(),pw_gid=os.getgid())
+                with mock.patch.object(deploy,'load_review',return_value=review),mock.patch.object(deploy,'load_security',return_value=security), \
+                     mock.patch.object(deploy,'as_user',side_effect=user_command),mock.patch.object(deploy,'store_path'), \
+                     mock.patch.object(deploy,'activation_executable'),mock.patch.object(deploy.pwd,'getpwnam',return_value=account), \
+                     mock.patch.object(Path,'resolve',resolve),mock.patch.object(deploy,'activate_bound',return_value={'ok':True}) as activation, \
+                     contextlib.redirect_stdout(io.StringIO()):
+                    if cached:
+                        self.assertTrue(deploy.process(config,self.request(),1000,22)['ok'])
+                        activation.assert_called_once();security.approve.assert_called_once();security.pending.assert_not_called()
+                        self.assertEqual([user for user,_ in commands],['builder','builder'])
+                    else:
+                        with self.assertRaises(deploy.DeploymentDenied) as denied:deploy.process(config,self.request(),1000,22)
+                        self.assertEqual(denied.exception.pending_nonce,'a'*64)
+                        self.assertEqual(denied.exception.pending_metadata,dict(pendingSourceFingerprint='frozen',pendingAction='test',pendingTarget='metal'))
+                        activation.assert_not_called();security.approve.assert_not_called()
+                        bound=security.pending.call_args.args[1]
+                        self.assertEqual(bound['source'],str(frozen));self.assertEqual(bound['closure'],str(closure))
+                        self.assertEqual(bound['base'],str(baseline));self.assertEqual(bound['profile'],str(profile))
+                        self.assertEqual(bound['action'],'test');self.assertEqual(bound['target'],'metal')
+                        self.assertEqual(security.pending.call_args.args[2],1000)
+
+    def security(self):
+        return deploy.load_security({'securityReviewScript': str(Path(__file__).resolve().parents[1]/'modules/development/ai/agent/security-review.py')})
+
+    def test_checkpoint_exact_closure_policy_target_and_branch_context(self):
+        security = self.security()
+        approved = dict(source='approved', closure='closure', target='metal', policy='current',
+                        branch=security.branch_key('main'))
+        review = mock.Mock()
+        review.baseline_files.side_effect = lambda path: {'file': 'candidate' if str(path)=='approved' else 'activated'}
+        review.source_diff.side_effect = lambda old,new: old['file'] if old != new else ''
+        with mock.patch.object(security,'policy_digest',return_value='current'), \
+             mock.patch.object(security,'records',return_value=[(None,approved)]):
+            verify=mock.Mock()
+            exact,base,files=security.choose_checkpoint({},'metal','approved','closure','main','activated',{'file':'candidate'},review,verify)
+            self.assertTrue(exact); self.assertEqual(base,'approved')
+            self.assertFalse(security.choose_checkpoint({},'metal','approved','DIFFERENT','main','activated',{'file':'candidate'},review,verify)[0])
+            # New exact merged source always needs review, even when another branch is approved.
+            self.assertFalse(security.choose_checkpoint({},'metal','merged','closure','feature','activated',{'file':'candidate'},review,verify)[0])
+            self.assertEqual(security.choose_checkpoint({},'metal','merged','closure','feature','activated',{'file':'candidate'},review,verify)[1],'activated')
+            approved['policy']='old'
+            self.assertFalse(security.choose_checkpoint({},'metal','approved','closure','main','activated',{'file':'candidate'},review,verify)[0])
+
+    def test_checkpoint_state_ownership_and_atomic_write(self):
+        security=self.security()
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory); record=path/'record.json'
+            security.write_record(record, {'approved':False})
+            self.assertEqual(record.stat().st_mode & 0o777,0o600)
+            self.assertEqual(json.loads(record.read_text()),{'approved':False})
+            self.assertEqual(list(path.glob('.record-*')),[])
+            link=path/'link.json'; link.symlink_to(record)
+            with self.assertRaises(OSError):security.read_record(link)
+            record.chmod(0o666)
+            with self.assertRaises(ValueError):security.read_record(record)
+            with mock.patch.object(security.os,'geteuid',return_value=1000):
+                with self.assertRaises(ValueError):security.state_directory({'securityReviewState':directory})
+            path.chmod(0o777)
+            with mock.patch.object(security.os,'geteuid',return_value=0):
+                with self.assertRaises(ValueError):security.state_directory({'securityReviewState':directory})
+
+    def test_policy_digest_changes_with_effective_review_execution_identity(self):
+        security=self.security()
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'trusted-policy';path.write_text('installed review policy')
+            config={key:str(path) for key in ('policy','reviewScript','securityReviewScript','controller')}
+            config.update(codex='/nix/store/pinned-codex',model='model',effort='medium',bwrap='/nix/store/bwrap',
+                          python='/nix/store/python',setpriv='/nix/store/setpriv',caBundle='/nix/store/ca-bundle')
+            digest=security.policy_digest(config)
+            for key in ('codex','model','effort','bwrap','python','setpriv','caBundle'):
+                with self.subTest(key=key):
+                    self.assertNotEqual(digest,security.policy_digest(dict(config,**{key:'changed execution identity'})))
+            path.write_text('changed installed review policy')
+            self.assertNotEqual(digest,security.policy_digest(config))
+
+    def test_consuming_pruned_pending_record_is_idempotent(self):
+        security = self.security()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            nonce = 'a' * 64
+            # Approval retention may prune the pending JSON before consumption.
+            for field in ('source', 'closure'):
+                (root / (nonce + '.pending.' + field)).symlink_to('/missing-store-root')
+            with mock.patch.object(security, 'state_directory', return_value=root):
+                security.consume_pending({}, nonce)
+                security.consume_pending({}, nonce)
+            self.assertEqual(list(root.iterdir()), [])
+
+    def test_pending_override_identity_policy_and_action_are_fixed(self):
+        security=self.security(); nonce='a'*64
+        record=dict(nonce=nonce,uid=1000,policy='policy',target='metal',action='test',source='frozen',
+                    closure='built',base='activated',profile='system-profile',profileSource='profile-source',branch='main')
+        config=dict(target='metal')
+        with mock.patch.object(security,'state_directory',return_value=Path('/protected')), \
+             mock.patch.object(security,'policy_digest',return_value='policy'), \
+             mock.patch.object(security,'read_record',return_value=record):
+            verify=mock.Mock()
+            self.assertEqual(security.load_pending(config,nonce,1000,verify),record)
+            self.assertEqual(verify.call_count,4)
+            for changes in [dict(uid=1001),dict(nonce='b'*64),dict(policy='changed'),dict(target='vm'),dict(action='update')]:
+                with self.subTest(changes=changes),mock.patch.object(security,'read_record',return_value=dict(record,**changes)):
+                    with self.assertRaises(ValueError):security.load_pending(config,nonce,1000,verify)
+            with self.assertRaises(ValueError):security.load_pending(config,'../pending',1000,verify)
+
+    def test_override_uses_only_protected_exact_state_and_rechecks_baseline(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory); source=root/'source'; source.mkdir()
+            closure=root/'closure'; marker=closure/'etc/phoenix-agent';marker.mkdir(parents=True)
+            (marker/'activated-source').symlink_to(source)
+            baseline=root/'baseline';baseline.mkdir()
+            profile=root/'profile'; profile_marker=profile/'etc/phoenix-agent';profile_marker.mkdir(parents=True)
+            (profile_marker/'activated-source').symlink_to(baseline)
+            runtime=root/'runtime';runtime.mkdir()
+            binding=dict(source=str(source),closure=str(closure),base=str(baseline),profile=str(profile),
+                         profileSource=str(baseline),action='boot',target='metal',nonce='a'*64,branch='main')
+            security=mock.Mock();security.load_pending.return_value=binding
+            review=mock.Mock()
+            config=dict(work=directory,baseline=str(baseline),modelReviewEnabled=True,nixStore='nix-store',
+                        systemdRun='systemd-run',python='python',controller='controller',configPath='config')
+            original=Path.resolve
+            def resolve(path,*args,**kwargs):
+                if path==Path('/nix/var/nix/profiles/system'):return profile
+                if path==Path('/run/current-system'):return runtime
+                return original(path,*args,**kwargs)
+            with mock.patch.object(deploy.os,'geteuid',return_value=0),mock.patch.object(deploy,'load_security',return_value=security), \
+                 mock.patch.object(deploy,'load_review',return_value=review),mock.patch.object(deploy,'store_path'), \
+                 mock.patch.object(deploy,'activation_executable'),mock.patch.object(Path,'resolve',resolve),contextlib.redirect_stdout(io.StringIO()):
+                result=deploy.override(config,'a'*64,1000,22)
+                self.assertTrue(result['securityOverride'])
+                argv=review.run.call_args.args[0]
+                index=argv.index('activate')
+                self.assertEqual(argv[index+1:index+3],[str(closure),'boot'])
+                self.assertEqual(argv[argv.index('--expected-source')+1],str(source))
+                self.assertEqual(argv[argv.index('--expected-profile')+1],str(profile))
+                security.approve.assert_called_once_with(config,binding,'main',review.run)
+                security.consume_pending.assert_called_once_with(config,'a'*64)
+                review.run.reset_mock();security.approve.reset_mock();security.consume_pending.reset_mock()
+                def failed_activation(argv,**kwargs):
+                    if argv[0]=='systemd-run':raise ValueError('activation failed')
+                    return b''
+                review.run.side_effect=failed_activation
+                with self.assertRaises(ValueError):deploy.override(config,'a'*64,1000,22)
+                security.approve.assert_called_once_with(config,binding,'main',review.run)
+                security.consume_pending.assert_not_called()
+                self.assertTrue(any(call.args[0][0]=='systemd-run' for call in review.run.call_args_list))
+                review.run.reset_mock();security.approve.reset_mock();security.consume_pending.reset_mock()
+                review.run.side_effect=None
+                config['baseline']=str(source)
+                with self.assertRaises(ValueError):deploy.override(config,'a'*64,1000,22)
+                review.run.assert_not_called();security.approve.assert_not_called();security.consume_pending.assert_not_called()
+            with mock.patch.object(deploy.os,'geteuid',return_value=1000):
+                with self.assertRaises(ValueError):deploy.override(config,'a'*64,1000,22)
+
 
 
 if __name__ == '__main__':

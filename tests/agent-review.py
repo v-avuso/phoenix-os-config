@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Focused fixtures for frozen-source review binding; no network or activation."""
 import importlib.util
+import contextlib
+import io
 import json
 from pathlib import Path
 import shutil
@@ -26,27 +28,93 @@ class ReviewTests(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 review.validate_verdict(bad, binding)
 
-    def test_actual_scoped_review_schema_preserves_string_binding(self):
-        deployment_spec = importlib.util.spec_from_file_location('deployment', Path(__file__).resolve().parents[1] / 'modules/development/ai/agent/deployment.py')
-        deployment = importlib.util.module_from_spec(deployment_spec); deployment_spec.loader.exec_module(deployment)
+    def test_diff_only_first_prompt_and_one_context_round(self):
         with tempfile.TemporaryDirectory() as directory:
             temporary = Path(directory)
             config = self.review_config(temporary)
-            (temporary/'source').mkdir()
-            binding = deployment.upstream_binding({'source':'frozen','nonce':'fresh'}, 'exact evidence', 0, ['codex-desktop-linux'])
-            self.assertEqual(json.loads(binding['affectedInputNodes']), ['codex-desktop-linux'])
-            verdict = dict(binding, approved=False, summary='unsafe scoped authority')
-            def native_fixture(argv, **kwargs):
-                schema = json.loads((temporary/'work/schema.json').read_text())
-                for key, value in binding.items():
-                    self.assertIsInstance(value, str)
-                    self.assertEqual(schema['properties'][key], {'type':'string','enum':[value]})
+            binding = {'source': 'frozen', 'nonce': 'fresh'}
+            candidate = {'a.nix': 'changed\nsecret-unrequested-context\n', 'private': 'never sent'}
+            baseline = {'a.nix': 'original\ncontext needed\n'}
+            prompts = []
+            def fixture(argv, **kwargs):
+                prompt = kwargs['data'].decode()
+                prompts.append(prompt)
+                if len(prompts) == 1:
+                    self.assertNotIn('secret-unrequested-context', prompt)
+                    self.assertNotIn('never sent', prompt)
+                    self.assertNotIn('full_source', prompt)
+                    verdict = dict(binding, approved=None, summary='need authority context',
+                        context=[dict(source='baseline', path='a.nix', start=2, end=2)])
+                else:
+                    self.assertIn('context needed', prompt)
+                    self.assertNotIn('secret-unrequested-context', prompt)
+                    schema = json.loads((temporary/'work/schema.json').read_text())
+                    self.assertNotIn('context', schema['properties'])
+                    verdict = dict(binding, approved=True, summary='safe')
                 (temporary/'work/verdict.json').write_text(json.dumps(verdict))
                 return b''
-            with mock.patch.object(review, 'run', side_effect=native_fixture):
-                with self.assertRaises(review.ReviewDenied) as denial:
-                    review.review(config,binding,{},'exact evidence',temporary)
-                self.assertEqual(denial.exception.verdict, verdict)
+            with mock.patch.object(review, 'run', side_effect=fixture):
+                result = review.review(config, binding, candidate, '-original\n+changed\n', temporary, baseline)
+            self.assertTrue(result['approved'])
+            self.assertEqual(len(prompts), 2)
+
+    def test_context_resolver_rejects_unbounded_and_foreign_access(self):
+        sources = {'candidate': {'x': 'one\ntwo\n'}, 'baseline': {}}
+        good = dict(source='candidate', path='x', start=1, end=1)
+        self.assertEqual(review.resolve_context([good], sources)[0]['text'], 'one\n')
+        for request in [dict(good,path='/etc/passwd'), dict(good,path='../x'), dict(good,source='store'),
+                        dict(good,start=0), dict(good,end=3), dict(good,start=True), dict(good,command='cat')]:
+            with self.subTest(request=request), self.assertRaises(review.ReviewVerdictError):
+                review.resolve_context([request], sources)
+        with self.assertRaises(review.ReviewVerdictError): review.resolve_context([good]*9,sources)
+        with self.assertRaises(review.ReviewVerdictError):
+            review.resolve_context([good], {'candidate': {'x': 'x'*(review.CONTEXT_LIMIT+1)}, 'baseline': {}})
+
+    def test_second_context_request_fails_without_third_invocation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            temporary=Path(directory); config=self.review_config(temporary); binding={'source':'frozen'}
+            verdict=dict(binding,approved=None,summary='need context',context=[dict(source='candidate',path='x',start=1,end=1)])
+            def fixture(*args,**kwargs):
+                (temporary/'work/verdict.json').write_text(json.dumps(verdict)); return b''
+            with mock.patch.object(review,'run',side_effect=fixture) as calls:
+                with self.assertRaises(review.ReviewVerdictError): review.review(config,binding,{'x':'one'},'diff',temporary)
+            self.assertEqual(calls.call_count,2)
+
+    def test_first_final_schema_and_secret_safe_process_diagnostics(self):
+        for approved in [True, False]:
+            with tempfile.TemporaryDirectory() as directory:
+                temporary=Path(directory);config=self.review_config(temporary);binding={'source':'frozen'}
+                def fixture(*args,**kwargs):
+                    (temporary/'work/verdict.json').write_text(json.dumps(dict(binding,approved=approved,summary='security decision',context=[])))
+                    return b''
+                with mock.patch.object(review,'run',side_effect=fixture) as calls:
+                    if approved:self.assertTrue(review.review(config,binding,{},'diff',temporary)['approved'])
+                    else:
+                        with self.assertRaises(review.ReviewDenied):review.review(config,binding,{},'diff',temporary)
+                self.assertEqual(calls.call_count,1)
+        with self.assertRaises(review.ReviewVerdictError) as failure:
+            review.run([sys.executable,'-c',"import sys; print('401 authentication SECRET',file=sys.stderr); sys.exit(1)"],fail_on_compaction=True)
+        self.assertEqual(failure.exception.code,'review-authentication-failed')
+        self.assertNotIn('SECRET',str(failure.exception))
+
+    def test_large_diff_warning_is_estimate_only_and_notification_is_optional(self):
+        small='x'*(4*(review.LARGE_DIFF_WARNING_TOKENS-1))
+        large='x'*(4*review.LARGE_DIFF_WARNING_TOKENS)
+        with mock.patch.object(review,'run') as run,contextlib.redirect_stderr(io.StringIO()) as output:
+            self.assertEqual(review.warn_large_diff({'notifySend':'/fixed/notify-send'},small),23999)
+            run.assert_not_called();self.assertEqual(output.getvalue(),'')
+            self.assertEqual(review.warn_large_diff({'notifySend':'/fixed/notify-send'},large),24000)
+            argv=run.call_args.args[0]
+            self.assertEqual(argv[0],'/fixed/notify-send')
+            self.assertEqual(run.call_args.kwargs['timeout'],2)
+            self.assertIn('estimated from characters / 4',output.getvalue())
+            self.assertIn('does not limit deployment',output.getvalue())
+        for notification in [None,'relative-command',['sh','-c']]:
+            with mock.patch.object(review,'run') as run,contextlib.redirect_stderr(io.StringIO()):
+                review.warn_large_diff({'notifySend':notification},large)
+            run.assert_not_called()
+        with mock.patch.object(review,'run',side_effect=OSError('notification unavailable')),contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(review.warn_large_diff({'notifySend':'/fixed/notify-send'},large),24000)
 
     def test_bounded_process(self):
         self.assertEqual(review.run([sys.executable, "-c", "print('ok')"]), b"ok\n")
@@ -76,7 +144,7 @@ class ReviewTests(unittest.TestCase):
 
     def test_complete_serialized_instruction_and_schema_bound(self):
         for binding, policy_text, files, diff in [
-            ({"source": "frozen"}, "p" * 400000, {"source.nix": "s" * 400000}, "d" * 300000),
+            ({"source": "frozen"}, "p" * 400000, {"source.nix": "s" * 400000}, "d" * 700000),
             ({"source": "b" * 250000}, "p" * 600000, {}, ""),
         ]:
             with self.subTest(schema_binding=len(binding['source'])), tempfile.TemporaryDirectory() as directory:
@@ -122,9 +190,9 @@ class ReviewTests(unittest.TestCase):
             (baseline / "complete.nix").write_text(text)
             self.assertEqual(review.baseline_files(baseline), {"complete.nix": text})
             (baseline / "complete.nix").write_text("x" * (review.SOURCE_LIMIT + 1))
-            with self.assertRaisesRegex(ValueError, "review context bound"):
+            with self.assertRaisesRegex(ValueError, "source transport capacity"):
                 review.baseline_files(baseline)
-        self.assertEqual(review.SOURCE_LIMIT, 896 * 1024)
+        self.assertEqual(review.SOURCE_LIMIT, 4 * 1024 * 1024)
         self.assertEqual(review.REVIEW_INPUT_LIMIT, 1024 * 1024)
         self.assertEqual(review.OUTPUT_LIMIT, 2 * 1024 * 1024)
 
@@ -242,7 +310,7 @@ class ReviewTests(unittest.TestCase):
             (repo / "private-note").unlink()
             (repo / ".gitignore").unlink()
             (repo / "large").write_text("x" * (review.SOURCE_LIMIT + 1))
-            with self.assertRaisesRegex(ValueError, "source exceeds bounded review context"):
+            with self.assertRaisesRegex(ValueError, "source exceeds transport capacity"):
                 review.snapshot(config, root / "unused")
             (repo / "large").write_text("x")
             (repo / "escape").symlink_to("/etc/passwd")

@@ -22,8 +22,8 @@ import struct
 import sys
 import tempfile
 
-LIMIT = 1024 * 1024
-SOURCE_LIMIT = 896 * 1024
+LIMIT = 32 * 1024 * 1024
+SOURCE_LIMIT = 4 * 1024 * 1024
 class DeploymentFailure(ValueError):
     def __init__(self, stage, code):
         self.stage, self.code = stage, code
@@ -35,6 +35,7 @@ class DeploymentDenied(DeploymentFailure):
         super().__init__('review', 'model-denied')
         self.summary = summary[:1000]
         self.affected_nodes = []
+        self.pending_nonce = None
 
 
 FIELDS = {'files', 'modes', 'commit', 'target', 'action', 'reason'}
@@ -43,7 +44,7 @@ FIELDS = {'files', 'modes', 'commit', 'target', 'action', 'reason'}
 def request_valid(request, target):
     if not isinstance(request, dict):
         raise ValueError('unsupported request fields')
-    expected = FIELDS | ({'expectedBase', 'expectedProfile'} if request.get('action') in {'boot', 'update'} else set())
+    expected = FIELDS | ({'branch'} if 'branch' in request else set()) | ({'expectedBase', 'expectedProfile'} if request.get('action') in {'boot', 'update'} else set())
     if set(request) != expected:
         raise ValueError('unsupported request fields')
     if request['action'] not in {'test', 'switch', 'boot', 'update'} or request['target'] != target:
@@ -55,6 +56,8 @@ def request_valid(request, target):
     if request['action'] in {'boot', 'update'}:
         store_path(request['expectedBase'], 'source')
         store_path(request['expectedProfile'], 'closure')
+    if 'branch' in request and (not isinstance(request['branch'], str) or not re.fullmatch(r'[A-Za-z0-9._/+@-]{1,200}', request['branch'])):
+        raise ValueError('invalid branch index hint')
     files, modes = request['files'], request['modes']
     if not isinstance(files, dict) or not isinstance(modes, dict) or set(files) != set(modes):
         raise ValueError('invalid source manifest')
@@ -73,7 +76,7 @@ def request_valid(request, target):
     if any(str(parent) in files for name in files for parent in Path(name).parents if str(parent) != '.'):
         raise ValueError('file/directory prefix collision')
     if total > SOURCE_LIMIT:
-        raise ValueError('source exceeds review bound')
+        raise ValueError('source exceeds transport capacity')
 
 
 def store_path(value, kind):
@@ -165,15 +168,11 @@ def as_user(config, user, argv, run, **kwargs):
                 '--clear-groups', '--no-new-privs', *argv], **kwargs)
 
 
-def collect_upstream(upstream, action, before, after, resolve_locked, resolve_cli):
-    """Manual deployments retain evidence for locked inputs and the reviewer CLI."""
-    if action == 'update':
-        return []
-    batches = []
-    if before.get('flake.lock') != after.get('flake.lock'):
-        batches.extend(upstream.evidence(before, after, resolve_locked))
-    batches.extend(upstream.cli_evidence(before, after, resolve_cli))
-    return batches
+def load_security(config):
+    spec = importlib.util.spec_from_file_location('security_review', config['securityReviewScript'])
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def process(config, request, uid, pid, operator=False):
@@ -248,7 +247,6 @@ def process_inner(config, request, uid, pid, state):
         # immutable source is the preceding approved dependency baseline; do not
         # repeatedly spend reviews on the same already-staged upstream changes.
         previous_dependencies = review.baseline_files(Path(profile_source))
-        upstream_batches = []
         if request['action'] == 'update':
             state['stage'] = 'routine-policy'
             update_spec = importlib.util.spec_from_file_location('routine_update', config['routineUpdateScript'])
@@ -325,33 +323,6 @@ def process_inner(config, request, uid, pid, state):
             update.validate_source(previous_dependencies, previous_modes, request['files'], request['modes'],
                                    config['system'], compare_versions, evaluate_package, desktop_package_version,
                                    verify_current_source)
-        else:
-            state['stage'] = 'upstream-evidence'
-        if review_required:
-            spec = importlib.util.spec_from_file_location('upstream_review', config['upstreamReviewScript'])
-            upstream = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(upstream)
-            def resolve_locked(locked):
-                from urllib.parse import quote
-                reference = 'github:%s/%s/%s?narHash=%s' % (locked['owner'], locked['repo'],
-                    locked['rev'], quote(locked['narHash'], safe=''))
-                metadata = json.loads(as_user(config, config['builderUser'],
-                    [config['nix'], 'flake', 'metadata', '--json', '--no-write-lock-file', reference],
-                    review.run, env=env, timeout=600))
-                if any(metadata['locked'].get(k) != locked.get(k) for k in ('owner', 'repo', 'rev', 'narHash')):
-                    raise ValueError('resolved upstream source does not match lock')
-                store_path(metadata['path'], 'source')
-                return metadata['path']
-            def resolve_cli(version):
-                record = json.loads(as_user(config, config['builderUser'],
-                    [config['nix'], 'flake', 'prefetch', '--json', 'github:openai/codex/rust-v' + version],
-                    review.run, env=env, timeout=600))
-                store_path(record['storePath'], 'source')
-                return record['storePath']
-            upstream_batches = collect_upstream(upstream, request['action'], previous_dependencies,
-                                                request['files'], resolve_locked, resolve_cli)
-        if review_required and len(upstream_batches) > upstream.MAX_BATCHES:
-            raise ValueError('combined upstream evidence exceeds batch bound')
         state['stage'] = 'build'
         print(json.dumps(dict(event='building', uid=uid, pid=pid, source=source_store)), flush=True)
         closure = as_user(config, config['builderUser'], [config['nix'], 'build', '--no-link', '--print-out-paths',
@@ -368,118 +339,153 @@ def process_inner(config, request, uid, pid, state):
         binding = {key: request[key] for key in ('commit', 'target', 'action', 'reason')}
         binding.update(source=source_store, base=baseline, profile=profile,
                        profileSource=profile_source, closure=closure, nonce=secrets.token_hex(32))
-        if review_required:
+        security = load_security(config) if review_required and config.get('securityReviewState') else None
+        branch = request.get('branch', 'detached-' + request['commit'])
+        checkpoint, context_base, context_old = False, baseline, old
+        if security:
+            checkpoint, context_base, context_old = security.choose_checkpoint(
+                config, request['target'], source_store, closure, branch, baseline, request['files'], review, store_path)
+        if review_required and not checkpoint:
+            binding['reviewBase'] = context_base
             work = temporary / 'review'
             work.mkdir(mode=0o700)
             reviewer = pwd.getpwnam(config['reviewerUser'])
             os.chown(work, reviewer.pw_uid, reviewer.pw_gid)
-            payload = {'binding': binding, 'files': request['files'],
-                       'diff': review.source_diff(old, request['files'], review.source_modes(Path(baseline), old), request['modes']), 'upstreamBatches': upstream_batches,
-                       'upstreamNodes': [getattr(batch, 'nodes', []) for batch in upstream_batches]}
+            payload = {'binding': binding, 'files': request['files'], 'baseline': context_old,
+                       'diff': review.source_diff(context_old, request['files'],
+                                review.source_modes(Path(context_base), context_old), request['modes'])}
             state['stage'] = 'review'
-            print(json.dumps(dict(event='reviewing', uid=uid, pid=pid, source=source_store, closure=closure)), flush=True)
-            output = as_user(config, config['reviewerUser'], [config['python'], '-I', config['controller'],
-                             config['configPath'], 'worker', str(work)], review.run,
-                             data=json.dumps(payload).encode(), timeout=min(7200, 700 * (len(upstream_batches) + 1)),
-                             env={'HOME': config['reviewHome'], 'PATH': '/nonexistent'})
-            state['stage'] = 'verdict'
-            result = json.loads(output)
-            if not isinstance(result, dict) or result.get('status') not in {'verdict', 'error'}:
-                raise DeploymentFailure('verdict', 'worker-envelope-invalid')
-            if result['status'] == 'error':
-                code = result.get('code')
-                if code not in {'reviewer-invocation-failed', 'schema-invalid', 'binding-mismatch',
-                                'context-compacted', 'review-context-oversized', 'upstream-model-denied'}:
-                    code = 'worker-envelope-invalid'
-                raise DeploymentFailure('review', code)
-            verdict = result.get('verdict')
-            if 'upstreamDenialIndex' in result:
-                index = result['upstreamDenialIndex']
-                if type(index) is not int or not 0 <= index < len(upstream_batches):
-                    raise DeploymentFailure('verdict', 'upstream-denial-index')
-                try:
-                    review.validate_verdict(verdict, upstream_binding(binding, upstream_batches[index], index, getattr(upstream_batches[index], 'nodes', [])))
-                except review.ReviewDenied as error:
-                    denial = DeploymentDenied(error.verdict['summary'])
-                    denial.affected_nodes = getattr(upstream_batches[index], 'nodes', [])
-                    raise denial from None
-                except review.ReviewVerdictError as error:
-                    raise DeploymentFailure('verdict', error.code) from None
-                raise DeploymentFailure('verdict', 'upstream-denial-approved')
+            print(json.dumps(dict(event='reviewing', uid=uid, pid=pid, source=source_store, closure=closure,
+                                  diffBytes=len(payload['diff'].encode()), controllerInvocationLimit=2,
+                                  contextByteLimit=128 * 1024)), flush=True)
             try:
-                upstream_verdicts = result.get('upstreamVerdicts', [])
-                if not isinstance(upstream_verdicts, list) or len(upstream_verdicts) != len(upstream_batches):
-                    raise DeploymentFailure('verdict', 'upstream-verdict-count')
-                for index, (batch, upstream_verdict) in enumerate(zip(upstream_batches, upstream_verdicts)):
-                    review.validate_verdict(upstream_verdict, upstream_binding(binding, batch, index, getattr(batch, 'nodes', [])))
-                review.validate_verdict(verdict, binding)
+                output = as_user(config, config['reviewerUser'], [config['python'], '-I', config['controller'],
+                                 config['configPath'], 'worker', str(work)], review.run,
+                                 data=json.dumps(payload).encode(), timeout=1400,
+                                 env={'HOME': config['reviewHome'], 'PATH': '/nonexistent'})
+                state['stage'] = 'verdict'
+                result = json.loads(output)
+                if not isinstance(result, dict) or result.get('status') not in {'verdict', 'error'}:
+                    raise DeploymentFailure('verdict', 'worker-envelope-invalid')
+                if result['status'] == 'error':
+                    code = result.get('code')
+                    if code not in {'reviewer-invocation-failed', 'review-invocation-failed', 'review-startup-failed',
+                            'review-authentication-missing', 'review-authentication-failed', 'review-timeout',
+                            'review-output-limit', 'schema-invalid', 'binding-mismatch', 'context-compacted',
+                            'review-context-oversized', 'context-request-invalid', 'context-request-oversized'}:
+                        code = 'worker-envelope-invalid'
+                    raise DeploymentFailure('review', code)
+                if set(result) != {'status', 'verdict'}:
+                    raise DeploymentFailure('verdict', 'worker-envelope-invalid')
+                review.validate_verdict(result.get('verdict'), binding)
             except review.ReviewDenied as error:
-                raise DeploymentDenied(error.verdict['summary']) from None
+                denial = DeploymentDenied(error.verdict['summary'])
+                if security:
+                    denial.pending_nonce = security.pending(config, binding, uid, branch, denial.code, denial.summary, review.run)
+                    denial.pending_metadata = pending_metadata(binding)
+                raise denial from None
             except review.ReviewVerdictError as error:
-                raise DeploymentFailure('verdict', error.code) from None
-        state['stage'] = 'baseline-recheck'
-        if str(Path(config['baseline']).resolve(strict=True)) != baseline:
-            raise ValueError('activated baseline changed during review')
-        if str(Path('/nix/var/nix/profiles/system').resolve(strict=True)) != profile:
-            raise ValueError('boot profile changed during review')
-        if str((Path(profile) / 'etc/phoenix-agent/activated-source').resolve(strict=True)) != profile_source:
-            raise ValueError('approved profile source changed during review')
-        print(json.dumps(dict(event='approved', uid=uid, pid=pid, source=source_store,
-                              closure=closure, action=request['action'], target=request['target'])), flush=True)
-        # Upstream transient service owns activation even if the new system
-        # explicitly changes/removes this controller. No shell or caller unit name.
-        state['stage'] = 'activation'
-        # A temporary-tested prior runtime may have no profile generation. Keep
-        # it alive after candidate activation moves the current-system GC root.
-        previous_runtime = str(Path('/run/current-system').resolve(strict=True))
-        store_path(previous_runtime, 'closure')
-        review.run([config['nixStore'], '--add-root', str(temporary / 'rollback-runtime-root'),
-                    '--indirect', '--realise', previous_runtime])
-        review.run([config['systemdRun'], '--quiet', '--wait', '--collect',
-                    '--service-type=exec', '--property=RuntimeMaxSec=2100', '--property=TimeoutStopSec=15s',
-                    '--unit=phoenix-deploy-activation-' + binding['nonce'],
-                    config['python'], '-I', config['controller'], config['configPath'],
-                    'activate', closure, request['action'], '--expected-base', baseline,
-                    '--expected-source', source_store, '--expected-profile', profile], timeout=2200)
-
-        return dict(ok=True, source=source_store, closure=closure, action=request['action'])
+                failure = DeploymentFailure('verdict', error.code)
+                if security:
+                    failure.pending_nonce = security.pending(config, binding, uid, branch, error.code,
+                                                             'Security review did not complete (' + error.code + ').', review.run)
+                    failure.pending_metadata = pending_metadata(binding)
+                raise failure from None
+            except DeploymentFailure as error:
+                if security:
+                    error.pending_nonce = security.pending(config, binding, uid, branch, error.code,
+                                                           'Security review did not complete (' + error.code + ').', review.run)
+                    error.pending_metadata = pending_metadata(binding)
+                raise
+            except Exception:
+                failure = DeploymentFailure('review', 'reviewer-invocation-failed')
+                if security:
+                    failure.pending_nonce = security.pending(config, binding, uid, branch, failure.code,
+                                                             'Security review could not complete.', review.run)
+                    failure.pending_metadata = pending_metadata(binding)
+                raise failure from None
+        if security:
+            # A checkpoint represents approved source; activated baseline is separate.
+            security.approve(config, binding, branch, review.run)
+        return activate_bound(config, binding, temporary, review, state, uid, pid)
 
 
-def upstream_binding(binding, batch, index, nodes=None):
-    return dict(binding, scope='upstream-authority-' + str(index),
-                evidenceDigest=hashlib.sha256(batch.encode()).hexdigest(), affectedInputNodes=json.dumps(nodes or [], separators=(',', ':')))
+def recheck_bound(config, binding):
+    if str(Path(config['baseline']).resolve(strict=True)) != binding['base']:
+        raise ValueError('activated baseline changed during review')
+    if str(Path('/nix/var/nix/profiles/system').resolve(strict=True)) != binding['profile']:
+        raise ValueError('boot profile changed during review')
+    if str((Path(binding['profile']) / 'etc/phoenix-agent/activated-source').resolve(strict=True)) != binding['profileSource']:
+        raise ValueError('approved profile source changed during review')
+
+
+def activate_bound(config, binding, temporary, review, state, uid, pid):
+    baseline, profile, profile_source, source_store, closure = (binding[key] for key in
+        ('base', 'profile', 'profileSource', 'source', 'closure'))
+    state['stage'] = 'baseline-recheck'
+    recheck_bound(config, binding)
+    print(json.dumps(dict(event='approved', uid=uid, pid=pid, source=source_store,
+                          closure=closure, action=binding['action'], target=binding['target'])), flush=True)
+    # Upstream transient service owns activation even if the new system
+    # explicitly changes/removes this controller. No shell or caller unit name.
+    state['stage'] = 'activation'
+    # A temporary-tested prior runtime may have no profile generation. Keep
+    # it alive after candidate activation moves the current-system GC root.
+    previous_runtime = str(Path('/run/current-system').resolve(strict=True))
+    store_path(previous_runtime, 'closure')
+    review.run([config['nixStore'], '--add-root', str(temporary / 'rollback-runtime-root'),
+                '--indirect', '--realise', previous_runtime])
+    review.run([config['systemdRun'], '--quiet', '--wait', '--collect',
+                '--service-type=exec', '--property=RuntimeMaxSec=2100', '--property=TimeoutStopSec=15s',
+                '--unit=phoenix-deploy-activation-' + binding['nonce'],
+                config['python'], '-I', config['controller'], config['configPath'],
+                'activate', closure, binding['action'], '--expected-base', baseline,
+                '--expected-source', source_store, '--expected-profile', profile], timeout=2200)
+
+    return dict(ok=True, source=source_store, closure=closure, action=binding['action'])
 
 
 def worker(config, directory):
     review = load_review(config)
     payload = json.load(sys.stdin)
     temporary = Path(directory)
-    # Source modes are read by the shared reviewer from this immutable link.
-    (temporary / 'source').symlink_to(payload['binding']['source'], target_is_directory=True)
     try:
-        upstream_verdicts = []
-        for index, batch in enumerate(payload.get('upstreamBatches', [])):
-            scoped = temporary / ('upstream-' + str(index))
-            scoped.mkdir(mode=0o700)
-            (scoped / 'source').symlink_to(payload['binding']['source'], target_is_directory=True)
-            upstream_verdicts.append(review.review(config,
-                upstream_binding(payload['binding'], batch, index, payload.get('upstreamNodes', [[]]*len(payload['upstreamBatches']))[index]), {}, batch, scoped))
-        verdict = review.review(config, payload['binding'], payload['files'], payload['diff'], temporary)
+        verdict = review.review(config, payload['binding'], payload['files'], payload['diff'], temporary,
+                                payload.get('baseline', {}))
         result = dict(status='verdict', verdict=verdict)
-        if upstream_verdicts:
-            result['upstreamVerdicts'] = upstream_verdicts
     except review.ReviewDenied as error:
         result = dict(status='verdict', verdict=error.verdict)
-        if 'scope' in error.verdict:
-            result['upstreamDenialIndex'] = index
-        elif upstream_verdicts:
-            result['upstreamVerdicts'] = upstream_verdicts
     except review.ReviewVerdictError as error:
         result = dict(status='error', code=error.code)
     except Exception:
-        # Do not reflect native/API stderr, which may contain credentials.
         result = dict(status='error', code='reviewer-invocation-failed')
     print(json.dumps(result))
+
+
+def override(config, nonce, uid, pid):
+    if os.geteuid() != 0 or not config.get('modelReviewEnabled', True):
+        raise ValueError('security override requires authenticated root and enabled review')
+    with (Path(config['work']).parent / 'deployment.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        security, review = load_security(config), load_review(config)
+        binding = security.load_pending(config, nonce, uid, store_path)
+        activation_executable(binding['closure'])
+        if str((Path(binding['closure']) / 'etc/phoenix-agent/activated-source').resolve(strict=True)) != binding['source']:
+            raise DeploymentFailure('override', 'source-mismatch')
+        recheck_bound(config, binding)
+        # Authentication approves this exact frozen source/closure independently
+        # of activation success. Preserve that approval if activation later fails.
+        security.approve(config, binding, binding['branch'], review.run)
+        with tempfile.TemporaryDirectory(prefix='override-', dir=config['work']) as directory:
+            result = activate_bound(config, binding, Path(directory), review, {}, uid, pid)
+            security.consume_pending(config, nonce)
+            return dict(result, securityOverride=True)
+
+
+def pending_metadata(binding):
+    # A source NAR identity is sufficient for display; never source text/reason.
+    return dict(pendingSourceFingerprint=Path(binding['source']).name.split('-', 1)[0],
+                pendingAction=binding['action'], pendingTarget=binding['target'])
 
 
 def serve(config):
@@ -521,6 +527,9 @@ def serve(config):
             code = error.code if isinstance(error, DeploymentFailure) else 'invalid-or-denied'
             print(json.dumps(dict(event='failed', uid=uid, pid=pid, stage=stage, code=code)), flush=True)
             result = dict(ok=False, stage=stage, code=code, error='Deployment failed at ' + stage + ' (' + code + ').')
+            if getattr(error, 'pending_nonce', None):
+                result['pendingNonce'] = error.pending_nonce
+                result.update(getattr(error, 'pending_metadata', {}))
             if isinstance(error, DeploymentDenied):
                 result['summary'] = error.summary
                 result['affectedInputNodes'] = error.affected_nodes
@@ -607,7 +616,7 @@ def bootstrap_transfer(config, home_fd):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('config')
-    parser.add_argument('mode', choices=['serve', 'worker', 'bootstrap', 'activate', 'operator'])
+    parser.add_argument('mode', choices=['serve', 'worker', 'bootstrap', 'activate', 'operator', 'override'])
     parser.add_argument('directory', nargs='?')
     parser.add_argument('action', nargs='?', choices=['test', 'switch', 'boot', 'update'])
     parser.add_argument('--expected-base')
@@ -616,7 +625,11 @@ def main():
     args = parser.parse_args()
     config = json.loads(Path(args.config).read_text())
     config['configPath'] = args.config
-    if args.mode == 'operator':
+    if args.mode == 'override':
+        with contextlib.redirect_stdout(sys.stderr):
+            result = override(config, args.directory, int(os.environ.get('PKEXEC_UID', '0')), os.getpid())
+        print(json.dumps(result))
+    elif args.mode == 'operator':
         # This route is entered only via the immutable graphical Polkit command.
         # The ordinary socket never treats disabled model review as approval.
         if os.geteuid() != 0 or config.get('modelReviewEnabled', True):
