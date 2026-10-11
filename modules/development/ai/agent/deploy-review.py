@@ -458,17 +458,37 @@ def main():
     parser.add_argument("--target", choices=["metal", "vm"])
     parser.add_argument("--action", choices=(["test", "switch", "boot"] if config.get("clientOnly") else ["review", "build", "test", "switch", "boot"]), default=("test" if config.get("clientOnly") else "review"))
     parser.add_argument("--security-override", metavar="PENDING_NONCE", help="authenticate an explicit exact-state review override")
+    parser.add_argument("--disruption-override", metavar="PENDING_NONCE", help="authenticate one exact protected unit exception")
     args = parser.parse_args()
     reservation = None
     if args.reservation_file:
-        if not config.get('reservationAdapter') or (args.action in {'review', 'build'} and not args.security_override):
+        if not config.get('reservationAdapter') or (args.action in {'review', 'build'} and not (args.security_override or args.disruption_override)):
             parser.error('reservation file is supported only for enabled manual activation')
         spec = importlib.util.spec_from_file_location('reservation_client', config['reservationAdapter'])
         adapter = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(adapter)
         reservation = adapter.read_capability(args.reservation_file)
-    if config.get('reservationAdapter') and (args.action in {'test', 'switch', 'boot'} or args.security_override) and reservation is None:
+    if config.get('reservationAdapter') and (args.action in {'test', 'switch', 'boot'} or args.security_override or args.disruption_override) and reservation is None:
         parser.error('activation requires --reservation-file; acquire a task reservation first')
+    if args.disruption_override:
+        nonce = args.disruption_override
+        if args.security_override or not re.fullmatch(r"[a-f0-9]{64}", nonce) or not config.get('disruptionOverrideCommand'):
+            parser.error('disruption override unavailable or invalid nonce')
+        info_path = Path(config['disruptionInfo']) / (nonce + '.disruption.json')
+        fd = os.open(info_path, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(fd) as stream:
+            info = os.fstat(stream.fileno())
+            if info.st_uid != 0 or info.st_mode & 0o022 or info.st_size > 65536:
+                raise ValueError('untrusted pending disruption display')
+            display = json.load(stream)
+        print('WARNING: One exact protected unit exception; activation shell effects are outside unit inspection.', file=sys.stderr)
+        print(json.dumps(display, ensure_ascii=True, sort_keys=True), file=sys.stderr, flush=True)
+        result = json.loads(run([*config['disruptionOverrideCommand'], nonce],
+                               data=json.dumps(reservation).encode() if reservation is not None else None, timeout=2400))
+        if result.get('ok') is not True:
+            raise ValueError('authenticated disruption exception failed')
+        print(json.dumps(result, indent=2))
+        return
     if args.security_override:
         if not re.fullmatch(r"[a-f0-9]{64}", args.security_override) or not config.get("overrideCommand"):
             parser.error("security override unavailable or invalid pending nonce")
@@ -539,10 +559,10 @@ def main():
                     result = json.loads(response)
                     if not result.get("ok"):
                         if result.get("pendingNonce"):
-                            print("CRITICAL: Security review failed for this exact pending deployment: " + json.dumps({key: result[key] for key in
-                                  ('stage', 'code', 'summary', 'pendingNonce', 'pendingSourceFingerprint', 'pendingAction', 'pendingTarget') if key in result}, ensure_ascii=True),
+                            print(("WARNING: Protected unit inspection requires approval: " if result.get("pendingKind") == "disruption" else "CRITICAL: Security review failed for this exact pending deployment: ") + json.dumps({key: result[key] for key in
+                                  ('stage', 'code', 'summary', 'pendingNonce', 'pendingSourceFingerprint', 'pendingAction', 'pendingTarget', 'pendingKind', 'pendingClosureFingerprint', 'findings', 'proofLimit') if key in result}, ensure_ascii=True),
                                   file=sys.stderr)
-                            print("For an explicit authenticated exact-state override: phoenix-deploy-review --security-override " +
+                            print("For an explicit authenticated exact-state override: phoenix-deploy-review " + ("--disruption-override " if result.get("pendingKind") == "disruption" else "--security-override ") +
                                   result['pendingNonce'], file=sys.stderr)
                         if result.get("code") == "model-denied":
                             raise ValueError("Model review denied: " + json.dumps(result.get("summary", ""), ensure_ascii=True))

@@ -473,11 +473,124 @@ def recheck_bound(config, binding):
         raise ValueError('approved profile source changed during review')
 
 
+def guarded_child(argv, *, timeout, guard_fd, **kwargs):
+    with subprocess.Popen(argv, pass_fds=(guard_fd,), start_new_session=True,
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **kwargs) as child:
+        try:
+            status = child.wait(timeout=timeout)
+            if status:
+                raise subprocess.CalledProcessError(status, argv)
+        except BaseException:
+            try:
+                os.killpg(child.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            child.wait()
+            raise
+
+
+def disruption_security_recheck(config, binding):
+    if not config.get('modelReviewEnabled', True):
+        return
+    security = load_security(config)
+    current = security.policy_digest(config)
+    if binding.get('disruptionSecurityPolicy') != current:
+        raise DeploymentFailure('disruption', 'security-policy-changed')
+    approved = any(record.get('policy') == current and all(record.get(key) == binding[key] for key in ('source', 'closure', 'target'))
+                   for _, record in security.records(config, 'approved'))
+    outstanding = any(record.get('policy') == current and all(record.get(key) == binding[key] for key in ('source', 'closure', 'target'))
+                      for _, record in security.records(config, 'pending'))
+    if not approved or outstanding:
+        raise DeploymentFailure('disruption', 'security-approval-required')
+
+
+def load_disruption(config):
+    spec = importlib.util.spec_from_file_location('phoenix_disruption', config['disruptionScript'])
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def disruption_check(config, binding, review=None, uid=None, pending=False):
+    if not config.get('disruptionGuard', {}).get('enable') or binding['action'] not in {'test', 'switch'}:
+        return
+    module = load_disruption(config)
+    runtime = str(Path('/run/current-system').resolve(strict=True))
+    proof = module.probe(config, runtime, binding['closure'])
+    approved = binding.get('disruptionApproval')
+    if approved is not None:
+        disruption_security_recheck(config, binding)
+        if approved != proof['digest']:
+            raise DeploymentFailure('disruption', 'approval-state-changed')
+        return
+    if proof['findings']:
+        error = DeploymentFailure('disruption', 'inspection-required')
+        if pending:
+            record = dict(binding, disruptionProof=proof, disruptionUid=uid)
+            if config.get('modelReviewEnabled', True):
+                record['disruptionSecurityPolicy'] = load_security(config).policy_digest(config)
+            record.pop('reservation', None)
+            state = module.state_directory(config)
+            if len(list(state.glob('*.json'))) >= 32:
+                raise DeploymentFailure('disruption', 'pending-capacity')
+            module.write_record(state / (binding['nonce'] + '.json'), record)
+            for name in ('source', 'closure'):
+                review.run([config['nixStore'], '--add-root', str(state / (binding['nonce'] + '.' + name)),
+                            '--indirect', '--realise', binding[name]])
+            display = dict(pending_metadata(binding), pendingClosureFingerprint=Path(binding['closure']).name,
+                           findings=proof['findings'], proofLimit='unit-artifacts-only')
+            module.write_record(Path(config['disruptionInfo']) / (binding['nonce'] + '.disruption.json'), display, public=True)
+            error.pending_nonce = binding['nonce']
+            error.pending_metadata = dict(display, pendingKind='disruption')
+        raise error
+
+
+def disruption_override(config, nonce, uid, pid, reservation=None):
+    if os.geteuid() != 0 or uid != operator_uid(config) or not config.get('disruptionGuard', {}).get('enable'):
+        raise ValueError('disruption override requires authenticated installed operator helper')
+    if not re.fullmatch('[a-f0-9]{64}', nonce or ''):
+        raise ValueError('invalid disruption nonce')
+    with (Path(config['work']).parent / 'deployment.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        module, review = load_disruption(config), load_review(config)
+        state = module.state_directory(config)
+        binding = module.read_record(state / (nonce + '.json'))
+        if binding.get('nonce') != nonce or binding.get('target') != config['target'] or binding.get('action') not in {'test', 'switch'}:
+            raise DeploymentFailure('disruption', 'pending-binding-invalid')
+        if binding.get('disruptionUid') not in {config['clientUid'], operator_uid(config)}:
+            raise DeploymentFailure('disruption', 'pending-caller-invalid')
+        recheck_bound(config, binding)
+        for key, kind in [('source', 'source'), ('closure', 'closure')]:
+            store_path(binding[key], kind)
+        if str((Path(binding['closure']) / 'etc/phoenix-agent/activated-source').resolve(strict=True)) != binding['source']:
+            raise DeploymentFailure('disruption', 'source-mismatch')
+        disruption_security_recheck(config, binding)
+        current = module.probe(config, str(Path('/run/current-system').resolve(strict=True)), binding['closure'])
+        if current != binding['disruptionProof']:
+            raise DeploymentFailure('disruption', 'pending-state-changed')
+        if config.get('reservations'):
+            reservation_identity(config, reservation, uid, 'deployment.override')
+            binding.update(reservation=reservation, reservationUid=uid)
+        elif reservation is not None:
+            raise ValueError('unused reservation')
+        binding['disruptionApproval'] = current['digest']
+        # Consume before dispatch: failed activation never leaves reusable authority.
+        (state / (nonce + '.json')).unlink()
+        (Path(config['disruptionInfo']) / (nonce + '.disruption.json')).unlink(missing_ok=True)
+        try:
+            with tempfile.TemporaryDirectory(prefix='disruption-', dir=config['work']) as directory:
+                return dict(activate_bound(config, binding, Path(directory), review, {}, uid, pid), disruptionOverride=True)
+        finally:
+            for name in ('source', 'closure'):
+                (state / (nonce + '.' + name)).unlink(missing_ok=True)
+
+
 def activate_bound(config, binding, temporary, review, state, uid, pid):
     baseline, profile, profile_source, source_store, closure = (binding[key] for key in
         ('base', 'profile', 'profileSource', 'source', 'closure'))
     state['stage'] = 'baseline-recheck'
     recheck_bound(config, binding)
+    disruption_check(config, binding, review, uid, pending=True)
     print(json.dumps(dict(event='approved', uid=uid, pid=pid, source=source_store,
                           closure=closure, action=binding['action'], target=binding['target'])), flush=True)
     # Upstream transient service owns activation even if the new system
@@ -489,13 +602,13 @@ def activate_bound(config, binding, temporary, review, state, uid, pid):
     store_path(previous_runtime, 'closure')
     review.run([config['nixStore'], '--add-root', str(temporary / 'rollback-runtime-root'),
                 '--indirect', '--realise', previous_runtime])
-    if config.get('reservations'):
+    if config.get('reservations') or config.get('disruptionGuard', {}).get('enable'):
         # This spool survives controller death; only the actual service removes it.
         spool = Path(config['activationSpool'])
         if len(list(spool.glob('*.json'))) >= 64:
             raise DeploymentFailure('activation', 'spool-recovery-required')
-        manager = reservation_manager(config)
-        routine = binding['action'] == 'update'
+        manager = reservation_manager(config) if config.get('reservations') else None
+        routine = binding['action'] == 'update' and manager is not None
         if routine:
             ticket = manager.engine.acquire(0, 'routine-update', 'deployment.update', manager.engine.baseline())
             value = {key: ticket[key] for key in ('generation', 'capability')}
@@ -503,8 +616,9 @@ def activate_bound(config, binding, temporary, review, state, uid, pid):
                 manager.engine.cancel(0, **value)
                 raise DeploymentFailure('reservation', 'routine-resource-busy')
             binding = dict(binding, reservation=value, reservationUid=0, routineReservation=True)
-        reservation_identity(config, binding['reservation'], binding['reservationUid'],
-                             'deployment.' + binding['action'])
+        if manager is not None:
+            reservation_identity(config, binding['reservation'], binding['reservationUid'],
+                                 'deployment.' + binding['action'])
         envelope = spool / (binding['nonce'] + '.json')
         fd = os.open(envelope, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, 'w') as stream:
@@ -547,30 +661,36 @@ def activate_reserved(config, nonce):
         binding = json.load(stream)
     if binding['nonce'] != nonce or binding['target'] != config['target'] or binding['action'] not in {'test', 'switch', 'boot', 'update'}:
         raise ValueError('invalid activation envelope')
-    manager = reservation_manager(config)
-    value = binding['reservation']
+    manager = reservation_manager(config) if config.get('reservations') else None
+    value = binding.get('reservation')
+    operation_context = manager.engine.operation(binding['reservationUid'], command='deployment.' + binding['action'], **value) if manager else contextlib.nullcontext()
     try:
-        with activation_guard(config) as guard_fd, manager.engine.operation(binding['reservationUid'], command='deployment.' + binding['action'], **value) as operation:
+        with activation_guard(config) as guard_fd, operation_context as operation:
             recheck_bound(config, binding)
             store_path(binding['closure'], 'closure')
             store_path(binding['source'], 'source')
             activation_executable(binding['closure'])
             if str((Path(binding['closure']) / 'etc/phoenix-agent/activated-source').resolve(strict=True)) != binding['source']:
                 raise DeploymentFailure('activation', 'source-mismatch')
+            disruption_check(config, binding)
             # Foreground children inherit the gate; systemd owns this helper's lifetime.
             def run(argv, *, timeout, **kwargs):
-                operation.run_child(argv, timeout=timeout, guard_fds=(guard_fd,), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, **kwargs)
+                if operation:
+                    operation.run_child(argv, timeout=timeout, guard_fds=(guard_fd,), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, **kwargs)
+                else:
+                    guarded_child(argv, timeout=timeout, guard_fd=guard_fd, **kwargs)
                 return b''
             activate(config, binding['closure'], binding['action'], run)
             try:
-                operation.advance_baseline()
-            except manager.module.Rejected:
+                if operation:
+                    operation.advance_baseline()
+            except (manager.module.Rejected if manager else ValueError):
                 print(json.dumps({'event': 'activated-reservation-ended', 'generation': value['generation']}), flush=True)
     finally:
         if binding.get('routineReservation'):
             try:
                 manager.engine.release(0, **value)
-            except manager.module.Rejected:
+            except (manager.module.Rejected if manager else ValueError):
                 pass
         path.unlink(missing_ok=True)
         for name in ('source', 'closure', 'runtime'):
@@ -613,9 +733,9 @@ def override(config, nonce, uid, pid, reservation=None):
         # Authentication approves this exact frozen source/closure independently
         # of activation success. Preserve that approval if activation later fails.
         security.approve(config, binding, binding['branch'], review.run)
+        security.consume_pending(config, nonce)
         with tempfile.TemporaryDirectory(prefix='override-', dir=config['work']) as directory:
             result = activate_bound(config, binding, Path(directory), review, {}, uid, pid)
-            security.consume_pending(config, nonce)
             return dict(result, securityOverride=True)
 
 
@@ -753,7 +873,7 @@ def bootstrap_transfer(config, home_fd):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('config')
-    parser.add_argument('mode', choices=['serve', 'worker', 'bootstrap', 'activate', 'activate-reserved', 'operator', 'override'])
+    parser.add_argument('mode', choices=['serve', 'worker', 'bootstrap', 'activate', 'activate-reserved', 'operator', 'override', 'disruption-override'])
     parser.add_argument('directory', nargs='?')
     parser.add_argument('action', nargs='?', choices=['test', 'switch', 'boot', 'update'])
     parser.add_argument('--expected-base')
@@ -762,7 +882,7 @@ def main():
     args = parser.parse_args()
     config = json.loads(Path(args.config).read_text())
     config['configPath'] = args.config
-    if args.mode == 'override':
+    if args.mode in {'override', 'disruption-override'}:
         reservation = None
         if config.get('reservations'):
             data = sys.stdin.buffer.read(4097)
@@ -770,7 +890,8 @@ def main():
                 raise ValueError('override reservation exceeds bound')
             reservation = json.loads(data)
         with contextlib.redirect_stdout(sys.stderr):
-            result = override(config, args.directory, int(os.environ.get('PKEXEC_UID', '0')), os.getpid(), reservation)
+            operation = disruption_override if args.mode == 'disruption-override' else override
+            result = operation(config, args.directory, int(os.environ.get('PKEXEC_UID', '0')), os.getpid(), reservation)
         print(json.dumps(result))
     elif args.mode == 'operator':
         # This route is entered only via the immutable graphical Polkit command.
@@ -784,7 +905,12 @@ def main():
         if request.get('action') not in {'test', 'switch', 'boot'}:
             raise ValueError('operator route only accepts manual deployment actions')
         with contextlib.redirect_stdout(sys.stderr):
-            result = process(config, request, int(os.environ.get('PKEXEC_UID', '0')), os.getpid(), operator=True)
+            try:
+                result = process(config, request, int(os.environ.get('PKEXEC_UID', '0')), os.getpid(), operator=True)
+            except DeploymentFailure as error:
+                result = dict(ok=False, stage=error.stage, code=error.code)
+                if getattr(error, 'pending_nonce', None):
+                    result.update(pendingNonce=error.pending_nonce, **error.pending_metadata)
         print(json.dumps(result))
     elif args.mode == 'activate-reserved':
         activate_reserved(config, args.directory)
@@ -803,6 +929,7 @@ def main():
                 raise DeploymentFailure('activation', 'profile-changed')
             if str((Path(args.directory) / 'etc/phoenix-agent/activated-source').resolve(strict=True)) != args.expected_source:
                 raise DeploymentFailure('activation', 'source-mismatch')
+            disruption_check(config, dict(closure=args.directory, action=args.action))
             review = load_review(config)
             activate(config, args.directory, args.action, lambda argv, **kwargs: review.run(argv, pass_fds=(guard_fd,), **kwargs))
 

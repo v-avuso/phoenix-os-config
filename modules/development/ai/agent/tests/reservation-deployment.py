@@ -26,7 +26,7 @@ deploy = load('deployment', OWNER / 'deployment.py')
 
 def helper(directory, nonce, legacy=False):
     directory = Path(directory)
-    config = {'target': 'metal', 'activationSpool': str(directory / 'spool'), 'activationLock': str(directory / 'activation.lock')}
+    config = {'target': 'metal', 'activationSpool': str(directory / 'spool'), 'activationLock': str(directory / 'activation.lock'), 'reservations': {'fixture': True}}
     mapping = json.loads((directory / 'mapping.json').read_text()) if (directory / 'mapping.json').exists() else None
     engine = engine_module.Engine(directory / 'state', baseline=lambda: (directory / 'baseline').read_text(), owner_uid=os.getuid(), mapping=mapping)
     manager = type('Manager', (), {'engine': engine, 'module': engine_module})()
@@ -52,6 +52,7 @@ def helper(directory, nonce, legacy=False):
     # Explicit stubs: fixture owner is not root; no Nix/store/systemd/OS change.
     with mock.patch.object(os, 'getuid', return_value=0), mock.patch.object(os, 'geteuid', return_value=0), mock.patch.object(Path, 'lstat', lstat), mock.patch.object(os, 'fstat', fstat), mock.patch.object(deploy, 'reservation_manager', return_value=manager), mock.patch.object(deploy, 'recheck_bound'), mock.patch.object(deploy, 'store_path'), mock.patch.object(deploy, 'activation_executable'), mock.patch.object(Path, 'resolve', lambda self, **kwargs: Path('source') if str(self).endswith('activated-source') else Path('profile') if str(self) == '/nix/var/nix/profiles/system' else self), mock.patch.object(deploy, 'activate', activate):
         if legacy:
+            config.pop('reservations')
             config.update(baseline=str(directory / 'baseline'), reviewScript=str(OWNER / 'deploy-review.py'))
             configfile = directory / 'legacy-config.json'; configfile.write_text(json.dumps(config))
             with mock.patch.object(sys, 'argv', ['controller', str(configfile), 'activate', 'closure', 'test', '--expected-base', str(directory / 'baseline'), '--expected-source', 'source', '--expected-profile', 'profile']):

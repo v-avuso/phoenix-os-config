@@ -55,16 +55,15 @@
   current baseline checks enforce exclusivity; see [reservations](reservations.md).
   Live VM/Polkit/systemd acceptance remains pending.
 
-- **Operator identity prerequisite:** Immutable deployment configuration separates
-  `operatorUid` (retained reviewer-login ownership and authenticated manual/critical
-  override caller) from `clientUid` (kernel socket caller and pending request owner).
-  Legacy immutable configurations retain their validated single UID. Both UIDs still
-  resolve to the operator today; sockets and launchers retain their existing access.
-  A dedicated agent account and protected native/OpenShell launch transport are not
-  implemented. UID checks do not identify an executable or prevent operator malware
-  from invoking an allowed launcher. A future migration must prove retained auth,
-  app-server/TTY transport, workspace DAC and agent-owned rootless Podman mapping
-  together before restricting broker callers.
+- **Operator identity (experimental):** Dedicated account and native/OpenShell
+  transport are prepared and default off. Distinct caller/operator authority and
+  migration constraints are documented in [identity](identity.md); isolated live
+  acceptance remains pending.
+- **Protected desktop units (experimental):** Default-off
+  `services.phoenixDeployment.disruptionGuard.enable` compares concrete active
+  desktop/session units before dispatch and inside the actual activation helper.
+  Exact fresh operator exceptions remain independent of security approval.
+  Arbitrary activation shell effects are outside its proof; see [disruption](disruption.md).
 
 - [Testing reservations](reservations.md): default-off management through the existing
   admin broker and fixed authenticated operator helpers, deployment lifetime gating

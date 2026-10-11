@@ -122,3 +122,10 @@ These checks were added for the architecture changes; they are not a
 comprehensive runtime suite. They never alter live settings or activate NixOS.
 Full-host evaluation/build and the combined manual acceptance pass still verify
 actual Home Manager deployment, application reloads, and session/reboot behavior.
+
+Protected desktop unit guarding (default off):
+`python3 -B modules/development/ai/agent/tests/disruption.py` checks regenerated
+immutable unit layouts, active-unit/removal/drop-in/dependency changes, native
+no-restart behavior, inspection fallback, pending exception binding and both actual
+helper routes using explicit fake OS/activation interfaces. See the module's
+[proof limits](../modules/development/ai/agent/disruption.md); live acceptance is deferred.

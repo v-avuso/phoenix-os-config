@@ -22,6 +22,11 @@
   and critical override must remain operator authority; pending requests retain
   their original configured client owner. Prove mapped launch paths before
   restricting broker callers.
+- Disruption guarding is default off and protects concrete immutable active unit
+  artifacts only. Query/layout uncertainty requires a fresh exact operator exception;
+  never describe it as proof against arbitrary activation shell effects. Read
+  `disruption.md` for its boundary; keep security approval independent and repeat
+  inspection inside the actual helper under its existing activation guard.
 - Protected identity remains off until distinct-UID launcher → OpenShell → broker,
   retained model auth, GUI/TTY and workspace/history acceptance pass in isolation.
   Its first mode requires the existing active history handoff; never copy whole

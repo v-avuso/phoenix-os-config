@@ -955,7 +955,7 @@ class DeploymentTests(unittest.TestCase):
                 review.run.side_effect=failed_activation
                 with self.assertRaises(ValueError):deploy.override(config,'a'*64,1000,22)
                 security.approve.assert_called_once_with(config,binding,'main',review.run)
-                security.consume_pending.assert_not_called()
+                security.consume_pending.assert_called_once_with(config,'a'*64)
                 self.assertTrue(any(call.args[0][0]=='systemd-run' for call in review.run.call_args_list))
                 review.run.reset_mock();security.approve.reset_mock();security.consume_pending.reset_mock()
                 review.run.side_effect=None

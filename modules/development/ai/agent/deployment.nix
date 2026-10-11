@@ -34,6 +34,13 @@ let
     "--disable-internal-agent"
     (toString securityOverride)
   ];
+  disruptionOverride = pkgs.writeShellScript "phoenix-disruption-override" ''
+    if [ "$#" -ne 1 ]; then exit 2; fi
+    exec ${pkgs.python3}/bin/python3 -I ${./deployment.py} ${deploymentConfig} disruption-override "$1"
+  '';
+  disruptionOverrideCommand = lib.optionals cfg.disruptionGuard.enable [
+    "/run/wrappers/bin/pkexec" "--disable-internal-agent" (toString disruptionOverride)
+  ];
   # The privileged reviewer is a separate control-plane dependency. Everyday
   # CLI freshness must not silently replace the code enforcing review isolation.
   reviewerCodexPackage = pkgs.callPackage ./reviewer-codex.nix { };
@@ -44,7 +51,8 @@ let
       reservationAdapter = if config.phoenix.agent.reservations.enable then toString ./reservation-client.py else null;
       modelReviewEnabled = cfg.securityReview.enable;
       operatorCommand = lib.optionals (!cfg.securityReview.enable) operatorCommand;
-      inherit overrideCommand;
+      inherit overrideCommand disruptionOverrideCommand;
+      disruptionInfo = "/run/phoenix-deploy";
       notifySend = "${pkgs.libnotify}/bin/notify-send";
       reviewHome = "${user.homeDirectory}/.local/state/phoenix-agent-review";
       codex = if cfg.securityReview.enable then "${reviewerCodexPackage}/bin/codex" else null;
@@ -72,7 +80,8 @@ let
       reservationAdapter = if config.phoenix.agent.reservations.enable then toString ./reservation-client.py else null;
       modelReviewEnabled = cfg.securityReview.enable;
       operatorCommand = lib.optionals (!cfg.securityReview.enable) operatorCommand;
-      inherit overrideCommand;
+      inherit overrideCommand disruptionOverrideCommand;
+      disruptionInfo = "/run/phoenix-deploy";
       notifySend = "${pkgs.libnotify}/bin/notify-send";
       git = "${pkgs.git}/bin/git";
       deploymentSocket = "/run/phoenix-deploy/control.sock";
@@ -102,6 +111,16 @@ let
   deploymentConfig = pkgs.writeText "phoenix-deployment.json" (
     builtins.toJSON ({
       modelReviewEnabled = cfg.securityReview.enable;
+      operatorName = user.name;
+      disruptionScript = toString ./disruption.py;
+      disruptionState = "/var/lib/phoenix-deploy/disruption";
+      disruptionInfo = "/run/phoenix-deploy";
+      systemctl = "${pkgs.systemd}/bin/systemctl";
+      disruptionGuard = {
+        enable = cfg.disruptionGuard.enable;
+        systemUnits = [ "display-manager.service" "systemd-logind.service" "systemd-user-sessions.service" "user@${toString config.users.users.${user.name}.uid}.service" ];
+        userUnits = [ "hyprland-session.target" "graphical-session.target" "hypr-persist.service" "kando.service" "phoenix-timewall.service" "phoenix-timewall-theme.service" "phoenix-timewall-theme-light.timer" "phoenix-timewall-theme-dark.timer" "phoenix-openshell-podman.service" "phoenix-openshell-gateway.service" "phoenix-agent-gui.socket" "phoenix-agent-gui-http.socket" "opensnitch-ui.service" ];
+      };
       clientUid = if config.phoenix.agent.identity.enable then config.phoenix.agent.identity.uid else config.users.users.${user.name}.uid;
       operatorUid = config.users.users.${user.name}.uid;
       target = if config.networking.hostName == "phoenix-vm" then "vm" else "metal";
@@ -146,6 +165,8 @@ let
 in
 {
   imports = [ ./security-review.nix ];
+  options.services.phoenixDeployment.disruptionGuard.enable =
+    lib.mkEnableOption "experimental protected desktop unit deployment guard";
   config = {
     system.build.phoenixDeploymentClient = deployReview;
     system.build.phoenixDeploymentSandboxClient = deployClient;
@@ -172,6 +193,21 @@ in
     # This policy is absent while the experimental security-review switch is off.
     environment.etc = lib.mkMerge [
       { "phoenix-agent/activated-source".source = inputs.self.outPath; }
+      (lib.optionalAttrs cfg.disruptionGuard.enable {
+        "polkit-1/actions/org.phoenix.disruption.policy".text = ''
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN" "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+          <policyconfig>
+            <action id="org.phoenix.disruption.override">
+              <description>Approve a protected desktop disruption exception</description>
+              <message>WARNING: This deployment changes protected desktop units or cannot be inspected. Read the CLI findings before authenticating. This authorizes one exact pending activation and may interrupt your session.</message>
+              <icon_name>dialog-warning</icon_name>
+              <defaults><allow_any>no</allow_any><allow_inactive>no</allow_inactive><allow_active>auth_admin</allow_active></defaults>
+              <annotate key="org.freedesktop.policykit.exec.path">${disruptionOverride}</annotate>
+            </action>
+          </policyconfig>
+        '';
+      })
       (lib.optionalAttrs cfg.securityReview.enable {
         "phoenix-agent/review-policy.md".source = ./review-policy.md;
         "polkit-1/actions/org.phoenix.security-review.policy".text = ''
@@ -202,6 +238,8 @@ in
       home = "/var/empty";
     };
     systemd.tmpfiles.rules =
+      lib.optionals cfg.disruptionGuard.enable [ "d /var/lib/phoenix-deploy/disruption 0700 root root -" ]
+      ++
       lib.optionals cfg.securityReview.enable [
         "d /var/lib/phoenix-deploy/security-review 0700 root root -"
       ]
