@@ -24,7 +24,9 @@ let
   };
   formats = pkgs.formats.toml { };
   yaml = pkgs.formats.yaml { };
-  state = "${user.homeDirectory}/.local/state/phoenix-openshell";
+  operatorState = "${user.homeDirectory}/.local/state/phoenix-openshell";
+  protected = cfg.identity.enable;
+  state = if protected then "/var/lib/phoenix-agent" else operatorState;
   gatewayConfig = formats.generate "phoenix-openshell-gateway.toml" {
     openshell = {
       version = 2;
@@ -36,7 +38,7 @@ let
         log_level = "info";
       };
       drivers.podman = {
-        socket_path = "/run/user/1000/phoenix-openshell-podman.sock";
+        socket_path = if protected then "/run/phoenix-agent/private/podman.sock" else "/run/user/1000/phoenix-openshell-podman.sock";
         # OpenShell 0.1.2's supervisor uses host networking. Its implicit
         # host-gateway entry fails with Podman 5.8 rootless IP detection;
         # use the driver's native override without widening workload networking.
@@ -180,7 +182,7 @@ let
     };
   };
   policy = yaml.generate "phoenix-openshell-policy.yaml" policyContents;
-  historyRoot = "${state}/history";
+  historyRoot = "${operatorState}/history";
   historyDirectories =
     map (name: "${user.homeDirectory}/.codex/${name}") [
       "sessions"
@@ -257,11 +259,17 @@ let
       transportHelper = toString ./launch.py;
     }
   );
+  protectedHistoryConfig = pkgs.writeText "phoenix-codex-protected-history.json" (builtins.toJSON {
+    nativeHome = "${user.homeDirectory}/.codex";
+    root = historyRoot;
+    transportHelper = toString ./launch.py;
+    protectedReadiness = true;
+  });
   historyCommand = [
     "${pkgs.python3}/bin/python3"
     "-I"
     (toString ./history-runtime.py)
-    (toString historyConfig)
+    (toString (if protected then protectedHistoryConfig else historyConfig))
   ];
   launcherConfig = pkgs.writeText "phoenix-openshell-launcher.json" (
     builtins.toJSON {
@@ -274,7 +282,8 @@ let
       policy = toString policy;
       mounts = toString driverConfig;
       historyCommand = historyCommand;
-      historyLock = "${state}/history.lock";
+      historyLock = "${operatorState}/history.lock";
+      protectedIdentity = protected;
       sharedPolicy = toString sharedPolicy;
       sharedMounts = toString sharedDriverConfig;
       profile = toString (
@@ -285,7 +294,7 @@ let
         )
       );
       workspaces = cfg.workspaces;
-      appServerPreferences = [
+      appServerPreferences = lib.optionals (!protected) [
         "${pkgs.python3}/bin/python3"
         "-I"
         (toString ./gui-profile.py)
@@ -296,24 +305,28 @@ let
       inherit state;
     }
   );
+  identityClientConfig = pkgs.writeText "phoenix-agent-identity-client.json" (builtins.toJSON { socket = "/run/phoenix-agent/launch.sock"; });
   launchers = pkgs.writeShellScriptBin "codex" ''
-    exec ${pkgs.python3}/bin/python3 -I ${./launch.py} ${launcherConfig} "$@"
+    ${if protected then "exec ${pkgs.python3}/bin/python3 -I ${./identity-transport.py} --client ${identityClientConfig}" else "exec ${pkgs.python3}/bin/python3 -I ${./launch.py} ${launcherConfig}"} "$@"
   '';
   native = pkgs.writeShellScriptBin "codex-native" ''
     exec ${pkgs.python3}/bin/python3 -I ${./history-runtime.py} ${historyConfig} -- ${codexCliPackage}/bin/codex "$@"
   '';
   login = pkgs.writeShellScriptBin "codex-sandbox-login" ''
+    ${lib.optionalString protected "echo Protected identity retains its migrated provider; use Native administration for repair. >&2; exit 1"}
     exec ${pkgs.python3}/bin/python3 -I ${./launch.py} ${launcherConfig} --phoenix-login
   '';
   historyEnable = pkgs.writeShellScriptBin "codex-history-enable" ''
     exec ${pkgs.python3}/bin/python3 -I ${./history-runtime.py} --cold-preflight "$@" ${historyConfig}
   '';
   sandboxExec = pkgs.writeShellScriptBin "codex-sandbox-exec" ''
+    ${lib.optionalString protected "echo Protected identity does not expose arbitrary sandbox commands. >&2; exit 1"}
     exec ${pkgs.python3}/bin/python3 -I ${./launch.py} ${launcherConfig} --phoenix-exec "$@"
   '';
 in
 {
   imports = [
+    ./identity.nix
     ./broker.nix
     ./shutdown-ordering.nix
   ];
@@ -375,7 +388,7 @@ in
     environment.etc."phoenix-openshell/gateway.toml".source = gatewayConfig;
     virtualisation.podman.enable = true;
     home-manager.users.${user.name} = {
-      systemd.user.services.phoenix-openshell-podman = {
+      systemd.user.services.phoenix-openshell-podman = lib.mkIf (!protected) {
         Unit.Description = "Dedicated rootless Podman API for OpenShell";
         Service = {
           ExecStart = "${pkgs.podman}/bin/podman system service --time=0 unix:%t/phoenix-openshell-podman.sock";
@@ -383,7 +396,7 @@ in
           UMask = "0077";
         };
       };
-      systemd.user.services.phoenix-openshell-gateway = {
+      systemd.user.services.phoenix-openshell-gateway = lib.mkIf (!protected) {
         Unit = {
           Description = "Phoenix OpenShell gateway (rootless, private credentials)";
           Requires = [ "phoenix-openshell-podman.service" ];

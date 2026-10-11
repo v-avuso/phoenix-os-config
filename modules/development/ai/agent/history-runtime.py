@@ -85,7 +85,8 @@ def status(config):
         if journal.exists() or transition.exists() or root.exists():
             raise ValueError("history handoff is incomplete; restore validated readiness before launching")
         return {"active": False}
-    reject_overrides(home)
+    if not config.get("protectedReadiness"):
+        reject_overrides(home)
     sqlite = regular_path(root / "sqlite", directory=True, required=True)
     marker = json.loads(ready.read_text())
     if not isinstance(marker, dict):

@@ -43,6 +43,15 @@ def locked_transport(command, env, lock):
 
 
 def main(config, args):
+    if config.get("identitySocket"):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("identity_transport", config["identityTransport"])
+        transport = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(transport)
+        return transport.client({"socket": config["identitySocket"]}, args)
+    if config.get("protectedIdentity") and args == ["--phoenix-account-id"]:
+        print(str(uuid.UUID(json.loads((Path(config["state"]) / "account-id.json").read_text()))))
+        return 0
     gui_http = args == ["--phoenix-gui-http"]
     app_server = args[:1] == ["app-server"] or gui_http
     state = Path(config["state"])
@@ -55,6 +64,8 @@ def main(config, args):
         if key.startswith("OPENSHELL_"):
             del env[key]
     env["OPENSHELL_GATEWAY"] = "openshell"
+    if config.get("protectedIdentity"):
+        env["OPENSHELL_LOCAL_TLS_DIR"] = str(state / "tls")
     cli = [config["openshell"], "--color=never"]
 
     def run(command, *, capture=True, extra_env=None, check=True, timeout=120):
@@ -86,6 +97,8 @@ def main(config, args):
         if selected.returncode:
             raise SystemExit("Phoenix history readiness failed; repair the cold handoff through Native administration before launching.")
         history = json.loads(selected.stdout)
+        if config.get("protectedIdentity") and not history.get("active"):
+            raise SystemExit("Protected identity requires the existing enabled history handoff; repair through Native administration.")
         if history.get("active"):
             config = config | {"policy": config["sharedPolicy"], "mounts": config["sharedMounts"]}
             if any(value.split("=", 1)[0].strip().split(".")[-1] == "sqlite_home"
@@ -96,7 +109,8 @@ def main(config, args):
 
     with open(state / "launch.lock", "a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        run([config["systemctl"], "--user", "start", "phoenix-openshell-gateway.service"])
+        if not config.get("protectedIdentity"):
+            run([config["systemctl"], "--user", "start", "phoenix-openshell-gateway.service"])
         # First registration follows upstream's supported local mTLS path. Do not
         # mistake a transient gateway failure for a missing registration or retry
         # blindly; errors remain actionable in the user-service journal.
@@ -195,7 +209,7 @@ def main(config, args):
         # Filesystem policy is static: a new declaration gets a new sandbox. Stop
         # the previous managed instance, retaining its workspace/sessions for
         # deliberate recovery instead of silently deleting user state.
-        revision = hashlib.sha256((config["image"] + config["policy"] + config["mounts"]).encode()).hexdigest()[:12]
+        revision = hashlib.sha256((config["image"] + config["policy"] + config["mounts"] + ("protected-identity" if config.get("protectedIdentity") else "")).encode()).hexdigest()[:12]
         # OpenShell v0.1.2 limits sandbox names to 19 characters.
         name = "phx-" + revision
         instance_marker = state / "instance"

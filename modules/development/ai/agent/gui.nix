@@ -46,11 +46,12 @@ let
   client = pkgs.writeShellScriptBin "phoenix-gui-codex" ''
     exec ${python} -I ${./gui-client.py} ${runtime}/phoenix-agent-gui.sock ${lib.removePrefix "codex-" codexCliPackage.name} "$@"
   '';
+  relayLauncherConfig = if cfg.identity.enable then pkgs.writeText "phoenix-agent-gui-protected-launch.json" (builtins.toJSON { identitySocket = "/run/phoenix-agent/launch.sock"; identityTransport = toString ./identity-transport.py; }) else phoenixAgentLauncherConfig;
   relayConfig = pkgs.writeText "phoenix-agent-gui-relay.json" (
     builtins.toJSON {
       inherit python;
       launcher = toString ./launch.py;
-      launcher_config = toString phoenixAgentLauncherConfig;
+      launcher_config = toString relayLauncherConfig;
       home = user.homeDirectory;
       workdir = user.repoDirectory;
       path = toolPath;
@@ -164,6 +165,8 @@ let
     destination = "${profile}/home/.codex/.codex-global-state.json";
     marker = "${profile}/preferences-seeded-v1";
     launcherConfig = toString phoenixAgentLauncherConfig;
+    accountCommand = [ python "-I" (toString ./launch.py) (toString relayLauncherConfig) "--phoenix-account-id" ];
+    workdir = user.repoDirectory;
     workspaces = cfg.workspaces;
   });
   guiConfig = pkgs.writeText "phoenix-agent-gui.json" (

@@ -10,6 +10,7 @@ import os
 import re
 from pathlib import Path
 import sys
+import subprocess
 import tempfile
 import tomllib
 import uuid
@@ -98,9 +99,13 @@ def seed(config):
         raise ValueError("Desktop preferences destination must not be aliased")
     account = None
     launcher = read_object(Path(config["launcherConfig"]))
-    account_file = Path(launcher["state"]) / "account-id.json"
-    if account_file.exists():
-        account = str(uuid.UUID(json.loads(account_file.read_text())))
+    if launcher.get("protectedIdentity"):
+        result = subprocess.run(config["accountCommand"], stdout=subprocess.PIPE, stderr=sys.stderr, cwd=config["workdir"], timeout=30, check=True)
+        account = str(uuid.UUID(result.stdout.decode().strip()))
+    else:
+        account_file = Path(launcher["state"]) / "account-id.json"
+        if account_file.exists():
+            account = str(uuid.UUID(json.loads(account_file.read_text())))
     patch = selected(read_object(source), account, config["workspaces"])
     current = read_object(destination) if destination.exists() else {}
     for key, value in patch.items():

@@ -99,7 +99,7 @@ let
   deploymentConfig = pkgs.writeText "phoenix-deployment.json" (
     builtins.toJSON {
       modelReviewEnabled = cfg.securityReview.enable;
-      clientUid = config.users.users.${user.name}.uid;
+      clientUid = if config.phoenix.agent.identity.enable then config.phoenix.agent.identity.uid else config.users.users.${user.name}.uid;
       operatorUid = config.users.users.${user.name}.uid;
       target = if config.networking.hostName == "phoenix-vm" then "vm" else "metal";
       reviewerUser = "phoenix-deploy-review";
@@ -211,7 +211,7 @@ in
       socketConfig = {
         ListenStream = "/run/phoenix-deploy/control.sock";
         SocketMode = "0600";
-        SocketUser = user.name;
+        SocketUser = if config.phoenix.agent.identity.enable then "phoenix-agent" else user.name;
         RemoveOnStop = true;
       };
     };

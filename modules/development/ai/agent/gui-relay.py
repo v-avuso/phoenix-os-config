@@ -210,7 +210,11 @@ def relay(config):
                 if method and isinstance(response.get("result"), dict):
                     if account is None:
                         launcher = json.loads(Path(config["launcher_config"]).read_text())
-                        account = str(uuid.UUID(json.loads((Path(launcher["state"]) / "account-id.json").read_text())))
+                        if launcher.get("identitySocket"):
+                            selected_account = subprocess.run([config["python"], "-I", config["launcher"], config["launcher_config"], "--phoenix-account-id"], stdout=subprocess.PIPE, stderr=sys.stderr, cwd=config["workdir"], timeout=30, check=True)
+                            account = str(uuid.UUID(selected_account.stdout.decode().strip()))
+                        else:
+                            account = str(uuid.UUID(json.loads((Path(launcher["state"]) / "account-id.json").read_text())))
                     result = response["result"]
                     if method == "getAuthStatus" and result.get("authToken"):
                         selected = selected or worker_account(config, account)

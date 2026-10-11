@@ -12,7 +12,7 @@ let
   '';
   brokerConfig = pkgs.writeText "phoenix-admin.json" (
     builtins.toJSON {
-      client_uid = config.users.users.${user.name}.uid;
+      client_uid = if cfg.identity.enable then cfg.identity.uid else config.users.users.${user.name}.uid;
       wakeup_devices = cfg.wakeupDevices;
       status_services = [
         "coolercontrold.service"
@@ -43,7 +43,7 @@ in
       wantedBy = [ "sockets.target" ];
       socketConfig = {
         ListenStream = "/run/phoenix-admin/socket";
-        SocketUser = user.name;
+        SocketUser = if cfg.identity.enable then "phoenix-agent" else user.name;
         SocketMode = "0600";
         DirectoryMode = "0755";
         RemoveOnStop = true;

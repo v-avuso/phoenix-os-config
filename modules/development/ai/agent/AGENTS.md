@@ -22,6 +22,18 @@
   and critical override must remain operator authority; pending requests retain
   their original configured client owner. Prove mapped launch paths before
   restricting broker callers.
+- Protected identity remains off until distinct-UID launcher → OpenShell → broker,
+  retained model auth, GUI/TTY and workspace/history acceptance pass in isolation.
+  Its first mode requires the existing active history handoff; never copy whole
+  profiles or adopt operator Podman storage to repair identity access.
+- Retained gateway cutover requires an explicit offline/quiescent boundary;
+  descriptor-relative relocation/chown cannot revoke open FDs or historical copies.
+  Cross-filesystem cutover uses only the pinned DB/KEK layout through fixed cp,
+  protected staging, exact streaming verification and atomic publication; retain
+  original source and never generalize this to profile/container reconciliation.
+- Nix may package Python entry points as individual store files. Pass helper paths
+  explicitly in immutable config and test an isolated entry point; do not assume
+  sibling files exist in its store directory.
 - Preserve retained authentication. Diagnose readiness and typed failure stages
   before asking for sign-in; never log tokens, account responses or raw auth stderr.
 - New containment/shutdown behavior stays opt-in until active workload cleanup,
