@@ -33,7 +33,7 @@ in
         "input"
         "uinput"
       ];
-      ExecStart = "${python}/bin/python3 -I ${./mouse-side-button-debounce.py} ${device}";
+      ExecStart = "${python}/bin/python3 -I ${./filter.py} ${device} --map-side-buttons";
       Restart = "on-failure";
       RestartSec = 1;
       TimeoutStopSec = 5;

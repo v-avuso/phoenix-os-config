@@ -23,8 +23,8 @@ python3 -B tests/agent-gui-connection.py
 nix build --impure --file tests/commands-packaging.nix --no-link
 nix build --impure --file tests/clamav-recovery.nix --no-link
 nix build --impure --file tests/hypr-persist.nix --no-link
-nix build --impure --file tests/kando-packaging.nix --no-link
-python3 -B tests/mouse-side-button-debounce.py
+nix build --impure --file home/kando/tests/packaging.nix --no-link
+python3 -B modules/input/mouse-side-button-debounce/test.py
 python3 -B tests/thunar-archive.py
 nix build --impure --file tests/idle-command.nix --no-link
 python3 -B tests/timewall.py

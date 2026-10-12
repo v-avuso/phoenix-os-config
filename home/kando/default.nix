@@ -9,7 +9,7 @@ let
   cfg = config.phoenix.kando;
   hypr = inputs.nixpkgs-unstable.legacyPackages.${pkgs.stdenv.hostPlatform.system}.hyprland;
   directory = "${config.xdg.configHome}/phoenix-kando/kando";
-  writer = import ./mutable-json-settings.nix { inherit pkgs; };
+  writer = import ../mutable-json-settings.nix { inherit pkgs; };
   # Exact 2.3 schemas: top-level settings; --config-dir is silently ignored.
   settings = {
     version = "2.3.0";
@@ -18,8 +18,7 @@ let
     enableDarkModeForMenuThemes = true;
     enableMarkingMode = true;
     enableTurboMode = true;
-    # The default theme places children 100px from center. Select there while
-    # held (50px stroke + 50px dead zone), without a click or release.
+    # Select at the default 100px item radius (50px stroke + 50px dead zone).
     fixedStrokeLength = 50;
     hoverModeNeedsConfirmation = false;
     keepInputFocus = false;
@@ -66,8 +65,7 @@ let
       shortcut = "";
       centered = false;
       anchored = false;
-      # Hover mode lets GestureDetector select final actions while the opening
-      # mouse button is held; marking/turbo modes select only submenus this way.
+      # Hover gestures execute final actions while the side button is held.
       hoverMode = true;
       root = {
         inherit name children;
@@ -124,7 +122,7 @@ let
   # menu or requires another privileged device owner. Remove when upstream
   # supports portal hold/release; re-review at the version assertion below.
   heldKando = pkgs.kando.overrideAttrs (old: {
-    patches = (old.patches or [ ]) ++ [ ../patches/kando-shortcut-hold.patch ];
+    patches = (old.patches or [ ]) ++ [ ./shortcut-hold.patch ];
   });
   wrapped = pkgs.symlinkJoin {
     name = "kando-phoenix-${pkgs.kando.version}";
@@ -145,14 +143,15 @@ let
     '';
   };
   lua = ''
-    -- hl.dsp.global automatically forwards release (releasePending in Hyprland).
-    hl.bind("mouse:276", hl.dsp.global("menu.kando.Kando:global-menu"))
-    hl.bind("mouse:275", hl.dsp.global("menu.kando.Kando:contextual-menu"))
+    -- Held keys avoid Hyprland retaining pointer focus on the underlying app.
+    -- transparent prevents __lua key-shadowing from suppressing portal release.
+    hl.bind("F23", hl.dsp.global("menu.kando.Kando:global-menu"), { transparent = true })
+    hl.bind("F24", hl.dsp.global("menu.kando.Kando:contextual-menu"), { transparent = true })
     hl.window_rule({
       name = "phoenix-kando",
       match = { class = "^menu[.]kando[.]Kando$", title = "^Kando Menu$" },
       no_blur = true, opaque = true, move = {0, 0}, size = {"100%", "100%"},
-      rounding = 0, border_size = 0, no_anim = true, float = true, pin = true,
+      rounding = 0, border_size = 0, no_anim = true, float = true, pin = true, stay_focused = true,
     })
   '';
 in

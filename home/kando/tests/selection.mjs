@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Use exact pinned upstream schemas/selection method, rather than another schema.
-// Args: rendered tests/kando.nix JSON, general schema TS, menu schema TS,
+// Args: rendered home/kando/tests/fixture.nix JSON, general schema TS, menu schema TS,
 //       menu-window.ts, and the upstream-lockfile integrity-checked zod module.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -53,8 +53,8 @@ assert.ok(data.wrapper.includes('--ozone-platform=wayland'));
 assert.ok(data.wrapper.includes('Exec=$out/bin/kando'));
 assert.ok(data.service.Service.ExecStart.endsWith('/bin/kando'));
 assert.equal(data.service.Service.ExecStartPre.length, 2);
-assert.ok(data.lua.includes('hl.bind("mouse:276", hl.dsp.global("menu.kando.Kando:global-menu"))'));
-assert.ok(data.lua.includes('hl.bind("mouse:275", hl.dsp.global("menu.kando.Kando:contextual-menu"))'));
+assert.ok(data.lua.includes('hl.bind("F23", hl.dsp.global("menu.kando.Kando:global-menu"), { transparent = true })'));
+assert.ok(data.lua.includes('hl.bind("F24", hl.dsp.global("menu.kando.Kando:contextual-menu"), { transparent = true })'));
 assert.equal(data.settings.warpMouse, false);
 assert.ok(data.wrapper.includes('--set KANDO_HOLD_SHORTCUT_IDS global-menu,contextual-menu'));
 for (const name of ['Firefox', 'ChatGPT']) {
@@ -241,11 +241,11 @@ assert.deepEqual(backendEdges, [
 console.log('Kando: exact Hyprland backend preserves portal edges and ordinary/inhibited triggers');
 
 // Execute upstream motion and menu selection together, with one sample per frame.
-// The default theme's child center is 100px away: stopping there must execute
-// immediately, without an extra movement, click, pause, or button release.
+// The first 100px crossing selects while held; center release cancels.
 assert.equal(data.settings.fixedStrokeLength, 50);
 assert.equal(data.settings.hoverModeNeedsConfirmation, false);
 assert.ok(parsed.menus.every(m => m.hoverMode === true));
+assert.ok(data.lua.includes('stay_focused = true'));
 const menuSource = read('src/menu-renderer/menu.ts');
 const selectionBegin = menuSource.indexOf('    const onSelection =');
 const selectionEnd = menuSource.indexOf('    this.pointerInput.onCloseMenu', selectionBegin);
@@ -253,23 +253,26 @@ const selectionCode = ts.transpileModule(menuSource.slice(selectionBegin, select
   compilerOptions: {target: ts.ScriptTarget.ES2022},
 }).outputText;
 const realMenuSelection = new Function('SelectionType', `${selectionCode}\nreturn onSelection;`);
-function straightHold(hoverMode, direction = {x:0, y:-1}) {
+function straightHold(direction = {x:0, y:-1}, releaseAtCenter = false) {
   const pointer = new PointerInput();
   const selections = [];
   const root = {type:'submenu'};
   const leaf = {type:'hotkey'};
+  let hidden = false;
   const menu = {
-    container: {classList: {contains: () => false}},
+    container: {classList: {contains: () => hidden}},
     root, selectionChain: [root], hoveredItem: root,
     settings: {centerDeadZone:50}, latestInput: {},
-    selectItem: item => selections.push(item), cancel: () => selections.push('cancel'),
+    selectItem: item => {selections.push(item); hidden = true;},
+    cancel: () => {selections.push('cancel'); hidden = true;},
   };
   pointer.onUpdateState(state => {
     menu.latestInput = state;
     menu.hoveredItem = state.distance > 50 ? leaf : root;
   });
   pointer.onSelection(realMenuSelection.call(menu, input.SelectionType));
-  pointer.enableHoverMode = hoverMode;
+  pointer.onCloseMenu(() => {if (!hidden) menu.cancel();});
+  pointer.enableHoverMode = parsed.menus[0].hoverMode;
   pointer.hoverModeNeedsConfirmation = data.settings.hoverModeNeedsConfirmation;
   pointer.gestureDetector.fixedStrokeLength = data.settings.fixedStrokeLength;
   pointer.gestureDetector.centerDeadZone = 50;
@@ -284,14 +287,18 @@ function straightHold(hoverMode, direction = {x:0, y:-1}) {
   move(0); move(1); // Real two-event startup filter, no fixture bypass.
   move(50); move(99);
   assert.deepEqual(selections, [], 'dead zone and inner stroke never execute');
-  move(100); // First and final crossing sample; no follow-up motion.
-  assert.equal(pointer.shortcutHeld, true, 'execution precedes physical release');
-  assert.deepEqual(selections, hoverMode ? [leaf] : [], 'real menu callback selects leaf only in hover mode');
-  pointer.gestureDetector.reset();
+  if (!releaseAtCenter) move(100); // Select on the first crossing sample.
+  assert.equal(pointer.shortcutHeld, true);
+  assert.deepEqual(selections, releaseAtCenter ? [] : [leaf], 'distance selects before release');
+  if (releaseAtCenter) move(0);
+  pointer.releaseShortcut();
+  assert.deepEqual(selections, releaseAtCenter ? ['cancel'] : [leaf]);
+  pointer.releaseShortcut();
+  assert.equal(selections.length, 1, 'duplicate release cannot execute or cancel twice');
 }
-straightHold(false);
 for (const direction of [{x:0,y:-1}, {x:1,y:0}, {x:0,y:1}, {x:-1,y:0}]) {
-  straightHold(true, direction);
+  straightHold(direction);
+  straightHold(direction, true);
 }
 globalThis.requestAnimationFrame = callback => callback();
-console.log('Kando: real menu executes leaf on first held 100px crossing in every direction');
+console.log('Kando: first held 100px crossing selects once; center release cancels');

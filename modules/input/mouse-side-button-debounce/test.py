@@ -5,7 +5,7 @@ import importlib.util
 from pathlib import Path
 import unittest
 
-spec = importlib.util.spec_from_file_location('debounce', Path(__file__).parents[1] / 'modules/input/mouse-side-button-debounce.py')
+spec = importlib.util.spec_from_file_location('debounce', Path(__file__).with_name('filter.py'))
 m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
 MS = 1_000_000
@@ -105,6 +105,19 @@ class Tests(unittest.TestCase):
         f = Fixture([(0, [Event(275, 1)]), (MS, Dropped()), (181 * MS, None)])
         f.run()
         self.assertEqual(f.sent, [(1, 275, 1), (0, 0, 0), (1, 275, 0), (0, 0, 0)])
+
+    def test_held_keyboard_mapping_and_cleanup(self):
+        f = Fixture([(0, [Event(275, 1), Event(276, 1), Event(0, 8, 2)]),
+                     (MS, [Event(275, 0)]), (181 * MS, None)])
+        keys = []
+        class Keyboard:
+            def send_events(self, events):
+                keys.extend((e.type, e.code, e.value) for e in events)
+        m.relay(f, f.make_output, API, make_keyboard=Keyboard,
+                clock=lambda: f.now, wait=f.wait, stopping=lambda: f.done)
+        self.assertEqual(f.sent, [(2, 0, 8)])
+        self.assertEqual(keys, [(1, 194, 1), (0, 0, 0), (1, 193, 1), (0, 0, 0),
+                                (1, 194, 0), (0, 0, 0), (1, 193, 0), (0, 0, 0)])
 
     def test_start_failure_does_not_grab(self):
         f = Fixture([])

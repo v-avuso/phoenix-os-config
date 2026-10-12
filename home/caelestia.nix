@@ -211,7 +211,7 @@ in
   imports = [
     inputs.caelestia-shell.homeManagerModules.default
     ./hypr-persist.nix
-    ./kando.nix
+    ./kando
     ./thunar.nix
     ./timewall.nix
   ];

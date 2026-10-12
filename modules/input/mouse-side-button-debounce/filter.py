@@ -1,4 +1,4 @@
-"""Fixed-device hardware filter; desktop/Kando policy belongs elsewhere.
+"""Fixed-device debounce with optional held-key output for desktop shortcuts.
 
 Reuse libevdev's cloned capabilities, properties and dropped-event recovery.
 Unlike press cooldown, delayed stable releases suppress chatter during long holds.
@@ -11,6 +11,7 @@ import signal
 import time
 
 SIDE_KEYS = (275, 276)
+SIDE_SHORTCUTS = {275: 194, 276: 193}  # BTN_SIDE -> F24, BTN_EXTRA -> F23
 RELEASE_NS = 180_000_000
 
 
@@ -52,12 +53,21 @@ class Debouncer:
         return released
 
 
-def relay(device, make_output, api, *, clock=time.monotonic_ns, wait=select.select, stopping=lambda: False):
+def relay(device, make_output, api, *, make_keyboard=None, clock=time.monotonic_ns, wait=select.select, stopping=lambda: False):
     state = Debouncer()
     output = None
+    keyboard = None
     grabbed = False
 
+    def key(code, value):
+        keyboard.send_events([api.InputEvent(api.evbit(1, SIDE_SHORTCUTS[code]), value),
+                              api.InputEvent(api.SYN_REPORT, 0)])
+
     def release(codes):
+        if keyboard is not None:
+            for code in codes:
+                key(code, 0)
+            return
         if codes:
             output.send_events([api.InputEvent(api.evbit(1, code), 0) for code in codes]
                                + [api.InputEvent(api.SYN_REPORT, 0)])
@@ -67,10 +77,15 @@ def relay(device, make_output, api, *, clock=time.monotonic_ns, wait=select.sele
             now = clock()
             release(state.due(now))
             if event.type != api.EV_KEY or state.update(int(event.code), event.value, now):
-                output.send_events([event])
+                if keyboard is not None and event.type == api.EV_KEY and int(event.code) in SIDE_KEYS:
+                    key(int(event.code), event.value)
+                else:
+                    output.send_events([event])
 
     try:
         output = make_output()
+        if make_keyboard is not None:
+            keyboard = make_keyboard()
         device.grab()
         grabbed = True
         while not stopping():
@@ -96,12 +111,14 @@ def relay(device, make_output, api, *, clock=time.monotonic_ns, wait=select.sele
                     # libevdev Device has no close() API. Drop the final clone
                     # reference; its managed UinputDevice destroys the node.
                     output = None
+                    keyboard = None
 
 
 def main():
     import libevdev
     parser = argparse.ArgumentParser()
     parser.add_argument("device")
+    parser.add_argument("--map-side-buttons", action="store_true")
     args = parser.parse_args()
     stopped = False
 
@@ -123,8 +140,19 @@ def main():
         # The name distinguishes the clone; selecting only the fixed physical
         # by-id path prevents recursive capture of this virtual device.
         device.name = "Phoenix debounced Razer Viper V2 Pro"
+        def make_keyboard():
+            keys = libevdev.Device()
+            keys.name = "Phoenix Kando side-button shortcuts"
+            # udev identifies keyboards by the first 31 key capability bits.
+            # These classification keys are never emitted; only F23/F24 are.
+            for code in (*range(1, 32), *SIDE_SHORTCUTS.values()):
+                keys.enable(libevdev.evbit(1, code))
+            return keys.create_uinput_device()
+
         try:
-            relay(device, device.create_uinput_device, libevdev, stopping=lambda: stopped)
+            relay(device, device.create_uinput_device, libevdev,
+                  make_keyboard=make_keyboard if args.map_side_buttons else None,
+                  stopping=lambda: stopped)
         except KeyboardInterrupt:
             pass
         except OSError as error:

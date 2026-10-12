@@ -1,9 +1,9 @@
-# Run: nix build --impure --file tests/kando-packaging.nix --no-link
+# Run: nix build --impure --file home/kando/tests/packaging.nix --no-link
 # Exact upstream schemas and selection code; no Electron/hardware is started.
 let
-  flake = builtins.getFlake ("git+file://" + toString ../.);
+  flake = builtins.getFlake ("git+file://" + toString ../../..);
   pkgs = flake.inputs.nixpkgs.legacyPackages.x86_64-linux;
-  user = import ../config/user.nix { inherit (pkgs) lib; };
+  user = import ../../../config/user.nix { inherit (pkgs) lib; };
   metal = flake.nixosConfigurations.metal.config;
   vm = flake.nixosConfigurations.vm.config;
   home = metal.home-manager.users.${user.name};
@@ -11,7 +11,7 @@ let
     p: p.name == "kando-phoenix-${pkgs.kando.version}"
   ) null home.home.packages;
   fixture = pkgs.writeText "kando-fixture.json" (
-    builtins.toJSON (import ./kando.nix { nixpkgsPath = flake.inputs.nixpkgs.outPath; })
+    builtins.toJSON (import ./fixture.nix { nixpkgsPath = flake.inputs.nixpkgs.outPath; })
   );
   # Integrity is copied from the pinned Kando lockfile, not an unpinned npm install.
   zod = pkgs.fetchurl {
@@ -30,6 +30,7 @@ assert
     "uinput"
   ];
 assert mouse.DevicePolicy == "closed";
+assert pkgs.lib.hasSuffix " --map-side-buttons" mouse.ExecStart;
 assert
   mouse.DeviceAllow == [
     "/dev/input/by-id/usb-Razer_Razer_Viper_V2_Pro_000000000000-event-mouse r"
@@ -50,8 +51,8 @@ pkgs.runCommand "phoenix-kando-check"
       tar xf ${zod} -C zod
       cp -r ${pkgs.kando.src} source
       chmod -R u+w source
-      patch -d source -p1 < ${../patches/kando-shortcut-hold.patch}
-      node ${./kando.mjs} ${fixture} \
+      patch -d source -p1 < ${../shortcut-hold.patch}
+      node ${./selection.mjs} ${fixture} \
         ${pkgs.kando.src}/src/common/settings-schemata/general-settings-v1.ts \
         ${pkgs.kando.src}/src/common/settings-schemata/menu-settings-v1.ts \
         ${pkgs.kando.src}/src/main/menu-window.ts "$PWD/zod/package/index.js" "$PWD/source" ${pkgs.typescript}/lib/node_modules/typescript/lib/typescript.js

@@ -23,7 +23,7 @@ let
     writeShellScript = name: text: (package name) // { inherit text; };
     symlinkJoin = args: (package args.name) // args;
   };
-  module = import ../home/kando.nix {
+  module = import ../default.nix {
     inherit lib pkgs;
     config = {
       phoenix.kando.enable = true;

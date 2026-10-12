@@ -67,8 +67,15 @@ and restart. This deliberately differs from Caelestia/VSCodium experiment
 preservation: promote Kando edits before restarting it. Chromium caches and other
 app-owned state remain untouched. Menu-launched apps regain the normal config
 root and use upstream systemd isolation to survive a Kando service restart.
-The separate non-root hardware filter debounces only the physical mouse's two
-side buttons; menu bindings and application conditions belong to Kando/Hyprland.
+The restricted non-root filter debounces the physical mouse's two side buttons
+and emits held F23 (global) / F24 (context) through a separate virtual keyboard.
+Mouse movement, ordinary clicks and high-resolution scrolling pass unchanged.
+The side buttons no longer send Back/Forward. Menu conditions remain in Kando.
+
+Kando keeps focus only while its menu window is visible; normal Hyprland
+focus-follows-mouse remains enabled. Both side-button menus select actions
+at the default 100px gesture radius while held; release at the center cancels.
+Hover mode enables final actions without a click.
 
 Timewall on metal reads an external HEIC at runtime and owns only its generated
 frame cache/session PID state. The asset never enters Git or the Nix store.
