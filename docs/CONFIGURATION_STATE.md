@@ -108,3 +108,7 @@ reload behavior, rollback limits, and semantic change review. Keep sensitive
 policy settings declarative. Reuse the existing narrow JSON writer when those
 same file-level semantics apply; avoid a blanket profile framework or sweeping
 application state into the baseline registry.
+
+Caelestia shell process ownership belongs to its upstream user service on
+`hyprland-session.target`; package changes restart it to keep IPC and the
+running configuration path aligned.

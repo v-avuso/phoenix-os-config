@@ -2,12 +2,14 @@
 """Check the locked idle schema, monitor API, IPC route and applied patch."""
 
 import json
+import os
+import re
 import pathlib
 import subprocess
 import sys
 import tempfile
 
-shell_source, quickshell_source, cli_source, patch_file, baseline_file, shell_package = map(
+shell_source, quickshell_source, cli_source, patch_file, baseline_file, shell_package, blank_command, hyprland_source = map(
     pathlib.Path, sys.argv[1:]
 )
 
@@ -40,6 +42,23 @@ caelestia_cli = (cli_source / "src/caelestia/subcommands/shell.py").read_text()
 assert '["qs", "-c", "caelestia", *args]' in caelestia_cli
 assert 'self.shell("ipc", "call", *args)' in caelestia_cli
 
+# Exercise the packaged executable without blanking the live desktop.
+with tempfile.TemporaryDirectory(prefix="phoenix-blank-route-") as tmp:
+    root = pathlib.Path(tmp)
+    stub = root / "caelestia"
+    stub.write_text(f"#!{sys.executable}\nimport json, os, sys\nopen(os.environ['BLANK_TEST_LOG'], 'w').write(json.dumps(sys.argv[1:]))\n")
+    stub.chmod(0o755)
+    command = root / "blank"
+    script, replacements = re.subn(r"/nix/store/[^\s]+/bin/caelestia", str(stub), blank_command.read_text())
+    assert replacements == 2
+    command.write_text(script)
+    command.chmod(0o755)
+    log = root / "argv.json"
+    for args, expected in (([], ["shell", "idle", "activate", "0"]), (["off"], ["shell", "idle", "restore"])):
+        subprocess.run([str(command), *args], env={**os.environ, "BLANK_TEST_LOG": str(log)}, check=True)
+        assert json.loads(log.read_text()) == expected
+    print("blank: packaged activation/restoration use the Caelestia CLI IPC route once")
+
 with tempfile.TemporaryDirectory(prefix="phoenix-idle-patch-") as tmp:
     root = pathlib.Path(tmp)
     target = root / "modules/IdleMonitors.qml"
@@ -52,11 +71,46 @@ with tempfile.TemporaryDirectory(prefix="phoenix-idle-patch-") as tmp:
     )
     qml = target.read_text()
 
+# Exercise the exact pinned compositor methods, rather than inventing resumed events.
+manual_timeout = float(re.search(r"id: manualIdleMonitor\s+enabled:.*?timeout: ([0-9.]+)", qml, re.S).group(1))
+compositor = (hyprland_source / "src/protocols/IdleNotify.cpp").read_text()
+methods = []
+for signature in ("void CExtIdleNotification::update(uint32_t elapsedMs)", "void CExtIdleNotification::reset()", "void CExtIdleNotification::onTimerFired()"):
+    methods.append(signature + " {" + block_after(compositor, signature) + "}")
+cpp = r"""
+#include <chrono>
+#include <optional>
+struct Resource { int idled = 0, resumed = 0; void sendIdled() { ++idled; } void sendResumed() { ++resumed; } };
+struct Timer { template<class T> void updateTimeout(T) {} };
+struct Protocol { bool isInhibited = false; };
+namespace PROTO { Protocol state; Protocol* idle = &state; }
+struct CExtIdleNotification {
+    Resource resource; Resource* m_resource = &resource;
+    Timer timer; Timer* m_timer = &timer;
+    uint32_t m_timeoutMs; bool m_obeyInhibitors = false, m_idled = false;
+    void update(uint32_t elapsedMs); void reset(); void onTimerFired();
+};
+""" + "\n".join(methods) + f"""
+int main() {{
+    CExtIdleNotification notification;
+    notification.m_timeoutMs = {int(manual_timeout * 1000)};
+    notification.onTimerFired(); // inactivity reaches the configured timeout
+    notification.update(0); // actual Hyprland input/activity path
+    return notification.resource.resumed == 1 && !notification.m_idled ? 0 : 1;
+}}
+"""
+with tempfile.TemporaryDirectory(prefix="phoenix-idle-compositor-") as tmp:
+    source = pathlib.Path(tmp) / "idle.cpp"
+    binary = pathlib.Path(tmp) / "idle"
+    source.write_text(cpp)
+    subprocess.run(["c++", "-std=c++23", str(source), "-o", str(binary)], check=True)
+    subprocess.run([str(binary)], check=True)
+
 packaged_qml = (shell_package / "share/caelestia-shell/modules/IdleMonitors.qml").read_text()
 assert 'target: "idle"' in packaged_qml
 assert "function activate(index: int)" in packaged_qml
 assert "function restore(): void" in packaged_qml
-assert "timeout: 0" in packaged_qml
+assert "timeout: 0.1" in packaged_qml
 assert "respectInhibitors: false" in packaged_qml
 assert "root.manualIdleEntry.idleAction" in packaged_qml
 assert "Component.onDestruction: finishManualIdle()" in packaged_qml
@@ -66,7 +120,7 @@ for fragment in (
     'target: "idle"',
     "function activate(index: int)",
     "function restore(): void",
-    "timeout: 0",
+    "timeout: 0.1",
     "respectInhibitors: false",
     "root.manualIdleEntry.idleAction",
     "root.finishManualIdle();",
@@ -166,4 +220,4 @@ function harness(reenter = false) {{
 }}
 """
 subprocess.run(["node", "-e", node_test], check=True)
-print("idle schema, zero-timeout monitor, CLI IPC, patch and manual state transitions passed")
+print("idle schema, positive-timeout compositor resume, CLI IPC, patch and manual state transitions passed")
