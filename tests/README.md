@@ -8,6 +8,7 @@ python3 home/mutable-json-settings/tests/mutable-json-settings.py
 python3 modules/tests/mutable-settings-activation.py
 python3 commands/tests/commands.py
 nix shell --inputs-from . nixpkgs#lua --command lua home/idle/tests/idle-blank.lua home/idle/blank.lua home/idle/black.frag
+nix shell --inputs-from . nixpkgs#lua --command lua home/workspaces/tests/navigation.lua home/workspaces/navigation.lua
 python3 -B modules/development/ai/agent/tests/agent-admin.py
 python3 -B modules/development/ai/agent/tests/agent-launch.py
 python3 -B modules/development/ai/agent/tests/agent-history.py

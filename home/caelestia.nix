@@ -4,6 +4,7 @@
   lib,
   pkgs,
   phoenixKandoHyprLua,
+  phoenixWorkspacesHyprLua,
   ...
 }:
 
@@ -45,6 +46,13 @@ let
   '';
 
   caelestiaSettings = {
+    # Five-number groups align with the monitor-owned ranges below. The shell's
+    # unoccupied mode displays all slots in the active group, including empty ones.
+    bar.workspaces = {
+      shown = 5;
+      perMonitor = true;
+      showUnoccupied = true;
+    };
     # Prefer the contained entry without renaming it or favouriting Native.
     # Query ordering still depends on Caelestia's fuzzy match/frequency score.
     launcher.favouriteApps = [ "codex-desktop-sandboxed" ];
@@ -160,6 +168,7 @@ let
   hyprUser = ''
     ${idleBlankLua}
     ${phoenixKandoHyprLua}
+    ${phoenixWorkspacesHyprLua}
 
     hl.monitor({
       output = "DP-1",
@@ -212,11 +221,17 @@ in
     inputs.caelestia-shell.homeManagerModules.default
     ./hypr-persist/default.nix
     ./kando
+    ./workspaces
     ./thunar/default.nix
     ./timewall/default.nix
   ];
 
   phoenix.kando.enable = true;
+  phoenix.workspaces.monitors = {
+    "DP-1".first = 1;
+    "HDMI-A-2".first = 6;
+    "DP-2".first = 11;
+  };
 
   # Mirror only Home Manager Hyprland's generic session lifecycle: import the
   # compositor environment, then activate the target linked to the graphical
