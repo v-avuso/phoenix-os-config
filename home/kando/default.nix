@@ -9,7 +9,7 @@ let
   cfg = config.phoenix.kando;
   hypr = inputs.nixpkgs-unstable.legacyPackages.${pkgs.stdenv.hostPlatform.system}.hyprland;
   directory = "${config.xdg.configHome}/phoenix-kando/kando";
-  writer = import ../mutable-json-settings.nix { inherit pkgs; };
+  writer = import ../mutable-json-settings/default.nix { inherit pkgs; };
   # Exact 2.3 schemas: top-level settings; --config-dir is silently ignored.
   settings = {
     version = "2.3.0";

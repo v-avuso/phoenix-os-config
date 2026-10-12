@@ -15,7 +15,7 @@ let
   keybindingsPath = "${config.xdg.configHome}/VSCodium/User/keybindings.json";
   settingsBaseline = config.home.file.${settingsPath}.source;
   keybindingsBaseline = config.home.file.${keybindingsPath}.source;
-  settingsWriter = import ./mutable-json-settings.nix { inherit pkgs; };
+  settingsWriter = import ./mutable-json-settings/default.nix { inherit pkgs; };
 in
 {
   programs.vscodium = {

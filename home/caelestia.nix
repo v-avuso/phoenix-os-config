@@ -12,7 +12,7 @@ let
   system = pkgs.stdenv.hostPlatform.system;
   hyprlandPackages = inputs.nixpkgs-unstable.legacyPackages.${system};
   desktopScale = import ../config/desktop-scale.nix;
-  idleBlackShader = pkgs.writeText "phoenix-idle-black.frag" (builtins.readFile ./idle-black.frag);
+  idleBlackShader = pkgs.writeText "phoenix-idle-black.frag" (builtins.readFile ./idle/black.frag);
   # The CLI owns palette generation. Its custom patchPhase skips the standard
   # patch hooks, so append explicitly and use this same CLI in both launch paths.
   caelestiaCli =
@@ -79,7 +79,7 @@ let
   caelestiaShellBaseline = pkgs.writeText "caelestia-shell-baseline.json" (
     builtins.toJSON caelestiaSettings + "\n"
   );
-  caelestiaSettingsWriter = import ./mutable-json-settings.nix { inherit pkgs; };
+  caelestiaSettingsWriter = import ./mutable-json-settings/default.nix { inherit pkgs; };
   blank = pkgs.writeShellScriptBin "blank" ''
     case "''${1:-}" in
       "")
@@ -155,7 +155,7 @@ let
 
   idleBlankLua =
     builtins.replaceStrings [ "@IDLE_BLACK_SHADER@" ] [ (builtins.toJSON (toString idleBlackShader)) ]
-      (builtins.readFile ./idle-blank.lua);
+      (builtins.readFile ./idle/blank.lua);
 
   hyprUser = ''
     ${idleBlankLua}
@@ -210,10 +210,10 @@ in
 {
   imports = [
     inputs.caelestia-shell.homeManagerModules.default
-    ./hypr-persist.nix
+    ./hypr-persist/default.nix
     ./kando
-    ./thunar.nix
-    ./timewall.nix
+    ./thunar/default.nix
+    ./timewall/default.nix
   ];
 
   phoenix.kando.enable = true;
