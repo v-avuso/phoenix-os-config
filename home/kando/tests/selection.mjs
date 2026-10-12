@@ -35,7 +35,7 @@ for (const [appName, expected] of [['firefox','Firefox'], ['Firefox','Firefox'],
   assert.equal(choose.call(context, {trigger:'contextual-menu'}, {appName, windowName:'', pointer:{x:0,y:0}}).root.name, expected);
 }
 const global = choose.call(context, {trigger:'global-menu'}, {appName:'firefox'});
-assert.equal(global.root.children.length, 6);
+assert.equal(global.root.children.length, 8);
 for (const item of global.root.children) {
   assert.equal(item.data.isolated, true, 'launched apps must escape Kando service lifecycle');
   assert.ok(item.data.command.includes('XDG_CONFIG_HOME=/home/fixture/.config '));
@@ -43,6 +43,11 @@ for (const item of global.root.children) {
 const firefox = parsed.menus.find(menu => menu.root.name === 'Firefox');
 assert.equal(firefox.root.children.find(i => i.name === 'Back').angle, 270);
 assert.equal(firefox.root.children.find(i => i.name === 'Forward').angle, 90);
+for (const name of ['Firefox','ChatGPT']) {
+  const toggle = parsed.menus.find(m => m.root.name === name).root.children.find(i => i.name === 'Toggle sidebar');
+  assert.equal(toggle.angle, 315);
+  assert.equal(toggle.data.hotkey, 'ControlLeft+ShiftLeft+KeyS');
+}
 for (const menu of parsed.menus) {
   assert.ok(menu.root.children.every(item => item.iconTheme === 'material-symbols-rounded'));
   const angles = menu.root.children.map(item => item.angle);
@@ -51,8 +56,11 @@ for (const menu of parsed.menus) {
 assert.ok(data.wrapper.includes('--set XDG_CONFIG_HOME'));
 assert.ok(data.wrapper.includes('--ozone-platform=wayland'));
 assert.ok(data.wrapper.includes('Exec=$out/bin/kando'));
-assert.ok(data.service.Service.ExecStart.endsWith('/bin/kando'));
+assert.ok(data.service.Service.ExecStart.endsWith('/bin/kando --close-menu'));
 assert.equal(data.service.Service.ExecStartPre.length, 2);
+assert.equal(data.service.Unit['X-Restart-Triggers'].length, 2);
+assert.deepEqual(data.activation.before, ['reloadSystemd']);
+assert.deepEqual(data.activation.after, ['writeBoundary']);
 assert.ok(data.lua.includes('hl.bind("F23", hl.dsp.global("menu.kando.Kando:global-menu"), { transparent = true })'));
 assert.ok(data.lua.includes('hl.bind("F24", hl.dsp.global("menu.kando.Kando:contextual-menu"), { transparent = true })'));
 assert.equal(data.settings.warpMouse, false);
@@ -64,7 +72,12 @@ for (const name of ['Firefox', 'ChatGPT']) {
   assert.equal(new Set(children.map(i => i.angle)).size, children.length);
   assert.ok(children.find(i => i.name === 'Copy'));
 }
-assert.ok(global.root.children.find(i=>i.name==='Next workspace').data.command.includes("hl.dsp.focus({workspace='+1'})"));
+assert.ok(global.root.children.find(i=>i.name==='Next workspace').data.command.includes('phoenix_workspace_step(1)'));
+assert.ok(global.root.children.find(i=>i.name==='Previous workspace').data.command.includes('phoenix_workspace_step(-1)'));
+for (const [name, angle] of [['Overview',0],['Blank screen',135],['Close window',180],['Audio',225],['Files',315]]) {
+  assert.equal(global.root.children.find(i=>i.name===name).angle, angle);
+}
+assert.ok(global.root.children.find(i=>i.name==='Overview').data.command.includes('hl.plugin.hyprexpo.expo("on all")'));
 console.log('Kando: exact upstream schemas, real context selection, angle mappings and launch ownership passed');
 
 // Execute patched upstream TypeScript directly. No Electron or input injection.
@@ -80,6 +93,19 @@ function compile(code, deps = {}) {
   return module.exports;
 }
 const read = path => fs.readFileSync(`${patched}/${path}`, 'utf8');
+// Upstream startup opens settings only when handleCommandLine returns false.
+const startupAppSource = read('src/main/app.ts');
+const startupStart = startupAppSource.indexOf('  public handleCommandLine(');
+assert.ok(startupStart >= 0);
+const startupMethod = startupAppSource.slice(startupStart, startupAppSource.indexOf('\n  }', startupStart) + 4);
+const {Startup} = compile(`export class Startup { ${startupMethod} }`);
+let hidden = 0;
+const startup = new Startup();
+startup.menuWindow = {hide: () => ++hidden};
+assert.equal(startup.handleCommandLine({}), false, 'manual launch retains the editor');
+assert.equal(startup.handleCommandLine({closeMenu: true}), true, 'service launch suppresses the editor');
+assert.equal(hidden, 1);
+assert.ok(read('src/main/index.ts').includes(".option('--close-menu',"));
 const math = compile(read('src/common/math/index.ts'), {'.': {}});
 const common = {SelectionSource: {eGesture: 0, eClick: 1}};
 const input = compile(read('src/menu-renderer/input-methods/input-method.ts'),

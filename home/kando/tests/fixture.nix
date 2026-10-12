@@ -3,7 +3,7 @@
 let
   upstreamLib = import (nixpkgsPath + "/lib");
   lib = upstreamLib // {
-    hm.dag.entryAfter = _: text: text;
+    hm.dag.entryBetween = before: after: text: { inherit before after text; };
   };
   package = name: { outPath = "/nix/store/fixture-${name}"; };
   pkgs = {
@@ -25,6 +25,7 @@ let
   };
   module = import ../default.nix {
     inherit lib pkgs;
+    phoenixBlankCommand = "/nix/store/fixture-blank/bin/blank";
     config = {
       phoenix.kando.enable = true;
       xdg.configHome = "/home/fixture/.config";

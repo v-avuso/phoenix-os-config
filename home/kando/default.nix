@@ -3,6 +3,7 @@
   inputs,
   lib,
   pkgs,
+  phoenixBlankCommand,
   ...
 }:
 let
@@ -57,6 +58,7 @@ let
   copyAt = angle: hotkey "Copy" "content_copy" angle "ControlLeft+KeyC";
   copy = copyAt 0;
   fullscreen = hotkey "Fullscreen" "fullscreen" 0 "F11";
+  sidebar = hotkey "Toggle sidebar" "side_navigation" 315 "ControlLeft+ShiftLeft+KeyS";
   paste = hotkey "Paste" "content_paste" 180 "ControlLeft+KeyV";
   menu =
     name: id: conditions: children:
@@ -80,18 +82,18 @@ let
     collections = [ ];
     menus = [
       (menu "Global" "global-menu" null [
-        (command "Launcher" "search" 0
-          "${hypr}/bin/hyprctl dispatch \"hl.dsp.global('caelestia:launcher')\""
+        (command "Overview" "view_quilt" 0
+          ''${hypr}/bin/hyprctl eval 'hl.plugin.hyprexpo.expo("on all")' ''
         )
         (command "Terminal" "terminal" 45 "${pkgs.foot}/bin/foot")
-        (command "Next workspace" "arrow_forward" 90
-          "${hypr}/bin/hyprctl dispatch \"hl.dsp.focus({workspace='+1'})\""
-        )
-        (command "Files" "folder" 180 "${pkgs.xdg-utils}/bin/xdg-open \"${config.home.homeDirectory}\"")
+        (command "Next workspace" "arrow_forward" 90 "${hypr}/bin/hyprctl eval 'phoenix_workspace_step(1)'")
+        (command "Blank screen" "bedtime" 135 phoenixBlankCommand)
+        (command "Close window" "close" 180 "${hypr}/bin/hyprctl dispatch 'hl.dsp.window.close()'")
         (command "Audio" "volume_up" 225 "${pkgs.pwvucontrol}/bin/pwvucontrol")
         (command "Previous workspace" "arrow_back" 270
-          "${hypr}/bin/hyprctl dispatch \"hl.dsp.focus({workspace='-1'})\""
+          "${hypr}/bin/hyprctl eval 'phoenix_workspace_step(-1)'"
         )
+        (command "Files" "folder" 315 "${pkgs.xdg-utils}/bin/xdg-open \"${config.home.homeDirectory}\"")
       ])
       (menu "Context" "contextual-menu" null [
         copy
@@ -105,12 +107,14 @@ let
         paste
         (hotkey "Reload" "refresh" 225 "ControlLeft+KeyR")
         (hotkey "Back" "arrow_back" 270 "AltLeft+ArrowLeft")
+        sidebar
       ])
       (menu "ChatGPT" "contextual-menu" { appName = "/^codex-desktop(-sandboxed)?$/"; } [
         fullscreen
         (copyAt 45)
         (hotkey "Select all" "select_all" 90 "ControlLeft+KeyA")
         paste
+        sidebar
       ])
     ];
   };
@@ -168,7 +172,7 @@ in
     home.packages = [ wrapped ];
     xdg.dataFile."kando/config.json.nix-baseline".source = configBaseline;
     xdg.dataFile."kando/menus.json.nix-baseline".source = menusBaseline;
-    home.activation.kandoSettings = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    home.activation.kandoSettings = lib.hm.dag.entryBetween [ "reloadSystemd" ] [ "writeBoundary" ] ''
       mode=reassert
       if [ "''${PHOENIX_PRESERVE_MUTABLE_BASELINES:-0}" = 1 ]; then mode=preserve; fi
       run ${writer} "$mode" ${configBaseline} ${lib.escapeShellArg "${directory}/config.json"} object
@@ -180,6 +184,10 @@ in
     systemd.user.services.kando = {
       Unit = {
         Description = "Phoenix contextual radial menus";
+        X-Restart-Triggers = [
+          configBaseline
+          menusBaseline
+        ];
         PartOf = [ "hyprland-session.target" ];
         After = [ "hyprland-session.target" ];
       };
@@ -188,7 +196,8 @@ in
           "${writer} reassert ${configBaseline} ${directory}/config.json object"
           "${writer} reassert ${menusBaseline} ${directory}/menus.json object"
         ];
-        ExecStart = "${wrapped}/bin/kando";
+        # A recognized no-op startup action suppresses 2.3's default editor window.
+        ExecStart = "${wrapped}/bin/kando --close-menu";
         Restart = "on-failure";
         RestartSec = 2;
       };

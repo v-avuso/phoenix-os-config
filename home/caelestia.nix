@@ -232,6 +232,7 @@ in
     "HDMI-A-2".first = 6;
     "DP-2".first = 11;
   };
+  _module.args.phoenixBlankCommand = "${blank}/bin/blank";
 
   # Mirror only Home Manager Hyprland's generic session lifecycle: import the
   # compositor environment, then activate the target linked to the graphical

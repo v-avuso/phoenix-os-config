@@ -63,7 +63,8 @@ acceptance check, not process/RAM continuation or a substitute for backups.
 
 Metal's [monitor workspaces](../home/workspaces/README.md) use five dedicated
 slots per screen: left 1–5, middle 6–10, right 11–15. Caelestia shows the active
-monitor's numeric group, including empty slots.
+monitor's numeric group, including empty slots. Kando's Global menu opens the
+all-monitor HyprExpo overview and navigates within the pointer monitor's group.
 
 Kando on metal uses a private config root. Only its `config.json` and `menus.json`
 are writable baselines; every service start also reasserts them, including login

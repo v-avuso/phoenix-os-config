@@ -37,7 +37,8 @@ assert
     "/dev/uinput rw"
   ];
 assert
-  pkgs.lib.toList home.systemd.user.services.kando.Service.ExecStart == [ "${wrapped}/bin/kando" ];
+  pkgs.lib.toList home.systemd.user.services.kando.Service.ExecStart
+  == [ "${wrapped}/bin/kando --close-menu" ];
 pkgs.runCommand "phoenix-kando-check"
   {
     nativeBuildInputs = [
