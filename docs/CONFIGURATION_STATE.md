@@ -24,6 +24,10 @@ and `User/keybindings.json` use the same narrow JSON writer. The shared
 NixOS/Home Manager integration applies this lifecycle to enabled baselines on
 both hosts:
 
+Caelestia's Super+Shift+L sleep shortcut and down gesture run
+`systemctl suspend`. The launcher Sleep action and session menu keep their
+upstream behavior and commands.
+
 - A fresh home gets a writable file from the declared baseline; a legacy managed
   symlink can be migrated to an ordinary file.
 - Live UI edits are allowed. Existing experiments survive logout and reboot.

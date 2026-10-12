@@ -123,11 +123,9 @@ let
   };
 
   hyprVars = {
-    # Caelestia defaults this command to suspend-then-hibernate, which wakes
-    # after systemd's two-hour delay. Keep sleep as suspend and hibernate
-    # explicit: one observed transition stalled and required forced power-off.
-    # If restoring suspend-then-hibernate, first investigate that failure with
-    # persistent kernel logs so the hibernation-entry failure is captured.
+    # Keep the sleep shortcut explicit and suspend-only. Caelestia's launcher
+    # action remains upstream-configured independently.
+    kbSleep = "SUPER + SHIFT + L";
     sleepGestureCmd = "systemctl suspend";
     # Nixpkgs' Sweet cursor theme is case-sensitive; upstream's lowercase
     # default otherwise fails to identify the installed theme.
