@@ -67,6 +67,31 @@ and active Lua include the contained-class rule. Real contained-window behavior
 and browser sign-in presentation still require a supervised GUI acceptance check;
 source inspection and no-GUI protocol trials do not establish them.
 
+## Declared local projects
+
+The host launcher holds the GUI lifetime lock while importing selected metadata
+before the contained process starts. Onboarding/display preferences seed once;
+newly seen native local projects import once when their canonical roots are
+inside `phoenix.agent.workspaces`. Only ID, name, roots and finite timestamps
+cross this boundary; account associations, threads, drafts and native databases
+do not. The pinned desktop performs its own local-project app-server migration.
+
+Existing sandbox IDs and equivalent root sets win. A bounded atomic marker records
+consumed native IDs, so subsequent imports preserve sandbox edits and removals;
+there is no update/delete synchronization. The legacy marker cannot identify old
+removed or server-mapped IDs absent from its local cache: its first conversion may
+reimport such an eligible native entry. Later removals of recorded IDs are preserved.
+Unchanged launches write neither profile nor marker; malformed marker data fails
+closed. Paths outside declared workspaces require an explicit configuration choice.
+
+The observed native profile contained three typed, eligible projects, while the
+sandbox contained one and already had the old one-time seed marker. The old early
+return prevented importing the other two. Fixtures cover that correction,
+duplicates, removals, later additions, malformed markers and unchanged launches.
+After the updated package is installed, close the contained desktop completely
+and reopen it to run the protected import; no active profile rewrite is needed.
+Actual project visibility after that reopen remains a user acceptance check.
+
 ## Acceptance boundary
 
 A controlled no-GUI comparison with the existing retained-auth launcher confirmed

@@ -1,6 +1,7 @@
-"""One-time selected desktop preferences; run under the host GUI lifetime lock.
+"""Selected desktop preferences/projects; run under the host GUI lifetime lock.
 
-Never synchronize profiles. Pinned desktop atoms include auth resume tokens,
+Preferences seed once; newly seen eligible projects import once. Never synchronize
+profiles. Pinned desktop atoms include auth resume tokens,
 drafts and history; only the fixed, typed preference fields below are imported.
 Worker CLI config is separate and is not changed by this display-state seed.
 """
@@ -33,6 +34,11 @@ def read_object(path):
     if not isinstance(value, dict):
         raise ValueError("Desktop preferences must be an object")
     return value
+
+
+def project_id(value):
+    return isinstance(value, str) and 0 < len(value) <= 256 and not any(
+        ord(c) < 32 or ord(c) == 127 for c in value)
 
 
 def selected(source, account, workspaces):
@@ -70,10 +76,15 @@ def selected(source, account, workspaces):
             result["electron-main-window-bounds"].update(width=min(bounds["width"], 1400), height=min(bounds["height"], 900))
     projects = source.get("local-projects", {})
     if isinstance(projects, dict):
+        if len(projects) > 1024:
+            raise ValueError("Desktop project metadata exceeds bounded input")
         approved = [Path(path) for path in workspaces]
         chosen = {}
         for key, value in projects.items():
-            if not isinstance(value, dict) or value.get("id") != key or not isinstance(value.get("rootPaths"), list):
+            if (not project_id(key) or not isinstance(value, dict) or value.get("id") != key
+                    or not isinstance(value.get("rootPaths"), list) or len(value["rootPaths"]) > 16
+                    or not isinstance(value.get("name"), str) or len(value["name"]) > 256
+                    or not all(number(value.get(k)) for k in ("createdAt", "updatedAt"))):
                 continue
             roots = [p for p in value["rootPaths"] if isinstance(p, str) and Path(p).is_absolute()
                      and str(Path(p).resolve()) == p and any(Path(p).is_relative_to(root) for root in approved)]
@@ -91,23 +102,81 @@ def selected(source, account, workspaces):
     return result
 
 
+def atomic_json(path, value):
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as stream:
+        temporary = Path(stream.name)
+        try:
+            json.dump(value, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+
 def seed(config):
     marker, source, destination = map(Path, (config["marker"], config["source"], config["destination"]))
-    if marker.exists() or not source.exists():
+    if not source.exists():
         return
     if destination.resolve() != destination or marker.resolve() != marker:
         raise ValueError("Desktop preferences destination must not be aliased")
-    account = None
-    launcher = read_object(Path(config["launcherConfig"]))
-    if launcher.get("protectedIdentity"):
-        result = subprocess.run(config["accountCommand"], stdout=subprocess.PIPE, stderr=sys.stderr, cwd=config["workdir"], timeout=30, check=True)
-        account = str(uuid.UUID(result.stdout.decode().strip()))
-    else:
-        account_file = Path(launcher["state"]) / "account-id.json"
-        if account_file.exists():
-            account = str(uuid.UUID(json.loads(account_file.read_text())))
-    patch = selected(read_object(source), account, config["workspaces"])
+    seeded = marker.exists()
+    prior_marker, consumed = None, set()
+    if seeded:
+        if marker.stat().st_size > 128 * 1024:
+            raise ValueError("Desktop project import marker exceeds bounded input")
+        text = marker.read_text()
+        if text != "Selected desktop preferences seeded; worker config unchanged.\n":
+            try:
+                prior_marker = json.loads(text)
+            except ValueError:
+                raise ValueError("Desktop project import marker invalid") from None
+            if (not isinstance(prior_marker, dict) or set(prior_marker) != {"version", "projectIds"}
+                    or type(prior_marker["version"]) is not int or prior_marker["version"] != 2
+                    or not isinstance(prior_marker["projectIds"], list)
+                    or len(prior_marker["projectIds"]) > 4096
+                    or not all(project_id(k) for k in prior_marker["projectIds"])
+                    or len(set(prior_marker["projectIds"])) != len(prior_marker["projectIds"])):
+                raise ValueError("Desktop project import marker invalid")
+            consumed = set(prior_marker["projectIds"])
+    native = read_object(source)
     current = read_object(destination) if destination.exists() else {}
+    before = json.dumps(current, sort_keys=True)
+    account = None
+    if not seeded:
+        launcher = read_object(Path(config["launcherConfig"]))
+        if launcher.get("protectedIdentity"):
+            result = subprocess.run(config["accountCommand"], stdout=subprocess.PIPE, stderr=sys.stderr, cwd=config["workdir"], timeout=30, check=True)
+            account = str(uuid.UUID(result.stdout.decode().strip()))
+        else:
+            account_file = Path(launcher["state"]) / "account-id.json"
+            if account_file.exists():
+                account = str(uuid.UUID(json.loads(account_file.read_text())))
+    patch = selected({"local-projects": native.get("local-projects", {})} if seeded else native,
+                     account, config["workspaces"])
+    projects = patch.pop("local-projects", {})
+    existing = current.get("local-projects", {})
+    if not isinstance(existing, dict):
+        raise ValueError("Existing desktop projects have incompatible shape")
+    # Legacy marker cannot recover removed/server-mapped IDs; preserve all entries
+    # currently present and record this migration's eligible IDs going forward.
+    if seeded and prior_marker is None:
+        consumed.update(k for k in existing if project_id(k))
+    roots = {frozenset(v["rootPaths"]) for v in existing.values()
+             if isinstance(v, dict) and isinstance(v.get("rootPaths"), list)
+             and all(isinstance(p, str) for p in v["rootPaths"])}
+    merged = dict(existing)
+    for key, value in projects.items():
+        project_roots = frozenset(value["rootPaths"])
+        if key not in consumed and key not in merged and project_roots not in roots:
+            merged[key] = value
+            roots.add(project_roots)
+        consumed.add(key)
+    if len(consumed) > 4096:
+        raise ValueError("Desktop project import marker exceeds bounded input")
+    if merged:
+        current["local-projects"] = merged
     for key, value in patch.items():
         if isinstance(value, dict) and key != "electron-main-window-bounds":
             prior = current.get(key, {})
@@ -119,17 +188,16 @@ def seed(config):
             current[key] = {**prior, **value}
         else:
             current[key] = value
-    destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    with tempfile.NamedTemporaryFile(mode="w", dir=destination.parent, delete=False) as stream:
-        temporary = Path(stream.name)
-        try:
-            json.dump(current, stream)
-            stream.flush()
-            os.fsync(stream.fileno())
-            os.replace(temporary, destination)
-        finally:
-            temporary.unlink(missing_ok=True)
-    marker.write_text("Selected desktop preferences seeded; worker config unchanged.\n")
+    next_marker = {"version": 2, "projectIds": sorted(consumed)}
+    serialized_current = json.dumps(current)
+    if len(serialized_current.encode()) > 16 * 1024 * 1024:
+        raise ValueError("Desktop preferences exceed bounded output")
+    if len(json.dumps(next_marker).encode()) > 128 * 1024:
+        raise ValueError("Desktop project import marker exceeds bounded input")
+    if not destination.exists() or json.dumps(current, sort_keys=True) != before:
+        atomic_json(destination, current)
+    if next_marker != prior_marker:
+        atomic_json(marker, next_marker)
 
 
 def worker_preferences(path):

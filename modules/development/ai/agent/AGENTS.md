@@ -50,6 +50,10 @@
   before asking for sign-in; compare the recorded instance to the installed
   launcher revision before attributing an old startup failure to current auth.
   Never log tokens, account responses or raw auth stderr.
+- For missing desktop projects, compare typed native/local metadata with declared
+  workspace eligibility and the import marker before changing access. Import only
+  newly seen eligible metadata under the GUI lifetime lock; preserve sandbox-owned
+  edits/removals and let the pinned desktop own its app-server migration.
 - New containment/shutdown behavior stays opt-in until active workload cleanup,
   final log delivery and real GUI/model workflows pass isolated acceptance.
 

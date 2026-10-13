@@ -23,7 +23,7 @@ class Profile(unittest.TestCase):
                  'chatgpt-conversation-resume-tokens-v1': 'secret', 'prompt-history': 'private'}
         source = {'electron-persisted-atom-state': atoms, 'auth': 'secret',
                   'electron-main-window-bounds': {'x': 0, 'y': 0, 'width': 2288, 'height': 1288, 'isMaximized': True},
-                  'local-projects': {'approved': {'id': 'approved', 'rootPaths': ['/tmp/nested', '/private'], 'name': 'fixture', 'history': 'private'},
+                  'local-projects': {'approved': {'id': 'approved', 'rootPaths': ['/tmp/nested', '/private'], 'name': 'fixture', 'createdAt': 1, 'updatedAt': 2, 'history': 'private'},
                                      'denied': {'id': 'denied', 'rootPaths': ['/private']}}}
         selected = profile.selected(source, ACCOUNT, ['/tmp'])
         text = json.dumps(selected)
@@ -53,6 +53,90 @@ class Profile(unittest.TestCase):
             profile.seed(config)
             self.assertEqual(first, destination.read_text())
             self.assertEqual(source.read_text(), '{}')
+
+    def test_legacy_seed_imports_new_projects_once_without_overwriting_sandbox(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            def project(key, root, name):
+                return {'id': key, 'name': name, 'rootPaths': [str(root)],
+                        'createdAt': 1, 'updatedAt': 2, 'chatGptBacking': 'private'}
+            native = {'local-projects': {
+                'existing': project('existing', path/'existing', 'native name'),
+                'second': project('second', path/'second', 'second'),
+                'third': project('third', path/'third', 'third'),
+                'duplicate': project('duplicate', path/'owned', 'duplicate'),
+                'outside': project('outside', Path('/private'), 'outside')},
+                'electron-persisted-atom-state': {'electron:onboarding-welcome-pending': True}}
+            source, destination, marker = path/'native', path/'sandbox', path/'marker'
+            source.write_text(json.dumps(native))
+            destination.write_text(json.dumps({'local-projects': {
+                'existing': project('existing', path/'existing', 'sandbox name'),
+                'owned': project('owned', path/'owned', 'owned')},
+                'sandbox-private': 'keep'}))
+            marker.write_text('Selected desktop preferences seeded; worker config unchanged.\n')
+            config = {'source': str(source), 'destination': str(destination),
+                      'marker': str(marker), 'workspaces': [directory]}
+            profile.seed(config)
+            result = json.loads(destination.read_text())
+            self.assertEqual(set(result['local-projects']), {'existing', 'owned', 'second', 'third'})
+            self.assertEqual(result['local-projects']['existing']['name'], 'sandbox name')
+            self.assertNotIn('chatGptBacking', result['local-projects']['second'])
+            self.assertNotIn('electron-persisted-atom-state', result)
+            self.assertEqual(result['sandbox-private'], 'keep')
+            del result['local-projects']['second']
+            destination.write_text(json.dumps(result))
+            native['local-projects']['fourth'] = project('fourth', path/'fourth', 'fourth')
+            source.write_text(json.dumps(native))
+            profile.seed(config)
+            result = json.loads(destination.read_text())
+            self.assertNotIn('second', result['local-projects'])
+            self.assertIn('fourth', result['local-projects'])
+            self.assertEqual(json.loads(source.read_text()), native)
+
+    def test_marker_is_fail_closed_and_unchanged_launch_does_not_write(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            source, destination, marker = path/'native', path/'sandbox', path/'marker'
+            source.write_text('{}')
+            destination.write_text('{"sandbox": "keep"}')
+            config = {'source': str(source), 'destination': str(destination),
+                      'marker': str(marker), 'workspaces': [directory]}
+            for value in ('broken', '{}', '{"version": true, "projectIds": []}',
+                          '{"version": 2, "projectIds": ["duplicate", "duplicate"]}',
+                          '{"version": 2, "projectIds": [1]}', 'x' * (128 * 1024 + 1)):
+                marker.write_text(value)
+                with self.assertRaisesRegex(ValueError, 'marker'):
+                    profile.seed(config)
+                self.assertEqual(destination.read_text(), '{"sandbox": "keep"}')
+            marker.write_text(json.dumps({'version': 2, 'projectIds': []}))
+            before = (destination.stat().st_mtime_ns, marker.stat().st_mtime_ns)
+            profile.seed(config)
+            self.assertEqual(before, (destination.stat().st_mtime_ns, marker.stat().st_mtime_ns))
+
+    def test_output_bounds_are_checked_before_profile_publication(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            source, destination, marker = path/'native', path/'sandbox', path/'marker'
+            def project(key):
+                return {'id': key, 'name': 'fixture', 'rootPaths': [str(path/'root')],
+                        'createdAt': 1, 'updatedAt': 2}
+            config = {'source': str(source), 'destination': str(destination),
+                      'marker': str(marker), 'workspaces': [directory]}
+            destination.write_text('{"sandbox": "keep"}')
+            marker.write_text(json.dumps({'version': 2, 'projectIds': []}))
+            source.write_text(json.dumps({'local-projects': {
+                str(i).zfill(256): project(str(i).zfill(256)) for i in range(600)}}))
+            with self.assertRaisesRegex(ValueError, 'marker exceeds'):
+                profile.seed(config)
+            self.assertEqual(destination.read_text(), '{"sandbox": "keep"}')
+            self.assertEqual(json.loads(marker.read_text())['projectIds'], [])
+            source.write_text(json.dumps({'local-projects': {'new': project('new')}}))
+            destination.write_text(json.dumps({'padding': 'x' * (16 * 1024 * 1024 - 50)}))
+            before = destination.read_bytes()
+            with self.assertRaisesRegex(ValueError, 'bounded output'):
+                profile.seed(config)
+            self.assertEqual(destination.read_bytes(), before)
+            self.assertEqual(json.loads(marker.read_text())['projectIds'], [])
 
     def test_worker_preferences_use_only_fixed_typed_cli_overrides(self):
         with tempfile.TemporaryDirectory() as directory:
