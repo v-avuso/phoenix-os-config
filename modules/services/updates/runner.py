@@ -230,7 +230,7 @@ def controller(config, c, home, tree, commit, base, profile):
                    reason='Automatically update supported stable system and selected fresh applications; respect explicit holds and preserve runtime state')
     body = json.dumps(request).encode() + b'\n'
     if len(body) > c.WIRE_LIMIT:
-        raise ValueError('source exceeds deployment wire bound')
+        raise c.SourceTransportError('wire-capacity-exceeded')
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
         connection.settimeout(7200)
         connection.connect(config['controllerSocket'])
@@ -433,6 +433,8 @@ def main():
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         try:
             result = run(config, c)
+        except c.SourceTransportError as error:
+            result = dict(status='failed', stage=error.stage, code=error.code, reason=str(error))
         except Exception as error:
             result = dict(status='failed', reason=str(error)[:1000])
         destination = state / 'last-result.json'

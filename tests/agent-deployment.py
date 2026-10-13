@@ -69,6 +69,26 @@ class DeploymentTests(unittest.TestCase):
         connection.close.assert_called_once()
         listener.accept.assert_called_once()
 
+    def test_controller_wire_failure_is_typed_before_source_processing(self):
+        handlers = {}
+        connection = mock.Mock()
+        connection.getsockopt.return_value = deploy.struct.pack('3i', 22, 1000, 1000)
+        connection.recv.return_value = b'1234'
+        listener = mock.Mock()
+        listener.accept.return_value = (connection, None)
+        def replied(_body):
+            handlers[deploy.signal.SIGUSR1](deploy.signal.SIGUSR1, None)
+        connection.sendall.side_effect = replied
+        with mock.patch.object(deploy, 'LIMIT', 3), \
+             mock.patch.object(deploy.os, 'getuid', return_value=0), \
+             mock.patch.object(deploy.socket, 'socket', return_value=listener), \
+             mock.patch.object(deploy.signal, 'signal', side_effect=lambda sig, handler: handlers.update({sig: handler})), \
+             mock.patch.object(deploy, 'process') as process, contextlib.redirect_stdout(io.StringIO()):
+            deploy.serve({'clientUid': 1000})
+        response = json.loads(connection.sendall.call_args.args[0])
+        self.assertEqual((response['stage'], response['code']), ('source-transport', 'wire-capacity-exceeded'))
+        process.assert_not_called()
+
     def test_pending_rejection_response_displays_identity_without_journaling_private_text(self):
         handlers={};connection=mock.Mock();listener=mock.Mock();listener.accept.return_value=(connection,None)
         connection.getsockopt.return_value=deploy.struct.pack('3i',22,1000,1000)
@@ -543,6 +563,8 @@ class DeploymentTests(unittest.TestCase):
                               if call.args[0][0] == 'systemd-run')
             self.assertEqual(activation[activation.index('activate') + 2], action)
             self.assertFalse(any(user == 'reviewer' for user, _argv in as_user_calls))
+            self.assertFalse(any("pkexec" in str(call.args[0]) or "polkit" in str(call.args[0])
+                                 for call in Review.run.call_args_list))
 
     def test_routine_update_reaches_boot_without_invoking_reviewer(self):
         self.non_model_deployment()

@@ -24,7 +24,11 @@ import tempfile
 import time
 
 # Resource bounds, not token estimates or a larger model context claim.
-SOURCE_LIMIT = 4 * 1024 * 1024
+# Nix substitutes an immutable policy path; repository fixtures use the source file.
+TRANSPORT_PATH = "@deploymentTransportPolicy@"
+TRANSPORT = json.loads((Path(TRANSPORT_PATH) if TRANSPORT_PATH.startswith("/") else Path(__file__).with_name("transport.json")).read_text())
+SOURCE_LIMIT = TRANSPORT["sourceBytes"]
+WIRE_LIMIT = TRANSPORT["wireBytes"]
 REVIEW_INPUT_LIMIT = 1024 * 1024
 OUTPUT_LIMIT = 2 * 1024 * 1024
 
@@ -445,6 +449,45 @@ def warn_deployment_diff(config, files, modes):
         pass  # The protected controller supplies the defining review/binding checks.
 
 
+FAILURE_STAGES = frozenset("request freeze baseline routine-policy build closure-binding review verdict baseline-recheck activation authentication source-transport protocol reservation disruption override".split())
+FAILURE_CODES = frozenset("source-capacity-exceeded wire-capacity-exceeded invalid-or-denied rejected-or-failed timeout invalid-json io-failed operator-authentication-required rollback-incomplete unsafe-execution-guard mutation-still-running missing-binding baseline-changed profile-changed source-mismatch spool-recovery-required invalid-capability routine-resource-busy model-denied reviewer-invocation-failed review-invocation-failed review-authentication-failed review-authentication-missing review-startup-failed review-timeout review-output-limit review-context-oversized context-compacted context-request-invalid context-request-oversized schema-invalid binding-mismatch worker-envelope-invalid security-policy-changed security-approval-required approval-state-changed inspection-required pending-capacity pending-binding-invalid pending-caller-invalid pending-state-changed".split())
+
+
+def deployment_failure(result):
+    """Display only bounded protocol diagnostics, shared by socket and operator."""
+    stage, code = result.get("stage"), result.get("code")
+    stage = stage if isinstance(stage, str) and stage in FAILURE_STAGES else "protocol"
+    code = code if isinstance(code, str) and code in FAILURE_CODES else "invalid-or-denied"
+    display = dict(stage=stage, code=code)
+    patterns = {
+        "pendingNonce": r"[a-f0-9]{64}",
+        "pendingSourceFingerprint": r"[a-z0-9]{32}",
+        "pendingClosureFingerprint": r"[a-z0-9]{32}-nixos-system-[A-Za-z0-9._+-]{1,160}",
+    }
+    for key, pattern in patterns.items():
+        value = result.get(key)
+        if isinstance(value, str) and re.fullmatch(pattern, value):
+            display[key] = value
+    for key, allowed in {"pendingAction": {"test", "switch", "boot", "update"},
+                         "pendingTarget": {"metal", "vm"},
+                         "pendingKind": {"security", "disruption"},
+                         "proofLimit": {"unit-artifacts-only"}}.items():
+        value = result.get(key)
+        if isinstance(value, str) and value in allowed:
+            display[key] = value
+    findings = result.get("findings")
+    if (isinstance(findings, list) and len(findings) <= 64 and all(
+            isinstance(item, str) and re.fullmatch(r"[A-Za-z0-9_.:@-]{1,256}", item) for item in findings)):
+        display["findings"] = findings
+    if "pendingNonce" in display:
+        prefix = ("WARNING: Protected unit inspection requires approval: " if display.get("pendingKind") == "disruption"
+                  else "CRITICAL: Security review failed for this exact pending deployment: ")
+        print(prefix + json.dumps(display, ensure_ascii=True), file=sys.stderr)
+        option = "--disruption-override " if display.get("pendingKind") == "disruption" else "--security-override "
+        print("For an explicit authenticated exact-state override: phoenix-deploy-review " + option + display["pendingNonce"], file=sys.stderr)
+    raise ValueError("Deployment failed at " + stage + " (" + code + ").")
+
+
 def main():
     config = json.loads(Path(sys.argv[1]).read_text())
     parser = argparse.ArgumentParser(description=__doc__)
@@ -540,16 +583,19 @@ def main():
             if args.action == "boot":
                 request.update(expectedBase=str(Path('/etc/phoenix-agent/activated-source').resolve(strict=True)),
                                expectedProfile=str(Path('/nix/var/nix/profiles/system').resolve(strict=True)))
+            body = json.dumps(request).encode() + b"\n"
+            if len(body) > WIRE_LIMIT:
+                raise ValueError("source-transport: wire-capacity-exceeded")
             if config.get("operatorCommand"):
-                result = json.loads(run(config["operatorCommand"], data=json.dumps(request).encode(), timeout=7200))
+                result = json.loads(run(config["operatorCommand"], data=body, timeout=7200))
                 if result.get("ok") is not True:
-                    raise ValueError("authenticated deployment failed")
+                    deployment_failure(result)
                 print(json.dumps(result, indent=2))
             else:
                 with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
                     connection.settimeout(7200)
                     connection.connect(config["deploymentSocket"])
-                    connection.sendall(json.dumps(request).encode() + b"\n")
+                    connection.sendall(body)
                     response = bytearray()
                     while not response.endswith(b"\n"):
                         block = connection.recv(65536)
@@ -557,18 +603,8 @@ def main():
                             raise ValueError("deployment controller response lost or oversized")
                         response.extend(block)
                     result = json.loads(response)
-                    if not result.get("ok"):
-                        if result.get("pendingNonce"):
-                            print(("WARNING: Protected unit inspection requires approval: " if result.get("pendingKind") == "disruption" else "CRITICAL: Security review failed for this exact pending deployment: ") + json.dumps({key: result[key] for key in
-                                  ('stage', 'code', 'summary', 'pendingNonce', 'pendingSourceFingerprint', 'pendingAction', 'pendingTarget', 'pendingKind', 'pendingClosureFingerprint', 'findings', 'proofLimit') if key in result}, ensure_ascii=True),
-                                  file=sys.stderr)
-                            print("For an explicit authenticated exact-state override: phoenix-deploy-review " + ("--disruption-override " if result.get("pendingKind") == "disruption" else "--security-override ") +
-                                  result['pendingNonce'], file=sys.stderr)
-                        if result.get("code") == "model-denied":
-                            raise ValueError("Model review denied: " + json.dumps(result.get("summary", ""), ensure_ascii=True))
-                        if result.get("code") in {'review-context-oversized', 'context-request-oversized'}:
-                            raise ValueError("Security review context is too large. Reduce the diff/context request or explicitly authenticate the exact pending override.")
-                        raise ValueError(result.get("error", "deployment rejected"))
+                    if result.get("ok") is not True:
+                        deployment_failure(result)
                     print(json.dumps(result, indent=2))
             return
         baseline_path = Path(config["baseline"]).resolve(strict=True)

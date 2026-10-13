@@ -31,7 +31,9 @@ let
     inherit (cfg) sourceBranch cleanupBranches;
     state = "/var/lib/phoenix-updates";
     policyFile = "config/updates.json";
-    candidateScript = toString ./candidate.py;
+    candidateScript = toString (pkgs.replaceVars ./candidate.py {
+      deploymentTransportPolicy = toString ../../development/ai/agent/transport.json;
+    });
     git = "${pkgs.git}/bin/git";
     nix = "${pkgs.nix}/bin/nix";
     python = "${pkgs.python3}/bin/python3";

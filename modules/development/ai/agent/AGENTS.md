@@ -114,3 +114,7 @@
 - Before enabling, test two competing agents, completion/release, owner loss/expiry,
   stale requests, human recovery and edits after snapshot creation. Keep experimental
   controls disabled on the daily-driver system until their actual workflow is verified.
+
+- Keep source/JSON transport capacity in `transport.json` separate from AI context
+  and cost budgets. Package its immutable path explicitly for standalone Python
+  entry points; verify updater, client and controller agree before deployment.

@@ -18,6 +18,79 @@ spec.loader.exec_module(review)
 
 
 class ReviewTests(unittest.TestCase):
+    def test_native_operator_failures_reach_shared_cli_formatter(self):
+        root = Path(__file__).resolve().parents[1]
+        spec = importlib.util.spec_from_file_location('operator_deployment', root / 'modules/development/ai/agent/deployment.py')
+        deploy = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(deploy)
+        with tempfile.TemporaryDirectory() as directory:
+            operator_config = Path(directory) / 'operator.json'
+            operator_config.write_text(json.dumps(dict(modelReviewEnabled=False)))
+            client_config = Path(directory) / 'client.json'
+            client_config.write_text(json.dumps(dict(clientOnly=True, operatorCommand=['fixture-operator'])))
+            def snapshot(_config, source):
+                for name in ('flake.nix', 'flake.lock'):
+                    (source / name).write_text('{}')
+                return 'a' * 40, {'flake.nix': '{}', 'flake.lock': '{}'}
+            pending = deploy.DeploymentFailure('disruption', 'inspection-required')
+            pending.pending_nonce = 'b' * 64
+            pending.pending_metadata = dict(pendingKind='disruption', pendingSourceFingerprint='c' * 32,
+                pendingTarget='metal', pendingAction='test', pendingClosureFingerprint='d' * 32 + '-nixos-system-fixture',
+                proofLimit='unit-artifacts-only', findings=['system:fixture.service:changed-or-removed'])
+            for mode in ('overflow', 'pending'):
+                def operator_run(argv, *, data, **kwargs):
+                    self.assertEqual(argv, ['fixture-operator'])
+                    output = io.StringIO()
+                    with mock.patch.object(sys, 'argv', ['deployment', str(operator_config), 'operator']), \
+                         mock.patch.object(sys, 'stdin', mock.Mock(buffer=io.BytesIO(data))), \
+                         mock.patch.object(deploy.os, 'geteuid', return_value=0), \
+                         mock.patch.object(deploy, 'LIMIT', len(data) - 1 if mode == 'overflow' else deploy.LIMIT), \
+                         mock.patch.object(deploy, 'process', side_effect=pending) as process, \
+                         contextlib.redirect_stdout(output):
+                        deploy.main()
+                    envelope = json.loads(output.getvalue())
+                    self.assertFalse(envelope['ok'])
+                    if mode == 'overflow':
+                        process.assert_not_called()
+                        self.assertEqual((envelope['stage'], envelope['code']), ('source-transport', 'wire-capacity-exceeded'))
+                    else:
+                        process.assert_called_once()
+                        self.assertTrue(process.call_args.kwargs['operator'])
+                    return output.getvalue().encode()
+                stderr = io.StringIO()
+                with self.subTest(mode=mode), \
+                     mock.patch.object(sys, 'argv', ['deploy-review', str(client_config), '--target', 'metal', '--action', 'test', '--reason', 'Diagnostic fixture']), \
+                     mock.patch.object(review, 'snapshot', side_effect=snapshot), \
+                     mock.patch.object(review, 'git', return_value=b'main'), \
+                     mock.patch.object(review, 'warn_deployment_diff'), \
+                     mock.patch.object(review, 'run', side_effect=operator_run), \
+                     contextlib.redirect_stderr(stderr), self.assertRaises(ValueError) as failure:
+                    review.main()
+                expected = 'wire-capacity-exceeded' if mode == 'overflow' else 'inspection-required'
+                self.assertIn(expected, str(failure.exception))
+                if mode == 'pending':
+                    self.assertTrue(stderr.getvalue().startswith('WARNING: Protected unit inspection requires approval: '))
+                    self.assertIn('--disruption-override ' + pending.pending_nonce, stderr.getvalue())
+                    display = json.loads(stderr.getvalue().splitlines()[0].removeprefix('WARNING: Protected unit inspection requires approval: '))
+                    for key, value in pending.pending_metadata.items():
+                        self.assertEqual(display[key], value)
+
+    def test_security_pending_failure_is_visibly_critical(self):
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr), self.assertRaisesRegex(ValueError, 'review.*model-denied'):
+            review.deployment_failure(dict(stage='review', code='model-denied', pendingNonce='a' * 64,
+                pendingKind='security', summary='PRIVATE model summary'))
+        self.assertTrue(stderr.getvalue().startswith('CRITICAL: Security review failed for this exact pending deployment: '))
+        self.assertIn('--security-override ' + 'a' * 64, stderr.getvalue())
+        self.assertNotIn('PRIVATE', stderr.getvalue())
+
+    def test_failure_formatter_omits_untrusted_text_and_invalid_metadata(self):
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr), self.assertRaisesRegex(ValueError, 'protocol.*invalid-or-denied'):
+            review.deployment_failure(dict(stage=['PRIVATE'], code='PRIVATE raw stderr', error='PRIVATE native',
+                summary='PRIVATE model text', pendingNonce='PRIVATE nonce', findings=['PRIVATE source text']))
+        self.assertEqual(stderr.getvalue(), '')
+
     def test_selected_worktree_reaches_authenticated_snapshot(self):
         root = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as directory:

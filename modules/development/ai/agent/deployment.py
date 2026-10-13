@@ -23,8 +23,11 @@ import struct
 import sys
 import tempfile
 
-LIMIT = 32 * 1024 * 1024
-SOURCE_LIMIT = 4 * 1024 * 1024
+# Nix substitutes an immutable policy path; repository fixtures use the source file.
+TRANSPORT_PATH = "@deploymentTransportPolicy@"
+TRANSPORT = json.loads((Path(TRANSPORT_PATH) if TRANSPORT_PATH.startswith("/") else Path(__file__).with_name("transport.json")).read_text())
+LIMIT = TRANSPORT["wireBytes"]
+SOURCE_LIMIT = TRANSPORT["sourceBytes"]
 class DeploymentFailure(ValueError):
     def __init__(self, stage, code):
         self.stage, self.code = stage, code
@@ -77,7 +80,7 @@ def request_valid(request, target, reservations=False):
     if any(str(parent) in files for name in files for parent in Path(name).parents if str(parent) != '.'):
         raise ValueError('file/directory prefix collision')
     if total > SOURCE_LIMIT:
-        raise ValueError('source exceeds transport capacity')
+        raise DeploymentFailure('source-transport', 'source-capacity-exceeded')
 
 
 def store_path(value, kind):
@@ -775,7 +778,7 @@ def serve(config):
                     raise ValueError('incomplete or oversized request')
                 data.extend(block)
                 if len(data) > LIMIT:
-                    raise ValueError('oversized request')
+                    raise DeploymentFailure('source-transport', 'wire-capacity-exceeded')
             result = process(config, json.loads(data), uid, pid)
             print(json.dumps(dict(event='activated', uid=uid, pid=pid, **result)), flush=True)
         except Exception as error:
@@ -896,21 +899,23 @@ def main():
     elif args.mode == 'operator':
         # This route is entered only via the immutable graphical Polkit command.
         # The ordinary socket never treats disabled model review as approval.
-        if os.geteuid() != 0 or config.get('modelReviewEnabled', True):
-            raise ValueError('operator route requires root and explicitly disabled model review')
-        data = sys.stdin.buffer.read(LIMIT + 1)
-        if len(data) > LIMIT:
-            raise ValueError('operator request exceeds transport bound')
-        request = json.loads(data)
-        if request.get('action') not in {'test', 'switch', 'boot'}:
-            raise ValueError('operator route only accepts manual deployment actions')
-        with contextlib.redirect_stdout(sys.stderr):
-            try:
+        try:
+            if os.geteuid() != 0 or config.get('modelReviewEnabled', True):
+                raise DeploymentFailure('authentication', 'operator-authentication-required')
+            data = sys.stdin.buffer.read(LIMIT + 1)
+            if len(data) > LIMIT:
+                raise DeploymentFailure('source-transport', 'wire-capacity-exceeded')
+            request = json.loads(data)
+            if request.get('action') not in {'test', 'switch', 'boot'}:
+                raise ValueError('operator route only accepts manual deployment actions')
+            with contextlib.redirect_stdout(sys.stderr):
                 result = process(config, request, int(os.environ.get('PKEXEC_UID', '0')), os.getpid(), operator=True)
-            except DeploymentFailure as error:
-                result = dict(ok=False, stage=error.stage, code=error.code)
-                if getattr(error, 'pending_nonce', None):
-                    result.update(pendingNonce=error.pending_nonce, **error.pending_metadata)
+        except Exception as error:
+            stage = error.stage if isinstance(error, DeploymentFailure) else 'protocol'
+            code = error.code if isinstance(error, DeploymentFailure) else 'invalid-or-denied'
+            result = dict(ok=False, stage=stage, code=code)
+            if getattr(error, 'pending_nonce', None):
+                result.update(pendingNonce=error.pending_nonce, **getattr(error, 'pending_metadata', {}))
         print(json.dumps(result))
     elif args.mode == 'activate-reserved':
         activate_reserved(config, args.directory)

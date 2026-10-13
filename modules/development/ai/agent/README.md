@@ -68,3 +68,9 @@
 - [Testing reservations](reservations.md): default-off management through the existing
   admin broker and fixed authenticated operator helpers, deployment lifetime gating
   and runtime ownership; complete live acceptance remains pending.
+
+Source transport uses [transport.json](transport.json): at most 4MiB UTF-8 file
+content and 32MiB serialized JSON, including escaping and metadata. Deployment
+clients, controller and routine updater share these bounds. Capacity failures
+use `source-transport` with `source-capacity-exceeded` or `wire-capacity-exceeded`;
+the separate 1MiB AI input budget retains `review-context-oversized`.

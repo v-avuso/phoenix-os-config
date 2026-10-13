@@ -15,8 +15,11 @@ import time
 COMMUNITY_CHECKS = {"source-and-node", "rust", "nix", "official-linux-gate"}
 COMMUNITY_VERSION = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+\Z")
 REVISION = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
-SOURCE_LIMIT = 896 * 1024
-WIRE_LIMIT = 1024 * 1024
+# Nix substitutes an immutable policy path; repository fixtures use the source file.
+TRANSPORT_PATH = "@deploymentTransportPolicy@"
+TRANSPORT = json.loads((Path(TRANSPORT_PATH) if TRANSPORT_PATH.startswith("/") else Path(__file__).parents[2] / "development/ai/agent/transport.json").read_text())
+SOURCE_LIMIT = TRANSPORT["sourceBytes"]
+WIRE_LIMIT = TRANSPORT["wireBytes"]
 
 def _revision(value, field):
     if not isinstance(value, str) or not REVISION.fullmatch(value):
@@ -26,19 +29,24 @@ def _revision(value, field):
 class CandidateError(ValueError):
     pass
 
-def _run(argv, cwd=None, env=None, timeout=60):
+class SourceTransportError(CandidateError):
+    def __init__(self, code):
+        self.stage, self.code = "source-transport", code
+        super().__init__(self.stage + ": " + code)
+
+def _run(argv, cwd=None, env=None, timeout=60, output_limit=2 * 1024 * 1024):
     with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
         process = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
                                    stdout=out, stderr=err, start_new_session=True)
         try:
             deadline = time.monotonic() + timeout
             while process.poll() is None:
-                if time.monotonic() > deadline or os.fstat(out.fileno()).st_size + os.fstat(err.fileno()).st_size > 2 * 1024 * 1024:
+                if time.monotonic() > deadline or os.fstat(out.fileno()).st_size + os.fstat(err.fileno()).st_size > output_limit:
                     raise CandidateError("command timed out or exceeded output bound: " + Path(argv[0]).name)
                 time.sleep(.03)
             if process.returncode:
                 raise CandidateError("command failed: %s exit %s" % (Path(argv[0]).name, process.returncode))
-            if os.fstat(out.fileno()).st_size + os.fstat(err.fileno()).st_size > 2 * 1024 * 1024:
+            if os.fstat(out.fileno()).st_size + os.fstat(err.fileno()).st_size > output_limit:
                 raise CandidateError("command output exceeded bound: " + Path(argv[0]).name)
             out.seek(0)
             return out.read()
@@ -96,7 +104,8 @@ def git_command(exe, repo, home):
 
 
 def git(exe, repo, home, *args):
-    return _run([*git_command(exe, repo, home), *args], env=git_env(repo, home))
+    return _run([*git_command(exe, repo, home), *args], env=git_env(repo, home),
+                output_limit=SOURCE_LIMIT + 1 if args[:2] == ("cat-file", "blob") else 2 * 1024 * 1024)
 
 def _inventory(path):
     files = {}
@@ -191,17 +200,17 @@ def _status_paths(exe, repo, home):
 
 def _manifest(exe, repo, home, commit):
     files, modes, total = {}, {}, 0
-    entries = git(exe, repo, home, "ls-tree", "-r", "-z", "--full-tree", commit).split(b"\0")
+    entries = git(exe, repo, home, "ls-tree", "-rl", "-z", "--full-tree", commit).split(b"\0")
     for entry in filter(None, entries):
         metadata, raw_name = entry.split(b"\t", 1)
-        mode, kind, oid = metadata.decode().split()
+        mode, kind, oid, size = metadata.decode().split()
         name = raw_name.decode()
         if kind != "blob" or mode not in {"100644", "100755"} or name.startswith("/") or ".git" in name.split("/"):
             raise CandidateError("candidate source contains unsupported paths")
-        raw = git(exe, repo, home, "cat-file", "blob", oid)
-        total += len(raw)
+        total += int(size)
         if total > SOURCE_LIMIT:
-            raise CandidateError("candidate source exceeds controller source bound")
+            raise SourceTransportError("source-capacity-exceeded")
+        raw = git(exe, repo, home, "cat-file", "blob", oid)
         try:
             files[name] = raw.decode("utf-8")
         except UnicodeDecodeError:

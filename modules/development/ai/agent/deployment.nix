@@ -9,6 +9,9 @@
 }:
 let
   cfg = config.services.phoenixDeployment;
+  transportPolicy = toString ./transport.json;
+  controllerScript = pkgs.replaceVars ./deployment.py { deploymentTransportPolicy = transportPolicy; };
+  reviewScript = pkgs.replaceVars ./deploy-review.py { deploymentTransportPolicy = transportPolicy; };
   sourceSelector = pkgs.writeScript "phoenix-source" (
     builtins.replaceStrings [ "#!/usr/bin/env python3" ]
       [ "#!${pkgs.python3}/bin/python3" ] (builtins.readFile ../../../../commands/phoenix-source)
@@ -18,7 +21,7 @@ let
     "--disable-internal-agent"
     "${pkgs.python3}/bin/python3"
     "-I"
-    (toString ./deployment.py)
+    (toString controllerScript)
     (toString deploymentConfig)
     "operator"
   ];
@@ -27,7 +30,7 @@ let
   # no caller-provided command, store path or source is accepted here.
   securityOverride = pkgs.writeShellScript "phoenix-security-review-override" ''
     if [ "$#" -ne 1 ]; then exit 2; fi
-    exec ${pkgs.python3}/bin/python3 -I ${./deployment.py} ${deploymentConfig} override "$1"
+    exec ${pkgs.python3}/bin/python3 -I ${controllerScript} ${deploymentConfig} override "$1"
   '';
   overrideCommand = lib.optionals cfg.securityReview.enable [
     "/run/wrappers/bin/pkexec"
@@ -36,7 +39,7 @@ let
   ];
   disruptionOverride = pkgs.writeShellScript "phoenix-disruption-override" ''
     if [ "$#" -ne 1 ]; then exit 2; fi
-    exec ${pkgs.python3}/bin/python3 -I ${./deployment.py} ${deploymentConfig} disruption-override "$1"
+    exec ${pkgs.python3}/bin/python3 -I ${controllerScript} ${deploymentConfig} disruption-override "$1"
   '';
   disruptionOverrideCommand = lib.optionals cfg.disruptionGuard.enable [
     "/run/wrappers/bin/pkexec" "--disable-internal-agent" (toString disruptionOverride)
@@ -71,7 +74,7 @@ let
     }
   );
   deployReview = pkgs.writeShellScriptBin "phoenix-deploy-review" ''
-    exec ${pkgs.python3}/bin/python3 -I ${./deploy-review.py} ${reviewConfig} "$@"
+    exec ${pkgs.python3}/bin/python3 -I ${reviewScript} ${reviewConfig} "$@"
   '';
   clientConfig = pkgs.writeText "phoenix-deployment-client.json" (
     builtins.toJSON {
@@ -90,7 +93,7 @@ let
     }
   );
   deployClient = pkgs.writeShellScriptBin "phoenix-deploy-review" ''
-    exec ${pkgs.python3}/bin/python3 -I ${./deploy-review.py} ${clientConfig} "$@"
+    exec ${pkgs.python3}/bin/python3 -I ${reviewScript} ${clientConfig} "$@"
   '';
   reviewLoginCommand = pkgs.writeShellScript "phoenix-review-login-retained" ''
     if [ -f /var/lib/phoenix-deploy/reviewer-migrated ]; then
@@ -131,8 +134,8 @@ let
       loginHome = "${user.homeDirectory}/.local/state/phoenix-agent-review";
       work = "/var/lib/phoenix-deploy/requests";
       baseline = "/etc/phoenix-agent/activated-source";
-      controller = toString ./deployment.py;
-      reviewScript = toString ./deploy-review.py;
+      controller = toString controllerScript;
+      reviewScript = toString reviewScript;
       securityReviewScript = toString ./security-review.py;
       securityReviewState = "/var/lib/phoenix-deploy/security-review";
       routineUpdateScript = toString ./routine-update.py;
@@ -159,7 +162,7 @@ let
     } // lib.optionalAttrs config.phoenix.agent.reservations.enable { reservations = phoenixReservationSettings; })
   );
   bootstrap = pkgs.writeShellScriptBin "phoenix-deploy-bootstrap" ''
-    exec /run/wrappers/bin/pkexec --disable-internal-agent ${pkgs.python3}/bin/python3 -I ${./deployment.py} ${deploymentConfig} bootstrap
+    exec /run/wrappers/bin/pkexec --disable-internal-agent ${pkgs.python3}/bin/python3 -I ${controllerScript} ${deploymentConfig} bootstrap
   '';
 
 in
@@ -274,7 +277,7 @@ in
       restartIfChanged = false;
       stopIfChanged = false;
       serviceConfig = {
-        ExecStart = "${pkgs.python3}/bin/python3 -I ${./deployment.py} ${deploymentConfig} serve";
+        ExecStart = "${pkgs.python3}/bin/python3 -I ${controllerScript} ${deploymentConfig} serve";
         User = "root";
         UMask = "0077";
         ExecReload = pkgs.writeShellScript "phoenix-deploy-reload" ''

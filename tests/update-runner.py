@@ -8,7 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'modules/services/updates'))
@@ -49,6 +49,76 @@ class RunnerTests(unittest.TestCase):
         commit = self.git('rev-parse', 'HEAD').strip()
         self.git('reset', '--hard', self.head)
         return commit
+
+    def test_source_transport_accepts_large_escaped_manifest_and_matches_controller(self):
+        spec = importlib.util.spec_from_file_location('capacity_deploy', ROOT / 'modules/development/ai/agent/deployment.py')
+        deploy = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(deploy)
+        review = deploy.load_review({'reviewScript': str(ROOT / 'modules/development/ai/agent/deploy-review.py')})
+        self.assertEqual((candidate.SOURCE_LIMIT, candidate.WIRE_LIMIT), (deploy.SOURCE_LIMIT, deploy.LIMIT))
+        self.assertEqual((review.SOURCE_LIMIT, review.WIRE_LIMIT), (candidate.SOURCE_LIMIT, candidate.WIRE_LIMIT))
+        self.assertEqual(review.REVIEW_INPUT_LIMIT, 1024 * 1024)
+        # A single blob exceeds both the former source cap and generic command-output cap.
+        (self.repo / 'large.nix').write_text('\x01' * (3 * 1024 * 1024))
+        self.git('add', 'large.nix')
+        self.git('commit', '-qm', 'large escaped fixture')
+        commit = self.git('rev-parse', 'HEAD').strip()
+        files, modes = candidate._manifest(self.config['git'], self.repo, self.home, commit)
+        request = dict(files=files, modes=modes, commit=commit, action='test', target='metal', reason='Capacity fixture')
+        deploy.request_valid(request, 'metal')
+        body = json.dumps(request).encode() + b'\n'
+        self.assertGreater(len(body), 4 * 1024 * 1024)
+        self.assertLessEqual(len(body), deploy.LIMIT)
+        connection = MagicMock()
+        connection.__enter__.return_value = connection
+        connection.recv.return_value = b'{"ok":true,"action":"update"}\n'
+        with patch.object(runner.socket, 'socket', return_value=connection):
+            runner.controller(dict(self.config, target='metal', controllerSocket='/fixture'), candidate,
+                              self.home, self.repo, commit, '/base', '/profile')
+        sent = connection.sendall.call_args.args[0]
+        self.assertLessEqual(len(sent), deploy.LIMIT)
+        received = json.loads(sent)
+        self.assertEqual(received['files'], files)
+        self.assertEqual(received['action'], 'update')
+        with tempfile.TemporaryDirectory() as directory:
+            for name, content in files.items():
+                path = Path(directory) / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content)
+            self.assertEqual(review.baseline_files(Path(directory)), files)
+        (self.repo / 'large.nix').write_text('x' * candidate.SOURCE_LIMIT)
+        self.git('add', 'large.nix')
+        self.git('commit', '-qm', 'over capacity')
+        with self.assertRaises(candidate.SourceTransportError) as failure:
+            candidate._manifest(self.config['git'], self.repo, self.home, self.git('rev-parse', 'HEAD').strip())
+        self.assertEqual((failure.exception.stage, failure.exception.code), ('source-transport', 'source-capacity-exceeded'))
+        request['files']['large.nix'] = 'x' * deploy.SOURCE_LIMIT
+        with self.assertRaises(deploy.DeploymentFailure) as failure:
+            deploy.request_valid(request, 'metal')
+        self.assertEqual((failure.exception.stage, failure.exception.code), ('source-transport', 'source-capacity-exceeded'))
+
+    def test_packaged_standalone_entrypoints_use_explicit_policy(self):
+        # Simulate Nix path substitution in a directory with no sibling helpers.
+        policy = ROOT / 'modules/development/ai/agent/transport.json'
+        with tempfile.TemporaryDirectory() as directory:
+            for name, relative in [('deploy', 'modules/development/ai/agent/deployment.py'),
+                                   ('review', 'modules/development/ai/agent/deploy-review.py'),
+                                   ('candidate', 'modules/services/updates/candidate.py')]:
+                script = Path(directory) / (name + '.py')
+                script.write_text((ROOT / relative).read_text().replace('@deploymentTransportPolicy@', str(policy)))
+                spec = importlib.util.spec_from_file_location('isolated_' + name, script)
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                self.assertEqual(module.SOURCE_LIMIT, candidate.SOURCE_LIMIT)
+                self.assertEqual(module.LIMIT if name == 'deploy' else module.WIRE_LIMIT, candidate.WIRE_LIMIT)
+
+    def test_updater_wire_failure_is_typed_and_precedes_socket(self):
+        with patch.object(candidate, '_manifest', return_value=({'flake.nix': '\x01' * 100}, {'flake.nix': '100644'})), \
+             patch.object(candidate, 'WIRE_LIMIT', 100), patch.object(runner.socket, 'socket') as socket:
+            with self.assertRaises(candidate.SourceTransportError) as failure:
+                runner.controller(dict(self.config, target='metal'), candidate, self.home, self.repo, self.head, '/base', '/profile')
+        self.assertEqual((failure.exception.stage, failure.exception.code), ('source-transport', 'wire-capacity-exceeded'))
+        socket.assert_not_called()
 
     def test_integrate_preserves_unrelated_staged_and_unstaged_edits(self):
         commit = self.candidate()
