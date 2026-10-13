@@ -47,7 +47,9 @@
   invalidate reuse on unrelated changes. Test relocation and actual helper changes;
   retain helper-byte hashing rather than normalizing away changed authority.
 - Preserve retained authentication. Diagnose readiness and typed failure stages
-  before asking for sign-in; never log tokens, account responses or raw auth stderr.
+  before asking for sign-in; compare the recorded instance to the installed
+  launcher revision before attributing an old startup failure to current auth.
+  Never log tokens, account responses or raw auth stderr.
 - New containment/shutdown behavior stays opt-in until active workload cleanup,
   final log delivery and real GUI/model workflows pass isolated acceptance.
 

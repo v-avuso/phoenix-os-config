@@ -42,6 +42,26 @@ def desktop_identity(account, profile, selected=None):
                      "phoenix-opaque-desktop"])
 
 
+# Codex 0.160.0 GetAccountResponse/PlanType; public metadata only.
+PLAN_TYPES = frozenset((
+    "free go plus pro prolite promax team self_serve_business_prolite "
+    "self_serve_business_usage_based business ent26 enterprise_cbp_automation "
+    "enterprise_cbp_usage_based enterprise edu edu_plus edu_pro unknown"
+).split())
+
+
+def desktop_account(profile, selected):
+    if not isinstance(profile, dict) or not isinstance(selected, dict):
+        raise ValueError('Desktop profile metadata invalid')
+    if (not isinstance(profile.get('id'), str) or not profile['id']
+            or (profile.get('email') is not None and not isinstance(profile['email'], str))):
+        raise ValueError('Desktop profile identity missing')
+    plan = selected.get('plan_type', 'unknown')
+    if not isinstance(plan, str) or plan not in PLAN_TYPES:
+        raise ValueError('Desktop plan metadata invalid')
+    return {'type': 'chatgpt', 'email': profile.get('email'), 'planType': plan}
+
+
 def worker_json(config, url):
     request = {"url": url, "method": "GET"}
     result = subprocess.run(
@@ -72,6 +92,9 @@ def worker_json(config, url):
 
 def worker_account(config, account):
     discovered = worker_json(config, "https://chatgpt.com/backend-api/wham/accounts/check")
+    if (not isinstance(discovered, dict) or not isinstance(discovered.get("accounts"), list)
+            or any(not isinstance(entry, dict) for entry in discovered["accounts"])):
+        raise ValueError("Sandbox workspace discovery metadata invalid")
     candidates = [entry for entry in discovered["accounts"] if entry.get("id") == account]
     if len(candidates) != 1:
         raise ValueError("Sandbox workspace routing is ambiguous")
@@ -207,7 +230,15 @@ def relay(config):
                 response = json.loads(line)
                 with pending_lock:
                     method = pending.pop(json.dumps(response.get("id")), None)
-                if method and isinstance(response.get("result"), dict):
+                # Exact pinned native routing errors only. Gateway-mediated
+                # discovery still must authenticate and bind the declared account.
+                # Never turn other protocol/auth/config errors into success.
+                error = response.get("error")
+                repair_account = (method == "account/read" and isinstance(error, dict)
+                    and type(error.get("code")) is int and error["code"] == -32603
+                    and error.get("message") in {"workspace routing discovery failed",
+                                                 "workspace routing discovery unauthorized (401)"})
+                if method and (isinstance(response.get("result"), dict) or repair_account):
                     if account is None:
                         launcher = json.loads(Path(config["launcher_config"]).read_text())
                         if launcher.get("identitySocket"):
@@ -215,6 +246,13 @@ def relay(config):
                             account = str(uuid.UUID(selected_account.stdout.decode().strip()))
                         else:
                             account = str(uuid.UUID(json.loads((Path(launcher["state"]) / "account-id.json").read_text())))
+                    if repair_account:
+                        selected = selected or worker_account(config, account)
+                        profile = profile or worker_json(config, "https://chatgpt.com/backend-api/me")
+                        response = {"id": response["id"], "result": {
+                            "account": desktop_account(profile, selected),
+                            "requiresOpenaiAuth": True,
+                            "workspaceRouting": account_routing(account, selected)}}
                     result = response["result"]
                     if method == "getAuthStatus" and result.get("authToken"):
                         selected = selected or worker_account(config, account)

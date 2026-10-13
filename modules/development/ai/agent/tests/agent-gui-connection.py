@@ -127,6 +127,76 @@ else:
                 for stream in (process.stdin, process.stdout, process.stderr):
                     stream.close()
 
+    def test_exact_native_routing_failure_uses_authoritative_mediation_only(self):
+        cases = [(False, "workspace routing discovery failed", -32603),
+                 (True, "workspace routing discovery failed", -32603),
+                 (False, "workspace routing discovery unauthorized (401)", -32603),
+                 (False, "account changed during workspace routing discovery", -32603),
+                 (False, "workspace routing discovery failed", -32600),
+                 (False, "workspace routing discovery failed", True)]
+        for failure, native_error, native_code in cases:
+            source = """import base64,json,sys
+if sys.argv[2:] == ["--phoenix-gui-http"]:
+    request=json.loads(sys.stdin.readline())
+    if FAILURE:
+        print(json.dumps({"error":{"stage":"routing-discovery","category":"http-forbidden"}}));sys.exit(1)
+    value={"id":"fixture-user","email":"fixture@example.invalid"} if request["url"].endswith("/me") else {"accounts":[{"id":"11111111-1111-4111-8111-111111111111","workspace_backend_origin":"NO_CONSTRAINT","account_routing_override":"NO_CONSTRAINT","plan_type":"plus"}]}
+    print(json.dumps({"status":200,"headers":{}}));print(json.dumps({"chunk":base64.b64encode(json.dumps(value).encode()).decode()}));print(json.dumps({"done":True}))
+else:
+    for line in sys.stdin:
+        request=json.loads(line)
+        print(json.dumps({"id":request["id"],"error":{"code":NATIVE_CODE,"message":"NATIVE_ERROR"}}),flush=True)
+""".replace('FAILURE', repr(failure)).replace('NATIVE_ERROR', native_error).replace('NATIVE_CODE', repr(native_code))
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
+                config=self.config(directory, source);sock,process=self.start_stdio_relay(config)
+                try:
+                    sock.sendall(b'{"id":1,"method":"account/read","params":{"refreshToken":false}}\n')
+                    response=json.loads(sock.recv(65536))
+                    if type(native_code) is not int or native_code != -32603 or native_error not in {'workspace routing discovery failed', 'workspace routing discovery unauthorized (401)'}:
+                        self.assertEqual(response['error']['message'], native_error)
+                        self.assertNotIn('result',response)
+                    elif failure:
+                        self.assertNotIn('result',response)
+                        self.assertIn('category=http-forbidden',response['error']['message'])
+                    else:
+                        self.assertEqual(set(response['result']),{'account','requiresOpenaiAuth','workspaceRouting'})
+                        self.assertEqual(response['result']['account'],{'type':'chatgpt','email':'fixture@example.invalid','planType':'plus'})
+                        self.assertTrue(response['result']['requiresOpenaiAuth'])
+                        self.assertEqual(response['result']['workspaceRouting']['chatgptAccountId'],ACCOUNT)
+                finally:
+                    sock.close();process.wait(timeout=5);process.stderr.close()
+
+    def test_account_repair_rejects_unbound_or_malformed_metadata(self):
+        valid={'id':ACCOUNT,'workspace_backend_origin':'NO_CONSTRAINT','account_routing_override':'NO_CONSTRAINT','plan_type':'plus'}
+        cases=[({'id':'fixture-user'},[dict(valid,id='22222222-2222-4222-8222-222222222222')]),
+               ({'id':'fixture-user'},[valid,valid]),
+               ({'id':'fixture-user'},[dict(valid,plan_type=['plus'])]),
+               ({'email':'PRIVATE-FIXTURE'},[valid]),
+               ({'id':'fixture-user','email':42},[valid]),
+               ([],[valid]),({'id':'fixture-user'},['PRIVATE-FIXTURE'])]
+        for profile, accounts in cases:
+            source="""import base64,json,sys
+if sys.argv[2:] == ["--phoenix-gui-http"]:
+    request=json.loads(sys.stdin.readline())
+    value=PROFILE if request["url"].endswith("/me") else {"accounts":ACCOUNTS}
+    print(json.dumps({"status":200,"headers":{}}));print(json.dumps({"chunk":base64.b64encode(json.dumps(value).encode()).decode()}));print(json.dumps({"done":True}))
+else:
+    for line in sys.stdin:
+        request=json.loads(line)
+        print(json.dumps({"id":request["id"],"error":{"code":-32603,"message":"workspace routing discovery failed"}}),flush=True)
+""".replace('PROFILE',repr(profile)).replace('ACCOUNTS',repr(accounts))
+            with self.subTest(profile_type=type(profile).__name__), tempfile.TemporaryDirectory() as directory:
+                config=self.config(directory,source);sock,process=self.start_stdio_relay(config)
+                try:
+                    sock.sendall(b'{"id":1,"method":"account/read","params":{}}\n')
+                    received=sock.recv(65536);response=json.loads(received)
+                    self.assertNotIn('result',response)
+                    self.assertIn('retained login was preserved',response['error']['message'])
+                    self.assertNotIn(b'PRIVATE-FIXTURE',received)
+                finally:
+                    sock.close();process.wait(timeout=5)
+                    self.assertNotIn(b'PRIVATE-FIXTURE',process.stderr.read());process.stderr.close()
+
     def test_failed_routing_reports_stage_and_preserves_opaque_auth(self):
         source = '''import json,sys
 if sys.argv[2:] == ["--phoenix-gui-http"]:
