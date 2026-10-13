@@ -9,7 +9,7 @@
 
 let
   home = config.home-manager.users.${user.name};
-  writer = import ../home/mutable-json-settings.nix { inherit pkgs; };
+  writer = import ../home/mutable-json-settings/default.nix { inherit pkgs; };
   # Only declared preferences participate; browser/editor session data and
   # hardware-control runtime state keep their own lifecycle and ownership.
   baselines =

@@ -1,40 +1,41 @@
 # Focused regression checks
 
-Run from the repository root:
+Test implementations live with their owning modules; this directory is only an
+index. Run from the repository root:
 
 ```sh
-python3 tests/mutable-json-settings.py
-python3 tests/mutable-settings-activation.py
-python3 tests/commands.py
-nix shell --inputs-from . nixpkgs#lua --command lua tests/idle-blank.lua home/idle-blank.lua home/idle-black.frag
-python3 -B tests/agent-admin.py
-python3 -B tests/agent-launch.py
-python3 -B tests/agent-history.py
-nix eval --impure --file tests/agent-security-options.nix
-python3 -B tests/agent-review.py
-python3 -B tests/agent-gui.py
-python3 -B tests/agent-gui-profile.py
-python3 -B tests/agent-gui-lifecycle.py
-python3 -B tests/agent-deployment.py
+python3 home/mutable-json-settings/tests/mutable-json-settings.py
+python3 modules/tests/mutable-settings-activation.py
+python3 commands/tests/commands.py
+nix shell --inputs-from . nixpkgs#lua --command lua home/idle/tests/idle-blank.lua home/idle/blank.lua home/idle/black.frag
+nix shell --inputs-from . nixpkgs#lua --command lua home/workspaces/tests/navigation.lua home/workspaces/navigation.lua
+python3 -B modules/development/ai/agent/tests/agent-admin.py
+python3 -B modules/development/ai/agent/tests/agent-launch.py
+python3 -B modules/development/ai/agent/tests/agent-history.py
+python3 -B modules/development/ai/agent/tests/agent-review.py
+python3 -B modules/development/ai/agent/tests/agent-gui.py
+python3 -B modules/development/ai/agent/tests/agent-gui-profile.py
+python3 -B modules/development/ai/agent/tests/agent-gui-lifecycle.py
+python3 -B modules/development/ai/agent/tests/agent-deployment.py
+python3 -B modules/services/updates/tests/update-runner.py
+python3 -B modules/development/ai/agent/tests/upstream-review.py
+python3 -B modules/development/ai/agent/tests/agent-gui-http.py
+node modules/development/ai/agent/tests/agent-gui-http-hook.cjs
+python3 -B modules/development/ai/agent/tests/agent-gui-connection.py
+nix build --impure --file commands/tests/commands-packaging.nix --no-link
+nix build --impure --file modules/security/tests/clamav-recovery.nix --no-link
+nix build --impure --file home/hypr-persist/tests/hypr-persist.nix --no-link
+nix build --impure --file home/kando/tests/packaging.nix --no-link
+python3 -B modules/input/mouse-side-button-debounce/test.py
+python3 -B home/thunar/tests/thunar-archive.py
+nix build --impure --file home/idle/tests/idle-command.nix --no-link
+python3 -B home/timewall/tests/timewall.py
+nix build --impure --file home/timewall/tests/timewall-packaging.nix --no-link
+nix build --impure --file home/thunar/tests/thunar-packaging.nix --no-link
+nix eval --impure --file modules/security/tests/opensnitch-observation.nix
+nix eval --impure --file modules/security/tests/pam-desktop-conditional.nix
+nix eval --impure --file modules/tests/desktop-services.nix
 python3 -B modules/development/ai/agent/tests/reservation-deployment.py
-python3 -B tests/update-runner.py
-python3 -B tests/upstream-review.py
-python3 -B tests/agent-gui-http.py
-node tests/agent-gui-http-hook.cjs
-python3 -B tests/agent-gui-connection.py
-nix build --impure --file tests/commands-packaging.nix --no-link
-nix build --impure --file tests/clamav-recovery.nix --no-link
-nix build --impure --file tests/hypr-persist.nix --no-link
-nix build --impure --file tests/kando-packaging.nix --no-link
-python3 -B tests/mouse-side-button-debounce.py
-python3 -B tests/thunar-archive.py
-nix build --impure --file tests/idle-command.nix --no-link
-python3 -B tests/timewall.py
-nix build --impure --file tests/timewall-packaging.nix --no-link
-nix build --impure --file tests/thunar-packaging.nix --no-link
-nix eval --impure --file tests/opensnitch-observation.nix
-nix eval --impure --file tests/pam-desktop-conditional.nix
-nix eval --impure --file tests/desktop-services.nix
 ```
 
 - **Writer fixtures:** temporary homes cover initialization, writable regular
@@ -69,6 +70,10 @@ nix eval --impure --file tests/desktop-services.nix
   non-root input unit. Fake events exercise stable-release debounce, unchanged
   high-resolution wheel events, recovery and cleanup without grabbing hardware.
   Portal shortcuts, focus, gestures and hotplug require manual acceptance.
+- **Psysonic output fixture:** `modules/services/tests/psysonic-output.py` takes
+  the pinned upstream source directory as its argument and needs patch, rustc,
+  a C linker and Node 24. It checks device predicates and startup recovery using
+  synthetic state; it never accesses the live app profile.
 - **Wallpaper fixtures:** mock fixed commands and temporary files to check
   missing/invalid assets, FIFO rejection, theme boundaries, black fallback,
   quoting and serialized writes. Packaging checks actual executable/config paths

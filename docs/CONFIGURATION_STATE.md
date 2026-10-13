@@ -24,6 +24,10 @@ and `User/keybindings.json` use the same narrow JSON writer. The shared
 NixOS/Home Manager integration applies this lifecycle to enabled baselines on
 both hosts:
 
+Caelestia's Super+Shift+L sleep shortcut and down gesture run
+`systemctl suspend`. The launcher Sleep action and session menu keep their
+upstream behavior and commands.
+
 - A fresh home gets a writable file from the declared baseline; a legacy managed
   symlink can be migrated to an ordinary file.
 - Live UI edits are allowed. Existing experiments survive logout and reboot.
@@ -57,14 +61,26 @@ Exact Codex launch overrides preserve Native versus Sandboxed containment;
 other applications use upstream resolution. Reboot fidelity is a prototype
 acceptance check, not process/RAM continuation or a substitute for backups.
 
+Metal's [monitor workspaces](../home/workspaces/README.md) use five dedicated
+slots per screen: left 1–5, middle 6–10, right 11–15. Caelestia shows the active
+monitor's numeric group, including empty slots. Kando's Global menu opens the
+all-monitor HyprExpo overview and navigates within the pointer monitor's group.
+
 Kando on metal uses a private config root. Only its `config.json` and `menus.json`
 are writable baselines; every service start also reasserts them, including login
 and restart. This deliberately differs from Caelestia/VSCodium experiment
 preservation: promote Kando edits before restarting it. Chromium caches and other
 app-owned state remain untouched. Menu-launched apps regain the normal config
 root and use upstream systemd isolation to survive a Kando service restart.
-The separate non-root hardware filter debounces only the physical mouse's two
-side buttons; menu bindings and application conditions belong to Kando/Hyprland.
+The restricted non-root filter debounces the physical mouse's two side buttons
+and emits held F23 (global) / F24 (context) through a separate virtual keyboard.
+Mouse movement, ordinary clicks and high-resolution scrolling pass unchanged.
+The side buttons no longer send Back/Forward. Menu conditions remain in Kando.
+
+Kando keeps focus only while its menu window is visible; normal Hyprland
+focus-follows-mouse remains enabled. Both side-button menus select actions
+at the default 100px gesture radius while held; release at the center cancels.
+Hover mode enables final actions without a click.
 
 Timewall on metal reads an external HEIC at runtime and owns only its generated
 frame cache/session PID state. The asset never enters Git or the Nix store.
@@ -97,3 +113,7 @@ reload behavior, rollback limits, and semantic change review. Keep sensitive
 policy settings declarative. Reuse the existing narrow JSON writer when those
 same file-level semantics apply; avoid a blanket profile framework or sweeping
 application state into the baseline registry.
+
+Caelestia shell process ownership belongs to its upstream user service on
+`hyprland-session.target`; package changes restart it to keep IPC and the
+running configuration path aligned.

@@ -1,0 +1,337 @@
+#!/usr/bin/env python3
+"""Disposable Git and mocked network/deployment acceptance; no live updates."""
+import importlib.util
+import json
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+from unittest.mock import patch, MagicMock
+
+ROOT = Path(__file__).resolve().parents[4]
+sys.path.insert(0, str(ROOT / 'modules/services/updates'))
+import runner
+import candidate
+
+
+class RunnerTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.repo = self.root / 'repo'
+        self.repo.mkdir()
+        self.git('init', '-q', '-b', 'main')
+        self.git('config', 'user.name', 'fixture')
+        self.git('config', 'user.email', 'fixture@localhost')
+        self.git('config', 'commit.gpgSign', 'false')
+        for name in ('flake.nix', 'flake.lock', 'config/updates.json'):
+            path = self.repo / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('{}\n' if name.startswith('flake') else (ROOT / name).read_text())
+        self.git('add', '.')
+        self.git('commit', '-qm', 'baseline')
+        self.head = self.git('rev-parse', 'HEAD').strip()
+        self.home = self.root / 'home'
+        self.home.mkdir()
+        self.config = dict(repo=str(self.repo), git=shutil.which('git'), path='/usr/bin:/bin')
+
+    def git(self, *args):
+        return subprocess.check_output(['git', '-C', str(self.repo), *args], text=True)
+
+    def candidate(self):
+        path = self.repo / 'flake.lock'
+        path.write_text('{"new": true}\n')
+        self.git('add', 'flake.lock')
+        self.git('commit', '-qm', 'update')
+        commit = self.git('rev-parse', 'HEAD').strip()
+        self.git('reset', '--hard', self.head)
+        return commit
+
+    def test_source_transport_accepts_large_escaped_manifest_and_matches_controller(self):
+        spec = importlib.util.spec_from_file_location('capacity_deploy', ROOT / 'modules/development/ai/agent/deployment.py')
+        deploy = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(deploy)
+        review = deploy.load_review({'reviewScript': str(ROOT / 'modules/development/ai/agent/deploy-review.py')})
+        self.assertEqual((candidate.SOURCE_LIMIT, candidate.WIRE_LIMIT), (deploy.SOURCE_LIMIT, deploy.LIMIT))
+        self.assertEqual((review.SOURCE_LIMIT, review.WIRE_LIMIT), (candidate.SOURCE_LIMIT, candidate.WIRE_LIMIT))
+        self.assertEqual(review.REVIEW_INPUT_LIMIT, 1024 * 1024)
+        # A single blob exceeds both the former source cap and generic command-output cap.
+        (self.repo / 'large.nix').write_text('\x01' * (3 * 1024 * 1024))
+        self.git('add', 'large.nix')
+        self.git('commit', '-qm', 'large escaped fixture')
+        commit = self.git('rev-parse', 'HEAD').strip()
+        files, modes = candidate._manifest(self.config['git'], self.repo, self.home, commit)
+        request = dict(files=files, modes=modes, commit=commit, action='test', target='metal', reason='Capacity fixture')
+        deploy.request_valid(request, 'metal')
+        body = json.dumps(request).encode() + b'\n'
+        self.assertGreater(len(body), 4 * 1024 * 1024)
+        self.assertLessEqual(len(body), deploy.LIMIT)
+        connection = MagicMock()
+        connection.__enter__.return_value = connection
+        connection.recv.return_value = b'{"ok":true,"action":"update"}\n'
+        with patch.object(runner.socket, 'socket', return_value=connection):
+            runner.controller(dict(self.config, target='metal', controllerSocket='/fixture'), candidate,
+                              self.home, self.repo, commit, '/base', '/profile')
+        sent = connection.sendall.call_args.args[0]
+        self.assertLessEqual(len(sent), deploy.LIMIT)
+        received = json.loads(sent)
+        self.assertEqual(received['files'], files)
+        self.assertEqual(received['action'], 'update')
+        with tempfile.TemporaryDirectory() as directory:
+            for name, content in files.items():
+                path = Path(directory) / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content)
+            self.assertEqual(review.baseline_files(Path(directory)), files)
+        (self.repo / 'large.nix').write_text('x' * candidate.SOURCE_LIMIT)
+        self.git('add', 'large.nix')
+        self.git('commit', '-qm', 'over capacity')
+        with self.assertRaises(candidate.SourceTransportError) as failure:
+            candidate._manifest(self.config['git'], self.repo, self.home, self.git('rev-parse', 'HEAD').strip())
+        self.assertEqual((failure.exception.stage, failure.exception.code), ('source-transport', 'source-capacity-exceeded'))
+        request['files']['large.nix'] = 'x' * deploy.SOURCE_LIMIT
+        with self.assertRaises(deploy.DeploymentFailure) as failure:
+            deploy.request_valid(request, 'metal')
+        self.assertEqual((failure.exception.stage, failure.exception.code), ('source-transport', 'source-capacity-exceeded'))
+
+    def test_packaged_standalone_entrypoints_use_explicit_policy(self):
+        # Simulate Nix path substitution in a directory with no sibling helpers.
+        policy = ROOT / 'modules/development/ai/agent/transport.json'
+        with tempfile.TemporaryDirectory() as directory:
+            for name, relative in [('deploy', 'modules/development/ai/agent/deployment.py'),
+                                   ('review', 'modules/development/ai/agent/deploy-review.py'),
+                                   ('candidate', 'modules/services/updates/candidate.py')]:
+                script = Path(directory) / (name + '.py')
+                script.write_text((ROOT / relative).read_text().replace('@deploymentTransportPolicy@', str(policy)))
+                spec = importlib.util.spec_from_file_location('isolated_' + name, script)
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                self.assertEqual(module.SOURCE_LIMIT, candidate.SOURCE_LIMIT)
+                self.assertEqual(module.LIMIT if name == 'deploy' else module.WIRE_LIMIT, candidate.WIRE_LIMIT)
+
+    def test_updater_wire_failure_is_typed_and_precedes_socket(self):
+        with patch.object(candidate, '_manifest', return_value=({'flake.nix': '\x01' * 100}, {'flake.nix': '100644'})), \
+             patch.object(candidate, 'WIRE_LIMIT', 100), patch.object(runner.socket, 'socket') as socket:
+            with self.assertRaises(candidate.SourceTransportError) as failure:
+                runner.controller(dict(self.config, target='metal'), candidate, self.home, self.repo, self.head, '/base', '/profile')
+        self.assertEqual((failure.exception.stage, failure.exception.code), ('source-transport', 'wire-capacity-exceeded'))
+        socket.assert_not_called()
+
+    def test_integrate_preserves_unrelated_staged_and_unstaged_edits(self):
+        commit = self.candidate()
+        (self.repo / 'config/updates.json').write_text((self.repo / 'config/updates.json').read_text() + ' ')
+        (self.repo / 'new-user-file').write_text('staged user data\n')
+        self.git('add', 'new-user-file')
+        runner.integrate(self.config, candidate, self.home, self.head, commit, {'flake.lock'})
+        self.assertEqual(self.git('rev-parse', 'HEAD').strip(), commit)
+        self.assertEqual((self.repo / 'flake.lock').read_text(), '{"new": true}\n')
+        self.assertEqual(self.git('diff', '--cached', '--name-only').strip(), 'new-user-file')
+        self.assertEqual(self.git('diff', '--name-only').strip(), 'config/updates.json')
+        self.assertEqual((self.repo / 'new-user-file').read_text(), 'staged user data\n')
+
+    def test_checkout_and_integration_ignore_caller_filters(self):
+        commit = self.candidate()
+        sentinel = self.root/'filter-executed'
+        script = self.root/'filter'
+        script.write_text('#!/bin/sh\necho unsafe > "' + str(sentinel) + '"\n/bin/cat\n')
+        script.chmod(0o755)
+        self.git('config', 'filter.unsafe.smudge', str(script))
+        self.git('config', 'filter.unsafe.clean', str(script))
+        self.git('config', 'filter.unsafe.required', 'true')
+        (self.repo/'.git/info/attributes').write_text('* filter=unsafe\n')
+        tree = self.root/'candidate-tree'
+        candidate.git(self.config['git'], self.repo, self.home, 'worktree', 'add', '-b', 'codex/fixture', str(tree), self.head)
+        self.assertEqual((tree/'flake.lock').read_text(), '{}\n')
+        self.assertFalse(sentinel.exists())
+        runner.integrate(self.config, candidate, self.home, self.head, commit, {'flake.lock'})
+        self.assertFalse(sentinel.exists())
+        self.assertEqual((self.repo/'flake.lock').read_text(), '{"new": true}\n')
+        candidate.git(self.config['git'], self.repo, self.home, 'worktree', 'remove', '--force', str(tree))
+
+    def test_dirty_affected_file_rejects_without_changing_index_head_or_edit(self):
+        commit = self.candidate()
+        (self.repo / 'flake.lock').write_text('user lock edit\n')
+        self.git('add', 'flake.lock')
+        index = (self.repo / '.git/index').read_bytes()
+        with self.assertRaisesRegex(ValueError, 'affected user edits'):
+            runner.integrate(self.config, candidate, self.home, self.head, commit, {'flake.lock'})
+        self.assertEqual((self.repo / '.git/index').read_bytes(), index)
+        self.assertEqual(self.git('rev-parse', 'HEAD').strip(), self.head)
+        self.assertEqual((self.repo / 'flake.lock').read_text(), 'user lock edit\n')
+
+    def test_busy_index_and_changed_main_are_preserved(self):
+        commit = self.candidate()
+        (self.repo / '.git/index.lock').write_text('other Git operation')
+        with self.assertRaises(FileExistsError):
+            runner.integrate(self.config, candidate, self.home, self.head, commit, {'flake.lock'})
+        self.assertEqual((self.repo / '.git/index.lock').read_text(), 'other Git operation')
+        (self.repo / '.git/index.lock').unlink()
+        self.git('commit', '--allow-empty', '-qm', 'concurrent user commit')
+        with self.assertRaisesRegex(ValueError, 'main advanced'):
+            runner.integrate(self.config, candidate, self.home, self.head, commit, {'flake.lock'})
+
+    def test_policy_rejects_unknown_identifier_opaque_versions_and_missing_pin_reason(self):
+        policy = json.loads((ROOT / 'config/updates.json').read_text())
+        runner.validate_policy(policy)
+        for hold in [{'pin': 'a'*40}, {'pin': 'a'*40, 'reason': ''},
+                     {'pin': 'a'*40, 'reason': 'fix', 'resumeAtVersion': 'next'},
+                     {'pin': 'HEAD', 'reason': 'fix'}]:
+            mutated = dict(policy, holds={'firefox': hold})
+            with self.assertRaises(ValueError):
+                runner.validate_policy(mutated)
+        with self.assertRaisesRegex(ValueError, 'identifier'):
+            runner.validate_policy(dict(policy, holds={'invalid/path': {}}))
+
+    def test_unknown_prerelease_version_cannot_release_hold(self):
+        with patch.object(candidate, '_run') as command:
+            self.assertFalse(runner.compare_version({}, candidate, '1.2.3-rc1', '1.2.3'))
+            self.assertFalse(runner.compare_version({}, candidate, '1.2.3', '999-next'))
+            command.assert_not_called()
+
+    def test_community_check_pagination_requires_all_exact_successful_contexts(self):
+        rev = 'a'*40
+        records = [dict(name=n, head_sha=rev, app={'slug': 'github-actions'},
+                        status='completed', conclusion='success') for n in candidate.COMMUNITY_CHECKS]
+        import base64
+        sri = 'sha256-' + base64.b64encode(bytes.fromhex('00'*32)).decode()
+        payload = {'version': '26.930.31730'}
+        for arch in ('amd64', 'arm64'):
+            payload[arch] = dict(repositoryPath='pool/main/c/chatgpt/chatgpt_26.930.31730_%s.deb' % arch,
+                                 sha256='00'*32, sri=sri)
+        with patch.object(runner, 'fetch', side_effect=[{'check_runs': records[:2], 'total_count': 4},
+                         {'check_runs': records[2:], 'total_count': 4}, payload]):
+            self.assertEqual(runner.community(candidate, rev), payload['version'])
+        records[0]['conclusion'] = 'failure'
+        with patch.object(runner, 'fetch', return_value={'check_runs': records, 'total_count': 4}):
+            with self.assertRaises(candidate.CandidateError):
+                runner.community(candidate, rev)
+
+
+    def setup_pipeline(self, hold=False):
+        lock = {'version': 7, 'root': 'root', 'nodes': {'root': {'inputs': {a:a for a in runner.SOURCES}}}}
+        for alias,(owner,repo,ref) in runner.SOURCES.items():
+            lock['nodes'][alias] = {'original': {'type':'github','owner':owner,'repo':repo,'ref':ref},
+                'locked': {'owner':owner,'repo':repo,'rev':'1'*40}, 'inputs': {}}
+        (self.repo/'flake.lock').write_text(json.dumps(lock))
+        policy = json.loads((self.repo/runner.POLICY).read_text())
+        if hold:
+            policy['holds']['codex-cli'] = {'pin': 'a'*40,
+                'reason':'wait for fix','resumeAtVersion':'0.160.0'}
+            (self.repo/runner.POLICY).write_text(json.dumps(policy))
+        self.git('add','.'); self.git('commit','-qm','pipeline baseline')
+        self.head=self.git('rev-parse','HEAD').strip()
+        approved=self.root/'approved'; shutil.copytree(self.repo,approved,ignore=shutil.ignore_patterns('.git'))
+        profile=self.root/'profile'; (profile/'etc/phoenix-agent').mkdir(parents=True)
+        (profile/'etc/phoenix-agent/activated-source').symlink_to(approved)
+        state=self.root/'state'; state.mkdir()
+        nix=self.root/'nix'; nix.write_text("""#!%s
+import json,pathlib,sys
+if sys.argv[1] == 'eval':
+ if '--expr' in sys.argv: print(1)
+ else: print('0.160.0')
+else:
+ path=pathlib.Path('flake.lock'); data=json.loads(path.read_text())
+ alias=sys.argv[sys.argv.index('--override-input')+1]
+ data['nodes'][alias]['locked']['rev']=sys.argv[sys.argv.index('--override-input')+2].rsplit('/',1)[-1]
+ path.write_text(json.dumps(data))
+""" % sys.executable); nix.chmod(0o755)
+        self.config.update(state=str(state),nixHome=str(state/'nix-home'),nix=str(nix),
+            baseline=str(approved),systemProfile=str(profile),target='metal',controllerSocket='/fixture')
+
+    def public_fetch(self,url):
+        if 'releases/latest' in url:
+            return {'tag_name':'rust-v0.160.0','draft':False,'prerelease':False,'published_at':'2026-10-05T00:00:00Z'}
+        import base64
+        payload={'version':'26.930.31730'}
+        for arch in ('amd64','arm64'):
+            payload[arch]=dict(repositoryPath='pool/main/c/chatgpt/chatgpt_26.930.31730_%s.deb'%arch,
+                sha256='00'*32,sri='sha256-'+base64.b64encode(bytes.fromhex('00'*32)).decode())
+        return payload
+
+    def test_complete_update_releases_hold_only_in_successful_update_commit(self):
+        self.setup_pipeline(hold=True)
+        (self.repo/'user-note').write_text('keep staged work');self.git('add','user-note')
+        def approved(config,c,home,tree,commit,base,profile):
+            policy=json.loads((tree/runner.POLICY).read_text())
+            self.assertNotIn('codex-cli',policy['holds'])
+            self.assertEqual(self.git('rev-parse','HEAD').strip(),self.head)
+            self.assertIn('codex-cli',json.loads((self.repo/runner.POLICY).read_text())['holds'])
+            return dict(ok=True,action='boot',source='/reviewed/source')
+        with patch.object(runner,'revision',return_value='2'*40), patch.object(runner,'community',return_value='26.930.31730'), \
+             patch.object(runner,'fetch',side_effect=self.public_fetch),patch.object(runner,'controller',side_effect=approved):
+            result=runner.run(self.config,candidate)
+        self.assertEqual(result['status'],'staged')
+        self.assertNotIn('codex-cli',json.loads((self.repo/runner.POLICY).read_text())['holds'])
+        self.assertEqual(self.git('diff','--cached','--name-only').strip(),'user-note')
+        self.assertEqual(self.git('show','--format=','--name-only','HEAD').strip().splitlines(),
+                         ['config/updates.json','flake.lock'])
+
+    def test_different_checked_out_branch_defers_before_network(self):
+        self.setup_pipeline()
+        self.git('checkout','-qb','feature')
+        with patch.object(runner,'revision') as network:
+            self.assertEqual(runner.run(self.config,candidate)['status'],'deferred')
+            network.assert_not_called()
+
+    def test_patch_threshold_removes_only_satisfied_entry(self):
+        self.setup_pipeline()
+        policy=json.loads((self.repo/runner.POLICY).read_text())
+        policy['patches']={'codex-cli': {'reason':'temporary fix',
+            'patchFiles':['config/update-patches/codex-fix.patch'], 'removeAtVersion':'0.160.0'}}
+        (self.repo/runner.POLICY).write_text(json.dumps(policy))
+        self.git('add','.');self.git('commit','-qm','approved fix')
+        self.head=self.git('rev-parse','HEAD').strip()
+        approved=Path(self.config['baseline']);shutil.rmtree(approved)
+        shutil.copytree(self.repo,approved,ignore=shutil.ignore_patterns('.git'))
+        with patch.object(runner,'revision',return_value='2'*40), patch.object(runner,'community',return_value='26.930.31730'), \
+             patch.object(runner,'fetch',side_effect=self.public_fetch),patch.object(runner,'controller',return_value={'source':'/fixture'}):
+            result=runner.run(self.config,candidate)
+        self.assertEqual(result['status'],'staged')
+        self.assertEqual(json.loads((self.repo/runner.POLICY).read_text())['patches'],{})
+        self.assertEqual(self.git('branch','--list','codex/updates/*').strip(),'')
+
+    def test_cleanup_deletes_owned_stale_candidates_but_preserves_debug_and_other_branches(self):
+        self.setup_pipeline()
+        original=self.head
+        (self.repo/'flake.lock').write_text((self.repo/'flake.lock').read_text()+' ')
+        self.git('add','flake.lock')
+        self.git('-c','user.email=phoenix-updates@localhost','commit','-qm','service candidate')
+        self.git('branch','codex/updates/'+'a'*32)
+        self.git('branch','codex/updates/user-work')
+        self.git('reset','--hard',original)
+        self.config['cleanupBranches']=False
+        runner.cleanup_branches(self.config,candidate,self.home)
+        self.assertTrue(self.git('branch','--list','codex/updates/'+'a'*32).strip())
+        self.config['cleanupBranches']=True
+        runner.cleanup_branches(self.config,candidate,self.home)
+        self.assertEqual(self.git('branch','--list','codex/updates/'+'a'*32).strip(),'')
+        self.assertTrue(self.git('branch','--list','codex/updates/user-work').strip())
+
+    def test_failed_staging_keeps_hold_and_current_pins(self):
+        self.setup_pipeline(hold=True)
+        original=(self.repo/'flake.lock').read_bytes()
+        with patch.object(runner,'revision',return_value='2'*40), patch.object(runner,'community',return_value='26.930.31730'), \
+             patch.object(runner,'fetch',side_effect=self.public_fetch),patch.object(runner,'controller',side_effect=ValueError('denied')):
+            with self.assertRaisesRegex(ValueError,'denied'):
+                runner.run(self.config,candidate)
+        self.assertEqual(self.git('rev-parse','HEAD').strip(),self.head)
+        self.assertEqual((self.repo/'flake.lock').read_bytes(),original)
+        self.assertIn('codex-cli',json.loads((self.repo/runner.POLICY).read_text())['holds'])
+
+    def test_unapproved_main_and_affected_local_edits_defer_before_network(self):
+        self.setup_pipeline()
+        (self.repo/'flake.lock').write_text('local work')
+        with patch.object(runner,'revision') as network:
+            self.assertEqual(runner.run(self.config,candidate)['status'],'deferred')
+            network.assert_not_called()
+        self.git('add','flake.lock');self.git('commit','-qm','user commit')
+        with patch.object(runner,'revision') as network:
+            self.assertEqual(runner.run(self.config,candidate)['status'],'deferred')
+            network.assert_not_called()
+
+
+if __name__ == '__main__':
+    unittest.main()

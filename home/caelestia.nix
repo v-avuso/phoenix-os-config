@@ -5,6 +5,7 @@
   pkgs,
   phoenixKandoHyprLua,
   phoenixAgentGuiHyprLua ? "",
+  phoenixWorkspacesHyprLua,
   ...
 }:
 
@@ -13,7 +14,7 @@ let
   system = pkgs.stdenv.hostPlatform.system;
   hyprlandPackages = inputs.nixpkgs-unstable.legacyPackages.${system};
   desktopScale = import ../config/desktop-scale.nix;
-  idleBlackShader = pkgs.writeText "phoenix-idle-black.frag" (builtins.readFile ./idle-black.frag);
+  idleBlackShader = pkgs.writeText "phoenix-idle-black.frag" (builtins.readFile ./idle/black.frag);
   # The CLI owns palette generation. Its custom patchPhase skips the standard
   # patch hooks, so append explicitly and use this same CLI in both launch paths.
   caelestiaCli =
@@ -46,6 +47,13 @@ let
   '';
 
   caelestiaSettings = {
+    # Five-number groups align with the monitor-owned ranges below. The shell's
+    # unoccupied mode displays all slots in the active group, including empty ones.
+    bar.workspaces = {
+      shown = 5;
+      perMonitor = true;
+      showUnoccupied = true;
+    };
     # Prefer the contained entry without renaming it or favouriting Native.
     # Query ordering still depends on Caelestia's fuzzy match/frequency score.
     launcher.favouriteApps = [ "codex-desktop-sandboxed" ];
@@ -80,7 +88,7 @@ let
   caelestiaShellBaseline = pkgs.writeText "caelestia-shell-baseline.json" (
     builtins.toJSON caelestiaSettings + "\n"
   );
-  caelestiaSettingsWriter = import ./mutable-json-settings.nix { inherit pkgs; };
+  caelestiaSettingsWriter = import ./mutable-json-settings/default.nix { inherit pkgs; };
   blank = pkgs.writeShellScriptBin "blank" ''
     case "''${1:-}" in
       "")
@@ -88,14 +96,14 @@ let
           echo "usage: blank [off]" >&2
           exit 2
         fi
-        exec ${caelestiaCli}/bin/caelestia shell ipc call idle activate 0
+        exec ${caelestiaCli}/bin/caelestia shell idle activate 0
         ;;
       off)
         if [ "$#" -ne 1 ]; then
           echo "usage: blank [off]" >&2
           exit 2
         fi
-        exec ${caelestiaCli}/bin/caelestia shell ipc call idle restore
+        exec ${caelestiaCli}/bin/caelestia shell idle restore
         ;;
       *)
         echo "usage: blank [off]" >&2
@@ -114,7 +122,7 @@ let
       substituteInPlace hypr/hyprland/execs.lua \
         --replace-fail '"/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1"' '"${pkgs.polkit_gnome}/libexec/polkit-gnome-authentication-agent-1"' \
         --replace-fail 'hl.exec_cmd("/usr/lib/geoclue-2.0/demos/agent")' '-- GeoClue agent is managed by NixOS.' \
-        --replace-fail 'hl.exec_cmd("caelestia shell -d")' 'hl.exec_cmd("${pkgs.dbus}/bin/dbus-update-activation-environment --systemd DISPLAY HYPRLAND_INSTANCE_SIGNATURE WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE && ${pkgs.systemd}/bin/systemctl --user stop hyprland-session.target && ${pkgs.systemd}/bin/systemctl --user start hyprland-session.target && caelestia shell -d")'
+        --replace-fail 'hl.exec_cmd("caelestia shell -d")' 'hl.exec_cmd("${pkgs.dbus}/bin/dbus-update-activation-environment --systemd DISPLAY HYPRLAND_INSTANCE_SIGNATURE WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE && ${pkgs.systemd}/bin/systemctl --user stop hyprland-session.target && ${pkgs.systemd}/bin/systemctl --user start hyprland-session.target")'
     '';
 
     installPhase = ''
@@ -124,11 +132,9 @@ let
   };
 
   hyprVars = {
-    # Caelestia defaults this command to suspend-then-hibernate, which wakes
-    # after systemd's two-hour delay. Keep sleep as suspend and hibernate
-    # explicit: one observed transition stalled and required forced power-off.
-    # If restoring suspend-then-hibernate, first investigate that failure with
-    # persistent kernel logs so the hibernation-entry failure is captured.
+    # Keep the sleep shortcut explicit and suspend-only. Caelestia's launcher
+    # action remains upstream-configured independently.
+    kbSleep = "SUPER + SHIFT + L";
     sleepGestureCmd = "systemctl suspend";
     # Nixpkgs' Sweet cursor theme is case-sensitive; upstream's lowercase
     # default otherwise fails to identify the installed theme.
@@ -158,12 +164,13 @@ let
 
   idleBlankLua =
     builtins.replaceStrings [ "@IDLE_BLACK_SHADER@" ] [ (builtins.toJSON (toString idleBlackShader)) ]
-      (builtins.readFile ./idle-blank.lua);
+      (builtins.readFile ./idle/blank.lua);
 
   hyprUser = ''
     ${idleBlankLua}
     ${phoenixKandoHyprLua}
     ${phoenixAgentGuiHyprLua}
+    ${phoenixWorkspacesHyprLua}
 
     hl.monitor({
       output = "DP-1",
@@ -214,13 +221,20 @@ in
 {
   imports = [
     inputs.caelestia-shell.homeManagerModules.default
-    ./hypr-persist.nix
-    ./kando.nix
-    ./thunar.nix
-    ./timewall.nix
+    ./hypr-persist/default.nix
+    ./kando
+    ./workspaces
+    ./thunar/default.nix
+    ./timewall/default.nix
   ];
 
   phoenix.kando.enable = true;
+  phoenix.workspaces.monitors = {
+    "DP-1".first = 1;
+    "HDMI-A-2".first = 6;
+    "DP-2".first = 11;
+  };
+  _module.args.phoenixBlankCommand = "${blank}/bin/blank";
 
   # Mirror only Home Manager Hyprland's generic session lifecycle: import the
   # compositor environment, then activate the target linked to the graphical
@@ -236,15 +250,22 @@ in
   programs.caelestia = {
     enable = true;
     package = caelestiaShell;
-    # Upstream Hyprland dots start the shell with `caelestia shell -d`.
-    # Keep lifecycle ownership there so Home Manager config changes can be
-    # handled by Caelestia's in-process settings watcher.
-    systemd.enable = false;
+    # Package changes must replace the running shell: IPC selects its store path.
+    systemd = {
+      enable = true;
+      target = "hyprland-session.target";
+    };
     cli = {
       enable = true;
       package = caelestiaCli;
     };
   };
+
+  # Adopt a matching unmanaged instance during migration to service ownership.
+  # The package wrapper scopes kill to this config path, not other Quickshell apps.
+  systemd.user.services.caelestia.Service.ExecStartPre = [
+    "-${caelestiaShell}/bin/caelestia-shell kill"
+  ];
 
   # Keep one Nix-owned baseline while leaving shell.json as a normal writable
   # file so Caelestia's Settings UI and file watcher can operate on it.
@@ -252,13 +273,15 @@ in
 
   # Boot initializes missing files but keeps experiments. Direct HM activation
   # and NixOS switch/test reassert the complete baseline with the same writer.
-  home.activation.caelestiaShellSettings = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    mode=reassert
-    if [ "''${PHOENIX_PRESERVE_MUTABLE_BASELINES:-0}" = 1 ]; then
-      mode=preserve
-    fi
-    run ${caelestiaSettingsWriter} "$mode" ${caelestiaShellBaseline} ${lib.escapeShellArg "${config.xdg.configHome}/caelestia/shell.json"} object
-  '';
+  home.activation.caelestiaShellSettings =
+    lib.hm.dag.entryBetween [ "reloadSystemd" ] [ "writeBoundary" ]
+      ''
+        mode=reassert
+        if [ "''${PHOENIX_PRESERVE_MUTABLE_BASELINES:-0}" = 1 ]; then
+          mode=preserve
+        fi
+        run ${caelestiaSettingsWriter} "$mode" ${caelestiaShellBaseline} ${lib.escapeShellArg "${config.xdg.configHome}/caelestia/shell.json"} object
+      '';
 
   # Deploy upstream dotfiles as static, store-backed files. Home Manager's
   # recursive linking leaves the directories themselves writable, including

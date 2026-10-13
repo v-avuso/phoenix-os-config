@@ -35,7 +35,7 @@ in
 
 {
   imports = [
-    ../../modules/input/mouse-side-button-debounce.nix
+    ../../modules/input/mouse-side-button-debounce/default.nix
     ./fan-control.nix
   ];
 

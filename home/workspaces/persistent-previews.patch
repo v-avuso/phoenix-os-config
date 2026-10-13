@@ -1,0 +1,11 @@
+--- a/src/Overview.cpp
++++ b/src/Overview.cpp
+@@ -1238,7 +1238,7 @@
+         const int64_t currentWorkspaceID = startedOn ? startedOn->m_id : (MON ? MON->activeWorkspaceID() : WORKSPACE_INVALID);
+ 
+         for (const auto& workspace : State::workspaceState()->workspacesCopy()) {
+-            if (!workspace || workspace->m_isSpecialWorkspace || workspace->m_monitor != MON || workspace->getWindowCount() <= 0)
++            if (!workspace || workspace->m_isSpecialWorkspace || workspace->m_monitor != MON || (workspace->getWindowCount() <= 0 && !workspace->isPersistent()))
+                 continue;
+ 
+             visibleWorkspaceIDs.push_back(workspace->m_id);

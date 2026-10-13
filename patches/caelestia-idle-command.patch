@@ -40,7 +40,7 @@
 +    IdleMonitor {
 +        id: manualIdleMonitor
 +        enabled: root.manualIdleEntry !== null
-+        timeout: 0
++        timeout: 0.1
 +        respectInhibitors: false
 +        onIsIdleChanged: {
 +            if (isIdle && root.manualIdleEntry && !root.manualIdleActionApplied) {
