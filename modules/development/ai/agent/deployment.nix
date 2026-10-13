@@ -9,22 +9,20 @@
 }:
 let
   cfg = config.services.phoenixDeployment;
+  authorizationPolicy = toString config.system.build.phoenixAuthorizationPolicy;
+  authorizationLibrary = toString ./authorization/request.py;
   transportPolicy = toString ./transport.json;
-  controllerScript = pkgs.replaceVars ./deployment.py { deploymentTransportPolicy = transportPolicy; };
-  reviewScript = pkgs.replaceVars ./deploy-review.py { deploymentTransportPolicy = transportPolicy; };
+  controllerScript = pkgs.replaceVars ./deployment.py { deploymentTransportPolicy = transportPolicy; inherit authorizationLibrary; };
+  reviewScript = pkgs.replaceVars ./deploy-review.py { deploymentTransportPolicy = transportPolicy; inherit authorizationLibrary; };
   sourceSelector = pkgs.writeScript "phoenix-source" (
     builtins.replaceStrings [ "#!/usr/bin/env python3" ]
       [ "#!${pkgs.python3}/bin/python3" ] (builtins.readFile ../../../../commands/phoenix-source)
   );
-  operatorCommand = [
-    "/run/wrappers/bin/pkexec"
-    "--disable-internal-agent"
-    "${pkgs.python3}/bin/python3"
-    "-I"
-    (toString controllerScript)
-    (toString deploymentConfig)
-    "operator"
-  ];
+  nativeDeployHelper = pkgs.writeShellScript "phoenix-deployment-authorize" ''
+    if [ "$#" -ne 0 ]; then exit 2; fi
+    exec ${pkgs.python3}/bin/python3 -I ${controllerScript} ${deploymentConfig} operator
+  '';
+  operatorCommand = [ "/run/wrappers/bin/pkexec" "--disable-internal-agent" (toString nativeDeployHelper) ];
   # The caller supplies only a protected pending-record nonce. The controller
   # validates UID, policy, source/closure, target/action and current baseline;
   # no caller-provided command, store path or source is accepted here.
@@ -52,6 +50,7 @@ let
       repo = user.repoDirectory;
       sourceSelector = toString sourceSelector;
       reservationAdapter = if config.phoenix.agent.reservations.enable then toString ./reservation-client.py else null;
+      inherit authorizationPolicy;
       modelReviewEnabled = cfg.securityReview.enable;
       operatorCommand = lib.optionals (!cfg.securityReview.enable) operatorCommand;
       inherit overrideCommand disruptionOverrideCommand;
@@ -81,6 +80,7 @@ let
       repo = user.repoDirectory;
       sourceSelector = toString sourceSelector;
       reservationAdapter = if config.phoenix.agent.reservations.enable then toString ./reservation-client.py else null;
+      inherit authorizationPolicy;
       modelReviewEnabled = cfg.securityReview.enable;
       operatorCommand = lib.optionals (!cfg.securityReview.enable) operatorCommand;
       inherit overrideCommand disruptionOverrideCommand;
@@ -113,6 +113,7 @@ let
   '';
   deploymentConfig = pkgs.writeText "phoenix-deployment.json" (
     builtins.toJSON ({
+      inherit authorizationPolicy;
       modelReviewEnabled = cfg.securityReview.enable;
       operatorName = user.name;
       disruptionScript = toString ./disruption.py;
@@ -167,7 +168,7 @@ let
 
 in
 {
-  imports = [ ./security-review.nix ];
+  imports = [ ./security-review.nix ./authorization ];
   options.services.phoenixDeployment.disruptionGuard.enable =
     lib.mkEnableOption "experimental protected desktop unit deployment guard";
   config = {
@@ -196,6 +197,19 @@ in
     # This policy is absent while the experimental security-review switch is off.
     environment.etc = lib.mkMerge [
       { "phoenix-agent/activated-source".source = inputs.self.outPath; }
+      (lib.optionalAttrs (!cfg.securityReview.enable) {
+        "polkit-1/actions/org.phoenix.deployment.policy".text = ''
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN" "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+          <policyconfig><action id="org.phoenix.deployment.authorize">
+            <description>Authorize an immutable Phoenix deployment</description>
+            <message>Phoenix requests deployment of the frozen source shown in the terminal. This can change the system and interrupt services.</message>
+            <icon_name>dialog-warning</icon_name>
+            <defaults><allow_any>no</allow_any><allow_inactive>no</allow_inactive><allow_active>auth_admin</allow_active></defaults>
+            <annotate key="org.freedesktop.policykit.exec.path">${nativeDeployHelper}</annotate>
+          </action></policyconfig>
+        '';
+      })
       (lib.optionalAttrs cfg.disruptionGuard.enable {
         "polkit-1/actions/org.phoenix.disruption.policy".text = ''
           <?xml version="1.0" encoding="UTF-8"?>
@@ -257,7 +271,8 @@ in
       wantedBy = [ "sockets.target" ];
       socketConfig = {
         ListenStream = "/run/phoenix-deploy/control.sock";
-        SocketMode = "0600";
+        SocketMode = "0660";
+        SocketGroup = "phoenix-authorization";
         SocketUser = if config.phoenix.agent.identity.enable then "phoenix-agent" else user.name;
         RemoveOnStop = true;
       };

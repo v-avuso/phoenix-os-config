@@ -9,8 +9,10 @@
   see [identity usage, compatibility and acceptance](identity.md).
 - **Bounded diagnostics:** A separately authorized broker exposes named diagnostic
   operations rather than arbitrary privileged commands. Workspace visibility does
-  not grant broker authority. Each request requires `--reason`; audits retain
-  only its hash, never its text. See the operating guide and [GUI diagnostics](gui-diagnostics.md).
+  not grant broker authority. Each request requires a nonsecret bounded `--reason`.
+  The [authorization module](authorization/README.md) owns installed decisions,
+  native human authentication and structured root audit metadata. See also
+  [GUI diagnostics](gui-diagnostics.md).
 - **Authenticated immutable deployment:** The deployment client freezes permitted
   Git-visible worktree changes; the protected controller binds authentication,
   exact source, closure and current baseline before activation. Dirty content is

@@ -105,7 +105,7 @@ class RunnerTests(unittest.TestCase):
                                    ('review', 'modules/development/ai/agent/deploy-review.py'),
                                    ('candidate', 'modules/services/updates/candidate.py')]:
                 script = Path(directory) / (name + '.py')
-                script.write_text((ROOT / relative).read_text().replace('@deploymentTransportPolicy@', str(policy)))
+                script.write_text((ROOT / relative).read_text().replace('@deploymentTransportPolicy@', str(policy)).replace('@authorizationLibrary@', str(ROOT / 'modules/development/ai/agent/authorization/request.py')))
                 spec = importlib.util.spec_from_file_location('isolated_' + name, script)
                 module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(module)

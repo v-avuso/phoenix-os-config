@@ -27,6 +27,8 @@ let
     else inputs.nixpkgs-unstable.legacyPackages.${system}.firefox;
 
   runnerConfig = pkgs.writeText "phoenix-updates-runner.json" (builtins.toJSON {
+    authorizationLibrary = toString ../../development/ai/agent/authorization/request.py;
+    authorizationPolicy = toString config.system.build.phoenixAuthorizationPolicy;
     repo = user.repoDirectory;
     inherit (cfg) sourceBranch cleanupBranches;
     state = "/var/lib/phoenix-updates";

@@ -106,7 +106,7 @@ class Commands(unittest.TestCase):
         for action in ("test", "switch", "boot"):
             result = self.run_command("phoenix-rebuild", action, "--branch", "feature", "--reason", "Validate requested change", env=env)
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(self.recorded(), {"command":"deployment", "args":["--worktree",str(other),"--target","vm","--action",action,"--reason","Validate requested change"]})
+            self.assertEqual(self.recorded(), {"command":"deployment", "args":["--worktree",str(other),"--target","vm","--action",action,"--task","phoenix-rebuild","--reason","Validate requested change"]})
         result = self.run_command("phoenix-rebuild", "test", "--reason", "fixture", env=env)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.recorded()["args"][0:2], ["--worktree", str(self.repo)])

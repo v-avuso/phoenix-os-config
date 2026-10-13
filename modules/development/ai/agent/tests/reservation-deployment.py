@@ -176,10 +176,11 @@ class Integration(unittest.TestCase):
         admin = load('admin', OWNER / 'admin.py')
         self.engine.mapping['admin.wakeup-set'] = 'system-testing'
         manager = type('Manager', (), {'engine': self.engine, 'module': engine_module})()
-        broker = type('Broker', (), {})()
+        broker = object.__new__(admin.Broker)
         broker.reservations = manager
         broker.dispatch = mock.Mock(return_value='{}')
-        config = {'client_uid': os.getuid(), 'reservations': {'mapping': self.engine.mapping}}
+        config = {'client_uid': os.getuid(), 'wakeup_devices': ['fixed-device'], 'status_services': [], 'reservations': {'mapping': self.engine.mapping}}
+        broker.config = config
         def exchange(cap):
             client, server = socket.socketpair()
             request = dict(args=['wakeup-set', 'fixed-device', 'enabled'], reason='fixture')

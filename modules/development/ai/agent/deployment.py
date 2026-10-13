@@ -23,6 +23,11 @@ import struct
 import sys
 import tempfile
 
+AUTHORIZATION_PATH = "@authorizationLibrary@"
+_auth_spec = importlib.util.spec_from_file_location('phoenix_authorization', AUTHORIZATION_PATH if AUTHORIZATION_PATH.startswith('/') else Path(__file__).parent / 'authorization/request.py')
+authorization = importlib.util.module_from_spec(_auth_spec)
+_auth_spec.loader.exec_module(authorization)
+
 # Nix substitutes an immutable policy path; repository fixtures use the source file.
 TRANSPORT_PATH = "@deploymentTransportPolicy@"
 TRANSPORT = json.loads((Path(TRANSPORT_PATH) if TRANSPORT_PATH.startswith("/") else Path(__file__).with_name("transport.json")).read_text())
@@ -48,13 +53,14 @@ FIELDS = {'files', 'modes', 'commit', 'target', 'action', 'reason'}
 def request_valid(request, target, reservations=False):
     if not isinstance(request, dict):
         raise ValueError('unsupported request fields')
-    expected = FIELDS | ({'reservation'} if reservations and request.get('action') != 'update' else set()) | ({'branch'} if 'branch' in request else set()) | ({'expectedBase', 'expectedProfile'} if request.get('action') in {'boot', 'update'} else set())
+    expected = FIELDS | ({'preflightId'} if 'preflightId' in request else set()) | ({'task'} if 'task' in request else set()) | ({'reservation'} if reservations and request.get('action') != 'update' else set()) | ({'branch'} if 'branch' in request else set()) | ({'expectedBase', 'expectedProfile'} if request.get('action') in {'boot', 'update'} else set())
     if set(request) != expected:
         raise ValueError('unsupported request fields')
     if request['action'] not in {'test', 'switch', 'boot', 'update'} or request['target'] != target:
         raise ValueError('unsupported action/target')
-    if not isinstance(request['reason'], str) or not 1 <= len(request['reason'].strip()) <= 2000 or any(ord(c) < 32 or ord(c) == 127 for c in request['reason']):
-        raise ValueError('concrete task reason required')
+    authorization.correlation(request.get('preflightId'))
+    authorization.text(request['reason'], 300, 'nonsecret reason')
+    authorization.text(request.get('task', 'phoenix-deployment'), 100, 'task')
     if not isinstance(request['commit'], str) or not re.fullmatch('[0-9a-f]{40,64}', request['commit']):
         raise ValueError('invalid informational commit')
     if request['action'] in {'boot', 'update'}:
@@ -229,8 +235,18 @@ def reservation_identity(config, value, uid, command):
 
 def process(config, request, uid, pid, operator=False):
     state = {'stage': 'request'}
+    auth_result = None
+    named = None
     try:
         request_valid(request, config['target'], bool(config.get('reservations')))
+        named = authorization.named('deployment.' + request['action'], {'target': request['target']}, request.get('task', 'phoenix-updater' if request['action'] == 'update' else 'phoenix-deployment'), request['reason'])
+        # Revalidate the installed decision on every entrance, including legacy requests.
+        installed = authorization.policy(config)
+        decision = authorization.validate(named, installed)
+        if decision == 'human' and (not operator or os.geteuid() != 0 or uid != operator_uid(config)):
+            authorization.preflight(named, installed, uid, pid)
+            raise DeploymentFailure('authentication', 'operator-authentication-required')
+        auth_result = authorization.require(named, installed, uid, pid, operator, request.get('preflightId'))
         if not config.get('modelReviewEnabled', True) and request['action'] != 'update':
             if not operator or os.geteuid() != 0 or uid != operator_uid(config):
                 raise DeploymentFailure('authentication', 'operator-authentication-required')
@@ -239,11 +255,22 @@ def process(config, request, uid, pid, operator=False):
         if config.get('work'):
             with (Path(config['work']).parent / 'deployment.lock').open('a') as lock:
                 fcntl.flock(lock, fcntl.LOCK_EX)
-                return process_inner(config, request, uid, pid, state)
-        return process_inner(config, request, uid, pid, state)
+                result = process_inner(config, request, uid, pid, state)
+        else:
+            result = process_inner(config, request, uid, pid, state)
+        authorization.audit('completed', auth_result['id'], uid, pid, named, auth_result['decision'])
+        return result
     except DeploymentFailure:
+        if auth_result:
+            authorization.audit('failed', auth_result['id'], uid, pid, named, auth_result['decision'], category='deployment-failed')
+        else:
+            authorization.audit('rejected', secrets.token_hex(16), uid, pid, category='invalid-or-denied')
         raise
     except Exception as error:
+        if auth_result:
+            authorization.audit('failed', auth_result['id'], uid, pid, named, auth_result['decision'], category='deployment-failed')
+        else:
+            authorization.audit('rejected', secrets.token_hex(16), uid, pid, category='invalid-or-denied')
         # Static stage/type classifications only; never relay native stderr,
         # source strings, credentials or model-written summary as diagnostics.
         code = ('timeout' if isinstance(error, TimeoutError) else
@@ -768,7 +795,7 @@ def serve(config):
         uid = pid = -1
         try:
             pid, uid, _ = struct.unpack('3i', connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
-            if uid != config['clientUid']:
+            if uid not in {config['clientUid'], operator_uid(config)}:
                 raise ValueError('caller UID denied')
             connection.settimeout(10)
             data = bytearray()
@@ -779,12 +806,19 @@ def serve(config):
                 data.extend(block)
                 if len(data) > LIMIT:
                     raise DeploymentFailure('source-transport', 'wire-capacity-exceeded')
-            result = process(config, json.loads(data), uid, pid)
+            request = json.loads(data)
+            if isinstance(request, dict) and set(request) == {'authorization'}:
+                result = authorization.preflight(request['authorization'], authorization.policy(config), uid, pid)
+            else:
+                if uid != config['clientUid']:
+                    raise ValueError('operator socket only admits metadata preflight')
+                result = process(config, request, uid, pid)
             print(json.dumps(dict(event='activated', uid=uid, pid=pid, **result)), flush=True)
         except Exception as error:
             # Avoid attacker strings, model output, task contents or credentials in journal.
             stage = error.stage if isinstance(error, DeploymentFailure) else 'protocol'
             code = error.code if isinstance(error, DeploymentFailure) else 'invalid-or-denied'
+            authorization.audit('rejected', secrets.token_hex(16), uid, pid, category='invalid-or-denied')
             print(json.dumps(dict(event='failed', uid=uid, pid=pid, stage=stage, code=code)), flush=True)
             result = dict(ok=False, stage=stage, code=code, error='Deployment failed at ' + stage + ' (' + code + ').')
             if getattr(error, 'pending_nonce', None):
@@ -911,6 +945,7 @@ def main():
             with contextlib.redirect_stdout(sys.stderr):
                 result = process(config, request, int(os.environ.get('PKEXEC_UID', '0')), os.getpid(), operator=True)
         except Exception as error:
+            authorization.audit('rejected', secrets.token_hex(16), -1, os.getpid(), category='invalid-or-denied')
             stage = error.stage if isinstance(error, DeploymentFailure) else 'protocol'
             code = error.code if isinstance(error, DeploymentFailure) else 'invalid-or-denied'
             result = dict(ok=False, stage=stage, code=code)

@@ -33,6 +33,11 @@ REVIEW_INPUT_LIMIT = 1024 * 1024
 OUTPUT_LIMIT = 2 * 1024 * 1024
 
 
+AUTHORIZATION_PATH = "@authorizationLibrary@"
+_auth_spec = importlib.util.spec_from_file_location('phoenix_authorization', AUTHORIZATION_PATH if AUTHORIZATION_PATH.startswith('/') else Path(__file__).parent / 'authorization/request.py')
+authorization = importlib.util.module_from_spec(_auth_spec)
+_auth_spec.loader.exec_module(authorization)
+
 def run(argv, *, cwd=None, env=None, data=None, timeout=60, fail_on_compaction=False, pass_fds=()):
     """Bound both execution and output; terminate the whole child process group."""
     with tempfile.TemporaryFile() as output, tempfile.TemporaryFile() as errors, tempfile.TemporaryFile() as input_file:
@@ -497,6 +502,7 @@ def main():
     selectors.add_argument("--worktree", help="existing worktree of the configured repository")
     parser.add_argument("--base", help="optional full commit SHA for an additional informational diff")
     parser.add_argument("--reservation-file", help="explicit caller-private testing capability file")
+    parser.add_argument("--task", default="phoenix-deployment", help="bounded task label")
     parser.add_argument("--reason", help="concrete authorized task purpose")
     parser.add_argument("--target", choices=["metal", "vm"])
     parser.add_argument("--action", choices=(["test", "switch", "boot"] if config.get("clientOnly") else ["review", "build", "test", "switch", "boot"]), default=("test" if config.get("clientOnly") else "review"))
@@ -543,12 +549,41 @@ def main():
             raise ValueError("authenticated security override failed")
         print(json.dumps(result, indent=2))
         return
-    if (args.base and not re.fullmatch(r"[0-9a-f]{40,64}", args.base)) or not args.reason or not 1 <= len(args.reason.strip()) <= 2000 or any(ord(c) < 32 or ord(c) == 127 for c in args.reason):
-        parser.error("base must be a full commit SHA and reason must be 1–2000 characters")
-    if config.get("sandboxClient") and config.get("operatorCommand"):
-        parser.error("AI-disabled deployment requires host Polkit authentication; run this command on the native host with the same source and reason")
+    if args.base and not re.fullmatch(r"[0-9a-f]{40,64}", args.base):
+        parser.error('base must be a full commit SHA')
+    try:
+        authorization.text(args.reason, 300, 'nonsecret reason')
+        authorization.text(args.task, 100, 'task')
+    except ValueError as error:
+        parser.error(str(error))
     if not args.target:
-        parser.error("target is required for deployment")
+        parser.error('target is required for deployment')
+    preflight = None
+    if args.action in {'test', 'switch', 'boot'}:
+        named = authorization.named('deployment.' + args.action, {'target': args.target}, args.task, args.reason.strip())
+        installed = authorization.policy(config if config.get('authorizationPolicy') else dict(config, target=args.target))
+        decision = authorization.validate(named, installed)
+        # Metadata only: root logs a trusted caller before source selection/freezing.
+        if config.get('authorizationPolicy'):
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+                connection.settimeout(15)
+                connection.connect(config['deploymentSocket'])
+                connection.sendall(json.dumps({'authorization': named}).encode() + b'\n')
+                with connection.makefile('rb') as stream:
+                    preflight = json.loads(stream.readline(8192))
+            if not preflight.get('ok') or preflight.get('decision') != decision:
+                raise ValueError('authorization preflight denied or installed policy changed')
+        if decision == 'human':
+            import shlex
+            host = ['phoenix-deploy-review', '--task', args.task, '--reason', args.reason, '--target', args.target, '--action', args.action]
+            if args.worktree: host += ['--worktree', args.worktree]
+            elif args.branch: host += ['--branch', args.branch]
+            if args.reservation_file: host += ['--reservation-file', args.reservation_file]
+            if config.get('sandboxClient'):
+                parser.error('host-authentication-required: host Polkit authentication required. Run on the native host: ' + shlex.join(host))
+            if config.get('authorizationPolicy') and not config.get('operatorCommand'):
+                raise ValueError('installed operator helper unavailable')
+            print('Phoenix needs native operator authentication for ' + named['operation'] + ': ' + args.reason.strip(), file=sys.stderr)
     config = json.loads(Path(args.config).read_text())
     if args.branch is not None or args.worktree is not None:
         selector = ["--branch", args.branch] if args.branch is not None else ["--worktree", args.worktree]
@@ -574,7 +609,9 @@ def main():
         if args.action in {"test", "switch", "boot"}:
             branch = git(config, "rev-parse", "--abbrev-ref", "HEAD").decode().strip()
             request = dict(files=files, modes=source_modes(source, files), commit=commit,
-                           reason=args.reason.strip(), target=args.target, action=args.action)
+                           reason=args.reason.strip(), task=args.task, target=args.target, action=args.action)
+            if preflight is not None:
+                request['preflightId'] = preflight['id']
             if reservation is not None:
                 request['reservation'] = reservation
             warn_deployment_diff(config, files, request['modes'])
@@ -587,7 +624,11 @@ def main():
             if len(body) > WIRE_LIMIT:
                 raise ValueError("source-transport: wire-capacity-exceeded")
             if config.get("operatorCommand"):
-                result = json.loads(run(config["operatorCommand"], data=body, timeout=7200))
+                try:
+                    result = json.loads(run(config['operatorCommand'], data=body, timeout=7200))
+                except Exception:
+                    authorization.audit('client-authentication-failed', secrets.token_hex(16), os.getuid(), os.getpid(), named, 'human', category='authentication-failed-or-cancelled', trusted=False)
+                    raise ValueError('operator authentication failed or cancelled') from None
                 if result.get("ok") is not True:
                     deployment_failure(result)
                 print(json.dumps(result, indent=2))
@@ -652,6 +693,11 @@ def main():
 if __name__ == "__main__":
     try:
         main()
+    except SystemExit as error:
+        if error.code not in (None, 0):
+            authorization.audit('client-failed', secrets.token_hex(16), os.getuid(), os.getpid(), category='local-validation-failed', trusted=False)
+        raise
     except (ValueError, OSError, subprocess.SubprocessError) as error:
+        authorization.audit('client-failed', secrets.token_hex(16), os.getuid(), os.getpid(), category='local-authentication-or-request-failed', trusted=False)
         print("phoenix-deploy-review: " + str(error), file=sys.stderr)
         sys.exit(1)

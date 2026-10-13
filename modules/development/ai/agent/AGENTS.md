@@ -88,7 +88,9 @@
   unverified; identity and reservation live acceptance remain later work.
 - `phoenix-admin --reason "authorized diagnostic purpose" OPERATION ...` requires
   a bounded nonempty reason without control characters. The broker verifies it
-  before dispatch and audits its hash only. Never include secrets in reasons.
+  before dispatch through the installed [authorization policy](authorization/README.md).
+  Root authorization audits retain validated nonsecret reason metadata. Never include
+  secrets in reasons.
 
 ### Testing reservations (implemented; live acceptance pending)
 

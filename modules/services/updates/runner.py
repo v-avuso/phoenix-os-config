@@ -224,10 +224,28 @@ class UpdateDenied(ValueError):
 
 
 def controller(config, c, home, tree, commit, base, profile):
+    preflight = None
+    if config.get('authorizationPolicy'):
+        spec = importlib.util.spec_from_file_location('phoenix_authorization', config['authorizationLibrary'])
+        auth = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(auth)
+        named = auth.named('deployment.update', {'target': config['target']}, 'phoenix-updater',
+                           'Automatically update supported stable system and selected fresh applications; respect explicit holds and preserve runtime state')
+        if auth.validate(named, auth.policy(config)) != 'automatic':
+            raise ValueError('routine update must use installed automatic policy')
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+            connection.settimeout(15)
+            connection.connect(config['controllerSocket'])
+            connection.sendall(json.dumps({'authorization': named}).encode() + b'\n')
+            with connection.makefile('rb') as stream:
+                preflight = json.loads(stream.readline(8192))
+        if not preflight.get('ok') or preflight.get('decision') != 'automatic':
+            raise ValueError('routine update preflight denied')
     files, modes = c._manifest(config['git'], tree, home, commit)
     request = dict(files=files, modes=modes, commit=commit, target=config['target'], action='update',
-                   expectedBase=base, expectedProfile=profile,
+                   expectedBase=base, expectedProfile=profile, task='phoenix-updater',
                    reason='Automatically update supported stable system and selected fresh applications; respect explicit holds and preserve runtime state')
+    if preflight is not None: request['preflightId'] = preflight['id']
     body = json.dumps(request).encode() + b'\n'
     if len(body) > c.WIRE_LIMIT:
         raise c.SourceTransportError('wire-capacity-exceeded')
