@@ -284,30 +284,33 @@ def serve(config):
             handle(connection, broker, config)
 
 
-def client(args, reason, reservation=None, socket_path="/run/phoenix-admin/socket", task='phoenix-admin'):
+def client(args, reason, reservation=None, socket_path="/run/phoenix-admin/socket", task='phoenix-admin', authorization_context=False, reservation_file=None):
     named = authorization.diagnostic(args, reason, task)
     client_config_path = "@authorizationClientConfig@"
     config = json.loads(Path(client_config_path).read_text()) if client_config_path.startswith('/') else None
     if config is not None:
-        authorization.validate(named, authorization.policy(config))
+        expected = authorization.validate(named, authorization.policy(config))
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as preflight:
             preflight.settimeout(15)
             preflight.connect(socket_path)
             preflight.sendall(json.dumps({'authorization': named}).encode() + b'\n')
             with preflight.makefile('rb') as stream:
                 decision = json.loads(stream.readline(8192))
-        if not decision.get('ok'):
+        if decision.get('ok') is not True or decision.get('decision') != expected:
             raise SystemExit('phoenix-admin: authorization preflight denied')
         if decision['decision'] == 'denied':
             raise SystemExit('phoenix-admin: operation denied by installed policy')
         if decision['decision'] == 'human':
             import shlex
-            host = shlex.join(['phoenix-admin', '--task', task, '--reason', reason, *args])
+            host_args = ['ai-broker', '--task', task, '--reason', reason, '--', 'phoenix-admin'] if authorization_context else ['phoenix-admin', '--task', task, '--reason', reason]
+            if reservation_file: host_args += ['--reservation-file', reservation_file]
+            host = shlex.join([*host_args, *args])
             if not Path('/run/wrappers/bin/pkexec').exists():
                 raise SystemExit('host-authentication-required: Run on the native host: ' + host)
             print('Phoenix needs native operator authentication for ' + named['operation'] + ': ' + reason, file=sys.stderr)
             envelope = {'request': named, 'preflightId': decision['id']}
             if reservation is not None: envelope['reservation'] = reservation
+            if authorization_context: authorization.explain(config, named, decision)
             completed = subprocess.run(config['operatorCommand'], input=json.dumps(envelope).encode(), stdout=subprocess.PIPE, check=False)
             if completed.returncode:
                 authorization.audit('client-authentication-failed', decision['id'], os.getuid(), os.getpid(), named, 'human', category='authentication-failed-or-cancelled', trusted=False)
@@ -316,6 +319,8 @@ def client(args, reason, reservation=None, socket_path="/run/phoenix-admin/socke
             if not response.get('ok'): raise SystemExit('phoenix-admin: bounded diagnostic denied')
             print(response['output'], end='')
             return
+    if authorization_context and config is None:
+        raise ValueError('context-unavailable')
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
         connection.settimeout(15)
         connection.connect(socket_path)
@@ -355,6 +360,7 @@ def main():
         print(json.dumps(response))
     else:
         parser = argparse.ArgumentParser(description=__doc__)
+        parser.add_argument("--authorization-context", action="store_true", help=argparse.SUPPRESS)
         parser.add_argument("--task", default="phoenix-admin", help="bounded task label")
         parser.add_argument("--reservation-file")
         parser.add_argument("--reason", required=True, help="concrete authorized task purpose; do not include secrets")
@@ -374,7 +380,7 @@ def main():
             adapter = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(adapter)
             reservation = adapter.read_capability(args.reservation_file)
-        client(args.args, args.reason.strip(), reservation, task=args.task)
+        client(args.args, args.reason.strip(), reservation, task=args.task, authorization_context=args.authorization_context, reservation_file=args.reservation_file)
 
 
 if __name__ == '__main__':

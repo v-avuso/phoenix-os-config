@@ -20,6 +20,7 @@ print_only=false
 selector=()
 reason=""
 reason_supplied=false
+authorization_context=false
 task="phoenix-rebuild"
 reservation_file=""
 action=""
@@ -29,6 +30,9 @@ if [ "$#" -eq 0 ]; then usage; exit 0; fi
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --print) print_only=true; shift ;;
+    --authorization-context)
+      if [ "$authorization_context" = true ]; then exit 2; fi
+      authorization_context=true; shift ;;
     --reservation-file)
       if [ -n "$reservation_file" ] || [ "$#" -lt 2 ] || [ -z "$2" ]; then exit 2; fi
       reservation_file="$2"; shift 2 ;;
@@ -94,11 +98,12 @@ if [[ "$action" =~ ^(test|switch|boot)$ ]] && [ -n "${phoenix_deployment_helper:
     printf 'phoenix-rebuild: explicit reason must be 1–300 characters without control characters\n' >&2; exit 2
   fi
   cmd=("$phoenix_deployment_helper" --worktree "$repo_root" --target "$target" --action "$action" --task "$task" --reason "$reason")
+  if [ "$authorization_context" = true ]; then cmd+=(--authorization-context); fi
   if [ -n "$reservation_file" ]; then cmd+=(--reservation-file "$reservation_file"); fi
   if [ "$print_only" = true ]; then printf '%q ' "${cmd[@]}"; printf '\n'; exit 0; fi
   exec "${cmd[@]}"
 fi
-if [ -n "$reason" ] || [ -n "$reservation_file" ]; then
+if [ "$authorization_context" = true ] || [ -n "$reason" ] || [ -n "$reservation_file" ]; then
   printf 'phoenix-rebuild: --reason is supported only for configured authenticated activation\n' >&2; exit 2
 fi
 cmd=(nixos-rebuild)

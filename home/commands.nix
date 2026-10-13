@@ -11,6 +11,7 @@ let
     && nixosConfig.system.build ? phoenixAuthorizationPolicy;
   aiBroker = import ../modules/development/ai/agent/authorization/adapter.nix {
     inherit pkgs;
+    explanationEnabled = nixosConfig.phoenix.authorization.explanation.enable or false;
     authorizationLibrary = nixosConfig.system.build.phoenixAuthorizationLibrary;
     authorizationPolicy = nixosConfig.system.build.phoenixAuthorizationPolicy;
     adminClient = nixosConfig.system.build.phoenixAdminClient or null;

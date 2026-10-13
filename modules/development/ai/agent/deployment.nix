@@ -61,6 +61,7 @@ let
       sourceSelector = toString sourceSelector;
       reservationAdapter = if config.phoenix.agent.reservations.enable then toString ./reservation-client.py else null;
       inherit authorizationPolicy;
+      authorizationPresentation = toString config.system.build.phoenixAuthorizationPresentation;
       authorizationLibrary = authorizationLibrary;
       deploymentTransportPolicy = toString transportPolicy;
       modelReviewEnabled = cfg.securityReview.enable;
@@ -92,6 +93,7 @@ let
       sourceSelector = toString sourceSelector;
       reservationAdapter = if config.phoenix.agent.reservations.enable then toString ./reservation-client.py else null;
       inherit authorizationPolicy;
+      authorizationPresentation = toString config.system.build.phoenixAuthorizationPresentation;
       authorizationLibrary = authorizationLibrary;
       deploymentTransportPolicy = toString transportPolicy;
       modelReviewEnabled = cfg.securityReview.enable;

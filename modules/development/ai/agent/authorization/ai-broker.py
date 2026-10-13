@@ -65,7 +65,8 @@ def prepare(config, argv):
         request = authorization.named("deployment." + name.removeprefix("phoenix-"),
                                       {"target":installed["target"]}, task, reason)
         authorization.validate(request, installed)
-    return [executable, "--task", task, "--reason", reason, *forwarded]
+    context = ["--authorization-context"] if config.get("explanationEnabled", False) else []
+    return [executable, "--task", task, "--reason", reason, *context, *forwarded]
 
 def main():
     config = json.loads(Path(sys.argv[1]).read_text())

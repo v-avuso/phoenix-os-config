@@ -120,6 +120,9 @@ python3 -B modules/development/ai/agent/tests/reservation-deployment.py
   `agent-gui-control.cjs` checks fixed actions, cancellation and connection bounds;
   `agent-gui-control-patch.py --source DIR` verifies the exact extracted pinned
   main bundle. GUI socket fixtures need sandbox execution permission; no OS root.
+  Authorization presentation fixtures stub native UI and preflight/authentication,
+  checking escaping, Cancel, unchanged frozen helper input, default-off direct
+  clients, contained guidance and independent override flows. No dialog is opened.
   Command packaging checks preview exact immutable helpers, target and generated
   audit context plus rejected broker arguments; it performs no root preflight or
   host authentication. Deployment fixtures use explicit preflight/auth stubs.

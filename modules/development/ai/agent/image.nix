@@ -7,6 +7,7 @@
   phoenixDeployReviewPackage,
   authorizationLibrary,
   authorizationPolicy,
+  explanationEnabled,
 }:
 let
   phoenixCommands = import ../../../../commands {
@@ -15,7 +16,7 @@ let
     includeDesktopCommands = false;
   };
   aiBroker = import ./authorization/adapter.nix {
-    inherit pkgs authorizationLibrary authorizationPolicy;
+    inherit pkgs authorizationLibrary authorizationPolicy explanationEnabled;
     adminClient = phoenixAdminPackage;
     deploymentCommands = pkgs.lib.optionalAttrs (phoenixDeployReviewPackage != null)
       (pkgs.lib.genAttrs [ "phoenix-test" "phoenix-switch" "phoenix-boot" ]

@@ -24,6 +24,7 @@ let
   '';
   clientConfig = pkgs.writeText "phoenix-authorization-client.json" (builtins.toJSON {
     inherit authorizationPolicy;
+    authorizationPresentation = toString config.system.build.phoenixAuthorizationPresentation;
     operatorCommand = [ "/run/wrappers/bin/pkexec" "--disable-internal-agent" (toString diagnosticHelper) ];
   });
   brokerConfig = pkgs.writeText "phoenix-admin.json" (

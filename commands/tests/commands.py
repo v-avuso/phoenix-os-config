@@ -117,8 +117,11 @@ class Commands(unittest.TestCase):
             result = self.run_command("phoenix-rebuild", action, env=env)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(self.recorded()["args"][-2:], ["--reason", "Direct phoenix-" + action + " invocation"])
+        result = self.run_command("phoenix-rebuild", "test", "--reason", "fixture", "--authorization-context", env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.recorded()["args"][-1], "--authorization-context")
         self.record.unlink()
-        for tail in ( ("--reason", " "), ("--reason", "line\nbreak"), ("--reason", "x"*2001), ("--reason", "fixture", "--option", "x", "y")):
+        for tail in (("--reason", ""), ("--reason", " "), ("--reason", "line\nbreak"), ("--reason", "x"*2001), ("--reason", "fixture", "--option", "x", "y")):
             result = self.run_command("phoenix-rebuild", "test", *tail, env=env)
             self.assertEqual(result.returncode, 2, result.stderr)
             self.assertFalse(self.record.exists())

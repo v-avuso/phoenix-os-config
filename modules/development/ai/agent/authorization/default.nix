@@ -31,6 +31,16 @@ in {
     default = { };
     description = "Closed named diagnostic policy; deployment decisions derive from securityReview.enable.";
   };
+  options.phoenix.authorization.explanation.enable = lib.mkOption {
+    type = lib.types.bool;
+    default = false;
+    description = "Experimental native explanation before Polkit for ai-broker human requests; enable after isolated GUI acceptance.";
+  };
+  config.system.build.phoenixAuthorizationPresentation = pkgs.writeText "phoenix-authorization-presentation.json"
+    (builtins.toJSON (if config.phoenix.authorization.explanation.enable then {
+      module = toString (pkgs.writeText "phoenix-authorization-presentation.py" (builtins.readFile ./presentation.py));
+      program = "${pkgs.zenity}/bin/zenity";
+    } else null));
   config.users.groups.phoenix-authorization.members = lib.unique [ user.name updaterName ];
   config.system.build.phoenixAuthorizationPolicy = policy;
   config.system.build.phoenixAuthorizationLibrary = pkgs.writeText "phoenix-authorization.py" (builtins.readFile ./request.py);

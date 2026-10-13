@@ -54,6 +54,7 @@ class Contract(unittest.TestCase):
             record = json.loads(journal.call_args.args[-1])
             self.assertEqual(event['id'], record['id'])
             self.assertEqual(record['event'], 'preflight')
+            self.assertEqual(record['arguments'], self.request['arguments'])
             self.assertEqual(record['uid'], 1000)
     def test_distinct_operator_socket_metadata_never_executes(self):
         policy = auth.default_policy(False, 2000, 1000)

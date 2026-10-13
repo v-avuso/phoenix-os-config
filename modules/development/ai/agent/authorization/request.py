@@ -1,5 +1,7 @@
 """Versioned semantic authorization; policy is installed configuration, never caller input."""
 import json
+import importlib.util
+import os
 import re
 import secrets
 import syslog
@@ -109,7 +111,7 @@ def audit(event, identifier, uid, pid, request=None, decision='denied', category
     record = dict(version=1, event=event, id=identifier, uid=uid, pid=pid, decision=decision, trusted=trusted)
     if request is not None:
         # Only validated semantic metadata reaches this branch; never source/output.
-        record.update(operation=request['operation'], task=request['task'], reason=request['reason'])
+        record.update(operation=request['operation'], arguments=request['arguments'], task=request['task'], reason=request['reason'])
     if category is not None: record['category'] = category
     if preflight_id is not None: record['clientPreflightId'] = correlation(preflight_id)
     syslog.openlog('phoenix-authorization')
@@ -147,3 +149,36 @@ def require(request, installed, uid, pid, operator=False, preflight_id=None):
         audit('denied', result['id'], uid, pid, request, decision, category='host-authentication-required' if decision == 'human' else 'policy-denied')
         raise ValueError('host-authentication-required' if decision == 'human' else 'operation denied by installed policy')
     return result
+
+
+def explain(config, request, preflight, source=None):
+    """Presentation opt-in only; matching preflight supplies no execution authority."""
+    decision = validate(request, policy(config))
+    if (not isinstance(preflight, dict) or preflight.get('ok') is not True
+            or preflight.get('decision') != decision or not isinstance(preflight.get('id'), str)):
+        raise ValueError('context-preflight-mismatch')
+    correlation(preflight['id'])
+    if decision == 'denied': raise ValueError('operation denied by installed policy')
+    if decision != 'human': return
+    category = 'context-unavailable'
+    try:
+        settings = config.get('authorizationPresentation')
+        if isinstance(settings, str): settings = json.loads(Path(settings).read_text())
+        if (not isinstance(settings, dict) or set(settings) != {'module', 'program'}
+                or any(not isinstance(settings[key], str) or not Path(settings[key]).is_absolute() for key in settings)):
+            raise ValueError('context-unavailable')
+        if source is not None:
+            text(source, 4096, 'selected source')
+            if not Path(source).is_absolute(): raise ValueError('invalid selected source')
+        spec = importlib.util.spec_from_file_location('phoenix_authorization_presentation', settings['module'])
+        module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+        try: module.show(settings, request, source)
+        except module.Cancelled:
+            category = 'context-cancelled'
+            raise
+    except (ValueError, OSError, ImportError):
+        audit('client-context-failed', preflight['id'], os.getuid(), os.getpid(), request,
+              decision, category=category, trusted=False)
+        raise ValueError(category) from None
+    audit('client-context-continued', preflight['id'], os.getuid(), os.getpid(), request,
+          decision, category='context-continued', trusted=False)

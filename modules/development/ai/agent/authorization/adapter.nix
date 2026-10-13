@@ -1,7 +1,8 @@
 # Thin CLI owner; root authorization remains in the existing clients/controllers.
-{ pkgs, authorizationLibrary, authorizationPolicy, deploymentCommands ? { }, adminClient ? null }:
+{ pkgs, authorizationLibrary, authorizationPolicy, deploymentCommands ? { }, adminClient ? null, explanationEnabled ? false }:
 let
   config = pkgs.writeText "phoenix-ai-broker.json" (builtins.toJSON {
+    inherit explanationEnabled;
     library = toString authorizationLibrary;
     policy = toString authorizationPolicy;
     commands = deploymentCommands // pkgs.lib.optionalAttrs (adminClient != null) {

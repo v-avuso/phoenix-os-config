@@ -13,6 +13,7 @@ let
   cfg = config.phoenix.agent;
   packages = import ./packages.nix { inherit pkgs; };
   image = import ./image.nix {
+    explanationEnabled = config.phoenix.authorization.explanation.enable;
     authorizationLibrary = config.system.build.phoenixAuthorizationLibrary;
     authorizationPolicy = config.system.build.phoenixAuthorizationPolicy;
     inherit

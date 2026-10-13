@@ -42,6 +42,17 @@ class Broker(unittest.TestCase):
             result=self.run_adapter(*args)
             self.assertNotEqual(result.returncode,0)
             self.assertFalse(self.record.exists())
+    def test_explanation_option_carries_static_flag_only_when_enabled(self):
+        config=json.loads(self.config.read_text());config["explanationEnabled"]=True
+        self.config.write_text(json.dumps(config))
+        result=self.run_adapter("--reason","Validate change","--","phoenix-test")
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertEqual(json.loads(self.record.read_text()),["--task","ai-broker","--reason","Validate change","--authorization-context"])
+        self.record.unlink()
+        result=self.run_adapter("--reason","Validate change","--","phoenix-test","--authorization-context")
+        self.assertNotEqual(result.returncode,0)
+        self.assertFalse(self.record.exists())
+
     def test_missing_deployment_mapping_never_uses_legacy_or_path(self):
         config=json.loads(self.config.read_text())
         config["commands"]={"phoenix-admin":config["commands"]["phoenix-admin"]}

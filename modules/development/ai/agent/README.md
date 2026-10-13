@@ -73,7 +73,9 @@ selected backend's allowed mounts. See [cold handoff and proof](history-layout.m
   operations rather than arbitrary privileged commands. Workspace visibility does
   not grant broker authority. Each request requires a nonsecret bounded `--reason`.
   The [authorization module](authorization/README.md) owns installed decisions,
-  native human authentication and structured root audit metadata. See also
+  native human authentication and structured root audit metadata. Its default-off
+  explanation adds a readable native question only for opted-in broker requests
+  requiring human authentication; isolated GUI acceptance remains pending. See also
   [GUI diagnostics](gui-diagnostics.md).
 - **Authenticated immutable deployment:** The deployment client freezes permitted
   Git-visible worktree changes; the protected controller binds authentication,

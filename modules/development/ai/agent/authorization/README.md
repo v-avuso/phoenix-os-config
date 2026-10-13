@@ -13,7 +13,8 @@ privileged command interface.
 - Give agent requests a separate bounded reason/task interface and fixed command set;
   reasons are audit context, never proof of a human or agent identity.
 - Present a readable command, short reason and broker decision before native Polkit
-  authentication. That explanation UI is planned; this adapter does not implement it.
+  authentication. Its experimental implementation stays off until isolated native
+  GUI acceptance; presentation never supplies execution authority.
 
 ## Requests and policy
 
@@ -90,11 +91,13 @@ and rechecks the same installed predicate before execution. An operator using
 native Polkit still has the existing separately authenticated human authority.
 
 Human routes use fixed immutable Polkit helpers with native dialog messages/icons.
-The current static helper messages cannot embed this arbitrary reason directly:
 [pkexec's documented message variables](https://polkit.pages.freedesktop.org/polkit/pkexec.1.html#pkexec-variables)
-cover program, command line and user data. A title alone does not satisfy the
-planned readable explanation. The separate explanation UI remains future work;
-current clients display terminal context before their existing authentication.
+cover program, command line and user data, not arbitrary reason details. The
+experimental explanation therefore precedes the existing Polkit dialog; it does
+not replace the password agent or capture credentials. The extra Continue click
+is a usability cost until a supported native authentication agent can present
+rich request context directly. Ordinary Phoenix commands retain their existing
+single authentication flow.
 Each helper independently validates installed policy, typed arguments and the
 supported `PKEXEC_UID` operator identity; it shares the same actual dispatcher or
 controller. It accepts no executable/configuration selector. Direct legacy socket
@@ -110,11 +113,42 @@ ID grants no authority. Invalid requests log only static categories. Contained
 human requests return `host-authentication-required` and a fixed copyable native
 host command. Authentication mounts and containment bypasses are unnecessary.
 
+## Native explanation (experimental, default off)
+
+`phoenix.authorization.explanation.enable` is the single presentation switch and
+defaults to `false`. Off keeps ai-broker's established terminal context and native
+Polkit authentication; reasons and installed decisions remain enforced. Off also
+keeps unused Zenity and its GUI dependencies out of this feature's closure.
+
+When enabled, the packaged adapter carries the fixed `--authorization-context`
+flag into its existing clients. After root preflight agrees with installed policy,
+only native `human` requests use one shared module-owned Zenity question dialog.
+Its body shows the semantic command/operation, typed arguments, task, bounded
+nonsecret reason, decision and static policy explanation; deployment additionally
+shows the actual selected source path after freezing its request. Caller text is
+escaped as Pango markup. The pinned [Zenity 4.2.2 question options](https://raw.githubusercontent.com/GNOME/zenity/4.2.2/src/option.c)
+support custom button labels and default Cancel focus. Cancel or display failure
+stops before privileged execution; Continue calls the same immutable helper with
+the same already-frozen body. Display timeout is bounded to five minutes, and no
+UI stdout/stderr is captured or logged. An explicit context request fails closed
+when display is disabled/unavailable, without a silent terminal fallback.
+
+Automatic diagnostics and security-review routes show no generic context dialog.
+Denied policy stays denied. Critical exact-pending security/disruption overrides
+retain their separate flow and cannot combine with this generic flag. Contained
+human requests show a copyable native `ai-broker` command; they open no UI and
+receive no authentication mounts. The flag carries no authenticated identity or
+authority; the actual helper independently validates policy and frozen input.
+
+Fixture coverage establishes rendering, escaping, cancellation, fixed helper/body
+binding and default-off behavior. Real native readability, window focus, Continue
+and Polkit cancellation remain isolated GUI acceptance work before enabling.
+
 ## Audit and verification
 
 Root authorization records use the fixed syslog identifier
 `phoenix-authorization`, structured JSON, peer UID/PID, operation/task/nonsecret
-reason, decision, outcome and generated ID. They exclude source, diagnostic
+reason, typed semantic arguments, decision, outcome and generated ID. They exclude source, diagnostic
 output, model stderr and credentials. Client validation/authentication failure or
 cancellation records are explicitly `trusted=false`; they prove no root approval.
 To inspect only records actually emitted as root:
@@ -129,7 +163,8 @@ Storage/rotation follow native journald configuration. This repository sets
 path or create its own retention system.
 
 Run `python3 -B modules/development/ai/agent/authorization/tests/request.py` and
-`python3 -B modules/development/ai/agent/authorization/tests/ai-broker.py` with
+`python3 -B modules/development/ai/agent/authorization/tests/ai-broker.py` and
+`python3 -B modules/development/ai/agent/authorization/tests/presentation.py` with
 the module's admin/deployment/review/updater/command fixtures. These tests stub OS
 authentication/execution and do not establish live Polkit, socket group migration,
 activation or contained-host acceptance. Distinct client/updater UIDs are covered through the production controller
@@ -139,3 +174,8 @@ Live protected-identity updater acceptance remains pending. Nix packages the lib
 explicitly; standalone store scripts must not search for sibling files. Legacy
 fixture configs without a policy use repository-only compatibility defaults;
 an installed store library fails closed when its policy is absent.
+
+The build-only `authorization/tests/presentation.nix` fixture checks off/on
+packaging and exposes native client/broker/admin/config outputs without opening
+a dialog. Stage owned new files before its Git-flake evaluation; no activation or
+live authentication is part of that build.

@@ -8,5 +8,11 @@
 - Keep this adapter a thin immutable-path argv mapping into existing clients;
   reject arbitrary commands, shells, inner reason overrides and option tails.
   Do not add a daemon, PATH lookup, caller-selected policy or legacy activation fallback.
-- The readable command/reason/decision explanation before native Polkit is pending.
-  Static pkexec messages/title changes do not establish that user-level acceptance.
+- Native explanation is experimental/default off via one `explanation.enable`
+  option. Only the adapter's explicit presentation flag selects it, after matched
+  root preflight; it grants no authority and must not affect ordinary Phoenix UI.
+  ON cancellation/display failure stops before the unchanged authenticated helper.
+- Keep one shared escaped semantic body renderer; do not capture credentials or
+  UI/model stderr. Distinguish untrusted context events from root authorization.
+  Source-build/stub tests do not establish live readability/focus/Polkit acceptance;
+  keep exact pending review overrides independent of this generic presentation.

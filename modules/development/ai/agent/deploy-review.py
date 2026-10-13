@@ -512,6 +512,7 @@ def main():
     selectors.add_argument("--worktree", help="existing worktree of the configured repository")
     parser.add_argument("--base", help="optional full commit SHA for an additional informational diff")
     parser.add_argument("--reservation-file", help="explicit caller-private testing capability file")
+    parser.add_argument("--authorization-context", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--task", default="phoenix-deployment", help="bounded task label")
     parser.add_argument("--reason", help="concrete authorized task purpose")
     parser.add_argument("--target", choices=["metal", "vm"])
@@ -519,6 +520,8 @@ def main():
     parser.add_argument("--security-override", metavar="PENDING_NONCE", help="authenticate an explicit exact-state review override")
     parser.add_argument("--disruption-override", metavar="PENDING_NONCE", help="authenticate one exact protected unit exception")
     args = parser.parse_args()
+    if args.authorization_context and (args.action not in {'test', 'switch', 'boot'} or args.security_override or args.disruption_override):
+        parser.error('authorization context is supported only for ordinary activation')
     reservation = None
     if args.reservation_file:
         if not config.get('reservationAdapter') or (args.action in {'review', 'build'} and not (args.security_override or args.disruption_override)):
@@ -590,6 +593,11 @@ def main():
             elif args.branch: host += ['--branch', args.branch]
             if args.reservation_file: host += ['--reservation-file', args.reservation_file]
             if config.get('sandboxClient'):
+                if args.authorization_context:
+                    host = ['ai-broker', '--task', args.task, '--reason', args.reason, '--', 'phoenix-' + args.action]
+                    if args.worktree: host += ['--worktree', args.worktree]
+                    elif args.branch: host += ['--branch', args.branch]
+                    if args.reservation_file: host += ['--reservation-file', args.reservation_file]
                 parser.error('host-authentication-required: host Polkit authentication required. Run on the native host: ' + shlex.join(host))
             if config.get('authorizationPolicy') and not config.get('operatorCommand'):
                 raise ValueError('installed operator helper unavailable')
@@ -634,6 +642,8 @@ def main():
             if len(body) > WIRE_LIMIT:
                 raise ValueError("source-transport: wire-capacity-exceeded")
             if config.get("operatorCommand"):
+                if args.authorization_context:
+                    authorization.explain(config, named, preflight, source=config['repo'])
                 try:
                     result = json.loads(run(config['operatorCommand'], data=body, timeout=7200))
                 except Exception:
