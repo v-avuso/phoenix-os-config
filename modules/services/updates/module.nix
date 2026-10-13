@@ -71,6 +71,10 @@ in
 
   config = {
     assertions = [
+      {
+        assertion = !cfg.enable || config.systemd.services.phoenix-updates.serviceConfig.User == config.phoenix.authorization.updaterUser;
+        message = "Phoenix update service User must match phoenix.authorization.updaterUser; change the declarative owner rather than overriding the generated service identity.";
+      }
       { assertion = lib.mod 24 cfg.intervalHours == 0;
         message = "Phoenix update intervalHours must divide 24."; }
       {
@@ -109,7 +113,7 @@ in
       };
       serviceConfig = {
         Type = "oneshot";
-        User = user.name;
+        User = config.phoenix.authorization.updaterUser;
         Group = "users";
         StateDirectory = "phoenix-updates";
         StateDirectoryMode = "0700";

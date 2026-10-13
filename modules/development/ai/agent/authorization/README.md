@@ -41,8 +41,15 @@ Clients request metadata-only preflight from the existing root socket before
 freezing source. Preflight checks kernel peer UID/PID, generates an audit ID and
 returns only the installed decision. It never freezes source, builds or invokes
 AI. Operator group membership admits the native operator to sockets when the
-contained client has another UID. That operator socket admission is metadata
-only; actual socket execution still requires the configured client UID.
+contained client has another UID. Ordinary operator socket admission is metadata only. The fixed installed
+`updaterUid`, derived from the static account named by
+`phoenix.authorization.updaterUser` (default: the operator), may execute only
+`deployment.update`; other socket execution still requires the client UID.
+The update service and socket membership use that same declarative account; an
+assertion rejects a conflicting generated service `User` override. Callers cannot
+select a role or UID. The controller reads kernel peer credentials
+and rechecks the same installed predicate before execution. An operator using
+native Polkit still has the existing separately authenticated human authority.
 
 Human routes use fixed immutable Polkit helpers with native dialog messages/icons.
 Each helper independently validates installed policy, typed arguments and the
@@ -81,11 +88,10 @@ path or create its own retention system.
 Run `python3 -B modules/development/ai/agent/authorization/tests/request.py` with
 the module's admin/deployment/review/updater/command fixtures. These tests stub OS
 authentication/execution and do not establish live Polkit, socket group migration,
-activation or contained-host acceptance. With protected identity enabled, the
-updater still runs as the native operator while execution sockets require the
-contained client UID: update execution is denied after preflight. A future fixed
-updater role must resolve that gap before identity acceptance; this change does
-not widen automatic deployment rights to resolve it. Nix packages the library/policy paths
+activation or contained-host acceptance. Distinct client/updater UIDs are covered through the production controller
+validator with mocked OS/build execution; malicious source and manual operations
+are rejected, and accepted updates stage only the next boot with zero AI/Polkit.
+Live protected-identity updater acceptance remains pending. Nix packages the library/policy paths
 explicitly; standalone store scripts must not search for sibling files. Legacy
 fixture configs without a policy use repository-only compatibility defaults;
 an installed store library fails closed when its policy is absent.

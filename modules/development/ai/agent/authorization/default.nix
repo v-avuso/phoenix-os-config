@@ -1,11 +1,15 @@
 { config, lib, pkgs, user, ... }:
 let
+  # A declarative account owner avoids policy -> ExecStart -> policy recursion.
+  updaterName = config.phoenix.authorization.updaterUser;
+  updaterUid = config.users.users.${updaterName}.uid;
   names = [ "kernel-journal" "dmesg" "trace-summary" "trace-format" "service-status" "wakeup-get" "wakeup-set" ];
   policy = pkgs.writeText "phoenix-authorization-policy.json" (builtins.toJSON {
     version = 1;
     securityReviewEnabled = config.services.phoenixDeployment.securityReview.enable;
     clientUid = if config.phoenix.agent.identity.enable then config.phoenix.agent.identity.uid else config.users.users.${user.name}.uid;
     operatorUid = config.users.users.${user.name}.uid;
+    inherit updaterUid;
     target = if config.networking.hostName == "phoenix-vm" then "vm" else "metal";
     diagnostics = lib.listToAttrs (map (name: { name = "admin.${name}"; value = config.phoenix.authorization.diagnostics.${name}; }) names);
     wakeupDevices = config.phoenix.agent.wakeupDevices;
@@ -13,6 +17,11 @@ let
   });
 in {
   imports = [ ../security-review.nix ];
+  options.phoenix.authorization.updaterUser = lib.mkOption {
+    type = lib.types.str;
+    default = user.name;
+    description = "Static account shared by the update service and its operation-specific authorization role.";
+  };
   options.phoenix.authorization.diagnostics = lib.mkOption {
     type = lib.types.submodule { options = lib.listToAttrs (map (name: {
       inherit name;
@@ -22,7 +31,7 @@ in {
     default = { };
     description = "Closed named diagnostic policy; deployment decisions derive from securityReview.enable.";
   };
-  config.users.groups.phoenix-authorization.members = [ user.name ];
+  config.users.groups.phoenix-authorization.members = lib.unique [ user.name updaterName ];
   config.system.build.phoenixAuthorizationPolicy = policy;
   config.system.build.phoenixAuthorizationLibrary = ./request.py;
 }

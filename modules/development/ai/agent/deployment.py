@@ -795,7 +795,7 @@ def serve(config):
         uid = pid = -1
         try:
             pid, uid, _ = struct.unpack('3i', connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
-            if uid not in {config['clientUid'], operator_uid(config)}:
+            if uid not in {config['clientUid'], operator_uid(config), authorization.policy(config)['updaterUid']}:
                 raise ValueError('caller UID denied')
             connection.settimeout(10)
             data = bytearray()
@@ -810,8 +810,9 @@ def serve(config):
             if isinstance(request, dict) and set(request) == {'authorization'}:
                 result = authorization.preflight(request['authorization'], authorization.policy(config), uid, pid)
             else:
-                if uid != config['clientUid']:
-                    raise ValueError('operator socket only admits metadata preflight')
+                operation = 'deployment.' + request.get('action', '') if isinstance(request, dict) and isinstance(request.get('action'), str) else None
+                if not authorization.execution_caller(operation, authorization.policy(config), uid):
+                    raise ValueError('caller may not execute this socket operation')
                 result = process(config, request, uid, pid)
             print(json.dumps(dict(event='activated', uid=uid, pid=pid, **result)), flush=True)
         except Exception as error:

@@ -17,10 +17,10 @@ def text(value, limit, label):
 def named(operation, arguments, task, reason):
     return dict(version=1, operation=operation, arguments=arguments, task=task, reason=reason)
 
-def default_policy(review, client, operator, devices=(), services=(), target='metal'):
+def default_policy(review, client, operator, devices=(), services=(), target='metal', updater=None):
     """Repository-only compatibility for focused fixtures; never an installed fallback."""
     return dict(version=1, securityReviewEnabled=bool(review), clientUid=client, operatorUid=operator,
-                target=target, diagnostics={'admin.' + op: 'automatic' for op in DIAGNOSTICS},
+                updaterUid=operator if updater is None else updater, target=target, diagnostics={'admin.' + op: 'automatic' for op in DIAGNOSTICS},
                 wakeupDevices=list(devices), statusServices=list(services))
 
 def policy(config):
@@ -32,15 +32,18 @@ def policy(config):
             raise ValueError('installed authorization policy missing')
         value = default_policy(config.get('modelReviewEnabled', True), config.get('clientUid', config.get('client_uid', 1000)),
                                config.get('operatorUid', config.get('clientUid', config.get('client_uid', 1000))),
-                               config.get('wakeup_devices', []), config.get('status_services', []), config.get('target', 'metal'))
-    if not isinstance(value, dict) or set(value) != {'version', 'securityReviewEnabled', 'clientUid', 'operatorUid', 'target', 'diagnostics', 'wakeupDevices', 'statusServices'}:
+                               config.get('wakeup_devices', []), config.get('status_services', []), config.get('target', 'metal'), config.get('updaterUid'))
+    if not isinstance(value, dict) or set(value) != {'version', 'securityReviewEnabled', 'clientUid', 'operatorUid', 'updaterUid', 'target', 'diagnostics', 'wakeupDevices', 'statusServices'}:
         raise ValueError('invalid installed authorization policy')
     if type(value['version']) is not int or value['version'] != 1 or type(value['securityReviewEnabled']) is not bool:
         raise ValueError('invalid installed authorization policy version')
-    if any(type(value[key]) is not int or value[key] < 0 for key in ('clientUid', 'operatorUid')):
+    if any(type(value[key]) is not int or value[key] < 0 for key in ('clientUid', 'operatorUid', 'updaterUid')):
         raise ValueError('invalid installed caller policy')
     if value['target'] not in {'metal', 'vm'} or not isinstance(value['diagnostics'], dict) or set(value['diagnostics']) != {'admin.' + op for op in DIAGNOSTICS} or any(mode not in {'automatic', 'human', 'denied'} for mode in value['diagnostics'].values()):
         raise ValueError('invalid installed decision policy')
+    for configured, installed in [('clientUid', 'clientUid'), ('client_uid', 'clientUid'), ('operatorUid', 'operatorUid'), ('updaterUid', 'updaterUid')]:
+        if configured in config and (type(config[configured]) is not int or config[configured] != value[installed]):
+            raise ValueError('contradictory installed caller policy')
     if 'modelReviewEnabled' in config and config['modelReviewEnabled'] != value['securityReviewEnabled']:
         raise ValueError('contradictory installed review policy')
     return value
@@ -112,11 +115,19 @@ def audit(event, identifier, uid, pid, request=None, decision='denied', category
     syslog.openlog('phoenix-authorization')
     syslog.syslog(syslog.LOG_INFO, json.dumps(record, ensure_ascii=True, sort_keys=True))
 
+def execution_caller(operation, installed, uid, operator=False):
+    """A kernel UID may use the updater role only for the fixed update operation."""
+    if type(uid) is not int:
+        return False
+    if operator:
+        return uid == installed['operatorUid']
+    return uid == installed['clientUid'] or (uid == installed['updaterUid'] and operation == 'deployment.update')
+
 def preflight(request, installed, uid, pid, operator=False, preflight_id=None):
     identifier = secrets.token_hex(16)
     try:
         correlation(preflight_id)
-        if (uid != installed['operatorUid'] if operator else uid not in {installed['clientUid'], installed['operatorUid']}):
+        if not (execution_caller(request.get('operation') if isinstance(request, dict) else None, installed, uid, operator) or (not operator and type(uid) is int and uid == installed['operatorUid'])):
             raise ValueError('caller denied')
         decision = validate(request, installed)
     except (ValueError, TypeError, KeyError):
@@ -126,7 +137,7 @@ def preflight(request, installed, uid, pid, operator=False, preflight_id=None):
     return dict(ok=True, id=identifier, decision=decision)
 
 def require(request, installed, uid, pid, operator=False, preflight_id=None):
-    if uid != (installed['operatorUid'] if operator else installed['clientUid']):
+    if not execution_caller(request.get('operation') if isinstance(request, dict) else None, installed, uid, operator):
         audit('rejected', secrets.token_hex(16), uid, pid, category='caller-denied')
         raise ValueError('caller denied for execution')
     result = preflight(request, installed, uid, pid, operator, preflight_id)

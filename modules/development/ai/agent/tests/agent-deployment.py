@@ -484,7 +484,7 @@ class DeploymentTests(unittest.TestCase):
             (source / 'upstream-linux-packages.json').write_text(json.dumps(payload))
             self.assertEqual(routine.validate_community_payload(directory), '1.2.3')
 
-    def non_model_deployment(self, action='update', operator=False):
+    def non_model_deployment(self, action='update', operator=False, updater_socket=False, malicious=False):
         before, _modes, candidate, modes = self.routine_sources()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -547,6 +547,28 @@ class DeploymentTests(unittest.TestCase):
             request['action'] = action
             if action not in {'boot', 'update'}:
                 del request['expectedBase'], request['expectedProfile']
+            if updater_socket:
+                config.update(clientUid=2000, operatorUid=1000,
+                              authorizationPolicy=dict(deploy.authorization.default_policy(False, 2000, 1000), updaterUid=1000))
+            if malicious:
+                # A valid source manifest containing an unauthorized source change.
+                request['files']['unapproved.nix'] = 'malicious = true;'
+                request['modes']['unapproved.nix'] = '100644'
+            def socket_workflow():
+                handlers = {}
+                connection = mock.Mock()
+                connection.getsockopt.return_value = deploy.struct.pack('3i', 42, 1000, 1000)
+                connection.recv.return_value = json.dumps(request).encode() + b'\n'
+                listener = mock.Mock()
+                calls = iter([0, 1])
+                def accept():
+                    if next(calls) == 0: return connection, None
+                    handlers[deploy.signal.SIGUSR1](None, None)
+                    raise deploy.socket.timeout()
+                listener.accept.side_effect = accept
+                with mock.patch.object(deploy.os, 'getuid', return_value=0), mock.patch.object(deploy.socket, 'socket', return_value=listener), mock.patch.object(deploy.signal, 'signal', side_effect=lambda sig, fn: handlers.update({sig: fn})):
+                    deploy.serve(config)
+                return json.loads(connection.sendall.call_args.args[0])
             with contextlib.redirect_stdout(io.StringIO()), mock.patch.object(Path, 'resolve', resolve), \
                  mock.patch.object(deploy, 'load_review', return_value=Review), \
                  mock.patch.object(deploy, 'as_user', side_effect=as_user), \
@@ -554,7 +576,18 @@ class DeploymentTests(unittest.TestCase):
                  mock.patch.object(deploy.pwd, 'getpwnam', return_value=account), \
                  mock.patch.object(deploy, 'request_valid', wraps=deploy.request_valid), \
                  mock.patch.object(deploy.os, 'geteuid', return_value=0 if operator else os.getuid()):
-                result = deploy.process(config, request, os.getuid(), 42, operator=operator)
+                result = socket_workflow() if updater_socket else deploy.process(config, request, os.getuid(), 42, operator=operator)
+            if updater_socket and action != 'update':
+                self.assertFalse(result['ok'])
+                self.assertEqual(result['stage'], 'protocol')
+                self.assertEqual(as_user_calls, [])
+                Review.run.assert_not_called()
+                return
+            if malicious:
+                self.assertFalse(result['ok'])
+                self.assertEqual(result['stage'], 'routine-policy')
+                self.assertFalse(any(call.args[0][0] == 'systemd-run' for call in Review.run.call_args_list))
+                return
             self.assertTrue(result['ok'])
             self.assertEqual(result['action'], action)
             self.assertEqual([user for user, _argv in as_user_calls], ['builder'] * (3 if action == 'update' else 2))
@@ -565,6 +598,12 @@ class DeploymentTests(unittest.TestCase):
             self.assertFalse(any(user == 'reviewer' for user, _argv in as_user_calls))
             self.assertFalse(any("pkexec" in str(call.args[0]) or "polkit" in str(call.args[0])
                                  for call in Review.run.call_args_list))
+
+    def test_distinct_updater_socket_uses_production_validator_and_boot_only(self):
+        self.non_model_deployment(updater_socket=True)
+        self.non_model_deployment(updater_socket=True, malicious=True)
+        for action in ('test', 'switch', 'boot'):
+            self.non_model_deployment(action=action, updater_socket=True)
 
     def test_routine_update_reaches_boot_without_invoking_reviewer(self):
         self.non_model_deployment()
@@ -594,6 +633,17 @@ class DeploymentTests(unittest.TestCase):
                 deploy.activate(config, '/new', 'boot', run)
             self.assertFalse(any('test' in call.args[0] or 'switch' in call.args[0] for call in run.call_args_list))
             self.assertEqual(run.call_args.args[0], ['/old/bin/switch-to-configuration', 'boot'])
+
+    def test_update_stages_boot_and_rollback_without_runtime_activation(self):
+        with mock.patch.object(Path, 'resolve', return_value=Path('/old')):
+            run = mock.Mock()
+            deploy.activate(dict(nixEnv='nix-env', activationEnvironment={}), '/new', 'update', run)
+            self.assertEqual(run.call_args.args[0], ['/new/bin/switch-to-configuration', 'boot'])
+            run = mock.Mock(side_effect=[None, ValueError('staging failed'), None, None])
+            with self.assertRaisesRegex(ValueError, 'staging failed'):
+                deploy.activate(dict(nixEnv='nix-env', activationEnvironment={}), '/new', 'update', run)
+            self.assertEqual(run.call_args.args[0], ['/old/bin/switch-to-configuration', 'boot'])
+            self.assertFalse(any('test' in call.args[0] or 'switch' in call.args[0] for call in run.call_args_list))
 
     def test_failed_test_restores_runtime_only(self):
         run = mock.Mock(side_effect=[ValueError('failed'), None])

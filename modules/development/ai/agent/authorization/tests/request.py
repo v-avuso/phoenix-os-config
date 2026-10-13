@@ -124,4 +124,16 @@ class Contract(unittest.TestCase):
         self.policy['wakeupDevices'] = ['fixture']
         with self.assertRaises(ValueError): auth.validate(state, self.policy)
 
+    def test_fixed_updater_role_is_operation_specific(self):
+        installed = dict(auth.default_policy(False, 2000, 1000), updaterUid=1000)
+        update = auth.named('deployment.update', {'target': 'metal'}, 'fixture', 'Stage stable updates')
+        self.assertEqual(auth.require(update, installed, 1000, 24)['decision'], 'automatic')
+        for operation, arguments in [('deployment.test', {'target': 'metal'}), ('deployment.switch', {'target': 'metal'}), ('deployment.boot', {'target': 'metal'}), ('admin.dmesg', {})]:
+            with self.subTest(operation=operation), self.assertRaises(ValueError):
+                auth.require(auth.named(operation, arguments, 'fixture', 'Unauthorized updater operation'), installed, 1000, 24)
+        for uid in [True, '1000', -1, None]:
+            with self.assertRaises(ValueError): auth.policy(dict(authorizationPolicy=dict(installed, updaterUid=uid)))
+        with self.assertRaises(ValueError): auth.policy(dict(authorizationPolicy=installed, updaterUid=2000))
+        with self.assertRaises(ValueError): auth.validate(dict(update, role='updater'), installed)
+
 if __name__ == '__main__': unittest.main()

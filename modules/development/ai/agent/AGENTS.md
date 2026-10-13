@@ -120,3 +120,10 @@
 - Keep source/JSON transport capacity in `transport.json` separate from AI context
   and cost budgets. Package its immutable path explicitly for standalone Python
   entry points; verify updater, client and controller agree before deployment.
+
+- When service and contained client identities differ, derive narrowly named
+  operation roles and the service user from one declarative account owner; do not
+  derive policy by inspecting a service whose ExecStart packages that policy. Test
+  combined NixOS evaluation and kernel-peer admission
+  through the actual controller/validator. Socket group membership or metadata
+  admission must not widen diagnostic or ordinary deployment execution rights.
