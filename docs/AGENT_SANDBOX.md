@@ -180,12 +180,16 @@ There is no arbitrary shell/network context tool. These are controller invocatio
 bounds, not a guarantee about Codex's internal API call count or exact AI cost.
 
 Root-owned checkpoints retain the exact approved source, built closure, target
-and policy identity. Branch names only select a nearby approved comparison state;
-they confer no authority. Review success is independent of successful activation.
+and policy identity. Context selects the smallest diff among all independently
+approved same-policy/target states; branch names confer no authority. Review success is independent of successful activation.
 An identical approved source/closure reuses approval; a merged candidate with a
 new identity still needs review. No review branches, user Git mutations or automatic
 approval propagation across merges are needed. The activated baseline is trusted
-as the initial comparison state. Retention is bounded to 32 approved/pending records.
+as the initial comparison state. Explicit authenticated active-runtime seeding is
+optional; it does not review the whole repository or authorize another branch.
+Retention is bounded to 32 approved/pending records. See the
+[review module usage](../modules/development/ai/agent/security-review.md) for
+adapter configuration, trust-active checks and acceptance limits.
 
 Denied or incomplete review returns a secret-safe category and protected pending
 request. `phoenix-deploy-review --security-override <pending-nonce>` requires

@@ -282,9 +282,21 @@ class ReviewTests(unittest.TestCase):
                         with self.assertRaises(review.ReviewDenied):review.review(config,binding,{},'diff',temporary)
                 self.assertEqual(calls.call_count,1)
         with self.assertRaises(review.ReviewVerdictError) as failure:
-            review.run([sys.executable,'-c',"import sys; print('401 authentication SECRET',file=sys.stderr); sys.exit(1)"],fail_on_compaction=True)
+            review.run([sys.executable,'-c',"import sys; print('401 Unauthorized SECRET',file=sys.stderr); sys.exit(1)"],fail_on_compaction=True)
         self.assertEqual(failure.exception.code,'review-authentication-failed')
         self.assertNotIn('SECRET',str(failure.exception))
+
+    def test_cli_errors_remain_static_and_untrusted_diagnostics(self):
+        cases = [('unexpected argument --secret', 'review-cli-incompatible-suspected'),
+                 ('model not found SECRET', 'review-model-unavailable-suspected'),
+                 ('rate limit SECRET', 'review-rate-limit-suspected'),
+                 ('error sending request SECRET', 'review-transport-failed-suspected'),
+                 ('source contains 401 SECRET', 'review-invocation-failed')]
+        for message, code in cases:
+            with self.subTest(code=code), self.assertRaises(review.ReviewVerdictError) as failure:
+                review.run([sys.executable, '-c', 'import sys; print(' + repr(message) + ',file=sys.stderr); sys.exit(1)'], fail_on_compaction=True)
+            self.assertEqual(failure.exception.code, code)
+            self.assertNotIn('SECRET', str(failure.exception))
 
     def test_large_diff_warning_is_estimate_only_and_notification_is_optional(self):
         small='x'*(4*(review.LARGE_DIFF_WARNING_TOKENS-1))
@@ -506,6 +518,12 @@ class ReviewTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 review.snapshot(config, root / "unused")
 
+
+    def test_unsupported_adapter_is_typed_before_auth_or_execution(self):
+        with mock.patch.object(review, 'run') as run, self.assertRaises(review.ReviewVerdictError) as failure:
+            review.review({'adapter': 'other'}, {}, {}, '', Path('/unused'))
+        self.assertEqual(failure.exception.code, 'review-adapter-unsupported')
+        run.assert_not_called()
 
 if __name__ == "__main__":
     unittest.main()

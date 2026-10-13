@@ -11,7 +11,7 @@ let
   authorizationPolicy = toString config.system.build.phoenixAuthorizationPolicy;
   substitutions = {
     reservationAdapter = toString ./reservation-client.py;
-    authorizationLibrary = toString ./authorization/request.py;
+    authorizationLibrary = toString config.system.build.phoenixAuthorizationLibrary;
   };
   operatorScript = pkgs.replaceVars ./admin.py (substitutions // { authorizationClientConfig = ""; });
   adminScript = pkgs.replaceVars ./admin.py (substitutions // { authorizationClientConfig = toString clientConfig; });

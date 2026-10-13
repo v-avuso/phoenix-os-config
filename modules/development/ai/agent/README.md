@@ -26,18 +26,19 @@
   No automatic upstream dependency batches run; routine updates use zero AI.
   See
   [acceptance evidence](../../../../docs/AGENT_SANDBOX_ACCEPTANCE.md) and
+  [review usage and baseline adoption](security-review.md) and
   [review policy](review-policy.md).
 - **Approval reuse and fallback:** Root-owned approval records bind exact immutable
   source, closure, target and installed policy; retain at most 32 records. Exact
   candidate reuse skips AI. Context uses the smallest diff among the activated
-  snapshot and same-branch approved snapshots, which need not be the latest
-  approval. Branch labels select context and grant no authority. Review denial or
+  snapshot and all independently approved same-policy/target snapshots across
+  branches, which need not be the latest approval. Branch labels grant no authority. Review denial or
   error blocks activation and returns an exact pending decision; explicit
   `phoenix-deploy-review --security-override PENDING_NONCE` requires separate
   authentication and accepts only that protected source/closure/action. Approval
   remains reusable after an activation failure; current baseline/profile checks
   still apply. Never include secrets in task reasons.
-- **Acceptance limits:** `python3 -B tests/agent-deployment.py` exercises the
+- **Acceptance limits:** `python3 -B modules/development/ai/agent/tests/agent-deployment.py` exercises the
   controller, worker, review adapter and checkpoint together with disposable state
   and explicit OS ownership/store/build/model/activation stubs. The retained login
   has moved to the protected controller; existing helpers offer no isolated

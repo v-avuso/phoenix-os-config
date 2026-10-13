@@ -27,8 +27,8 @@ not counted or limited by this contract.
 The root controller freezes source, builds unprivileged, validates its exact
 closure binding, and rechecks activated baseline and system profile before
 activation. Root-owned checkpoints bind installed policy digest, target and
-immutable source identity; caller files never approve deployment. Branch labels
-select context only. An authenticated explicit override uses one protected
+immutable source identity; caller files never approve deployment. Every context checkpoint is independently approved under the same policy/target;
+branch labels are metadata only. An authenticated explicit override uses one protected
 pending exact source/closure/action/base/profile/policy/UID decision. It accepts
 no replacement source, closure, command or approval. Preserve recovery generations.
 

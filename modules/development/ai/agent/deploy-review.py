@@ -67,10 +67,18 @@ def run(argv, *, cwd=None, env=None, data=None, timeout=60, fail_on_compaction=F
             if process.returncode:
                 if fail_on_compaction:
                     lowered = error_output.lower()
-                    code = ("review-authentication-failed" if any(marker in lowered for marker in
-                            (b"unauthorized", b"401", b"refresh token", b"not logged in", b"authentication")) else
-                            "review-context-oversized" if any(marker in lowered for marker in
-                            (b"context window", b"context length", b"too many tokens")) else "review-invocation-failed")
+                    categories = (
+                        ("review-cli-incompatible-suspected", (b"unexpected argument", b"unrecognized option", b"unknown option")),
+                        ("review-model-unavailable-suspected", (b"model is not supported", b"model not found", b"model does not exist")),
+                        ("review-rate-limit-suspected", (b"rate limit", b"usage limit", b"quota exceeded")),
+                        ("review-transport-failed-suspected", (b"connection refused", b"connection reset", b"error sending request", b"network is unreachable")),
+                        ("review-authentication-failed", (b"refresh token", b"not logged in", b"authentication failed", b"401 unauthorized")),
+                        ("review-context-oversized", (b"context window", b"context length", b"too many tokens")),
+                    )
+                    # Stderr can contain echoed evidence: these are diagnostics,
+                    # never authority or proof of the underlying cause.
+                    code = next((category for category, markers in categories
+                                 if any(marker in lowered for marker in markers)), "review-invocation-failed")
                     raise ReviewVerdictError(code)
                 raise ValueError("command failed")
             return result
@@ -267,6 +275,8 @@ def resolve_context(requests, sources):
 
 
 def review(config, binding, files, diff, temporary, baseline=None):
+    if config.get('adapter', 'codex') != 'codex':
+        raise ReviewVerdictError('review-adapter-unsupported')
     home = temporary / "home"
     codex_home = home / ".codex"
     codex_home.mkdir(parents=True, mode=0o700)
@@ -455,7 +465,7 @@ def warn_deployment_diff(config, files, modes):
 
 
 FAILURE_STAGES = frozenset("request freeze baseline routine-policy build closure-binding review verdict baseline-recheck activation authentication source-transport protocol reservation disruption override".split())
-FAILURE_CODES = frozenset("source-capacity-exceeded wire-capacity-exceeded invalid-or-denied rejected-or-failed timeout invalid-json io-failed operator-authentication-required rollback-incomplete unsafe-execution-guard mutation-still-running missing-binding baseline-changed profile-changed source-mismatch spool-recovery-required invalid-capability routine-resource-busy model-denied reviewer-invocation-failed review-invocation-failed review-authentication-failed review-authentication-missing review-startup-failed review-timeout review-output-limit review-context-oversized context-compacted context-request-invalid context-request-oversized schema-invalid binding-mismatch worker-envelope-invalid security-policy-changed security-approval-required approval-state-changed inspection-required pending-capacity pending-binding-invalid pending-caller-invalid pending-state-changed".split())
+FAILURE_CODES = frozenset("source-capacity-exceeded wire-capacity-exceeded review-adapter-unsupported review-cli-incompatible-suspected review-model-unavailable-suspected review-rate-limit-suspected review-transport-failed-suspected invalid-or-denied rejected-or-failed timeout invalid-json io-failed operator-authentication-required rollback-incomplete unsafe-execution-guard mutation-still-running missing-binding baseline-changed profile-changed source-mismatch spool-recovery-required invalid-capability routine-resource-busy model-denied reviewer-invocation-failed review-invocation-failed review-authentication-failed review-authentication-missing review-startup-failed review-timeout review-output-limit review-context-oversized context-compacted context-request-invalid context-request-oversized schema-invalid binding-mismatch worker-envelope-invalid security-policy-changed security-approval-required approval-state-changed inspection-required pending-capacity pending-binding-invalid pending-caller-invalid pending-state-changed".split())
 
 
 def deployment_failure(result):

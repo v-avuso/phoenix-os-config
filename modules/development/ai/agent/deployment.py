@@ -99,6 +99,46 @@ def store_path(value, kind):
     return value
 
 
+def store_file(path):
+    resolved = path.resolve(strict=True)
+    if not re.fullmatch(r'/nix/store/[a-z0-9]{32}-[^/]+(?:/[^/]+)*', str(resolved)):
+        raise ValueError('metadata escapes immutable store')
+    info = resolved.stat()
+    if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+        raise ValueError('untrusted store metadata owner/mode')
+    return resolved
+
+
+def active_provenance(closure, source, target):
+    path = Path(closure) / 'etc/phoenix-agent/active-provenance.json'
+    try:
+        resolved = store_file(path)
+        with resolved.open('rb') as stream:
+            data = stream.read(4097)
+    except FileNotFoundError:
+        raise DeploymentFailure('baseline', 'baseline-provenance-missing') from None
+    except Exception:
+        raise DeploymentFailure('baseline', 'baseline-provenance-invalid') from None
+    try:
+        def unique(pairs):
+            result = {}
+            for key, value in pairs:
+                if key in result:
+                    raise ValueError('duplicate field')
+                result[key] = value
+            return result
+        if len(data) > 4096:
+            raise ValueError('oversized provenance')
+        value = json.loads(data, object_pairs_hook=unique)
+        if not isinstance(value, dict) or set(value) != {'version', 'target', 'source'} or type(value['version']) is not int or value['version'] != 1 or not isinstance(value['target'], str) or not isinstance(value['source'], str) or value['source'] != source:
+            raise ValueError('invalid provenance')
+    except Exception:
+        raise DeploymentFailure('baseline', 'baseline-provenance-invalid') from None
+    if value['target'] != target:
+        raise DeploymentFailure('baseline', 'baseline-target-mismatch')
+    return value
+
+
 def activation_executable(closure):
     executable = (Path(closure) / 'bin/switch-to-configuration').resolve(strict=True)
     if not str(executable).startswith('/nix/store/'):
@@ -453,7 +493,7 @@ def process_inner(config, request, uid, pid, state):
                     raise DeploymentFailure('verdict', 'worker-envelope-invalid')
                 if result['status'] == 'error':
                     code = result.get('code')
-                    if code not in {'reviewer-invocation-failed', 'review-invocation-failed', 'review-startup-failed',
+                    if code not in {'review-cli-incompatible-suspected', 'review-model-unavailable-suspected', 'review-rate-limit-suspected', 'review-transport-failed-suspected', 'review-adapter-unsupported', 'reviewer-invocation-failed', 'review-invocation-failed', 'review-startup-failed',
                             'review-authentication-missing', 'review-authentication-failed', 'review-timeout',
                             'review-output-limit', 'schema-invalid', 'binding-mismatch', 'context-compacted',
                             'review-context-oversized', 'context-request-invalid', 'context-request-oversized'}:
@@ -769,6 +809,54 @@ def override(config, nonce, uid, pid, reservation=None):
             return dict(result, securityOverride=True)
 
 
+def trust_active(config, uid, pid):
+    """Fresh native authentication trusts only the actual immutable runtime state."""
+    if os.geteuid() != 0 or not config.get('modelReviewEnabled', False) or uid != operator_uid(config):
+        raise DeploymentFailure('baseline', 'baseline-authentication-required')
+    installed = authorization.policy(config)
+    if not installed['securityReviewEnabled'] or installed['operatorUid'] != uid or installed['target'] != config['target']:
+        raise DeploymentFailure('baseline', 'baseline-policy-mismatch')
+    named = authorization.named('security-review.trust-active', {}, 'review-baseline',
+                                'Explicitly trust the current active code for security review testing')
+    identifier = secrets.token_hex(16)
+    authorization.audit('requested', identifier, uid, pid, named, 'human')
+    try:
+        with (Path(config['work']).parent / 'deployment.lock').open('a') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            with activation_guard(config):
+                security, review = load_security(config), load_review(config)
+                closure = str(Path('/run/current-system').resolve(strict=True))
+                source = str((Path(closure) / 'etc/phoenix-agent/activated-source').resolve(strict=True))
+                baseline = str(Path(config['baseline']).resolve(strict=True))
+                profile = str(Path('/nix/var/nix/profiles/system').resolve(strict=True))
+                profile_source = str((Path(profile) / 'etc/phoenix-agent/activated-source').resolve(strict=True))
+                for value, kind in ((closure, 'closure'), (source, 'source'), (baseline, 'source'), (profile, 'closure'), (profile_source, 'source')):
+                    store_path(value, kind)
+                activation_executable(closure)
+                if baseline != source:
+                    raise DeploymentFailure('baseline', 'baseline-runtime-mismatch')
+                policy = security.policy_digest(config)
+                provenance = active_provenance(closure, source, config['target'])
+                def recheck():
+                    current = (str(Path('/run/current-system').resolve(strict=True)),
+                               str((Path(closure) / 'etc/phoenix-agent/activated-source').resolve(strict=True)),
+                               str(Path(config['baseline']).resolve(strict=True)),
+                               str(Path('/nix/var/nix/profiles/system').resolve(strict=True)))
+                    if current != (closure, source, baseline, profile) or security.policy_digest(config) != policy or active_provenance(closure, source, config['target']) != provenance:
+                        raise DeploymentFailure('baseline', 'baseline-state-changed')
+                recheck()
+                security.approve(config, dict(source=source, closure=closure, target=config['target']),
+                                 'trusted-active-runtime', review.run, before_publish=recheck)
+        authorization.audit('completed', identifier, uid, pid, named, 'human')
+        return dict(ok=True, trustedActive=True, source=source, closure=closure, target=config['target'])
+    except DeploymentFailure:
+        authorization.audit('failed', identifier, uid, pid, named, 'human', category='baseline-verification-failed')
+        raise
+    except Exception:
+        authorization.audit('failed', identifier, uid, pid, named, 'human', category='baseline-verification-failed')
+        raise DeploymentFailure('baseline', 'baseline-verification-failed') from None
+
+
 def pending_metadata(binding):
     # A source NAR identity is sufficient for display; never source text/reason.
     return dict(pendingSourceFingerprint=Path(binding['source']).name.split('-', 1)[0],
@@ -911,7 +999,7 @@ def bootstrap_transfer(config, home_fd):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('config')
-    parser.add_argument('mode', choices=['serve', 'worker', 'bootstrap', 'activate', 'activate-reserved', 'operator', 'override', 'disruption-override'])
+    parser.add_argument('mode', choices=['serve', 'worker', 'bootstrap', 'activate', 'activate-reserved', 'operator', 'override', 'disruption-override', 'trust-active'])
     parser.add_argument('directory', nargs='?')
     parser.add_argument('action', nargs='?', choices=['test', 'switch', 'boot', 'update'])
     parser.add_argument('--expected-base')
@@ -920,7 +1008,19 @@ def main():
     args = parser.parse_args()
     config = json.loads(Path(args.config).read_text())
     config['configPath'] = args.config
-    if args.mode in {'override', 'disruption-override'}:
+    if args.mode == 'trust-active':
+        try:
+            if args.directory is not None or args.action is not None or args.expected_base or args.expected_source or args.expected_profile:
+                raise DeploymentFailure('baseline', 'baseline-arguments-denied')
+            result = trust_active(config, int(os.environ.get('PKEXEC_UID', '-1')), os.getpid())
+        except (ValueError, OSError) as error:
+            authorization.audit('rejected', secrets.token_hex(16), -1, os.getpid(), category='invalid-or-denied')
+            stage = error.stage if isinstance(error, DeploymentFailure) else 'baseline'
+            code = error.code if isinstance(error, DeploymentFailure) else 'baseline-verification-failed'
+            print(json.dumps(dict(ok=False, stage=stage, code=code)))
+            raise SystemExit(1)
+        print(json.dumps(result))
+    elif args.mode in {'override', 'disruption-override'}:
         reservation = None
         if config.get('reservations'):
             data = sys.stdin.buffer.read(4097)

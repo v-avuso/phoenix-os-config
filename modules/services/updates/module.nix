@@ -27,14 +27,14 @@ let
     else inputs.nixpkgs-unstable.legacyPackages.${system}.firefox;
 
   runnerConfig = pkgs.writeText "phoenix-updates-runner.json" (builtins.toJSON {
-    authorizationLibrary = toString ../../development/ai/agent/authorization/request.py;
+    authorizationLibrary = toString config.system.build.phoenixAuthorizationLibrary;
     authorizationPolicy = toString config.system.build.phoenixAuthorizationPolicy;
     repo = user.repoDirectory;
     inherit (cfg) sourceBranch cleanupBranches;
     state = "/var/lib/phoenix-updates";
     policyFile = "config/updates.json";
     candidateScript = toString (pkgs.replaceVars ./candidate.py {
-      deploymentTransportPolicy = toString ../../development/ai/agent/transport.json;
+      deploymentTransportPolicy = toString config.system.build.phoenixDeploymentTransportPolicy;
     });
     git = "${pkgs.git}/bin/git";
     nix = "${pkgs.nix}/bin/nix";

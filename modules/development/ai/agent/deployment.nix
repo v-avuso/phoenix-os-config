@@ -9,11 +9,12 @@
 }:
 let
   cfg = config.services.phoenixDeployment;
+  installedTarget = if config.networking.hostName == "phoenix-vm" then "vm" else "metal";
   authorizationPolicy = toString config.system.build.phoenixAuthorizationPolicy;
-  authorizationLibrary = toString ./authorization/request.py;
-  transportPolicy = toString ./transport.json;
-  controllerScript = pkgs.replaceVars ./deployment.py { deploymentTransportPolicy = transportPolicy; inherit authorizationLibrary; };
-  reviewScript = pkgs.replaceVars ./deploy-review.py { deploymentTransportPolicy = transportPolicy; inherit authorizationLibrary; };
+  authorizationLibrary = toString config.system.build.phoenixAuthorizationLibrary;
+  transportPolicy = pkgs.writeText "phoenix-deployment-transport.json" (builtins.readFile ./transport.json);
+  controllerScript = pkgs.replaceVars ./deployment.py { deploymentTransportPolicy = toString transportPolicy; inherit authorizationLibrary; };
+  reviewScript = pkgs.replaceVars ./deploy-review.py { deploymentTransportPolicy = toString transportPolicy; inherit authorizationLibrary; };
   sourceSelector = pkgs.writeScript "phoenix-source" (
     builtins.replaceStrings [ "#!/usr/bin/env python3" ]
       [ "#!${pkgs.python3}/bin/python3" ] (builtins.readFile ../../../../commands/phoenix-source)
@@ -35,6 +36,15 @@ let
     "--disable-internal-agent"
     (toString securityOverride)
   ];
+  trustActiveHelper = pkgs.writeShellScript "phoenix-security-review-trust-active" ''
+    if [ "$#" -ne 0 ]; then exit 2; fi
+    exec ${pkgs.python3}/bin/python3 -I ${controllerScript} ${deploymentConfig} trust-active
+  '';
+  trustActive = pkgs.writeShellScriptBin "phoenix-review-trust-active" ''
+    if [ "$#" -ne 0 ]; then exit 2; fi
+    echo 'Trusting current active code for security review testing; no model, build or activation.' >&2
+    exec /run/wrappers/bin/pkexec --disable-internal-agent ${trustActiveHelper}
+  '';
   disruptionOverride = pkgs.writeShellScript "phoenix-disruption-override" ''
     if [ "$#" -ne 1 ]; then exit 2; fi
     exec ${pkgs.python3}/bin/python3 -I ${controllerScript} ${deploymentConfig} disruption-override "$1"
@@ -51,6 +61,8 @@ let
       sourceSelector = toString sourceSelector;
       reservationAdapter = if config.phoenix.agent.reservations.enable then toString ./reservation-client.py else null;
       inherit authorizationPolicy;
+      authorizationLibrary = authorizationLibrary;
+      deploymentTransportPolicy = toString transportPolicy;
       modelReviewEnabled = cfg.securityReview.enable;
       operatorCommand = lib.optionals (!cfg.securityReview.enable) operatorCommand;
       inherit overrideCommand disruptionOverrideCommand;
@@ -65,8 +77,7 @@ let
       # Nix store binaries are not setuid; NixOS owns the privileged wrapper.
       pkexec = "/run/wrappers/bin/pkexec";
       policy = toString ./review-policy.md;
-      model = "gpt-6.1-sol";
-      effort = "medium";
+      inherit (cfg.securityReview) adapter model effort;
       baseline = "/etc/phoenix-agent/activated-source";
       migrationMarker = "/var/lib/phoenix-deploy/reviewer-migrated";
       deploymentSocket = "/run/phoenix-deploy/control.sock";
@@ -81,6 +92,8 @@ let
       sourceSelector = toString sourceSelector;
       reservationAdapter = if config.phoenix.agent.reservations.enable then toString ./reservation-client.py else null;
       inherit authorizationPolicy;
+      authorizationLibrary = authorizationLibrary;
+      deploymentTransportPolicy = toString transportPolicy;
       modelReviewEnabled = cfg.securityReview.enable;
       operatorCommand = lib.optionals (!cfg.securityReview.enable) operatorCommand;
       inherit overrideCommand disruptionOverrideCommand;
@@ -114,6 +127,8 @@ let
   deploymentConfig = pkgs.writeText "phoenix-deployment.json" (
     builtins.toJSON ({
       inherit authorizationPolicy;
+      authorizationLibrary = authorizationLibrary;
+      deploymentTransportPolicy = toString transportPolicy;
       modelReviewEnabled = cfg.securityReview.enable;
       operatorName = user.name;
       disruptionScript = toString ./disruption.py;
@@ -127,7 +142,7 @@ let
       };
       clientUid = if config.phoenix.agent.identity.enable then config.phoenix.agent.identity.uid else config.users.users.${user.name}.uid;
       operatorUid = config.users.users.${user.name}.uid;
-      target = if config.networking.hostName == "phoenix-vm" then "vm" else "metal";
+      target = installedTarget;
       reviewerUser = "phoenix-deploy-review";
       builderUser = "phoenix-deploy-build";
       reviewHome = "/var/lib/phoenix-deploy-review";
@@ -151,8 +166,7 @@ let
       bwrap = "${pkgs.bubblewrap}/bin/bwrap";
       caBundle = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
       policy = toString ./review-policy.md;
-      model = "gpt-6.1-sol";
-      effort = "medium";
+      inherit (cfg.securityReview) adapter model effort;
       activationLock = "/var/lib/phoenix-deploy/activation.lock";
       activationSpool = "/var/lib/phoenix-deploy/activation";
       activationEnvironment = {
@@ -172,6 +186,7 @@ in
   options.services.phoenixDeployment.disruptionGuard.enable =
     lib.mkEnableOption "experimental protected desktop unit deployment guard";
   config = {
+    system.build.phoenixDeploymentTransportPolicy = transportPolicy;
     system.build.phoenixDeploymentClient = deployReview;
     system.build.phoenixDeploymentSandboxClient = deployClient;
     _module.args.phoenixDeployReviewPackage = deployClient;
@@ -192,11 +207,19 @@ in
     ++ lib.optionals cfg.securityReview.enable [
       reviewLogin
       bootstrap
+      trustActive
     ];
     # Fresh authentication, never auth_admin_keep: a rejected review is critical.
     # This policy is absent while the experimental security-review switch is off.
     environment.etc = lib.mkMerge [
-      { "phoenix-agent/activated-source".source = inputs.self.outPath; }
+      {
+        "phoenix-agent/activated-source".source = inputs.self.outPath;
+        "phoenix-agent/active-provenance.json".text = builtins.toJSON {
+          version = 1;
+          target = installedTarget;
+          source = toString inputs.self.outPath;
+        };
+      }
       (lib.optionalAttrs (!cfg.securityReview.enable) {
         "polkit-1/actions/org.phoenix.deployment.policy".text = ''
           <?xml version="1.0" encoding="UTF-8"?>
@@ -227,6 +250,17 @@ in
       })
       (lib.optionalAttrs cfg.securityReview.enable {
         "phoenix-agent/review-policy.md".source = ./review-policy.md;
+        "polkit-1/actions/org.phoenix.security-review-baseline.policy".text = ''
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN" "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+          <policyconfig><action id="org.phoenix.security-review.trust-active">
+            <description>Trust the current active Phoenix code for security review testing</description>
+            <message>This adopts only the actual immutable running system as an explicitly trusted review checkpoint. Its existing code is not being reviewed. No deployment will run.</message>
+            <icon_name>dialog-warning</icon_name>
+            <defaults><allow_any>no</allow_any><allow_inactive>no</allow_inactive><allow_active>auth_admin</allow_active></defaults>
+            <annotate key="org.freedesktop.policykit.exec.path">${trustActiveHelper}</annotate>
+          </action></policyconfig>
+        '';
         "polkit-1/actions/org.phoenix.security-review.policy".text = ''
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN" "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">

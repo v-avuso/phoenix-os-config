@@ -3,6 +3,7 @@
 import importlib.util
 from pathlib import Path
 import json
+import hashlib
 import contextlib
 import io
 import os
@@ -572,7 +573,7 @@ class DeploymentTests(unittest.TestCase):
             with contextlib.redirect_stdout(io.StringIO()), mock.patch.object(Path, 'resolve', resolve), \
                  mock.patch.object(deploy, 'load_review', return_value=Review), \
                  mock.patch.object(deploy, 'as_user', side_effect=as_user), \
-                 mock.patch.object(deploy, 'store_path'), mock.patch.object(deploy, 'activation_executable'), \
+                 mock.patch.object(deploy, 'store_path'), mock.patch.object(deploy, 'activation_executable'), mock.patch.object(deploy, 'store_file', side_effect=lambda path: path), \
                  mock.patch.object(deploy.pwd, 'getpwnam', return_value=account), \
                  mock.patch.object(deploy, 'request_valid', wraps=deploy.request_valid), \
                  mock.patch.object(deploy.os, 'geteuid', return_value=0 if operator else os.getuid()):
@@ -773,6 +774,7 @@ class DeploymentTests(unittest.TestCase):
             profile = root / 'profile'
             (profile / 'etc/phoenix-agent').mkdir(parents=True)
             (profile / 'etc/phoenix-agent/activated-source').symlink_to(baseline)
+            (profile / 'etc/phoenix-agent/active-provenance.json').write_text(json.dumps(dict(version=1, target='metal', source=str(baseline))))
             state = root / 'security'
             state.mkdir()
             auth = root / 'auth'
@@ -823,6 +825,10 @@ class DeploymentTests(unittest.TestCase):
                         shutil.copytree(argv[3], frozen)
                         frozen_sources[key] = frozen
                     return str(frozen_sources[key]).encode()
+                if argv[:2] == ['nix', 'eval']:
+                    self.assertIn('--offline', argv)
+                    self.assertIn('allow-import-from-derivation', argv)
+                    return str(profile).encode()
                 if argv[:2] == ['nix', 'build']:
                     frozen = Path(argv[-1].split('#')[0][5:])
                     if frozen not in closures:
@@ -840,6 +846,8 @@ class DeploymentTests(unittest.TestCase):
             original_resolve = Path.resolve
 
             def resolve(path, *args, **kwargs):
+                if path == Path('/run/current-system'):
+                    return profile
                 if path == Path('/nix/var/nix/profiles/system'):
                     return profile
                 return original_resolve(path, *args, **kwargs)
@@ -852,16 +860,25 @@ class DeploymentTests(unittest.TestCase):
             account = mock.Mock(pw_uid=os.getuid(), pw_gid=os.getgid())
             with mock.patch.object(deploy, 'load_review', return_value=review), mock.patch.object(deploy, 'load_security', return_value=security), \
                  mock.patch.object(review, 'run', side_effect=command), mock.patch.object(deploy, 'as_user', side_effect=user_command), \
-                 mock.patch.object(deploy, 'store_path'), mock.patch.object(deploy, 'activation_executable'), \
+                 mock.patch.object(deploy, 'store_path'), mock.patch.object(deploy, 'activation_executable'), mock.patch.object(deploy, 'store_file', side_effect=lambda path: path), \
                  mock.patch.object(deploy.pwd, 'getpwnam', return_value=account), mock.patch.object(Path, 'resolve', resolve), \
                  mock.patch.object(security, 'state_directory', return_value=state), \
                  mock.patch.object(security, 'read_record', side_effect=lambda path: json.loads(path.read_text())), \
+                 mock.patch.object(deploy, 'activation_guard', return_value=contextlib.nullcontext(42)), \
                  mock.patch.object(deploy.os, 'geteuid', return_value=0), \
                  mock.patch.object(deploy, 'activate_bound', return_value={'ok': True}) as activation, contextlib.redirect_stdout(io.StringIO()) as journal:
+                seeded = deploy.trust_active(config, 1000, 22)
+                self.assertEqual(seeded['source'], str(baseline))
+                self.assertEqual(seeded['closure'], str(profile))
+                self.assertEqual(prompts, [], 'trust active never calls AI')
+                # Trust seeds an exact independently approved runtime checkpoint.
+                self.assertTrue(security.choose_checkpoint(config, 'metal', str(baseline), str(profile),
+                    'unrelated-branch', str(baseline), review.baseline_files(baseline), review, deploy.store_path)[0])
                 self.assertTrue(deploy.process(config, request, 1000, 22)['ok'])
                 self.assertEqual(len(prompts), 2)
                 self.assertIn('-{}', prompts[0])
                 self.assertIn('+{ changed = true; }', prompts[0])
+                request['branch'] = 'another-branch'
                 self.assertTrue(deploy.process(config, request, 1000, 22)['ok'])
                 self.assertEqual(len(prompts), 2, 'exact source/closure approval reuses zero AI')
                 decision = 'approve'
@@ -870,6 +887,12 @@ class DeploymentTests(unittest.TestCase):
                 self.assertTrue(deploy.process(config, request, 1000, 22)['ok'])
                 self.assertIn('-{ changed = true; }', prompts[-1], 'approved checkpoint supplies incremental diff')
                 self.assertNotIn('-{}', prompts[-1])
+                # A combination of separately approved changes remains a new source.
+                request['files']['flake.nix'] = request['files']['flake.nix'].replace('extra = true;', 'extra = true; union = true;')
+                request['branch'] = 'merged'
+                before = len(prompts)
+                self.assertTrue(deploy.process(config, request, 1000, 22)['ok'])
+                self.assertEqual(len(prompts), before + 1, 'merged integration residual still needs review')
                 decision = 'deny'
                 request['files']['flake.nix'] = '{ denied = true; }\n'
                 before = activation.call_count
@@ -913,8 +936,9 @@ class DeploymentTests(unittest.TestCase):
                         branch=security.branch_key('main'))
         review = mock.Mock()
         review.baseline_files.side_effect = lambda path: {'file': 'candidate' if str(path)=='approved' else 'activated'}
-        review.source_diff.side_effect = lambda old,new: old['file'] if old != new else ''
+        review.source_diff.side_effect = lambda old,new,*_modes: old['file'] if old != new else ''
         with mock.patch.object(security,'policy_digest',return_value='current'), \
+             mock.patch.object(Path,'resolve',return_value=Path('approved')), \
              mock.patch.object(security,'records',return_value=[(None,approved)]):
             verify=mock.Mock()
             exact,base,files=security.choose_checkpoint({},'metal','approved','closure','main','activated',{'file':'candidate'},review,verify)
@@ -922,9 +946,116 @@ class DeploymentTests(unittest.TestCase):
             self.assertFalse(security.choose_checkpoint({},'metal','approved','DIFFERENT','main','activated',{'file':'candidate'},review,verify)[0])
             # New exact merged source always needs review, even when another branch is approved.
             self.assertFalse(security.choose_checkpoint({},'metal','merged','closure','feature','activated',{'file':'candidate'},review,verify)[0])
-            self.assertEqual(security.choose_checkpoint({},'metal','merged','closure','feature','activated',{'file':'candidate'},review,verify)[1],'activated')
+            self.assertEqual(security.choose_checkpoint({},'metal','merged','closure','feature','activated',{'file':'candidate'},review,verify)[1],'approved')
             approved['policy']='old'
             self.assertFalse(security.choose_checkpoint({},'metal','approved','closure','main','activated',{'file':'candidate'},review,verify)[0])
+
+    def test_trust_active_requires_enabled_review_root_and_exact_operator(self):
+        config = dict(modelReviewEnabled=True, operatorUid=1000, clientUid=2000)
+        for root, uid, enabled in [(1000, 1000, True), (0, 2000, True), (0, 1000, False)]:
+            with mock.patch.object(deploy.os, 'geteuid', return_value=root), self.assertRaises(deploy.DeploymentFailure):
+                deploy.trust_active(dict(config, modelReviewEnabled=enabled), uid, 23)
+
+    def test_trust_active_rechecks_runtime_target_and_policy_before_publish(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / 'source'; source.mkdir()
+            runtime = root / 'runtime'
+            staged = root / 'staged'
+            for closure in (runtime, staged):
+                (closure / 'etc/phoenix-agent').mkdir(parents=True)
+                (closure / 'etc/phoenix-agent/activated-source').symlink_to(source)
+                (closure / 'etc/phoenix-agent/active-provenance.json').write_text(json.dumps(dict(version=1, target='metal', source=str(source))))
+            security = mock.Mock()
+            security.policy_digest.return_value = 'installed-policy'
+            review = mock.Mock()
+            config = dict(modelReviewEnabled=True, target='metal', operatorUid=1000, clientUid=2000,
+                          work=directory, baseline=str(source), builderUser='builder', nix='nix')
+            original = Path.resolve
+            current = runtime
+            def resolve(path, *args, **kwargs):
+                if path == Path('/run/current-system'): return current
+                if path == Path('/nix/var/nix/profiles/system'): return staged
+                return original(path, *args, **kwargs)
+            def publish(*args, **kwargs):
+                kwargs['before_publish']()
+            security.approve.side_effect = publish
+            with mock.patch.object(deploy.os, 'geteuid', return_value=0), mock.patch.object(Path, 'resolve', resolve), mock.patch.object(deploy, 'activation_guard', return_value=contextlib.nullcontext(42)), mock.patch.object(deploy, 'store_path'), mock.patch.object(deploy, 'activation_executable'), mock.patch.object(deploy, 'store_file', side_effect=lambda path: path), mock.patch.object(deploy, 'load_security', return_value=security), mock.patch.object(deploy, 'load_review', return_value=review), mock.patch.object(deploy, 'as_user', return_value=str(runtime).encode()) as evaluate:
+                result = deploy.trust_active(config, 1000, 22)
+                self.assertEqual(result['closure'], str(runtime), 'staged boot profile is not the adopted runtime')
+                self.assertEqual(security.approve.call_args.args[1]['closure'], str(runtime))
+                self.assertNotEqual(result['closure'], str(staged))
+                evaluate.assert_not_called()
+                provenance = runtime / 'etc/phoenix-agent/active-provenance.json'
+                valid = dict(version=1, target='metal', source=str(source))
+                for value, code in [(dict(valid, target='vm'), 'baseline-target-mismatch'),
+                                    (dict(valid, source=str(staged)), 'baseline-provenance-invalid'),
+                                    (dict(valid, extra='caller'), 'baseline-provenance-invalid'),
+                                    (dict(valid, version=True), 'baseline-provenance-invalid'),
+                                    ([], 'baseline-provenance-invalid')]:
+                    provenance.write_text(json.dumps(value))
+                    security.approve.reset_mock()
+                    with self.assertRaisesRegex(deploy.DeploymentFailure, code):
+                        deploy.trust_active(config, 1000, 22)
+                    security.approve.assert_not_called()
+                provenance.write_text('{broken')
+                with self.assertRaisesRegex(deploy.DeploymentFailure, 'baseline-provenance-invalid'):
+                    deploy.trust_active(config, 1000, 22)
+                provenance.unlink()
+                with self.assertRaisesRegex(deploy.DeploymentFailure, 'baseline-provenance-missing'):
+                    deploy.trust_active(config, 1000, 22)
+                provenance.write_text(json.dumps(valid))
+                def changed(*args, **kwargs):
+                    nonlocal current
+                    current = staged
+                    kwargs['before_publish']()
+                security.approve.side_effect = changed
+                with self.assertRaisesRegex(deploy.DeploymentFailure, 'baseline-state-changed'):
+                    deploy.trust_active(config, 1000, 22)
+                current = runtime
+                security.approve.side_effect = publish
+                security.policy_digest.side_effect = ['old', 'changed']
+                with self.assertRaisesRegex(deploy.DeploymentFailure, 'baseline-state-changed'):
+                    deploy.trust_active(config, 1000, 22)
+
+    def test_runtime_provenance_rejects_mutable_escape_and_duplicate_fields(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mutable = root / 'mutable.json'
+            mutable.write_text('{}')
+            marker = root / 'marker.json'
+            marker.symlink_to(mutable)
+            with self.assertRaisesRegex(ValueError, 'escapes immutable store'):
+                deploy.store_file(marker)
+            provenance = root / 'etc/phoenix-agent/active-provenance.json'
+            provenance.parent.mkdir(parents=True)
+            provenance.write_text('{"version":1,"version":1,"target":"metal","source":"source"}')
+            with mock.patch.object(deploy, 'store_file', side_effect=lambda path: path), self.assertRaisesRegex(deploy.DeploymentFailure, 'baseline-provenance-invalid'):
+                deploy.active_provenance(str(root), 'source', 'metal')
+            provenance.write_text('x' * 4097)
+            with mock.patch.object(deploy, 'store_file', side_effect=lambda path: path), self.assertRaisesRegex(deploy.DeploymentFailure, 'baseline-provenance-invalid'):
+                deploy.active_provenance(str(root), 'source', 'metal')
+
+    def test_trust_active_main_rejects_caller_paths_and_uses_pkexec_operator(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'installed.json'
+            path.write_text('{}')
+            for tail in [['/caller/source'], ['--expected-source', '/caller/source'], ['--expected-profile', '/caller/closure']]:
+                output = io.StringIO()
+                with mock.patch.object(deploy.sys, 'argv', ['controller', str(path), 'trust-active', *tail]), mock.patch.object(deploy, 'trust_active') as trust, contextlib.redirect_stdout(output), self.assertRaises(SystemExit):
+                    deploy.main()
+                trust.assert_not_called()
+                self.assertEqual(json.loads(output.getvalue())['code'], 'baseline-arguments-denied')
+                self.assertNotIn('/caller', output.getvalue())
+            with mock.patch.object(deploy.sys, 'argv', ['controller', str(path), 'trust-active']), mock.patch.dict(deploy.os.environ, {'PKEXEC_UID': '1000'}), mock.patch.object(deploy, 'trust_active', return_value={'ok': True}) as trust, contextlib.redirect_stdout(io.StringIO()):
+                deploy.main()
+            self.assertEqual(trust.call_args.args[1], 1000)
+
+    def test_checkpoint_rejects_unbound_approved_closure_even_as_context(self):
+        security = self.security()
+        record = dict(source='approved', closure='wrong-closure', target='metal', policy='current', branch=security.branch_key('main'))
+        with mock.patch.object(security, 'policy_digest', return_value='current'), mock.patch.object(security, 'records', return_value=[(None, record)]), mock.patch.object(Path, 'resolve', return_value=Path('different-source')), self.assertRaisesRegex(ValueError, 'closure/source binding'):
+            security.choose_checkpoint({}, 'metal', 'candidate', 'candidate-closure', 'other-branch', 'active', {}, mock.Mock(), mock.Mock())
 
     def test_checkpoint_state_ownership_and_atomic_write(self):
         security=self.security()
@@ -952,11 +1083,48 @@ class DeploymentTests(unittest.TestCase):
             config.update(codex='/nix/store/pinned-codex',model='model',effort='medium',bwrap='/nix/store/bwrap',
                           python='/nix/store/python',setpriv='/nix/store/setpriv',caBundle='/nix/store/ca-bundle')
             digest=security.policy_digest(config)
-            for key in ('codex','model','effort','bwrap','python','setpriv','caBundle'):
+            for key in ('adapter','clientUid','operatorUid','updaterUid','codex','model','effort','bwrap','python','setpriv','caBundle'):
                 with self.subTest(key=key):
                     self.assertNotEqual(digest,security.policy_digest(dict(config,**{key:'changed execution identity'})))
+            authority = Path(directory) / 'authorization.json'
+            authority.write_text(json.dumps({'updaterUid': 1000}))
+            bound = dict(config, authorizationPolicy=str(authority))
+            before = security.policy_digest(bound)
+            authority.write_text(json.dumps({'updaterUid': 2000}))
+            self.assertNotEqual(before, security.policy_digest(bound))
             path.write_text('changed installed review policy')
             self.assertNotEqual(digest,security.policy_digest(config))
+
+    def test_security_fingerprint_survives_unrelated_repository_relocation(self):
+        security = self.security()
+        owner = Path(__file__).resolve().parents[5] / 'modules/development/ai/agent'
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            packages = root / 'single-file-packages'; packages.mkdir()
+            def package(name, contents):
+                identifier = hashlib.sha256(contents.encode()).hexdigest()
+                path = packages / (identifier + '-' + name)
+                path.write_text(contents)
+                return str(path)
+            library = package('authorization.py', (owner / 'authorization/request.py').read_text())
+            transport = package('transport.json', (owner / 'transport.json').read_text())
+            def snapshot(name):
+                repo = root / name; repo.mkdir()
+                config = {}
+                for key, filename in [('policy', 'review-policy.md'), ('reviewScript', 'deploy-review.py'), ('securityReviewScript', 'security-review.py'), ('controller', 'deployment.py')]:
+                    contents = (owner / filename).read_text().replace('@authorizationLibrary@', library).replace('@deploymentTransportPolicy@', transport)
+                    path = repo / filename; path.write_text(contents); config[key] = str(path)
+                config.update(authorizationLibrary=library, deploymentTransportPolicy=transport, adapter='codex', model='gpt-6-luna', effort='high')
+                return config
+            first, relocated = snapshot('repository-a'), snapshot('repository-b')
+            (root / 'repository-b/unrelated-doc.md').write_text('unrelated repository change')
+            expected = security.policy_digest(first)
+            self.assertEqual(expected, security.policy_digest(relocated))
+            for key in ('authorizationLibrary', 'deploymentTransportPolicy'):
+                changed = dict(first, **{key: package(key, Path(first[key]).read_text() + '\nchanged')})
+                self.assertNotEqual(expected, security.policy_digest(changed))
+            Path(relocated['controller']).write_text(Path(relocated['controller']).read_text() + '\n# actual security code change')
+            self.assertNotEqual(expected, security.policy_digest(relocated))
 
     def test_consuming_pruned_pending_record_is_idempotent(self):
         security = self.security()

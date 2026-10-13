@@ -33,5 +33,5 @@ in {
   };
   config.users.groups.phoenix-authorization.members = lib.unique [ user.name updaterName ];
   config.system.build.phoenixAuthorizationPolicy = policy;
-  config.system.build.phoenixAuthorizationLibrary = ./request.py;
+  config.system.build.phoenixAuthorizationLibrary = pkgs.writeText "phoenix-authorization.py" (builtins.readFile ./request.py);
 }

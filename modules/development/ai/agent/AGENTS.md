@@ -4,6 +4,9 @@
   authority, prompts, cache and override UI behind `securityReview.enable`.
   Authenticated deployment, immutable source/closure binding and rollback are
   independent safeguards; disabling AI must not grant unattended root access.
+  Explicit trust-active seeding needs fresh native authentication, only the actual
+  runtime source/closure and a final locked recheck; it is never per-generation
+  automatic approval. See [security review usage](security-review.md).
 - Review the frozen repository diff for security, not code quality or distributor
   package contents. Request only relevant bounded context; never automatically
   send the entire repository or create dependency-review batches. Define cost
@@ -15,8 +18,9 @@
   checkpoint together in `tests/agent-deployment.py`, not only mocked worker
   envelopes. Keep fixture ownership/store/build/model/activation stubs explicit;
   passing fixtures do not establish retained-auth or live OS acceptance. Check
-  incremental context against the smallest-diff checkpoint heuristic, not an
-  assumed latest approval.
+  incremental context against the smallest content/mode diff among independently
+  approved same-policy/target checkpoints across branches, not an assumed latest
+  approval. A merged/combined new source still requires residual integration review.
 - Keep operator authentication/migration ownership separate from broker caller UID.
   When changing agent identity, test distinct UIDs: operator-owned retained auth
   and critical override must remain operator authority; pending requests retain
@@ -38,7 +42,10 @@
   original source and never generalize this to profile/container reconciliation.
 - Nix may package Python entry points as individual store files. Pass helper paths
   explicitly in immutable config and test an isolated entry point; do not assume
-  sibling files exist in its store directory.
+  sibling files exist in its store directory. For checkpoint fingerprints, package
+  embedded helper content individually: whole-repository source prefixes otherwise
+  invalidate reuse on unrelated changes. Test relocation and actual helper changes;
+  retain helper-byte hashing rather than normalizing away changed authority.
 - Preserve retained authentication. Diagnose readiness and typed failure stages
   before asking for sign-in; never log tokens, account responses or raw auth stderr.
 - New containment/shutdown behavior stays opt-in until active workload cleanup,
@@ -127,3 +134,8 @@
   combined NixOS evaluation and kernel-peer admission
   through the actual controller/validator. Socket group membership or metadata
   admission must not widen diagnostic or ordinary deployment execution rights.
+
+- Explicit active-baseline trust must validate immutable provenance selected from
+  the actual running closure; reproducing a store flake can require IFD or lose
+  Git metadata. Keep provenance as identity evidence, with fresh operator trust
+  supplying approval; missing old-generation provenance must fail closed.
