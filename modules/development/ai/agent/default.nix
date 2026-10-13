@@ -318,6 +318,7 @@ let
   '';
   guiStateConfig = pkgs.writeText "phoenix-shared-gui-state.json" (builtins.toJSON {
     lock = "${operatorState}/gui.lock";
+    controlDir = "/run/user/${toString config.users.users.${user.name}.uid}/phoenix-shared-gui";
     historyConfig = toString historyConfig;
     historyModule = toString (pkgs.writeText "phoenix-gui-history-runtime.py" (builtins.readFile ./history-runtime.py));
     transportModule = toString (pkgs.writeText "phoenix-gui-transport.py" (builtins.readFile ./launch.py));

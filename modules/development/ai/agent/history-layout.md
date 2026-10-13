@@ -95,7 +95,11 @@ validates readiness before launching either frontend. Native executable,
 session-restoration and desktop/new-window entry points use the same wrapped
 package. Sandboxed entry points use the same guard before their private-profile
 launcher. Direct old/unwrapped executables remain outside this guarantee.
-Same-variant new-window is currently refused too; no graceful-switch UI is claimed.
+The prepared owner adapter restores same-variant windows, uses the existing
+new-window callback, and forwards one bounded Codex link to the exact pinned
+second-instance callback. Cross-variant switching offers Keep current or ordinary
+Close and switch; upstream active-work cancellation remains authoritative.
+Installed/live GUI acceptance remains pending; see [limits and usage](README.md#shared-desktop-state-opt-in-gui-acceptance-pending).
 
 `tests/agent-gui-state.py` checks readiness, exclusion, lock retention despite
 child FD closure, failure cleanup and synthetic atomic pin replacement. The

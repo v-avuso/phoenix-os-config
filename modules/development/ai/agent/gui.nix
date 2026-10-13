@@ -21,8 +21,9 @@ let
   ];
   upstreamDesktop =
     inputs.codex-desktop-sandbox.packages.${pkgs.stdenv.hostPlatform.system}.codex-desktop;
-  # Only this immutable sandbox copy mediates desktop backend fetches. Neither
-  # the native app nor its private account/profile is patched or mounted.
+  # Only this immutable sandbox copy mediates desktop backend fetches. Shared
+  # mode separately patches fixed owner actions in both copies and mounts Codex
+  # state; Chromium profiles and backend/network hooks remain independent.
   desktop = upstreamDesktop.overrideAttrs (old: {
     nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ pkgs.asar ];
     postInstall = (old.postInstall or "") + ''
@@ -36,6 +37,11 @@ let
       # confirmation, bounds persistence and normal quit cleanup. Remove this
       # adapter when upstream close/reopen works under the same filtered bus.
       ${python} -I ${./gui-lifecycle.py} phoenix-app
+      ${lib.optionalString cfg.gui.sharedState.enable ''
+        ${python} -I ${./gui-control-patch.py} phoenix-app/.vite/build
+        { printf '%s\n' 'require(${builtins.toJSON (toString ./gui-control.cjs)});'; cat "$bootstrap"; } > phoenix-control.js
+        mv phoenix-control.js "$bootstrap"
+      ''}
       # Electron native modules must retain their original unpacked layout.
       asar pack phoenix-app "$out/opt/codex-desktop/resources/app.asar" --unpack '*.node'
     '';
@@ -93,6 +99,9 @@ let
         # bundled unrestricted CLI; controlled PATH resolves only the bridge.
         CODEX_CLI_PATH = "phoenix-gui-codex";
         CODEX_APP_SERVER_FORCE_CLI = "1";
+        PHOENIX_GUI_CONTROL_DIR = lib.mkIf cfg.gui.sharedState.enable "${runtime}/phoenix-shared-gui";
+        PHOENIX_GUI_OWNER_TOKEN = lib.mkIf cfg.gui.sharedState.enable "$PHOENIX_GUI_OWNER_TOKEN";
+        PHOENIX_GUI_VARIANT = lib.mkIf cfg.gui.sharedState.enable "sandbox";
         PHOENIX_GUI_HTTP_SOCKET = "${runtime}/phoenix-agent-gui-http.sock";
         CODEX_LINUX_APP_ID = "codex-desktop-sandboxed";
         CODEX_LINUX_APP_DISPLAY_NAME = "ChatGPT Community (Sandboxed)";
@@ -155,6 +164,10 @@ let
             to = user.homeDirectory;
           }
         ]
+        ++ lib.optionals cfg.gui.sharedState.enable [ {
+          from = "${runtime}/phoenix-shared-gui";
+          to = "${runtime}/phoenix-shared-gui";
+        } ]
         ++ lib.optional cfg.gui.sharedState.enable {
           from = "${user.homeDirectory}/.codex";
           to = "${user.homeDirectory}/.codex";
@@ -177,6 +190,7 @@ let
   guiConfig = pkgs.writeText "phoenix-agent-gui.json" (
     builtins.toJSON {
       inherit profile;
+      sharedControlDir = lib.optionalString cfg.gui.sharedState.enable "${runtime}/phoenix-shared-gui";
       profileSeed = lib.optionals (!cfg.gui.sharedState.enable) [ python "-I" (toString ./gui-profile.py) (toString profileSeedConfig) ];
       busctl = "${pkgs.systemd}/bin/busctl";
       proxyExecutable = "${pkgs.xdg-dbus-proxy}/bin/xdg-dbus-proxy";
@@ -222,6 +236,7 @@ in
     system.build.phoenixAgentGui = launcher;
     system.build.phoenixAgentGuiConfig = guiConfig;
     system.build.phoenixAgentGuiWrapper = wrapped;
+    system.build.phoenixAgentGuiDesktop = desktop;
     home-manager.users.${user.name} = {
       _module.args.phoenixAgentGuiHyprLua = builtins.readFile ./gui-window.lua;
       systemd.user.sockets.phoenix-agent-gui = socket "Fixed sandbox app-server relay for ChatGPT Community" "phoenix-agent-gui";

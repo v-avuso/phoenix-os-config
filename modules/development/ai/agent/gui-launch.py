@@ -19,6 +19,14 @@ def environment(config, env):
               "DBUS_SESSION_BUS_ADDRESS": "unix:path=" + runtime + "/bus",
               "LANG": env.get("LANG", "C.UTF-8"),
               "XDG_CURRENT_DESKTOP": env.get("XDG_CURRENT_DESKTOP", "")}
+    if config.get("sharedControlDir"):
+        token = env.get("PHOENIX_GUI_OWNER_TOKEN", "")
+        if (env.get("PHOENIX_GUI_CONTROL_DIR") != config["sharedControlDir"]
+                or not re.fullmatch(r"[a-f0-9]{64}", token)
+                or env.get("PHOENIX_GUI_VARIANT") != "sandbox"):
+            raise ValueError("Shared GUI must start through its host owner guard")
+        result.update(PHOENIX_GUI_CONTROL_DIR=config["sharedControlDir"],
+                      PHOENIX_GUI_OWNER_TOKEN=token, PHOENIX_GUI_VARIANT="sandbox")
     return result
 
 

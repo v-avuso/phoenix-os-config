@@ -21,23 +21,35 @@ let
       cfg.linuxFeatures ++ pkgs.lib.optional cfg.remoteMobileControl.enable "remote-mobile-control"
     );
   };
+  sharedDesktop = if config.phoenix.agent.gui.sharedState.enable then base.overrideAttrs (old: {
+    nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ pkgs.asar ];
+    postInstall = (old.postInstall or "") + ''
+      asar extract "$out/opt/codex-desktop/resources/app.asar" phoenix-shared-app
+      ${pkgs.python3}/bin/python3 -I ${../development/ai/agent/gui-control-patch.py} phoenix-shared-app/.vite/build
+      bootstrap=phoenix-shared-app/.vite/build/early-bootstrap.js
+      test -f "$bootstrap"
+      { printf '%s\n' 'require(${builtins.toJSON (toString ../development/ai/agent/gui-control.cjs)});'; cat "$bootstrap"; } > phoenix-control.js
+      mv phoenix-control.js "$bootstrap"
+      asar pack phoenix-shared-app "$out/opt/codex-desktop/resources/app.asar" --unpack '*.node'
+    '';
+  }) else base;
   # Session restoration launches the executable directly, bypassing desktop
   # entry environment. Use upstream's live-Wayland detection for every entry
   # point; explicit user flags/settings still win and X11 sessions still work.
   nativeDesktop = pkgs.symlinkJoin {
     name = "${base.name}-native-wayland";
-    paths = [ base ];
+    paths = [ sharedDesktop ];
     nativeBuildInputs = [ pkgs.makeWrapper ];
     postBuild = ''
       rm "$out/bin/codex-desktop"
       makeWrapper "${pkgs.python3}/bin/python3" "$out/bin/codex-desktop" \
-        --add-flags "-I ${pkgs.lib.optionalString config.phoenix.agent.gui.sharedState.enable "${../development/ai/agent/gui-state.py} ${phoenixAgentGuiStateConfig} native -- ${pkgs.python3}/bin/python3 -I "}${../development/ai/agent/history-runtime.py} ${phoenixAgentHistoryConfig} -- ${base}/bin/codex-desktop" \
+        --add-flags "-I ${pkgs.lib.optionalString config.phoenix.agent.gui.sharedState.enable "${../development/ai/agent/gui-state.py} ${phoenixAgentGuiStateConfig} native -- ${pkgs.python3}/bin/python3 -I "}${../development/ai/agent/history-runtime.py} ${phoenixAgentHistoryConfig} -- ${sharedDesktop}/bin/codex-desktop" \
         --set-default CODEX_OZONE_PLATFORM auto
       desktopFile="$out/share/applications/codex-desktop.desktop"
       target="$(readlink -f "$desktopFile")"
       rm "$desktopFile"
       substitute "$target" "$desktopFile" \
-        --replace-fail "${base}/bin/codex-desktop" "$out/bin/codex-desktop"
+        --replace-fail "${sharedDesktop}/bin/codex-desktop" "$out/bin/codex-desktop"
     '';
     inherit (base) meta;
     passthru = base.passthru or { };

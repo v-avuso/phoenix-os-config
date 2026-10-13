@@ -112,7 +112,13 @@ python3 -B modules/development/ai/agent/tests/reservation-deployment.py
   opt-in shutdown declarations without enabling the live features.
   HTTP fixtures cover destination/header bounds, real identity/routing, streaming
   and cancellation without exposing credentials.
-  GUI socket fixtures need sandbox execution permission; they need no OS root.
+  Shared-GUI guard fixtures cover private lock modes, stale owner nonces and
+  normal owner close before a fresh guard starts; the owner uses explicit Electron
+  stubs. Set `PHOENIX_TEST_NODE` to an absolute Node executable when running
+  `agent-gui-state.py` to include that combined workflow.
+  `agent-gui-control.cjs` checks fixed actions, cancellation and connection bounds;
+  `agent-gui-control-patch.py --source DIR` verifies the exact extracted pinned
+  main bundle. GUI socket fixtures need sandbox execution permission; no OS root.
   Separate sign-in, real model turns, desktop portal behavior and authenticated
   system activation remain runtime acceptance checks.
 

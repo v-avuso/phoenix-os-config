@@ -22,4 +22,4 @@ assert lib.hasInfix "codex-desktop" (native on);
 assert state.lock == "/home/v/.local/state/phoenix-openshell/gui.lock";
 assert lib.hasInfix "phoenix-gui-history-runtime.py" state.historyModule;
 assert lib.hasInfix "phoenix-gui-transport.py" state.transportModule;
-{ passed = true; }
+{ passed = true; nativeDesktop = on.programs.codexDesktopLinux.package; sandboxDesktop = on.system.build.phoenixAgentGuiDesktop; sandboxWrapper = on.system.build.phoenixAgentGuiWrapper; }

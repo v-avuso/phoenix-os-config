@@ -17,8 +17,8 @@
   keep native credentials outside the contained CLI; share only the data needed
   for the agreed workflow.
 
-Shared state is opt-in and disabled by default; its preparatory implementation
-blocks a second GUI rather than offering the intended graceful switch dialog.
+Shared state is opt-in and disabled by default; its owner-mediated switching
+implementation is prepared for isolated acceptance, not enabled on the installed system.
 Real GUI sharing and switching acceptance remain pending. Native GUI uses native
 CLI independently of OpenShell; sandbox GUI retains its contained backend.
 
@@ -26,9 +26,24 @@ CLI independently of OpenShell; sandbox GUI retains its contained backend.
 
 Set `phoenix.agent.gui.sharedState.enable = true` only for a planned cold trial.
 Both reviewed GUI launchers require validated `codex-history-enable` readiness
-and hold one host exclusive GUI lock for the process lifetime. A second launch,
-including same-variant new-window, currently reports the running variant and asks
-to keep its window or close it normally. It never closes another application.
+and hold one host exclusive GUI lock for the process lifetime. A same-variant
+launch asks the current owner to restore its window; `--new-instance`
+uses the pinned app's existing new-window callback. A cross-variant launch offers
+**Keep current** or **Close and switch** in the running app. Closing uses ordinary
+`app.quit()`, retaining upstream active-work confirmation; cancellation or failure
+keeps the current owner and prevents the new variant from starting. The guard
+waits at most 45 seconds for exclusive-lock release and checks the owner nonce
+before starting. It never forcibly closes an application. The private local owner
+socket accepts only activation, new-window, switch and typed open-link actions.
+Repeated launches forward a single `codex://` or `codex-browser-sidebar://` URI
+(maximum 4096 UTF-8 bytes, no userinfo or whitespace/control characters) through the exact
+pinned second-instance callback, preserving upstream link validation. Other URI
+schemes, multiple links and oversized links fail explicitly without logging link
+contents. Cross-variant links remain in the original startup arguments after the
+old owner closes; cancelling the switch keeps the owner and starts no new app.
+The socket caps JSON messages at 32 KiB, connections at four and each connection
+at an absolute 45-second deadline. Native support has no OpenShell
+dependency; each variant retains its separate Chromium profile.
 The history shared lifecycle lock remains separate and permits CLI clients.
 
 The sandboxed frontend mounts the native `~/.codex` **directory**, so the pinned
