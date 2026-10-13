@@ -5,18 +5,29 @@
   phoenixAdminPackage,
   phoenixAgentCodexConfig,
   phoenixDeployReviewPackage,
+  authorizationLibrary,
+  authorizationPolicy,
 }:
 let
+  phoenixCommands = import ../../../../commands {
+    inherit pkgs user;
+    deploymentHelper = phoenixDeployReviewPackage;
+    includeDesktopCommands = false;
+  };
+  aiBroker = import ./authorization/adapter.nix {
+    inherit pkgs authorizationLibrary authorizationPolicy;
+    adminClient = phoenixAdminPackage;
+    deploymentCommands = pkgs.lib.optionalAttrs (phoenixDeployReviewPackage != null)
+      (pkgs.lib.genAttrs [ "phoenix-test" "phoenix-switch" "phoenix-boot" ]
+        (name: "${phoenixCommands}/bin/${name}"));
+  };
   tools = pkgs.buildEnv {
     name = "phoenix-agent-tools";
     paths = [
       codexCliPackage
       phoenixAdminPackage
-      (import ../../../../commands {
-        inherit pkgs user;
-        deploymentHelper = phoenixDeployReviewPackage;
-        includeDesktopCommands = false;
-      })
+      phoenixCommands
+      aiBroker
       phoenixDeployReviewPackage
       pkgs.bashInteractive
       pkgs.coreutils

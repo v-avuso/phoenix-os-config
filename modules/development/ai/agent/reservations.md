@@ -148,7 +148,7 @@ owned for runtime validation; it does not automatically release it.
 
 ```sh
 phoenix-reservation acquire --task TASK --command deployment.test --capability-file /private/task.json --wait 60
-phoenix-test --worktree /absolute/registered/worktree --reason "authorized task purpose" --reservation-file /private/task.json
+ai-broker --reason "authorized task purpose" -- phoenix-test --worktree /absolute/registered/worktree --reservation-file /private/task.json
 phoenix-reservation renew --capability-file /private/task.json --seconds 900
 # Complete runtime validation first.
 phoenix-reservation release --capability-file /private/task.json

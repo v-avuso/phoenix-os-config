@@ -55,6 +55,7 @@ in
   config = {
     users.users.${user.name}.uid = lib.mkDefault 1000;
     _module.args.phoenixAdminPackage = admin;
+    system.build.phoenixAdminClient = admin;
     environment.systemPackages = [ admin ];
     environment.etc."polkit-1/actions/org.phoenix.diagnostic.policy".text = ''
       <?xml version="1.0" encoding="UTF-8"?>

@@ -152,8 +152,10 @@ reviewer login commands; it retains authenticated deployment and protected state
 Do not enable live review until the real model, denial/override and activation
 workflow passes isolated acceptance. Current fixtures are not that acceptance.
 
-With the deployment module installed, `phoenix-test --reason "task purpose"`
-(also switch/boot) routes through the frozen deployment client. It accepts
+With the deployment module installed, plain `phoenix-test` (also switch/boot)
+routes through the frozen deployment client with neutral invocation audit context.
+Agents use `ai-broker --task TASK --reason "task purpose" -- phoenix-test ...`;
+explicit legacy `--reason` remains compatible. It accepts
 branch/worktree selectors and no nixos-rebuild option tail; build/dry-build still
 forward build options. Without this module, explicitly packaged legacy wrappers
 retain nixos-rebuild activation. A failed configured helper never falls back.

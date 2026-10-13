@@ -45,7 +45,7 @@ class Commands(unittest.TestCase):
             )
             executable.chmod(0o755)
         selector = self.bin / "phoenix-source"
-        selector.write_text((ROOT / "commands/phoenix-source").read_text())
+        selector.write_text((ROOT / "commands/phoenix-source").read_text().replace("#!/usr/bin/env python3", "#!" + sys.executable))
         selector.chmod(0o755)
         target = self.bin / "phoenix-target"
         target.write_text((ROOT / "commands/phoenix-target").read_text())
@@ -113,8 +113,12 @@ class Commands(unittest.TestCase):
         result = self.run_command("phoenix-rebuild", "test", "--reason", "fixture", env=env | {"HELPER_STATUS":"23"})
         self.assertEqual(result.returncode, 23)
         self.assertEqual(self.recorded()["command"], "deployment")
+        for action in ("test", "switch", "boot"):
+            result = self.run_command("phoenix-rebuild", action, env=env)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(self.recorded()["args"][-2:], ["--reason", "Direct phoenix-" + action + " invocation"])
         self.record.unlink()
-        for tail in ((), ("--reason", " "), ("--reason", "line\nbreak"), ("--reason", "x"*2001), ("--reason", "fixture", "--option", "x", "y")):
+        for tail in ( ("--reason", " "), ("--reason", "line\nbreak"), ("--reason", "x"*2001), ("--reason", "fixture", "--option", "x", "y")):
             result = self.run_command("phoenix-rebuild", "test", *tail, env=env)
             self.assertEqual(result.returncode, 2, result.stderr)
             self.assertFalse(self.record.exists())

@@ -110,8 +110,9 @@ selected backend's allowed mounts. See [cold handoff and proof](history-layout.m
 - **Explicit source selection:** Shared rebuild commands and the authenticated
   deployment client accept branch/worktree selectors without switching checkouts.
   Configured native and OpenShell Phoenix activation wrappers submit frozen
-  requests through the existing deployment client, require `--reason`, and reject
-  nixos-rebuild argument tails. Build/dry-build retain argument forwarding.
+  requests through the existing deployment client with neutral invocation context
+  when no reason is supplied, and reject
+  nixos-rebuild argument tails. Agents use the [bounded `ai-broker` interface](authorization/README.md#command-interface). Build/dry-build retain argument forwarding.
   OpenShell can select only mounted workspaces; managed external worktrees are
   absent by default. Disabled AI requires native host Polkit; sandbox clients fail with host guidance. See [agent instructions](AGENTS.md#source-selection) for usage,
   dirty-source behavior and existing-worktree constraints.

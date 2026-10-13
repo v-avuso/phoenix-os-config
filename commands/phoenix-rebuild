@@ -7,7 +7,8 @@ Usage:
   phoenix-rebuild [--print] [--branch NAME | --worktree PATH] [--task TASK] [--reason PURPOSE] [--reservation-file FILE] <action> [nixos-rebuild args...]
   phoenix-<action> [--print] [--branch NAME | --worktree PATH] [--task TASK] [--reason PURPOSE] [--reservation-file FILE] [nixos-rebuild args...]
 
-Configured authenticated test/switch/boot require --reason and accept no nixos-rebuild tail.
+Configured authenticated test/switch/boot accept no nixos-rebuild tail.
+Direct invocations supply neutral audit context; --reason remains compatible.
 Enabled testing reservations also require --reservation-file for activation.
 Build/dry-build forward nixos-rebuild arguments.
 Runs the selected workflow against the auto-selected PhoeNix OS flake target.
@@ -18,6 +19,7 @@ EOF
 print_only=false
 selector=()
 reason=""
+reason_supplied=false
 task="phoenix-rebuild"
 reservation_file=""
 action=""
@@ -34,10 +36,10 @@ while [ "$#" -gt 0 ]; do
       if [ "$#" -lt 2 ] || [ -z "$2" ]; then exit 2; fi
       task="$2"; shift 2 ;;
     --reason)
-      if [ -n "$reason" ] || [ "$#" -lt 2 ]; then
+      if [ "$reason_supplied" = true ] || [ "$#" -lt 2 ]; then
         printf 'phoenix-rebuild: supply one --reason with a value\n' >&2; exit 2
       fi
-      reason="$2"; shift 2 ;;
+      reason="$2"; reason_supplied=true; shift 2 ;;
     --branch|--worktree)
       if [ "${#selector[@]}" -ne 0 ] || [ "$#" -lt 2 ] || [ -z "$2" ]; then
         printf 'phoenix-rebuild: supply one --branch or --worktree with a value\n' >&2
@@ -87,8 +89,9 @@ if [[ "$action" =~ ^(test|switch|boot)$ ]] && [ -n "${phoenix_deployment_helper:
   if [ "$#" -ne 0 ]; then
     printf 'phoenix-rebuild: authenticated activation does not support nixos-rebuild options; use build for evaluation/build options\n' >&2; exit 2
   fi
+  if [ "$reason_supplied" = false ]; then reason="Direct phoenix-$action invocation"; fi
   if [ -z "${reason//[[:space:]]/}" ] || [ "${#reason}" -gt 300 ] || [[ "$reason" =~ [[:cntrl:]] ]]; then
-    printf 'phoenix-rebuild: activation requires --reason (1–300 characters, no control characters)\n' >&2; exit 2
+    printf 'phoenix-rebuild: explicit reason must be 1–300 characters without control characters\n' >&2; exit 2
   fi
   cmd=("$phoenix_deployment_helper" --worktree "$repo_root" --target "$target" --action "$action" --task "$task" --reason "$reason")
   if [ -n "$reservation_file" ]; then cmd+=(--reservation-file "$reservation_file"); fi

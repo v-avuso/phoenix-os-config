@@ -92,8 +92,10 @@
   `phoenix-deploy-review --worktree /absolute/path --target metal --action test --reason "authorized task purpose"`
   (or `--branch NAME`). Its existing snapshot
   includes permitted Git-visible dirty/new content. With the deployment module,
-  `phoenix-test --reason "authorized task purpose"` (also switch/boot) uses that
-  same frozen authenticated client. These actions reject nixos-rebuild option
+  `phoenix-test` (also switch/boot) uses that
+  same frozen authenticated client with neutral direct-invocation audit context.
+  Agents use `ai-broker --task TASK --reason "authorized task purpose" -- phoenix-test ...`;
+  explicit legacy `--reason` remains compatible. These actions reject nixos-rebuild option
   tails; build/dry-build still forward them. Without the deployment module the
   packaged wrappers explicitly retain the legacy nixos-rebuild route. A missing
   or failed configured helper never falls back. Branch labels confer no authority.
@@ -105,7 +107,8 @@
   not mounted. Do not mount authentication or bypass containment to fix this.
   Enabled-review socket routing is packaged, but live runtime acceptance remains
   unverified; identity and reservation live acceptance remain later work.
-- `phoenix-admin --reason "authorized diagnostic purpose" OPERATION ...` requires
+- Agents use `ai-broker --reason "authorized diagnostic purpose" -- phoenix-admin OPERATION ...`;
+  the legacy `phoenix-admin --reason ...` interface remains compatible and requires
   a bounded nonempty reason without control characters. The broker verifies it
   before dispatch through the installed [authorization policy](authorization/README.md).
   Root authorization audits retain validated nonsecret reason metadata. Never include

@@ -99,7 +99,8 @@ python3 -B modules/development/ai/agent/tests/reservation-deployment.py
   cross-client task writer exclusion require a coordinated cold handoff.
 - **Agent launcher/review/GUI fixtures:** fail-closed stdio and login setup,
   frozen Git source, rejected/stale verdicts, process bounds, unsafe Git helper
-  suppression, private profile/environment validation and real fixed-command socket relays.
+  suppression, neutral direct-activation reasons, fixed `ai-broker` argument mapping
+  and rejected missing reasons/commands/overrides, private profile/environment validation and real fixed-command socket relays.
   Desktop lifecycle fixtures reject upstream wiring drift before patching the
   Linux tray predicate; actual window close/reopen remains a runtime check.
   Protected deployment fixtures cover immutable source/closure binding, rejection
@@ -119,6 +120,9 @@ python3 -B modules/development/ai/agent/tests/reservation-deployment.py
   `agent-gui-control.cjs` checks fixed actions, cancellation and connection bounds;
   `agent-gui-control-patch.py --source DIR` verifies the exact extracted pinned
   main bundle. GUI socket fixtures need sandbox execution permission; no OS root.
+  Command packaging checks preview exact immutable helpers, target and generated
+  audit context plus rejected broker arguments; it performs no root preflight or
+  host authentication. Deployment fixtures use explicit preflight/auth stubs.
   Separate sign-in, real model turns, desktop portal behavior and authenticated
   system activation remain runtime acceptance checks.
 

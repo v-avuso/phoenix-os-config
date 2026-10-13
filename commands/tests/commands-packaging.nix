@@ -4,7 +4,7 @@ let
   config = flake.nixosConfigurations.metal.config;
   pkgs = flake.inputs.nixpkgs.legacyPackages.x86_64-linux;
   user = import ../../config/user.nix { inherit (pkgs) lib; };
-  sandboxCommands = import .. {
+  sandboxCommands = import ../. {
     inherit pkgs user;
     deploymentHelper = config.system.build.phoenixDeploymentSandboxClient;
     includeDesktopCommands = false;
@@ -14,7 +14,18 @@ let
       package: (package.name or "") == "phoenix-user-commands"
     ) config.home-manager.users.${user.name}.home.packages
   );
+  nativeBroker = builtins.head (builtins.filter (package: (package.name or "") == "ai-broker")
+    config.home-manager.users.${user.name}.home.packages);
+  sandboxBroker = import ../../modules/development/ai/agent/authorization/adapter.nix {
+    inherit pkgs;
+    authorizationLibrary = config.system.build.phoenixAuthorizationLibrary;
+    authorizationPolicy = config.system.build.phoenixAuthorizationPolicy;
+    adminClient = config.system.build.phoenixAdminClient;
+    deploymentCommands = pkgs.lib.genAttrs [ "phoenix-test" "phoenix-switch" "phoenix-boot" ]
+      (name: "${sandboxCommands}/bin/${name}");
+  };
 in
+assert (builtins.fromJSON config.system.build.phoenixAuthorizationPolicy.text).target == "metal";
 pkgs.runCommand "phoenix-command-packaging" { } ''
   # This checkout deliberately contains an unusable dispatcher. The installed
   # executable must use its packaged implementation while reading flake.nix
@@ -34,18 +45,35 @@ pkgs.runCommand "phoenix-command-packaging" { } ''
     echo 'build unexpectedly requests privilege' >&2
     exit 1
   fi
-  ${commands}/bin/phoenix-rebuild --print test --reason 'packaged routing fixture' > activation
+  ${commands}/bin/phoenix-rebuild --print test > activation
   grep -Fq 'phoenix-deploy-review' activation
   grep -Fq -- '--worktree' activation
   grep -Fq -- '--reason' activation
   if grep -Eq 'nixos-rebuild|--sudo' activation; then
     echo 'activation bypasses frozen deployment helper' >&2; exit 1
   fi
-  ${sandboxCommands}/bin/phoenix-test --print --reason 'sandbox routing fixture' > sandbox-preview
+  for package in ${nativeBroker} ${sandboxBroker}; do
+    test -x "$package/bin/ai-broker"
+    if "$package/bin/ai-broker" -- phoenix-test > broker-output 2>&1; then exit 1; fi
+    if "$package/bin/ai-broker" --reason fixture -- sh -c true > broker-output 2>&1; then exit 1; fi
+    if "$package/bin/ai-broker" --reason fixture -- phoenix-test --reason override > broker-output 2>&1; then exit 1; fi
+  done
+  ${sandboxCommands}/bin/phoenix-test --print > sandbox-preview
   grep -Fq 'phoenix-deploy-review' sandbox-preview
-  if ${sandboxCommands}/bin/phoenix-test --reason 'sandbox routing fixture' > sandbox-output 2>&1; then
-    echo 'sandbox disabled-AI deployment unexpectedly succeeded' >&2; exit 1
-  fi
-  grep -Fq 'host Polkit authentication' sandbox-output
+  # Packaging only: no deployment-socket preflight, authentication or activation.
+  # Existing agent-deployment fixtures exercise the sandbox host-auth branch
+  # with explicit disposable preflight stubs; a Nix builder has no live broker.
+  ${pkgs.python3}/bin/python3 -I - <<'PY_CHECK'
+  import shlex
+  from pathlib import Path
+  for filename, helper in [
+      ('activation', '${config.system.build.phoenixDeploymentClient}/bin/phoenix-deploy-review'),
+      ('sandbox-preview', '${config.system.build.phoenixDeploymentSandboxClient}/bin/phoenix-deploy-review')]:
+      command = shlex.split(Path(filename).read_text())
+      assert command[0] == helper
+      assert command[command.index('--target') + 1] == 'metal'
+      assert command[command.index('--action') + 1] == 'test'
+      assert command[command.index('--reason') + 1] == 'Direct phoenix-test invocation'
+  PY_CHECK
   touch "$out"
 ''
