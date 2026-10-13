@@ -1,5 +1,52 @@
 # Agent containment and deployment
 
+## Intentions
+
+- Make the sandboxed GUI and CLI the everyday defaults, with a functioning user
+  experience and the least necessary filesystem, network and other authority.
+  Containment reduces blast radius; it does not promise anonymity or perfect isolation.
+- Preserve native GUI and native CLI as independent OpenShell fallback/recovery
+  paths. A failure of the contained backend must not remove the native lifeline.
+- Reuse maintained Nix-Bwrapper/Flatpak foundations for desktop containment rather
+  than accumulating custom sandbox machinery or state synchronization patches.
+- Prefer shared chats/history and consistent preferences across variants without
+  requiring perfect simultaneous synchronization. One active variant is acceptable
+  when switching offers an explicit keep-current or gracefully-close-and-switch
+  choice; never force termination or discard ongoing work.
+- Preserve native and sandbox-owned state. Avoid whole-profile reconciliation and
+  keep native credentials outside the contained CLI; share only the data needed
+  for the agreed workflow.
+
+Shared state is opt-in and disabled by default; its preparatory implementation
+blocks a second GUI rather than offering the intended graceful switch dialog.
+Real GUI sharing and switching acceptance remain pending. Native GUI uses native
+CLI independently of OpenShell; sandbox GUI retains its contained backend.
+
+## Shared desktop state (opt-in; GUI acceptance pending)
+
+Set `phoenix.agent.gui.sharedState.enable = true` only for a planned cold trial.
+Both reviewed GUI launchers require validated `codex-history-enable` readiness
+and hold one host exclusive GUI lock for the process lifetime. A second launch,
+including same-variant new-window, currently reports the running variant and asks
+to keep its window or close it normally. It never closes another application.
+The history shared lifecycle lock remains separate and permits CLI clients.
+
+The sandboxed frontend mounts the native `~/.codex` **directory**, so the pinned
+GUI's atomic metadata replacements share projects and chat/project pins. This
+trusts the frontend with native Codex data, including native auth/config files;
+it does not grant that directory to the contained CLI. Chromium profiles stay
+separate. Startup metadata imports are skipped in shared mode. Native GUI keeps
+its native backend, and native CLI remains the independent fallback. Backend
+preferences are still separately owned; this option does not synchronize them.
+
+Existing sandbox-only chats remain in retained containers; inventory and preserve
+them before adopting the native history baseline. No database/profile merge runs.
+Sharing preserves saved conversations, not running commands or provider prompt
+caches. Resume requires the chat's workspace/rollout paths to exist inside the
+selected backend's allowed mounts. See [cold handoff and proof](history-layout.md).
+
+## Current behavior
+
 - **Containment:** OpenShell CLI and desktop launchers restrict filesystem/network
   access and keep reusable credentials outside workers. See the
   [operating guide](../../../../docs/AGENT_SANDBOX.md) for launchers and boundaries.

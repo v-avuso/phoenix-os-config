@@ -6,6 +6,7 @@
   user,
   codexCliPackage,
   phoenixAgentLauncherConfig,
+  phoenixAgentGuiStateConfig,
   ...
 }:
 let
@@ -139,8 +140,8 @@ let
     };
     mounts = {
       privateTmp = false;
-      # Preserve the existing whole private home, including GUI state. Manifest
-      # persistence must never mount the native ~/.codex or GTK profiles.
+      # Preserve private Chromium/GTK state. Shared mode separately admits the
+      # native Codex directory to this trusted frontend only, never its worker.
       sandbox = lib.mkForce [ ];
       read = lib.mkForce [
         "/sys"
@@ -154,6 +155,10 @@ let
             to = user.homeDirectory;
           }
         ]
+        ++ lib.optional cfg.gui.sharedState.enable {
+          from = "${user.homeDirectory}/.codex";
+          to = "${user.homeDirectory}/.codex";
+        }
         ++ cfg.workspaces
       );
     };
@@ -172,7 +177,7 @@ let
   guiConfig = pkgs.writeText "phoenix-agent-gui.json" (
     builtins.toJSON {
       inherit profile;
-      profileSeed = [ python "-I" (toString ./gui-profile.py) (toString profileSeedConfig) ];
+      profileSeed = lib.optionals (!cfg.gui.sharedState.enable) [ python "-I" (toString ./gui-profile.py) (toString profileSeedConfig) ];
       busctl = "${pkgs.systemd}/bin/busctl";
       proxyExecutable = "${pkgs.xdg-dbus-proxy}/bin/xdg-dbus-proxy";
       proxySocket = "${runtime}/app/io.phoenix.Codex/bus";
@@ -185,7 +190,7 @@ let
     }
   );
   launcher = pkgs.writeShellScriptBin "codex-desktop-sandboxed" ''
-    exec ${python} -I ${./gui-launch.py} ${guiConfig} "$@"
+    exec ${python} -I ${lib.optionalString cfg.gui.sharedState.enable "${./gui-state.py} ${phoenixAgentGuiStateConfig} sandbox -- ${python} -I "}${./gui-launch.py} ${guiConfig} "$@"
   '';
   socket = description: name: {
     Unit.Description = description;
@@ -211,29 +216,33 @@ let
   };
 in
 {
-  environment.systemPackages = [ launcher ];
-  system.build.phoenixAgentGui = launcher;
-  system.build.phoenixAgentGuiWrapper = wrapped;
-  home-manager.users.${user.name} = {
-    _module.args.phoenixAgentGuiHyprLua = builtins.readFile ./gui-window.lua;
-    systemd.user.sockets.phoenix-agent-gui = socket "Fixed sandbox app-server relay for ChatGPT Community" "phoenix-agent-gui";
-    systemd.user.services."phoenix-agent-gui@" =
-      service "OpenShell app-server stdio relay" ./gui-relay.py;
-    systemd.user.sockets.phoenix-agent-gui-http = socket "Fixed sandbox desktop HTTP relay" "phoenix-agent-gui-http";
-    systemd.user.services."phoenix-agent-gui-http@" =
-      service "OpenShell desktop backend HTTP relay" ./gui-http-relay.py;
-    xdg.desktopEntries.codex-desktop-sandboxed = {
-      name = "ChatGPT Community (Sandboxed)";
-      comment = "Private GUI state, OpenShell agents and independently reviewed deployment";
-      exec = "${launcher}/bin/codex-desktop-sandboxed %u";
-      icon = "codex-desktop";
-      terminal = false;
-      type = "Application";
-      categories = [ "Development" ];
-      startupNotify = true;
-      settings = {
-        Keywords = "chat;codex;openai;ai;coding;sandbox;";
-        StartupWMClass = "codex-desktop-sandboxed";
+  options.phoenix.agent.gui.sharedState.enable = lib.mkEnableOption "one-active GUI sharing of native metadata and prepared history (trusted frontend access)";
+  config = {
+    environment.systemPackages = [ launcher ];
+    system.build.phoenixAgentGui = launcher;
+    system.build.phoenixAgentGuiConfig = guiConfig;
+    system.build.phoenixAgentGuiWrapper = wrapped;
+    home-manager.users.${user.name} = {
+      _module.args.phoenixAgentGuiHyprLua = builtins.readFile ./gui-window.lua;
+      systemd.user.sockets.phoenix-agent-gui = socket "Fixed sandbox app-server relay for ChatGPT Community" "phoenix-agent-gui";
+      systemd.user.services."phoenix-agent-gui@" =
+        service "OpenShell app-server stdio relay" ./gui-relay.py;
+      systemd.user.sockets.phoenix-agent-gui-http = socket "Fixed sandbox desktop HTTP relay" "phoenix-agent-gui-http";
+      systemd.user.services."phoenix-agent-gui-http@" =
+        service "OpenShell desktop backend HTTP relay" ./gui-http-relay.py;
+      xdg.desktopEntries.codex-desktop-sandboxed = {
+        name = "ChatGPT Community (Sandboxed)";
+        comment = if cfg.gui.sharedState.enable then "Shared Codex GUI state, OpenShell agents and independently reviewed deployment" else "Private GUI state, OpenShell agents and independently reviewed deployment";
+        exec = "${launcher}/bin/codex-desktop-sandboxed %u";
+        icon = "codex-desktop";
+        terminal = false;
+        type = "Application";
+        categories = [ "Development" ];
+        startupNotify = true;
+        settings = {
+          Keywords = "chat;codex;openai;ai;coding;sandbox;";
+          StartupWMClass = "codex-desktop-sandboxed";
+        };
       };
     };
   };

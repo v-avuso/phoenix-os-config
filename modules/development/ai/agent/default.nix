@@ -316,6 +316,12 @@ let
     ${lib.optionalString protected "echo Protected identity retains its migrated provider; use Native administration for repair. >&2; exit 1"}
     exec ${pkgs.python3}/bin/python3 -I ${./launch.py} ${launcherConfig} --phoenix-login
   '';
+  guiStateConfig = pkgs.writeText "phoenix-shared-gui-state.json" (builtins.toJSON {
+    lock = "${operatorState}/gui.lock";
+    historyConfig = toString historyConfig;
+    historyModule = toString (pkgs.writeText "phoenix-gui-history-runtime.py" (builtins.readFile ./history-runtime.py));
+    transportModule = toString (pkgs.writeText "phoenix-gui-transport.py" (builtins.readFile ./launch.py));
+  });
   historyEnable = pkgs.writeShellScriptBin "codex-history-enable" ''
     exec ${pkgs.python3}/bin/python3 -I ${./history-runtime.py} --cold-preflight "$@" ${historyConfig}
   '';
@@ -374,6 +380,8 @@ in
   };
   config = {
     _module.args.phoenixAgentHistoryConfig = historyConfig;
+    _module.args.phoenixAgentGuiStateConfig = guiStateConfig;
+    system.build.phoenixAgentGuiStateConfig = guiStateConfig;
     _module.args.phoenixAgentImage = image;
     _module.args.phoenixAgentPackages = packages;
     _module.args.phoenixAgentLauncherConfig = launcherConfig;

@@ -54,6 +54,12 @@
   workspace eligibility and the import marker before changing access. Import only
   newly seen eligible metadata under the GUI lifetime lock; preserve sandbox-owned
   edits/removals and let the pinned desktop own its app-server migration.
+- When sharing desktop metadata, mount its directory for atomic replacements and
+  hold one host GUI lifetime lock across both reviewed entry points before exposing
+  it. History's shared lifecycle lock permits concurrent clients and cannot protect
+  whole-map GUI writers. Keep native fallback independent; test private worker
+  parent mounts and exact CLI history read/resume without treating them as live GUI
+  or model-turn acceptance.
 - New containment/shutdown behavior stays opt-in until active workload cleanup,
   final log delivery and real GUI/model workflows pass isolated acceptance.
 

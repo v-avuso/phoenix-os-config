@@ -6,7 +6,7 @@ locations. Do not enable sharing while it owns this conversation.
 
 ## Upstream layout
 
-Codex 0.159 supports `sqlite_home` and `CODEX_SQLITE_HOME`; configuration takes
+Codex 0.160 supports `sqlite_home` and `CODEX_SQLITE_HOME`; configuration takes
 precedence over the environment. `CODEX_HOME` independently owns rollouts and
 cross-process writer locks. Both clients must see the same absolute rollout
 paths and the same lock directory; SQLite sharing alone is insufficient.
@@ -79,9 +79,32 @@ upstream configuration can outrank the environment. Native home/profile settings
 and explicit CLI overrides are rejected; project settings need separate review
 before enabling sharing.
 
-Bounded source evidence in exact 0.159: `core/src/config/mod.rs` resolves SQLite
+Bounded source evidence in exact 0.160: `core/src/config/mod.rs` resolves SQLite
 precedence; `state/src/sqlite.rs` defines six database names;
 `rollout/src/writer_lock.rs` coordinates writers under `CODEX_HOME`;
 `rollout/src/state_db.rs` gates backfill; `app-server-protocol/src/protocol/v2/thread.rs`
 defines explicit-path resume; `thread-store/src/local/mod.rs` tests explicit-path
 resume against a stale SQLite path.
+
+
+## Shared GUI gate and disposable acceptance
+
+`phoenix.agent.gui.sharedState.enable` is default off. Its host GUI guard holds
+an exclusive cross-variant lock plus the shared history lifecycle lock; it
+validates readiness before launching either frontend. Native executable,
+session-restoration and desktop/new-window entry points use the same wrapped
+package. Sandboxed entry points use the same guard before their private-profile
+launcher. Direct old/unwrapped executables remain outside this guarantee.
+Same-variant new-window is currently refused too; no graceful-switch UI is claimed.
+
+`tests/agent-gui-state.py` checks readiness, exclusion, lock retention despite
+child FD closure, failure cleanup and synthetic atomic pin replacement. The
+optional `tests/agent-history-0160.py --bwrap /absolute/bwrap --codex /absolute/codex`
+uses installed 0.160 app-server in network-isolated disposable namespaces. It
+reads/resumes a synthetic upstream-format rollout from native and private-parent
+worker views, creates a persisted worker fork and reads/resumes it from a fresh
+native view. It requests no model turn and reaps all processes. This establishes
+local format/path compatibility, not actual OpenShell, retained auth or GUI/model
+acceptance. A representative real trial must check existing and newly saved chats,
+pins, permitted workspace resume, native fallback with OpenShell unavailable, and
+contained CLI denial of native credentials/personal files before enabling daily use.
