@@ -62,12 +62,35 @@ def regular_path(value, *, directory=False, required=False):
 
 
 def reject_overrides(home):
-    path = regular_path(home / "config.toml")
-    if not path.exists():
-        return
-    with path.open("rb") as stream:
-        config = tomllib.load(stream)
+    # Config is read-only input and may be centrally/Nix managed through a link.
+    # O_NONBLOCK prevents a FIFO input from blocking before the regular-file check.
+    path = home / "config.toml"
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NONBLOCK)
+    except FileNotFoundError:
+        try:
+            path.lstat()
+        except FileNotFoundError:
+            return
+        raise ValueError("Native config.toml target is missing") from None
+    except OSError:
+        raise ValueError("Native config.toml cannot be read") from None
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise ValueError("Native config.toml must resolve to a regular file")
+        with os.fdopen(fd, "rb", closefd=False) as stream:
+            data = stream.read(1024 * 1024 + 1)
+        if len(data) > 1024 * 1024:
+            raise ValueError("Native config.toml exceeds the 1 MiB input limit")
+    finally:
+        os.close(fd)
+    try:
+        config = tomllib.loads(data.decode("utf-8"))
+    except (UnicodeError, tomllib.TOMLDecodeError):
+        raise ValueError("Native config.toml is invalid TOML") from None
     profiles = config.get("profiles", {})
+    if not isinstance(profiles, dict):
+        raise ValueError("Native config.toml profiles must be a table")
     if "sqlite_home" in config or any("sqlite_home" in profile for profile in profiles.values() if isinstance(profile, dict)):
         raise ValueError("remove the Native sqlite_home configuration override before sharing history")
 

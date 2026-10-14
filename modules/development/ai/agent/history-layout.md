@@ -22,6 +22,9 @@ separate. Both sandbox transports receive the same location settings.
 
 `history-runtime.py` validates the exact marker locations, known database names,
 required database/rollout paths, and rejects Native `sqlite_home` overrides.
+Read-only `config.toml` may link to a central/Nix-managed regular file; parsing is
+bounded to 1 MiB. History directories, databases, readiness and staging remain
+strictly non-symlinked. Dangling/nonregular config inputs fail explicitly.
 Missing/invalid readiness after publication fails closed instead of starting
 blank history. Reviewed Native clients and sandbox transports have a host parent
 holding the shared lifecycle flock; runtime descriptor sanitation cannot drop it.
@@ -32,7 +35,7 @@ also blocks reviewed entry points after an interrupted handoff.
 
 1. Exit every Native and sandbox Codex process in a coordinated handoff.
    `codex-history-enable` defaults to a database-read-only cold preflight and refuses
-   same-user Codex processes, symlinked paths, unknown SQLite families, conflicting
+   same-user Codex processes, symlinked history paths, unknown SQLite families, conflicting
    targets, missing history directories, and configuration overrides.
 2. Run `codex-history-enable --apply` only while clients are stopped. Python's
    maintained SQLite backup API reads each allowlisted Native database through

@@ -7,6 +7,7 @@ import json
 import sqlite3
 import subprocess
 import sys
+import os
 
 source = Path(__file__).resolve().parents[5] / "modules/development/ai/agent/history-plan.py"
 spec = importlib.util.spec_from_file_location("history_plan", source)
@@ -74,6 +75,62 @@ class HistoryRuntime(unittest.TestCase):
         self.connection.execute("INSERT INTO fixture VALUES ('saved task')")
         self.connection.commit()
         (self.home / "auth.json").write_text("private credential sentinel")
+
+    def test_central_config_link_is_read_only_input_and_overrides_still_reject(self):
+        central = self.root / "central-config.toml"
+        central.write_text('model = "fixture"\n')
+        config = self.home / "config.toml"
+        config.symlink_to(central)
+        self.assertEqual(runtime.cold_preflight(self.config, self.proc)["status"], "cold-preflight-only")
+        self.assertTrue(config.is_symlink())
+        self.assertEqual(central.read_text(), 'model = "fixture"\n')
+        for text in ('sqlite_home = "/private-sentinel"\n', '[profiles.custom]\nsqlite_home = "/private-sentinel"\n'):
+            central.write_text(text)
+            with self.assertRaisesRegex(ValueError, "override") as error:
+                runtime.cold_preflight(self.config, self.proc)
+            self.assertNotIn("private-sentinel", str(error.exception))
+        config.unlink()
+        self.assertEqual(runtime.cold_preflight(self.config, self.proc)["status"], "cold-preflight-only")
+        config.symlink_to(self.root / "missing")
+        with self.assertRaisesRegex(ValueError, "target is missing"):
+            runtime.cold_preflight(self.config, self.proc)
+
+    def test_mutable_history_links_stay_rejected(self):
+        database = self.home / "state_5.sqlite"
+        target = self.root / "database-target"
+        database.rename(target); database.symlink_to(target)
+        with self.assertRaisesRegex(ValueError, "symlink"):
+            runtime.cold_preflight(self.config, self.proc)
+        database.unlink(); target.rename(database)
+        directory = self.home / "sessions"
+        directory.rmdir()
+        target = self.root / "sessions-target"; target.mkdir()
+        directory.symlink_to(target, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "symlink"):
+            runtime.cold_preflight(self.config, self.proc)
+
+    def test_config_nonregular_rejects_without_waiting_for_fifo_writer(self):
+        config = self.home / "config.toml"
+        config.mkdir()
+        with self.assertRaisesRegex(ValueError, "regular file"):
+            runtime.reject_overrides(self.home)
+        config.rmdir(); os.mkfifo(config)
+        program = ('import importlib.util,sys; from pathlib import Path; '
+                   's=importlib.util.spec_from_file_location("runtime",sys.argv[1]); '
+                   'r=importlib.util.module_from_spec(s); s.loader.exec_module(r); '
+                   'r.reject_overrides(Path(sys.argv[2]))')
+        result = subprocess.run([sys.executable, "-I", "-c", program,
+                                 str(source.with_name("history-runtime.py")), str(self.home)],
+                                capture_output=True, timeout=2)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(b"regular file", result.stderr)
+        config.unlink(); config.write_bytes(b"x" * (1024 * 1024 + 1))
+        with self.assertRaisesRegex(ValueError, "input limit"):
+            runtime.reject_overrides(self.home)
+        config.write_text('model = "private-sentinel')
+        with self.assertRaisesRegex(ValueError, "invalid TOML") as error:
+            runtime.reject_overrides(self.home)
+        self.assertNotIn("private-sentinel", str(error.exception))
 
     def test_dry_run_and_atomic_wal_backup_preserve_sources(self):
         before = {name: (self.home / name).read_bytes() for name in ("state_5.sqlite", "state_5.sqlite-wal", "auth.json")}
