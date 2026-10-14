@@ -1,8 +1,7 @@
 # Shared task history handoff
 
 The integration stays in the existing separate-history mode until an explicit
-cold handoff publishes readiness. The running Native app keeps its current data
-locations. Do not enable sharing while it owns this conversation.
+cold handoff publishes readiness. Before readiness, reviewed Native entry points keep their original locations. Do not enable sharing while it owns this conversation.
 
 ## Upstream layout
 
@@ -11,7 +10,7 @@ precedence over the environment. `CODEX_HOME` independently owns rollouts and
 cross-process writer locks. Both clients must see the same absolute rollout
 paths and the same lock directory; SQLite sharing alone is insufficient.
 
-The conditional Native wrappers and sandbox launcher use `/home/v/.codex` as
+The always-present Native history wrappers and readiness-aware sandbox launcher use `/home/v/.codex` as
 `CODEX_HOME` and a credential-free SQLite directory under
 `~/.local/state/phoenix-openshell/history`. The sandbox's canonical `.codex`
 parent remains private image state. Only Native `sessions`, `archived_sessions`,
@@ -54,14 +53,104 @@ blocks new clients until an administrator reviews/removes that unpublished
 staging directory. `codex-history-enable --recover-staging` performs that recovery
 only while cold, validates owned private staging directories and pinned filenames,
 and removes only unpublished staging. Sources remain unchanged. Do not delete a
-published root to retry migration; recover
-its readiness or deliberately restore the separate-history configuration.
+published root to retry migration: preserve it and recover validated readiness.
+Disabling GUI sharing does not reverse this history handoff.
 
 `history-plan.py` optionally inventories only allowlisted path metadata for
 retained homes. It reads no database, credential, or rollout contents and changes
 nothing. Preserve retained sandbox databases as well as rollouts: sidebar
 metadata, attachments, goals, queued work, and paginated history may not be
 reconstructible from rollout files.
+
+## Bounded live GUI-sharing trial
+
+Production sharing stays off. Use the registered clean trial checkout
+`/home/v/.codex/worktrees/gui-sharing-trial/phoenix-os-config`, not the development
+checkout with its pending root instructions. The coordinator adds only
+`phoenix.agent.gui.sharedState.enable = true;` in `modules/development/ai/default.nix`.
+Identity, reservations, shutdown ordering, disruption guard, AI review and the
+experimental authorization explanation stay off. A fixture-extended configuration
+is packaging evidence, not a deployment source; use this real checkout's normal
+metal output rather than another trial-system output.
+
+1. **Prepare before closing apps.** The coordinator evaluates/builds the trial and
+   current OFF source, inspects their generated wrappers and records immutable
+   paths. Keep a native operator terminal open: this conversation cannot continue
+   inside a GUI that must close. Inventory/retain old sandbox-only state using the
+   metadata-only planner; do not merge, delete or replace retained containers.
+
+   ```sh
+   trial_repo=/home/v/.codex/worktrees/gui-sharing-trial/phoenix-os-config
+   off_repo=/home/v/repos/code/phoenix-os-config
+   off_system="$(nix build --no-write-lock-file --no-link --print-out-paths "git+file://$off_repo#nixosConfigurations.metal.config.system.build.toplevel")"
+   trial_system="$(nix build --no-write-lock-file --no-link --print-out-paths "git+file://$trial_repo#nixosConfigurations.metal.config.system.build.toplevel")"
+   broker="$(readlink -f /etc/profiles/per-user/v/bin/ai-broker)"
+   test -x "$broker"
+   ```
+
+   These paths are preparation evidence, not activation permission. Verify
+   `$off_system/sw/bin/{codex-history-enable,codex-native,codex-desktop}`
+   and their fixed helper/config paths before the cold window; retain `off_system`
+   and the verified immutable `broker` path in the terminal. The broker is a Home
+   Manager user package, not a system `sw/bin` entry. Do not substitute an old
+   unwrapped executable.
+2. **Cold handoff in the operator terminal.** Close every Native and
+   sandbox Codex GUI/CLI normally, including this chat. Do not force termination.
+   With no writers, run each command only after the previous one succeeds:
+
+   ```sh
+   "$off_system/sw/bin/codex-history-enable"
+   "$off_system/sw/bin/codex-history-enable" --apply
+   "$off_system/sw/bin/codex-native" --version
+   "$off_system/sw/bin/codex-desktop"
+   ```
+
+   The first command is cold preflight; apply backs up known databases and
+   publishes readiness before GUI acceptance. Initially inspect only saved chats
+   and pins in Native: no new task/model turn. Close Native again before activation.
+   If it fails, retain the terminal and captured authenticated broker/controller
+   path; stop the trial and preserve history. Native CLI also follows readiness
+   and can fail closed if published history is damaged. Do not open an old app
+   against stale databases.
+3. **Temporary authenticated activation.** From that native terminal, use the
+   existing immutable deployment boundary; never directly invoke
+   `switch-to-configuration` on the packaging build:
+
+   ```sh
+   "$broker" --task gui-sharing-trial --reason 'Temporarily validate shared GUI state and graceful switching' -- phoenix-test --worktree "$trial_repo"
+   active_trial="$(readlink -f /run/current-system)"
+   ```
+
+   Stop on any failure; do not run the second line or bypass preflight/authentication.
+   The helper's successful result supplies the actual frozen source/closure;
+   verify `active_trial` matches that reported closure. It can differ from the
+   earlier Git-flake packaging build. `test` leaves the persistent boot profile
+   unchanged; no switch/boot action is part of this trial.
+4. **Acceptance, one GUI at a time.** Use the activated reviewed Native/sandbox
+   desktop entries. Verify same-variant restore/new-window, existing chat/project
+   pins and saved chats, Keep current, then Close and switch with upstream active-work
+   cancellation still honored. Continue one existing chat in sandbox and then
+   Native; verify the newly saved continuation and pins in both. No extra sign-in,
+   force close, running-command transfer or sandbox-only history merger is expected.
+   For bounded fallback evidence, the coordinator may invoke the built `gui-client.py`
+   with its exact immutable Python/script/version arguments against a fresh private
+   directory's nonexistent socket, then check Native independently. This is a
+   fail-closed transport probe, not proof of a real OpenShell outage. Do not stop
+   the shared gateway merely to manufacture a failure.
+5. **Recover OFF without losing trial history.** Close all Codex GUIs/CLIs normally.
+   Restore the trial checkout's sole setting to OFF and use the same broker →
+   `phoenix-test --worktree "$trial_repo"` route with a recovery reason, or deploy
+   the reviewed unchanged main OFF source. Verify the returned active closure,
+   then reopen its reviewed Native wrapper and check the saved continuation.
+   Keep `history/ready.json`, shared SQLite plus WAL/SHM, and Native rollout/lock
+   directories intact. OFF Native GUI/CLI still invoke `history-runtime.py`, which
+   selects shared SQLite whenever readiness exists; OFF removes GUI sharing and
+   its lifetime exclusion, not shared-history routing. Use only one GUI during
+   recovery. Original Native databases are pre-handoff snapshots and become stale
+   after shared writes: never restore them over the shared store, delete readiness,
+   or rerun `--apply`. An interrupted unpublished staging tree alone may use the
+   cold `--recover-staging` helper. Repairing published readiness or reversing the
+   history layout needs separate review; there is no automatic reverse merger.
 
 ## Why upstream, not an importer
 

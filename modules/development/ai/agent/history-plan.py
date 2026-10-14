@@ -10,7 +10,7 @@ import stat
 
 
 ROLLOUT_DIRS = ("sessions", "archived_sessions", "thread-writer-locks")
-# Exact Codex 0.159 SqliteConfig filenames; never enumerate a whole profile.
+# Exact verified Codex 0.160 SqliteConfig filenames; never enumerate a whole profile.
 DATABASES = ("state_5.sqlite", "thread_history_1.sqlite", "goals_1.sqlite",
              "memories_1.sqlite", "queue_1.sqlite", "logs_2.sqlite")
 
@@ -64,11 +64,11 @@ def plan(native_home, sqlite_home, retained_homes):
         "shared_sqlite_home": str(sqlite),
         "sandbox_codex_home": native["codex_home"],
         "sandbox_bind_directories": [str(Path(native["codex_home"]) / name) for name in ROLLOUT_DIRS] + [str(sqlite)],
-        "required_before_activation": [
+        "handoff_and_acceptance_steps": [
             "Exit every Native and sandbox Codex writer in a coordinated handoff.",
-            "Preserve complete old homes; relocate only the allowlisted Native SQLite families while stopped.",
+            "Preserve old homes; codex-history-enable --apply backs up allowlisted Native databases and atomically publishes readiness while stopped.",
             "Retain sandbox databases and rollouts; use upstream thread resume for selected retained tasks and verify their IDs.",
-            "Verify Native and sandbox listing, resume, archive, and writer exclusion before recording migration readiness.",
+            "After readiness publication, verify Native and sandbox listing, resume, archive, and writer exclusion before accepting the trial.",
         ],
     }
 
