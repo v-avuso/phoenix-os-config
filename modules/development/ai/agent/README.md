@@ -1,5 +1,7 @@
 # Agent containment and deployment
 
+For operator setup and testing, see the short [shared chats trial guide](USER_GUIDE.md).
+
 ## Intentions
 
 - Make the sandboxed GUI and CLI the everyday defaults, with a functioning user

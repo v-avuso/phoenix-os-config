@@ -1,5 +1,7 @@
 # Shared task history handoff
 
+Technical documentation; user setup and testing: [USER_GUIDE.md](USER_GUIDE.md).
+
 The integration stays in the existing separate-history mode until an explicit
 cold handoff publishes readiness. Before readiness, reviewed Native entry points keep their original locations. Do not enable sharing while it owns this conversation.
 
