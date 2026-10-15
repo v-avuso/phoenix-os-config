@@ -166,4 +166,6 @@
   setters as well as picker reads/defaults. Permission selection and preferred-mode
   keys can be separate shared writers; guard pinned owners and resumed-thread
   reconciliation. Test restricted/unknown current profiles against saved host-wide
-  modes; current chat policy must outrank stale preferences. Verify Native return.
+  modes; current chat policy must outrank stale preferences. Characterize the pinned
+  mode decoder through outgoing permissions: Approve for me is guardian-approvals,
+  not auto. Verify Native return.

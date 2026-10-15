@@ -19,8 +19,8 @@ LOOKUP = ("function Fci(e,t,n,r){let i=t[e];if(i!=null)return i;"
 GUARDS = (
     "if(profile!=null&&profile!==`:workspace`&&profile!==`:read-only`)return;"
     "if(profile===`:read-only`)return`read-only`;"
-    "if(mode!=null&&mode!==`auto`){"
-    "if([`read-only`,`custom`,`full-access`,`granular`,`guardian-approvals`].includes(mode))return mode;return;}"
+    "if(mode!=null&&mode!==`auto`&&mode!==`guardian-approvals`){"
+    "if([`read-only`,`custom`,`full-access`,`granular`].includes(mode))return mode;return;}"
 )
 REPLACEMENT = LOOKUP[:-1].replace("Fci(e,t,n,r)", "Fci(e,t,n,r,mode,profile)").replace(
     "{let i=t[e];", "{" + GUARDS + "let i=t[e];"

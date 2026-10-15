@@ -34,8 +34,8 @@ and check `/proc/<pid>/exe`; a changed upstream wrapper layout fails the build
 rather than silently losing model egress. This check does not contact a provider
 or establish live model-turn acceptance.
 
-The sandbox desktop defaults new chats and resumed ordinary workspace chats to
-**Custom (config.toml)** using its existing worker settings: `danger-full-access`,
+The sandbox desktop defaults new chats and resumed ordinary workspace chats
+(including **Approve for me**) to **Custom (config.toml)** using its existing worker settings: `danger-full-access`,
 `on-request`, and `auto_review`. OpenShell
 remains the filesystem/network boundary; Codex adds no inner workspace/read-only
 sandbox, and actions permitted by that outer boundary do not acquire automatic

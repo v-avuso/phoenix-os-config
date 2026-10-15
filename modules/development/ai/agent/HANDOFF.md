@@ -92,6 +92,21 @@ commands and limits remain in the [module README](README.md),
   chat resumes. Requirements-only filtering was rejected because Codex 0.160 requires
   explicit allowed-mode lists to include read-only, retaining the nested-sandbox gap.
   No managed requirements or RPC policy rewriting was added.
+- Actual automatic-mode acceptance FAILED after the corrected installation:
+  Native appeared to change from Approve for me to the least permissive option;
+  operator restored Approve for me, closed Native, then opened Sandbox. Sandbox
+  still showed Approve for me instead of Custom. No Sandbox command was run;
+  operator returned to Native. The apparent Native mode change has no established
+  cause. Read-only inspection confirmed the installed Sandbox bundle contains the
+  patch and Native's bundle retains the original permission resolver. The four
+  Sandbox preference keys were absent; Native's restored mode and selection were
+  `guardian-approvals`. The pinned decoder maps workspace-write/on-request with
+  auto_review to that mode, labelled Approve for me. The adapter mistakenly treated
+  it as a distinct explicit policy and preserved it before selecting Custom. The
+  next correction handles ordinary workspace guardian mode like auto, while keeping
+  restrictive profiles and explicit Sandbox selections. Tests must start from the
+  actual decoder and cover outgoing Custom policy, not only an assumed mode name.
+  This explains Sandbox's failed default, not Native's earlier transient display.
 - Committed repair `70fb232` accepts Codex 0.160's exact `.sqlite-maintenance.lock` as
   regular, non-symlink coordination state in both Native preflight and shared
   runtime status. It is not a database and is never copied during migration.
