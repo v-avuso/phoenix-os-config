@@ -28,7 +28,7 @@ commands and limits remain in the [module README](README.md),
   `/nix/store/dql2y6v7zhsszffw8gv6fw7zqa8rk18c-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
 - The 2026-10-15 cold handoff published readiness and the sharing-ON trial was
   temporarily activated. Runtime is
-  `/nix/store/fw5v28pbsarb1k46k203107ldcf44zy2-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
+  `/nix/store/rmq7wy970wi75cygy7lr1lbrcgyd72qx-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
   The operator confirmed this exact conversation resumed and a reply was sent
   in Sandbox, then returned to Native. Do not rerun migration or restore stale
   Native originals over the shared store. Boot profile is still sharing OFF.
@@ -69,9 +69,23 @@ commands and limits remain in the [module README](README.md),
   with auto_review. Chat continuation and one shell command are demonstrated,
   not all filesystem/network denials. Check defaults/persistence and scoped denied
   access with nonsecret fixtures before declaring everyday acceptance complete.
-- Operator reported Sandbox two hours behind the host. Host configuration is
-  Europe/Berlin; the worker image omitted localtime/TZ. Timezone integration is
-  pending; this is not evidence of an incorrect system clock.
+- Timezone repair `15ac5e1` was built and temporarily installed through native
+  authentication. The updated worker returned `CEST +0200` through the supported
+  sandbox-exec launcher. GUI timezone settings are packaged; visual confirmation
+  awaits the next normal GUI launch. No clock or Native configuration changed.
+- A nonsecret live fixture through sandbox-exec confirmed repository README
+  readability while a temporary host-only /tmp canary was invisible; probe exited
+  zero and the host fixture was removed. This is a focused mount-isolation check,
+  not exhaustive personal-data, credential, egress or broker acceptance.
+- Automatic mode selection remains unfinished. Upstream requirements filter the
+  picker and choose Custom, but that fallback writes shared local-host mode keys.
+  Native currently records `auto` and supplies workspace-write/auto_review context.
+  Do not mutate real preference maps or claim independent defaults without checking
+  shared thread permissions and resumed-thread behavior too. A bounded source
+  check found Codex 0.160 rejects danger-full-access-only allowed-mode lists:
+  explicit lists must include read-only. Requirements-based fallback can therefore
+  still select an incompatible inner sandbox. No preference patch or new managed
+  requirement was implemented; explicit Custom remains the tested path.
 - Committed repair `70fb232` accepts Codex 0.160's exact `.sqlite-maintenance.lock` as
   regular, non-symlink coordination state in both Native preflight and shared
   runtime status. It is not a database and is never copied during migration.
