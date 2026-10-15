@@ -315,7 +315,19 @@ service/recorder descendant alive. The competitor failed with activation guard
 `mutation-still-running`; completion and unit successful deactivation, timeout
 cleanup and gate reuse passed. A fixed immutable recorder substituted for OS
 activation, using synthetic guest provenance. The exact rerun also passed the explicit competitor-reason assertion. Reservations stay OFF; peer admission, Polkit/identity,
-real activation/rollback, critical fallback and general recovery remain separate.
+real reservation-mediated OS activation/rollback, critical fallback and general
+recovery remain separate; the independent non-reservation activation VM follows.
+
+The real activation/rollback VM passed from source
+`a49063faad024ae69f8639789ef79d028e11ce59`, evidence
+`/nix/store/h7j0k43mp3fsjgh65acb9jlq7gz8wn7y-vm-test-run-phoenix-activation-runtime/evidence`.
+Good specialisation activation returned zero in 1.460 seconds. Real failing
+activation returned one in 2.127 seconds after observing marker `failing`; the
+production rollback restored the previous good runtime/marker, and both cases
+left the boot profile unchanged. This used actual systemd/controller/guard and
+NixOS activation, with synthetic guest provenance and no model/auth. Critical
+pending override, peer admission, boot/switch staging and host compatibility remain
+separate; optional controls remain OFF. See security-review.md for exact bindings.
 
 ## Resume order
 
