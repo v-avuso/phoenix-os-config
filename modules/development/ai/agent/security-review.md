@@ -93,3 +93,59 @@ fallback using explicit OS/store/build/model stubs. `tests/security-review.nix`
 checks enabled-only native packaging and option defaults. These are fixture and
 configuration evidence; actual retained-auth CLI behavior, Polkit, live isolation
 and activation acceptance remain pending.
+
+## Opt-in real-adapter fixture (production review stays off)
+
+`tests/agent-review-live.py` reuses the disposable controller/worker/checkpoint
+fixture with the real production adapter. Ordinary `tests/agent-deployment.py`
+remains offline, including adapter doubles exercising the opt-in branch. A live
+run requires separate authorization for model use and must already execute as
+`phoenix-deploy-review`, never root or the Native user. It uses only the protected
+existing `/var/lib/phoenix-deploy-review` through the production adapter; no auth
+is copied, printed, inspected by the fixture, or replaced with Native credentials.
+Missing retained authentication fails closed: do not sign in or migrate for this
+trial. Keep production review OFF and run only one trial at a time.
+
+First run `python3 -I tests/agent-review-live.py --dry-run` from this module;
+without opt-in it refuses execution. The actual source must be a reviewed immutable
+repository tree (including `tests/agent-deployment.py` and its sibling modules,
+policies, authorization library and transport JSON); it needs no `.git` directory.
+The reviewed immutable public JSON configuration has exactly these fields:
+
+```json
+{
+  "codex": "/nix/store/PINNED-codex-0.159.0/bin/codex",
+  "bwrap": "/nix/store/PINNED-bubblewrap/bin/bwrap",
+  "caBundle": "/nix/store/PINNED-cacert/etc/ssl/certs/ca-bundle.crt",
+  "reviewHome": "/var/lib/phoenix-deploy-review",
+  "model": "gpt-6-luna",
+  "effort": "high"
+}
+```
+
+Resolve `codex` from the locked package set's `callPackage ./reviewer-codex.nix {}`;
+do not select another cached package solely by version. The operator authenticates
+one concrete immutable command using the supported native Polkit dialog:
+
+```sh
+pkexec /nix/store/UTIL-LINUX/bin/setpriv \
+  --reuid=phoenix-deploy-review --regid=phoenix-deploy-review --init-groups --reset-env \
+  /nix/store/PYTHON/bin/python3 -I /nix/store/SOURCE/modules/development/ai/agent/tests/agent-review-live.py \
+  --allow-paid-review --config /nix/store/PUBLIC-CONFIG.json
+```
+
+The runner validates immutable public paths and the protected UID/home before
+calling the fixture. It reviews one comment-only change, checks a bound verdict,
+then reuses identical source/closure across a different branch with zero extra
+model calls. A deterministic injected failure exercises pending state and exact
+fallback with explicit stubs. One optional context round permits at most two real
+CLI invocations total, 600 seconds each, with no retries; internal API/token costs
+remain uncapped. Output contains status/counts/booleans and bounded static stage/code diagnostics.
+Failure emits no raw model output, prompts, auth or stderr. Stop on the first
+failure and address its category; do not automatically retry.
+
+This is real adapter compatibility plus controller composition evidence. Store,
+build, root checkpoint ownership, activation and human fallback authentication
+remain fixture stubs; the one Polkit launch does not prove production fallback's
+fresh-auth contract. Do not describe success as live privileged deployment review
+acceptance or enable production review from this result alone.

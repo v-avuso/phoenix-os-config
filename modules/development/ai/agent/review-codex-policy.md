@@ -4,8 +4,10 @@ credential reads, new privileges, policy changes, or deployment. Auto-review
 approves individual command escalation, not a full NixOS configuration.
 
 For authorized NixOS test/switch/boot, submit the frozen working tree through the
-installed Phoenix activation commands with `--reason`, or phoenix-deploy-review
-with a concrete reason. Sandbox clients with disabled AI require the same
+`ai-broker --task TASK --reason "concrete authorized task purpose" --
+phoenix-test|phoenix-switch|phoenix-boot [--worktree /absolute/path | --branch NAME]`
+using exactly one named action. Human Phoenix wrappers retain terminal sudo and
+are not the agent deployment route. Sandbox clients with disabled AI require the same
 request on the native host for Polkit authentication; do not bypass this boundary. Git-visible
 untracked files are included; HEAD is informational provenance. The protected
 controller binds the frozen source and built closure. When security review is

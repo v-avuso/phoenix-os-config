@@ -26,6 +26,54 @@ class DeploymentTests(unittest.TestCase):
                     modes={'flake.nix': '100644', 'flake.lock': '100644'},
                     commit='a' * 40, action='test', target='metal', reason='Implement requested isolated controller')
 
+    def test_optin_integration_branch_with_offline_adapter_double(self):
+        owner = Path(__file__).resolve().parents[1]
+        for context_round in (False, True):
+            with self.subTest(context=context_round):
+                review = deploy.load_review({'reviewScript': str(owner / 'deploy-review.py')})
+                invocations = []
+                def adapter(argv, **kwargs):
+                    invocations.append(argv)
+                    payload = json.loads(kwargs['data'].decode().split('Source data follows:\n', 1)[1].split('\nResolved context', 1)[0])
+                    verdict = dict(payload['binding'], approved=True, summary='offline adapter double')
+                    if len(invocations) == 1:
+                        verdict['context'] = []
+                        if context_round:
+                            verdict.update(approved=None, context=[dict(source='baseline', path='context.nix', start=1, end=1)])
+                    work = Path(argv[argv.index('/work') - 1])
+                    (work / 'verdict.json').write_text(json.dumps(verdict))
+                    return b''
+                self.live_review = dict(codex='/fixed/codex', bwrap='/fixed/bwrap', caBundle='/fixed/ca',
+                                        reviewHome='/var/lib/phoenix-deploy-review', model='gpt-6-luna', effort='high')
+                original_is_file = Path.is_file
+                def auth_metadata(path):
+                    return True if str(path) == '/var/lib/phoenix-deploy-review/auth.json' else original_is_file(path)
+                try:
+                    with mock.patch.object(deploy, 'load_review', return_value=review), \
+                         mock.patch.object(Path, 'is_file', auth_metadata), \
+                         mock.patch.object(review, 'run', side_effect=adapter):
+                        self.test_controller_worker_adapter_and_checkpoints_as_one_disposable_workflow()
+                    self.assertEqual(self.live_receipt['modelInvocations'], 2 if context_round else 1)
+                    self.assertTrue(self.live_receipt['exactReuse'])
+                    self.assertTrue(self.live_receipt['stubFallbackBound'])
+                finally:
+                    del self.live_review
+
+    def test_live_runner_requires_explicit_optin_and_immutable_auth_route(self):
+        path = Path(__file__).with_name('agent-review-live.py')
+        spec = importlib.util.spec_from_file_location('live_runner', path)
+        runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runner)
+        with mock.patch.object(runner.pwd, 'getpwnam', side_effect=AssertionError('no auth lookup')), \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(runner.main([]), 1)
+            self.assertEqual(runner.main(['--allow-paid-review']), 1)
+            self.assertEqual(runner.main(['--dry-run']), 0)
+            with tempfile.NamedTemporaryFile(mode='w') as config:
+                config.write('{}'); config.flush()
+                self.assertEqual(runner.main(['--allow-paid-review', '--config', config.name]), 1)
+        self.assertNotIn('auth.json', output.getvalue())
+
     def test_unsupported_capabilities_and_forged_verdict(self):
         good = self.request()
         deploy.request_valid(good, 'metal')
@@ -790,14 +838,25 @@ class DeploymentTests(unittest.TestCase):
                 caBundle='/fixture/cert', model='gpt-6.1-sol', effort='medium', modelReviewEnabled=True, operatorUid=1000, clientUid=1000)
             frozen_sources, closures, prompts = {}, {}, []
             decision = 'context'
+            live = getattr(self, 'live_review', None)
+            real_run = review.run
+            if live:
+                config.update(live)
+                config['reviewHome'] = '/var/lib/phoenix-deploy-review'
+                decision = 'live'
 
             def command(argv, **kwargs):
                 if argv[0] == 'nix-store':
                     Path(argv[argv.index('--add-root') + 1]).symlink_to(argv[-1])
                     return b''
-                self.assertEqual(argv[0], 'bwrap')
+                self.assertEqual(argv[0], config['bwrap'])
                 prompt = kwargs['data'].decode()
                 prompts.append(prompt)
+                if live and decision == 'live':
+                    if len(prompts) > 2:
+                        raise RuntimeError('live invocation budget exhausted')
+                    self.live_invocations = len(prompts)
+                    return real_run(argv, **kwargs)
                 self.assertNotIn('upstreamBatches', prompt)
                 payload = json.loads(prompt.split('Source data follows:\n', 1)[1].split('\nResolved context', 1)[0])
                 self.assertNotIn('unrequested secret content', prompt)
@@ -856,6 +915,8 @@ class DeploymentTests(unittest.TestCase):
                 'private.nix': 'unrequested secret content\n'}), branch='feature')
             # An unchanged private file belongs in both frozen states, never prompt data.
             (baseline / 'private.nix').write_text(request['files']['private.nix'])
+            if live:
+                request['files']['flake.nix'] = '# Isolated acceptance comment; no behavior change.\n{}\n'
             request['modes'] = {name: '100644' for name in request['files']}
             account = mock.Mock(pw_uid=os.getuid(), pw_gid=os.getgid())
             with mock.patch.object(deploy, 'load_review', return_value=review), mock.patch.object(deploy, 'load_security', return_value=security), \
@@ -874,13 +935,40 @@ class DeploymentTests(unittest.TestCase):
                 # Trust seeds an exact independently approved runtime checkpoint.
                 self.assertTrue(security.choose_checkpoint(config, 'metal', str(baseline), str(profile),
                     'unrelated-branch', str(baseline), review.baseline_files(baseline), review, deploy.store_path)[0])
-                self.assertTrue(deploy.process(config, request, 1000, 22)['ok'])
-                self.assertEqual(len(prompts), 2)
-                self.assertIn('-{}', prompts[0])
-                self.assertIn('+{ changed = true; }', prompts[0])
+                self.live_stage = 'bound-verdict'
+                try:
+                    self.assertTrue(deploy.process(config, request, 1000, 22)['ok'])
+                except (deploy.DeploymentFailure, deploy.DeploymentDenied) as error:
+                    if live:
+                        self.live_failure = getattr(error, 'code', 'model-denied')
+                    raise
+                initial_calls = len(prompts)
+                if live:
+                    self.assertIn(initial_calls, (1, 2))
+                else:
+                    self.assertEqual(initial_calls, 2)
+                if not live:
+                    self.assertIn('-{}', prompts[0])
+                self.assertIn('+# Isolated acceptance comment' if live else '+{ changed = true; }', prompts[0])
+                self.live_stage = 'exact-reuse'
                 request['branch'] = 'another-branch'
                 self.assertTrue(deploy.process(config, request, 1000, 22)['ok'])
-                self.assertEqual(len(prompts), 2, 'exact source/closure approval reuses zero AI')
+                self.assertEqual(len(prompts), initial_calls, 'exact source/closure approval reuses zero AI')
+                if live:
+                    # No second model decision: inject a deterministic adapter failure.
+                    self.live_stage = 'injected-failure-fallback'
+                    decision = 'error'
+                    request['files']['flake.nix'] += '# Distinct failure-path binding.\n'
+                    before = activation.call_count
+                    with self.assertRaises(deploy.DeploymentFailure) as failed:
+                        deploy.process(config, request, 1000, 22)
+                    self.assertEqual(activation.call_count, before)
+                    pending = security.load_pending(config, failed.exception.pending_nonce, 1000, deploy.store_path)
+                    self.assertTrue(deploy.override(config, failed.exception.pending_nonce, 1000, 22)['ok'])
+                    self.assertEqual(activation.call_args.args[1]['source'], pending['source'])
+                    self.live_receipt = dict(status='passed', modelInvocations=initial_calls,
+                                             exactReuse=True, injectedFailure=True, stubFallbackBound=True)
+                    return
                 decision = 'approve'
                 request['files']['flake.nix'] = request['files']['flake.nix'].replace(
                     'changed = true;', 'changed = true; extra = true;')
