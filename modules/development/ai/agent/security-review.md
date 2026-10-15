@@ -194,3 +194,56 @@ have regressions. Nix store/build, root checkpoint ownership, activation and hum
 fallback authentication remain stubbed. No deployment occurred and production
 review stays OFF. Prompt-scope guards now precede the real-adapter branch for future
 runs; no additional model call was made for that assertion-placement correction.
+
+## Zero-AI root checkpoint trial (separate narrower proof)
+
+`tests/review-checkpoint.nix { flake = ...; }` packages two argument-free test
+commands. It derives the exact production controller/config through an isolated
+review-ON `extendModules` evaluation and asserts the existing ExecStart shape.
+Building it neither enables nor activates review on the live system. It adds no
+production exports, service, endpoint or Polkit policy. From the exact committed
+Git source (never `path:.` or the unrelated root instructions draft):
+
+```sh
+nix build --no-link --print-out-paths --expr 'let
+  f = builtins.getFlake "git+file:///home/v/repos/code/phoenix-os-config?rev=COMMIT";
+in import (f.outPath + "/modules/development/ai/agent/tests/review-checkpoint.nix") { flake = f; }'
+```
+
+Run `RESULT/bin/phoenix-review-checkpoint-trial-dry-run` unprivileged first; it
+reads only immutable public descriptor/config and prints the zero-model/no-
+activation scope. After reviewing that exact artifact, authenticate one concrete
+command with `timeout 120 pkexec RESULT/bin/phoenix-review-checkpoint-trial`
+(the cap includes authentication; expiry fails rather than retrying). Both wrappers
+reject caller arguments. The actual helper requires root and exact authenticated
+`PKEXEC_UID=operatorUid`, derives source/closure only from active runtime/provenance,
+requires runtime and next-boot profile agreement, and checks existing store paths
+are valid before proceeding. It performs no new build, fetch, sign-in or auth-home
+access. Busy/missing/changed state stops with a bounded stage/code; never retry or
+override automatically.
+
+A root-owned temporary base contains private checkpoints and separate requests.
+The helper holds the ORIGINAL global deployment lock nonblocking, while production
+`trust_active` uses the DISTINCT private request-parent lock and the original
+activation guard identity. This avoids self-deadlock and concurrent deployment;
+it does not adopt/change/delete production cache, shared lock files or credentials.
+Normal `phoenix-authorization` requested/completed audit events are emitted by
+production `trust_active`; match their PID to `trialPid` in the fixture receipt.
+These are private-cache trial logs, not production approval records.
+Production code verifies immutable provenance and rechecks state while publishing
+actual private root checkpoints and Nix GC roots. The helper verifies UID/modes,
+exact root targets and cross-branch same-source/closure reuse, then removes only
+its owned temporary tree/indirect-root paths. A persistent dangling auto-root
+registry entry, if any, is ordinary Nix GC bookkeeping; no global cleanup runs.
+
+This is the deliberately cheaper explicit-trust seed path: ZERO AI, no request
+`process`, reviewer worker, new Nix build or activation callback is invoked. It
+proves root checkpoint/provenance/guard/GC-root behavior only if the actual trial
+passes. The earlier protected reviewer trial is separate composition evidence;
+this does not prove root-to-worker review/new-build integration, temporary
+activation or fresh-auth security override. No success is recorded yet. A denied
+review is never automatically overridden. Production security review remains OFF.
+
+Offline checks: `python3 -B tests/review-checkpoint-test.py` tests authentication,
+lock separation, record binding/modes with explicit ownership stubs, and dry-run
+without auth/controller execution. Those tests do not establish root operation.
