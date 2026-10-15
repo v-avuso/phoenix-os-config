@@ -7,8 +7,16 @@ from typing import Any
 
 
 def user(command):
-    environment = "export XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus OPENSHELL_GATEWAY=openshell OPENSHELL_LOCAL_TLS_DIR=/home/fixture/.local/state/phoenix-openshell/tls; "
-    return "su fixture -l -c " + shlex.quote(environment + command)
+    # Root driver drops identity directly: PAM sessions could restart the user
+    # manager and invalidate the manager-stop observation/captures.
+    environment = ("/run/current-system/sw/bin/env -i HOME=/home/fixture USER=fixture LOGNAME=fixture "
+                   "PATH=/run/current-system/sw/bin XDG_RUNTIME_DIR=/run/user/1000 "
+                   "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus "
+                   "OPENSHELL_GATEWAY=openshell "
+                   "OPENSHELL_LOCAL_TLS_DIR=/home/fixture/.local/state/phoenix-openshell/tls ")
+    return ("/run/current-system/sw/bin/setpriv --reuid=1000 --regid=$(id -g fixture) --init-groups "
+            + environment + "/run/current-system/sw/bin/bash -c "
+            + shlex.quote("cd /home/fixture && " + command))
 
 
 def run(command, timeout=30):
@@ -146,7 +154,7 @@ try:
         machine.wait_until_succeeds(user("test -s /tmp/shutdown-stream.log && kill -0 $(cat /tmp/shutdown-stream.pid)"), timeout=10)
         capture("before-stop", containers)
         run("kill -0 $(cat /tmp/shutdown-stream.pid)")
-        if stop_mode == "transaction":
+        if stop_mode in {"transaction", "manager"}:
             # Exact recorded scopes only; never enumerate or stop unrelated units.
             scopes = ["libpod-" + containers[role] + ".scope" for role in ("sandbox", "supervisor")]
             for scope in scopes:
@@ -183,35 +191,53 @@ try:
                     assert not any(path == scope_path or path.startswith(scope_path + "/") for path in conmon_paths), "conmon remains inside container scope"
                     assert any(path == scope_path or path.startswith(scope_path + "/") for path in workload_paths), "workload missing container resource cgroup"
             run("kill -0 $(cat /tmp/shutdown-stream.pid)")
-            stage = "transaction-stop"
-            machine.log("PHASE transaction-stop entered")
+            stage = stop_mode + "-stop"
+            machine.log("PHASE " + stage + " entered")
             started = time.monotonic()
-            status, _ = machine.execute(user("timeout 50 systemctl --user stop " + units + " > /tmp/transaction-stop.log 2>&1"), timeout=55)
+            stop_command = ("timeout 50 systemctl stop user@1000.service" if stop_mode == "manager"
+                            else user("timeout 50 systemctl --user stop " + units))
+            status, _ = machine.execute(stop_command + " > /tmp/transaction-stop.log 2>&1", timeout=55)
             elapsed = time.monotonic() - started
-            outcome: dict[str, Any] = dict(stopStatus=status, stopSeconds=round(elapsed, 3))
+            # Observe before any fixture-identity command; no PAM/session start.
+            manager_active_status = machine.execute("systemctl is-active user@1000.service", timeout=5)[0]
+            outcome: dict[str, Any] = dict(mode=stop_mode, stopStatus=status, stopSeconds=round(elapsed, 3))
             # Record independent results before assertions; known attached-create
             # and bootstrap failures must not prevent observing the transaction.
-            outcome["transportStatus"] = run("cat /tmp/workload-status 2>/dev/null || echo pending").strip()
-            outcome["logReaderStatus"] = run("cat /tmp/shutdown-stream.status 2>/dev/null || echo pending").strip()
+            outcome["transportStatus"] = machine.succeed("cat /tmp/workload-status 2>/dev/null || echo pending").strip()
+            outcome["logReaderStatus"] = machine.succeed("cat /tmp/shutdown-stream.status 2>/dev/null || echo pending").strip()
             outcome["logReaderAlive"] = machine.execute(user("kill -0 $(cat /tmp/shutdown-stream.pid)"), timeout=5)[0] == 0
-            output = run("cat /tmp/workload-stdout.log")
+            output = machine.succeed("cat /tmp/workload-stdout.log")
             outcome["termMarker"] = "ACCEPT_TERM" in output
             outcome["finalMarker"] = "ACCEPT_FINAL" in output
             outcome["containers"] = {}
             for role, identifier in containers.items():
-                outcome["containers"][role] = json.loads(run("podman inspect --format '{{json .State}}' " + identifier, timeout=10))
+                # Direct local Podman needs no D-Bus, but may fail after the
+                # runtime directory is removed. Capture that limitation; do not
+                # restart the manager or synthesize runtime state to hide it.
+                try:
+                    inspect_status, state_output = machine.execute(user("podman inspect --format '{{json .State}}' " + identifier), timeout=10)
+                except Exception:
+                    inspect_status, state_output = 124, ""
+                outcome.setdefault("inspectStatus", {})[role] = inspect_status
+                if inspect_status == 0:
+                    outcome["containers"][role] = json.loads(state_output)
+            outcome["managerActiveStatus"] = manager_active_status
             machine.succeed("printf %s " + shlex.quote(json.dumps(outcome)) + " > /tmp/transaction-outcome.json")
             capture("after-transaction", containers)
             # A first stall ends the experiment after evidence, without restart.
             assert status == 0 and elapsed < 10, "combined stop failed or stalled; retain 45s fallback and captured phase"
-            stage = "transaction-durable-log"
-            run("systemctl --user start phoenix-openshell-gateway.service", timeout=35)
-            durable = run("openshell logs shutdown-acceptance -n 200 --source sandbox", timeout=10)
-            machine.succeed("printf %s " + shlex.quote(durable) + " > /tmp/durable-sandbox.log")
-            outcome["durableDeny"] = any("192.0.2.1:80" in line and "denied staged transparent connection" in line.lower() for line in durable.splitlines())
-            machine.succeed("printf %s " + shlex.quote(json.dumps(outcome)) + " > /tmp/transaction-outcome.json")
-            capture("after-gateway-restart", containers)
-            assert outcome["durableDeny"], "pre-stop policy deny event unavailable after gateway restart"
+            if stop_mode == "transaction":
+                stage = "transaction-restart-observation"
+                run("systemctl --user start phoenix-openshell-gateway.service", timeout=35)
+                observed = run("openshell logs shutdown-acceptance -n 200 --source sandbox", timeout=10)
+                machine.succeed("printf %s " + shlex.quote(observed) + " > /tmp/durable-sandbox.log")
+                outcome["postRestartDenyObserved"] = any("192.0.2.1:80" in line and "denied staged transparent connection" in line.lower() for line in observed.splitlines())
+                outcome["logStorageContract"] = "gateway process-memory tail; restart query is not durability proof"
+                machine.succeed("printf %s " + shlex.quote(json.dumps(outcome)) + " > /tmp/transaction-outcome.json")
+                capture("after-gateway-restart", containers)
+            else:
+                assert outcome["managerActiveStatus"] != 0, "guest user manager survived stop"
+            assert len(outcome["containers"]) == 2, "post-stop local Podman inspection unavailable; see inspectStatus, no restart attempted"
             assert outcome["termMarker"] and outcome["finalMarker"], "transaction workload final markers missing"
             assert all(not state["Running"] for state in outcome["containers"].values()), "transaction container survived"
             assert outcome["transportStatus"] == "0", "transaction attached transport incomplete/nonzero; timing alone is not full acceptance"
@@ -225,7 +251,7 @@ try:
             machine.log("PHASE ordinary-stop completed seconds=" + str(round(elapsed, 3)))
             stage = "ordinary-stop-assertions"
             machine.wait_until_succeeds(user("test -f /tmp/workload-status"), timeout=5)
-            output = run("cat /tmp/workload-stdout.log")
+            output = machine.succeed("cat /tmp/workload-stdout.log")
             assert run("cat /tmp/workload-status").strip() == "0", "attached workload transport did not exit zero"
             assert "ACCEPT_TERM" in output and "ACCEPT_FINAL" in output, "workload final markers missing"
             for role, identifier in containers.items():

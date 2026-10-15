@@ -49,7 +49,7 @@ let
   });
 in
 assert containersConfig == null || (lib.hasPrefix "/nix/store/" (toString containersConfig) && builtins.pathExists containersConfig);
-assert builtins.elem stopMode [ "ordinary" "transaction" ];
+assert builtins.elem stopMode [ "ordinary" "transaction" "manager" ];
 assert builtins.all valid (builtins.attrValues images);
 pkgs.testers.runNixOSTest {
   name = "phoenix-shutdown-openshell";
@@ -63,7 +63,7 @@ pkgs.testers.runNixOSTest {
     };
     users.users.fixture = { isNormalUser = true; uid = 1000; autoSubUidGidRange = true; };
     services.journald.extraConfig = "Storage=persistent";
-    environment.systemPackages = [ packages.cli pkgs.procps pkgs.curl ];
+    environment.systemPackages = [ packages.cli pkgs.procps pkgs.curl pkgs.util-linux pkgs.bash ];
     systemd.user.services.phoenix-openshell-podman = {
       description = "Disposable rootless OpenShell API";
       environment = lib.optionalAttrs (containersConfig != null) {
