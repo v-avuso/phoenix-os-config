@@ -157,27 +157,34 @@ step after this preflight. Never use `path:.` or include the unrelated root draf
 
 `tests/shutdown-openshell.nix` takes `{ pkgs, runtime, supervisor, workload }`.
 Each image argument is `{ archive, sha256, id }`: an explicit immutable public
-archive path, its hexadecimal SHA256 and its independently verified OCI image
-configuration ID (without `sha256:`). Evaluation checks archive hashes; the guest
+OCI or Docker archive path, its hexadecimal SHA256 and its independently verified
+image configuration ID (without `sha256:`). Evaluation checks archive hashes; the guest
 checks loaded IDs and references images by those IDs, avoiding lost registry
-digest names after OCI import. It never adopts host container state or credentials.
+digest names after archive import. It never adopts host container state or credentials.
 Do not add binary archives to Git. For a verified export, verify the exact
-configured repository digest, export only that image with `podman save --format
-oci-archive`, record its archive SHA256 and image ID, and publish the archive into
-the Nix store. A future fixed-output `dockerTools.pullImage` may supply the same
+configured repository digest and configuration ID. Export that exact cached ID
+with `podman save --format docker-archive --output ARCHIVE IMAGE_ID`, without
+adding or changing host tags. Record the new archive SHA256 while retaining the
+original RepoDigest-to-ID proof, then publish only the image archive into the Nix
+store. Podman 5.8.7's save/load manuals support both OCI and Docker archives; its
+[save implementation](https://github.com/containers/podman/blob/v5.8.7/pkg/domain/infra/abi/images.go#L462-L481)
+accepts a name or ID. This transport choice still requires guest-load/ID verification;
+it does not claim bit-identical archives across exports. A future fixed-output `dockerTools.pullImage` may supply the same
 contract after its image/hash binding is independently verified.
 
-The already prepared public archive bindings are:
+The current verified Docker-archive bindings below passed guest loading. The
+original OCI runtime/supervisor exports failed import and were superseded without
+changing expected image IDs. The workload archive binding is unchanged:
 
 | Image | Archive SHA256 | Image ID |
 | --- | --- | --- |
-| runtime | `f6aff91497d959304240b0b8f6595be197f4c065300c1459d3ab6476abf0940a` | `e7a78d2e2c9c7d6ffc801e429a3304b51ffd65a84692530f2bbceea11e6e1558` |
-| supervisor | `898903978d972013a816d1948705374c5df2e6acdb5ccf4a161e19d428b1fbe3` | `494b86855b51987cd68e205aa1b08d67592d4ea7b989f94c66e7179e17a97388` |
+| runtime | `ff175171aa978b7232ec5ca938162b95c825b8c387c42cc380d53421d8c886aa` | `e7a78d2e2c9c7d6ffc801e429a3304b51ffd65a84692530f2bbceea11e6e1558` |
+| supervisor | `b77c8746e6228799e00bddb5b751f9155244c7e7f0b8f28f8eefaf936609e2c2` | `494b86855b51987cd68e205aa1b08d67592d4ea7b989f94c66e7179e17a97388` |
 | workload | `581c4cbbbbeac1aee7481c14e9702e9c39c2906627e1a3e28f4652492e1405aa` | `d090ea4d6e2780f9ee6aaf8e89543f70808d792731dc3e733438d4ccd5c77623` |
 
 Use the previous exact-Git-revision expression, importing
 `tests/shutdown-openshell.nix` instead, and pass the three bindings. For example,
-`runtime.archive = builtins.storePath "/nix/store/...-runtime.oci.tar";` retains
+`runtime.archive = builtins.storePath "/nix/store/...-runtime.docker.tar";` retains
 its dependency context. No host archive locations are defaults. Evaluate/dry-run
 this explicit derivation before authorizing its build/run.
 
@@ -193,7 +200,40 @@ artifacts include workload stream/status, workload/supervisor logs/inspect and
 user-manager/unit journals. A failure identifies its last explicit stage; it does
 not prove which internal await stalled.
 
-The ordinary-stop definition has syntax checks only, not VM acceptance yet.
+The first actual OpenShell VM attempt failed after 19.6 seconds at image loading:
+Podman reported `Digest of source image manifest would not match destination
+reference` for the runtime OCI archive exported by registry digest. No gateway,
+sandbox or shutdown operation was reached; this is archive transport evidence,
+not a supervisor failure. Re-exporting the same verified IDs in supported Docker
+archive format resolved image loading. Ordinary-stop acceptance remains unpassed
+until subsequent stages succeed.
+The Docker-archive rerun passed image imports, TLS/gateway readiness and CLI
+status, but failed before workload readiness: CreateSandbox returned its
+30-second API timeout. Exact 0.1.2 source places the last completed channel-volume
+creation immediately before workload `POST /v5.0.0/libpod/containers/create`.
+No workload-create completion was observed. A same-image identity inspection had
+completed quickly; cold keep-id/rootfs preparation remains a hypothesis, not a
+permission or hardware diagnosis. This did not exercise ordinary shutdown.
+
+For the next isolated run, pass `probeCreateOnly = true;` to the same test import.
+It starts only the dedicated guest API after image import, then uses maintained
+`podman --remote --url unix:///run/user/1000/phoenix-openshell-podman.sock create`
+with the exact workload ID and no execution. Baseline uses `--network=none`,
+`--pull=never` and `/bin/true` entrypoint; the second request adds production
+`--userns keep-id:uid=1000,gid=1000`. Both use fixed labeled fixture names and a
+35-second external cap. Record entered/completed monotonic timing and status;
+a failure stops after captures, without proceeding or warming a later ordinary
+stop run. A successful created probe is removed before the next comparison.
+No gateway or sandbox is started in probe-only mode; it cannot pass shutdown
+acceptance. Neither production's 30-second API deadline nor 45-second stop fallback
+changes. Server debug/body logging is not enabled; remote command status/timing,
+fixed-name inspections and bounded user-service journals supply metadata.
+
+Captures discover partial containers by managed and exact sandbox-name labels
+even before READY, and preserve all disposable guest container-list metadata plus
+fixed probe-name snapshots. Attached create now fails promptly when its status
+file appears before readiness, rather than waiting the remaining 60-second poll.
+
 Combined gateway/exact-scope stop, manager-wide shutdown and durable final
 supervisor-event comparison after gateway restart remain pending; workload stdout
 or a closed tail alone never proves final log persistence. Do not extend or patch
@@ -223,6 +263,8 @@ allow at most five minutes for the ready guest's regression run. Preserve the
 10-second cooperative pass and 45-second safety net; stop at the first reproduced
 stall (50-second harness deadline) to identify the last acknowledged cleanup phase
 before choosing a Rust fix. The rootless smoke passed. The ordinary OpenShell
-slice is defined and syntax-checked, with runtime acceptance pending. Combined
+slice is defined and syntax-checked; the latest VM attempt passed archive loading
+and gateway readiness but timed out creating the workload. Ordinary-stop runtime
+acceptance remains pending. Combined
 gateway/scope stop, full user-manager shutdown and durable final-log persistence
 remain pending.

@@ -1,6 +1,6 @@
 # Explicit first slice: actual OpenShell ordinary stop, ordering OFF.
 # Image arguments are public immutable archives plus independently verified IDs/hash.
-{ pkgs, runtime, supervisor, workload }:
+{ pkgs, runtime, supervisor, workload, probeCreateOnly ? false }:
 let
   lib = pkgs.lib;
   packages = import ../packages.nix { inherit pkgs; };
@@ -95,6 +95,7 @@ pkgs.testers.runNixOSTest {
   testScript = ''
     import json
     images = json.loads("""${builtins.toJSON (builtins.mapAttrs (_: image: image // { archive = toString image.archive; }) images)}""")
+    probe_create_only = ${if probeCreateOnly then "True" else "False"}
     policy = "${policy}"
   '' + builtins.readFile ./shutdown-openshell.py;
 }
