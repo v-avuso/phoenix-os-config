@@ -244,8 +244,31 @@ The source-backed nonloopback replacement enters staged TCP mediation
 `openshell-supervisor-network/src/proxy.rs:700`. Its source-backed proxy mode has
 no ordinary loopback listener when mediation is supplied (`proxy.rs:288–293`),
 so forcing a loopback proxy listener would also be unsupported here. Corrected
-probe runtime acceptance and ordinary shutdown remain pending; the denial
-requirement was preserved rather than accepting curl failure as evidence.
+source `82a9669` passed the nonloopback deny-event assertion. Ordinary stop took
+1.498 seconds; workload output included `ACCEPT_TERM` and `ACCEPT_FINAL`.
+Supervisor exited zero, runtime exited one without OOM, and attached create did
+not produce its status file within five seconds. Ordinary acceptance failed
+after stop; the original 45-second stall was not reproduced.
+
+Exact 0.1.2 source explains distinct failure paths with high confidence:
+administrative shutdown skips normal exit reporting and terminal-delivery drain
+(`openshell-supervisor/src/lib.rs:1184–1238`); SSH waits for terminal-report
+acknowledgement before sending Exit (`openshell-supervisor-process/src/ssh.rs:721–724`,
+`delegated.rs:45–62`). Boundary termination sets state `Terminal`
+(`openshell-sandbox/src/boundary_server.rs:1832–1855`), but later SIGTERM treats
+every non-`Connected` state as before confirmation (`:493–519`). Prior gateway
+logs prove enforcement confirmation. Runtime exit one therefore does not show
+failed workload TERM handling; final markers also do not establish canonical
+command exit zero or its delivery. Gateway log push ended gRPC 13 with relay/TLS
+EOF at supervisor exit; durable final-log flush remains unproved. Artifacts:
+`/nix/store/7dfjinf28r9wn1daldy3zks76dnyp5dm-vm-test-run-phoenix-shutdown-openshell/final/shutdown-evidence`.
+
+Next: add an independent combined gateway/exact-scope stop mode to this same
+fixture, capturing all cleanup, attachment, bootstrap and durable-log outcomes
+even on failure. Preserve the ordinary transport failure as failing evidence,
+10-second cooperative target, 45-second fallback and 50-second capture deadline.
+Stop at the first stall; its causal await remains unknown. No production Rust
+patch or relaxed ordinary pass assertion is proposed.
 
 The Docker-archive rerun passed image imports, TLS/gateway readiness and CLI
 status, but failed before workload readiness: CreateSandbox returned its
@@ -284,8 +307,8 @@ file appears before readiness, rather than waiting the remaining 60-second poll.
 
 Combined gateway/exact-scope stop, manager-wide shutdown and durable final
 supervisor-event comparison after gateway restart remain pending; workload stdout
-or a closed tail alone never proves final log persistence. Do not extend or patch
-Rust until this first actual OpenShell slice produces evidence.
+or a closed tail alone never proves final log persistence. Do not patch Rust without an agreed source-backed repair proposal; ordinary
+shutdown now supplies failure evidence rather than complete acceptance.
 
 For the full regression, reuse the locked Nixpkgs `pkgs.testers.runNixOSTest` driver and its rootless
 Podman/lingering-user pattern in the existing module-local smoke; extend it only
@@ -311,8 +334,7 @@ allow at most five minutes for the ready guest's regression run. Preserve the
 10-second cooperative pass and 45-second safety net; stop at the first reproduced
 stall (50-second harness deadline) to identify the last acknowledged cleanup phase
 before choosing a Rust fix. The rootless smoke passed. The ordinary OpenShell
-slice is defined and syntax-checked; the latest VM attempt passed archive loading
-and gateway readiness but timed out creating the workload. Ordinary-stop runtime
-acceptance remains pending. Combined
+slice reached policy denial and stopped quickly, but failed attachment/runtime
+status assertions as described above. Ordinary-stop acceptance remains incomplete. Combined
 gateway/scope stop, full user-manager shutdown and durable final-log persistence
 remain pending.

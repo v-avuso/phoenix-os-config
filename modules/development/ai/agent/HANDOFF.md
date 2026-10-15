@@ -209,9 +209,18 @@ The bounded same-image remote API probe completed baseline create in 0.25 second
 inspection blocked. This is a startup flag-dependent observation, not proof of UID
 remapping/storage-lock cause and not a shutdown reproduction.
 
-The next on-demand `tests/shutdown-workload.nix` supplies a small Bash/curl/coreutils
-image for the same exact runtime/supervisor, keep-id, TERM trap and supervisor
-policy log stream. Its build and probe/ordinary-stop acceptance remain pending.
+The small `tests/shutdown-workload.nix` Bash/curl/coreutils image was built and
+its same-image create probe passed: baseline 0.264 seconds and keep-id 13.584
+seconds, both exit zero. Exact runtime/supervisor pins and keep-id were retained.
+The ordinary test reached the workload but failed on an invalid localhost deny
+probe before attempting stop. Corrected source `82a9669` passed nonloopback policy
+denial and ordinary stop returned in 1.498 seconds. TERM/FINAL markers appeared
+and supervisor exited zero; runtime exited one and attached create did not
+complete within five seconds. Exact 0.1.2 source supports separate terminal-delivery
+and boundary status-classification gaps (references in shutdown acceptance).
+Gateway log push ended gRPC 13/relay EOF; durable final flush remains unproved.
+The original 45-second stall remains unreproduced. Next is an independent combined
+gateway/exact-scope stop mode preserving all failure captures and current deadlines.
 This deliberately tests control/log/shutdown behavior without the full Phoenix
 image; that image's cold keep-id startup limitation remains unresolved. Follow
 [shutdown acceptance](shutdown-acceptance.md). Keep ordering OFF, the 45-second
@@ -245,9 +254,12 @@ The root instructions draft remains only in the feature worktree. The older
 `gui-sharing-trial` checkout is retained for preservation, not the deployment
 source: it predates subsequent command repairs. Use reviewed main/current work.
 
-The bounded next shutdown regression plan is in
-[shutdown-acceptance.md](shutdown-acceptance.md#proposed-test-implementation).
-No guest, new runtime images or shutdown patch has been built or run.
+The current shutdown procedure/evidence is in
+[shutdown-acceptance.md](shutdown-acceptance.md#on-demand-smoke-and-pending-regression).
+Disposable guests, the rootless smoke and small workload have been built/run;
+the corrected ordinary-stop VM supplied the fast-stop/status-delivery failure
+evidence above. No shutdown fix or production stop
+has occurred.
 
 ## Resume order
 
