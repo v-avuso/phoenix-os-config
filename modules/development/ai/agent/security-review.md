@@ -91,8 +91,9 @@ diagnostics, not proof of cause. Raw Nix/model stderr is never an authorization 
 explicit trust, dirty diff, global reuse, integration review and exact human
 fallback using explicit OS/store/build/model stubs. `tests/security-review.nix`
 checks enabled-only native packaging and option defaults. These are fixture and
-configuration evidence; actual retained-auth CLI behavior, Polkit, live isolation
-and activation acceptance remain pending.
+configuration evidence. The bounded protected-UID real-adapter trial below passed;
+root checkpoint ownership, activation and production fallback authentication remain
+separate pending acceptance.
 
 ## Opt-in real-adapter fixture (production review stays off)
 
@@ -169,3 +170,27 @@ build, root checkpoint ownership, activation and human fallback authentication
 remain fixture stubs; the one Polkit launch does not prove production fallback's
 fresh-auth contract. Do not describe success as live privileged deployment review
 acceptance or enable production review from this result alone.
+
+### Recorded protected-adapter acceptance
+
+The exact immutable source `91112be`, packaged at
+`/nix/store/lc944afdgl4hamk1cjpxvswca3kfvnwk-source`, passed through the native
+Polkit → setpriv route as actual protected UID 989. Public configuration was
+`/nix/store/ajhmkb0js5ngcgg9wk7wmpmkl023ddgq-phoenix-review-trial.json`, selecting
+the independently pinned Codex 0.159.0 reviewer, `gpt-6-luna` and `high` effort.
+The static receipt was:
+
+```json
+{"exactReuse":true,"injectedFailure":true,"modelInvocations":1,"offlinePrecheck":true,"status":"passed","stubFallbackBound":true}
+```
+
+Protected retained authentication, real CLI/schema/binding and the same-UID offline
+precheck worked without sign-in or credential copies. Identical source/closure
+under another branch reused approval with zero additional AI. Injected deterministic
+adapter failure produced pending state and exact fallback binding using stubs.
+Two preceding protected attempts made zero model calls: immutable fixture policy
+and a request-parent lock outside the private tree failed before review; both now
+have regressions. Nix store/build, root checkpoint ownership, activation and human
+fallback authentication remain stubbed. No deployment occurred and production
+review stays OFF. Prompt-scope guards now precede the real-adapter branch for future
+runs; no additional model call was made for that assertion-placement correction.

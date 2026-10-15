@@ -165,6 +165,27 @@ protects supported participating clients; older launchers and manual OpenShell
 clients remain outside it. This first cutover used explicit operator quiescence,
 not an inference that old clients held the new lock.
 
+## Optional reviewer bounded acceptance
+
+The protected real-adapter fixture passed as actual UID 989 through native Polkit
+and setpriv, using source `91112be` at
+`/nix/store/lc944afdgl4hamk1cjpxvswca3kfvnwk-source` and public configuration
+`/nix/store/ajhmkb0js5ngcgg9wk7wmpmkl023ddgq-phoenix-review-trial.json`.
+Pinned reviewer Codex 0.159.0 requested `gpt-6-luna`/`high`. Receipt:
+`status=passed`, `modelInvocations=1`, `offlinePrecheck=true`, `exactReuse=true`,
+`injectedFailure=true`, `stubFallbackBound=true`. Protected retained authentication
+worked without sign-in/copy. Same source/closure on another branch incurred zero
+extra AI. Deterministic injected failure and exact pending fallback were fixture
+operations; Nix store/build, root checkpoint ownership, activation and fallback's
+human authentication were stubs. Production review remains OFF; no deployment
+was performed by the trial. See [review acceptance](security-review.md).
+
+Two earlier protected attempts stopped before model use on fixture policy/lock
+setup, with zero model invocations; regressions now cover those cases. Future
+paid runs assert prompt scope before entering the real adapter; the placement
+correction itself required no additional model call. Full privileged review
+acceptance remains separate from this bounded compatibility/composition result.
+
 ## Shutdown investigation checkpoint
 
 Read-only refresh against exact v0.1.2 release source confirmed supervisor/driver
@@ -256,7 +277,9 @@ GUI and CLI; retain the operator terminal and authenticated controller route.
   Original history was unchanged and processes were reaped. This proves backup
   format compatibility, not the live OpenShell/GUI/workspace workflow or future sizes.
 - Protected identity, reservations, disruption protection and the full optional
-  security-review workflow have separate unfinished live acceptance. The generic
+  security-review workflow have separate unfinished live acceptance. The protected
+  reviewer adapter/auth/schema and stubbed composition trial above passed; it
+  does not establish root checkpoint/activation/fallback-auth authority. The generic
   authorization explanation remains experimental/off; critical exact-pending
   override handling is a separate flow.
 - On 2026-10-06 at 08:32, OpenShell 0.1.2 shutdown hit the 45-second supervisor

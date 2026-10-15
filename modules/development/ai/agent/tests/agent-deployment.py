@@ -920,14 +920,14 @@ class DeploymentTests(unittest.TestCase):
                 self.assertEqual(argv[0], config['bwrap'])
                 prompt = kwargs['data'].decode()
                 prompts.append(prompt)
+                self.assertNotIn('upstreamBatches', prompt)
+                self.assertNotIn('unrequested secret content', prompt)
                 if live and decision == 'live':
                     if len(prompts) > 2:
                         raise RuntimeError('live invocation budget exhausted')
                     self.live_invocations = len(prompts)
                     return real_run(argv, **kwargs)
-                self.assertNotIn('upstreamBatches', prompt)
                 payload = json.loads(prompt.split('Source data follows:\n', 1)[1].split('\nResolved context', 1)[0])
-                self.assertNotIn('unrequested secret content', prompt)
                 if decision == 'error':
                     raise ValueError('SECRET credential stderr must not escape')
                 verdict = dict(payload['binding'], approved=decision != 'deny', summary='fixture security decision')
