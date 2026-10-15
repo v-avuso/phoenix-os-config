@@ -8,4 +8,5 @@
     ./agent
     ./agent/gui.nix
   ];
+  phoenix.agent.gui.sharedState.enable = true;
 }

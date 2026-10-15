@@ -3,9 +3,9 @@
 let
   flake = builtins.getFlake ("git+file://" + toString ../../../../..);
   lib = flake.inputs.nixpkgs.lib;
-  off = flake.nixosConfigurations.metal.config;
-  on = (flake.nixosConfigurations.metal.extendModules {
-    modules = [ { phoenix.agent.gui.sharedState.enable = true; } ];
+  on = flake.nixosConfigurations.metal.config;
+  off = (flake.nixosConfigurations.metal.extendModules {
+    modules = [ { phoenix.agent.gui.sharedState.enable = lib.mkForce false; } ];
   }).config;
   gui = cfg: builtins.fromJSON (builtins.unsafeDiscardStringContext cfg.system.build.phoenixAgentGuiConfig.text);
   state = builtins.fromJSON (builtins.unsafeDiscardStringContext on.system.build.phoenixAgentGuiStateConfig.text);

@@ -27,7 +27,8 @@ commands and limits remain in the [module README](README.md),
   installed through explicit `ai-broker`. Current runtime and next-boot profile
   both resolve to
   `/nix/store/c9idlbl404zv5lhsyrbw4pkq56i57fbm-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
-  Main's sharing flag is OFF, so this replaced the temporary sharing-ON trial.
+  That installed source has sharing OFF, so it replaced the temporary sharing-ON
+  trial. The subsequent approved source promotion below is not installed yet.
   Published shared-history readiness remains authoritative; never restore originals.
 - The operator clarified that human Phoenix commands must retain terminal
   `nixos-rebuild --sudo` authentication and output. Only explicit `ai-broker`
@@ -101,13 +102,16 @@ commands and limits remain in the [module README](README.md),
   Custom worker policy. Native's permission code remains unmodified. One earlier
   transient Native least-permissive display remains unexplained and was not
   reproduced in the accepted return; do not claim its cause or a dedicated fix.
-- Permanent promotion is pending explicit operator approval. Automatic approval
-  review twice rejected enabling the repository sharing default: it distinguished
-  the authorized temporary trial/continuation from permanent shared-history access.
-  No configuration or fixture change was made. Preserve the accepted runtime and
-  published readiness; do not bypass this rejection through another writer.
-  Identity, reservations, disruption, shutdown ordering, AI security review and
-  authorization explanation remain off.
+- The operator explicitly approved making GUI sharing persistent after the choice
+  between temporary use and retaining it after reboot was explained. Earlier
+  automatic-review rejections are superseded by this direct approval, not bypassed.
+  Source now promotes only the accepted trial's
+  `phoenix.agent.gui.sharedState.enable = true` in `modules/development/ai/default.nix`;
+  the reusable option remains default off. Clean-source build, integration and
+  persistent installation are pending. Preserve published readiness and shared
+  history: no migration, profile copy, extra sign-in or GUI restart is part of this
+  source promotion. Identity, reservations, disruption, shutdown ordering,
+  AI security review and authorization explanation remain off.
 - Committed repair `70fb232` accepts Codex 0.160's exact `.sqlite-maintenance.lock` as
   regular, non-symlink coordination state in both Native preflight and shared
   runtime status. It is not a database and is never copied during migration.
@@ -152,14 +156,15 @@ was performed; ordering remains experimental and disabled.
 
 | Purpose | Checkout | State to preserve |
 | --- | --- | --- |
-| Main/integration | `/home/v/repos/code/phoenix-os-config` | Production sharing OFF |
+| Main/integration | `/home/v/repos/code/phoenix-os-config` | Awaiting approved sharing-ON source integration |
 | Feature | `/home/v/.codex/worktrees/deployment-security-review/phoenix-os-config` | Repair committed; root `AGENTS.md` is an unrelated uncommitted operator-review draft |
 | Trial (`codex/gui-sharing-trial`) | `/home/v/.codex/worktrees/gui-sharing-trial/phoenix-os-config` | Repair merged; sole uncommitted sharing-ON flag remains |
 
 Do not include the root instructions draft in a deployment snapshot, reset it,
-stash it or silently copy it into the clean trial source. Only the trial enables
-sharing; identity, reservations, shutdown ordering, disruption guard, security
-review and authorization explanation remain off.
+stash it or silently copy it into a deployment snapshot. The approved feature
+source now enables the same sharing flag as the trial; the trial flag becomes
+redundant after integration. Identity, reservations, shutdown ordering, disruption
+guard, security review and authorization explanation remain off.
 
 ## Integration and next bounded work
 
@@ -168,8 +173,10 @@ sharing-OFF source successfully (closure `avdpmhc3pm8ybyb2ccjjm9zy6rzi98d0`). Ma
 was clean; the root instructions draft remained only in the feature worktree.
 Effective main evaluation confirmed sharing, security review, identity,
 reservations, shutdown ordering, disruption and explanation all false. No runtime
-or next-boot change followed this integration. The explicit permanent-sharing
-approval question remains pending; never treat the merge as that approval.
+or next-boot change followed that integration. The operator subsequently approved
+persistent sharing explicitly; the feature source promotion now awaits its checked
+clean-source build and persistent installation. The separate human-command routing
+repair remains installed as recorded above.
 
 The bounded next shutdown regression plan is in
 [shutdown-acceptance.md](shutdown-acceptance.md#proposed-test-implementation).
@@ -179,10 +186,11 @@ No guest, new runtime images or shutdown patch has been built or run.
 
 1. Cold handoff and primary GUI acceptance are complete. Preserve readiness and
    shared writes; do not repeat one-time setup or request the same GUI trial again.
-2. Coordinator records the narrow approval decision for permanent GUI/history
-   sharing before changing repository defaults or requesting persistent installation.
-   Main integration of checked repairs is separate from that blocked promotion.
-   Exclude the unrelated root instructions draft from deployment snapshots.
+2. Coordinator commits only owned promotion files, checks the exact committed
+   source, integrates into main and performs the approved persistent installation
+   through the authenticated agent deployment boundary. Exclude the unrelated
+   root instructions draft from deployment snapshots; preserve the installed
+   human terminal-rebuild versus explicit-agent controller routing contract.
 3. Keep the ordinary Native fallback and accepted separate permission preferences.
    Investigate a concrete regression before requesting additional user interaction.
    Broader archive/pin/new-window observations may continue during normal use;

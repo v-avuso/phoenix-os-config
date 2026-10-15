@@ -20,14 +20,15 @@ For technical continuation and evidence limits, see [HANDOFF.md](HANDOFF.md).
   keep native credentials outside the contained CLI; share only the data needed
   for the agreed workflow.
 
-Shared state remains opt-in and disabled in repository defaults. The accepted
-2026-10-15 temporary installation shares this existing chat: Sandbox preselected
-Custom, `pwd` returned `/home/v/repos/code/phoenix-os-config`, and Native resumed
-with workspace-write/auto_review. This establishes the primary shared-chat/tool
-flow, not every archive/pin action or optional broker control. The boot profile
-still has sharing off. Permanent default promotion awaits explicit approval;
-see [the checkpoint](HANDOFF.md). Native GUI and CLI remain independent OpenShell
-recovery paths; the sandbox GUI retains its contained backend.
+The repository enables the accepted one-active GUI sharing workflow with explicit
+operator approval for persistence. The reusable module option still defaults off.
+In the 2026-10-15 trial, Sandbox preselected Custom, `pwd` returned
+`/home/v/repos/code/phoenix-os-config`, and Native resumed with
+workspace-write/auto_review. This establishes the primary shared-chat/tool flow,
+not every archive/pin action or optional broker control. The current installed
+and next-boot profiles still have sharing off until the promoted source is built
+and switched. See [the checkpoint](HANDOFF.md). Native GUI and CLI remain
+independent OpenShell recovery paths; the sandbox GUI retains its contained backend.
 
 The Codex package exports one exact kernel executable identity for OpenShell's
 provider and network policies. Policy builds run the packaged app-server locally
@@ -76,10 +77,14 @@ rendering, not the host clock or Native configuration.
   repair lifeline. Further simultaneous-GUI parity and optional reviewer controls
   are separate work, not prerequisites for diagnosing this backend failure.
 
-## Shared desktop state (opt-in; primary GUI workflow accepted)
+## Shared desktop state (primary GUI workflow accepted)
 
-The accepted temporary trial uses `phoenix.agent.gui.sharedState.enable = true`.
-Repository and next-boot defaults remain off pending permanent-promotion approval.
+`modules/development/ai/default.nix` enables
+`phoenix.agent.gui.sharedState.enable = true` for this repository. Its reusable
+option remains default off. Explicit operator approval covers persistent promotion
+of the accepted setting; installation is pending. A new installation still needs
+the coordinated [cold handoff](history-layout.md#explicit-cold-handoff). Do not
+repeat it on this already prepared shared store.
 Both reviewed GUI launchers require validated `codex-history-enable` readiness
 and hold one host exclusive GUI lock for the process lifetime. A same-variant
 launch asks the current owner to restore its window; `--new-instance`
