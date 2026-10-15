@@ -23,20 +23,25 @@ commands and limits remain in the [module README](README.md),
 
 ## Recorded installed state and pending source
 
-- Approved sharing promotion `fb761b9` was built, merged into main and authenticated
-  through explicit `ai-broker` for persistent switch. Current runtime and next-boot
-  profile both resolve to
-  `/nix/store/v8jxcw5jy5nc7lhdlx65lmrcq69qh3mm-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
-  Sharing is ON. All six experimental controls remain OFF. Clean-source GUI on/off
-  evaluation passed; installed Sandbox entry point uses the shared GUI-state guard.
-  Published shared-history readiness remains authoritative; never restore originals.
+- Lifecycle guard `33bcfce`, accepted repairs and approved sharing promotion are
+  integrated into main and persistently installed. Actual `ai-broker` switch
+  returned `ok=true`, action `switch`, source
+  `/nix/store/l0f22687ny5zw4d9rsq2pfzqh51wwr4p-source` and closure
+  `/nix/store/nhqm2dwyycw5jvfr88106afig8afsynr-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
+  Both `/run/current-system` and resolved `/nix/var/nix/profiles/system` match
+  that closure. Installed launcher script/config match the exact built launcher
+  used for acceptance. Sharing is ON; all six experimental controls remain OFF.
+  Clean-source GUI on/off evaluation passed. Published shared-history readiness
+  remains authoritative; never restore originals. Sharing was first persistently
+  installed in the earlier `v8jxcw` closure.
 - The operator clarified that human Phoenix commands must retain terminal
   `nixos-rebuild --sudo` authentication and output. Only explicit `ai-broker`
   requests should enter the controller pipeline. The correction separates these
   routes without changing updater ownership. All 24 focused tests, ShellCheck,
   Bash/Nix parsing, actual Nix command-packaging fixture and the full system build
   passed. Controller switch returned success; runtime and next-boot paths match.
-  Installed `phoenix-switch --print` emits `nixos-rebuild --sudo switch --flake ...`;
+  Installed `phoenix-switch --print` emits
+  `nixos-rebuild --sudo switch --flake /home/v/repos/code/phoenix-os-config#metal`;
   installed agent mappings point directly to the immutable deployment client.
   No extra activation or live terminal fingerprint prompt was run merely to test.
 - The 2026-10-15 cold handoff published readiness and the sharing-ON trial was
@@ -125,7 +130,7 @@ commands and limits remain in the [module README](README.md),
 - Existing old Sandbox chats/containers are retained separately, not merged or
   silently imported into the Native/shared baseline.
 
-## Base broker and next lifecycle correction
+## Base broker and lifecycle acceptance
 
 Actual native broker acceptance passed with `ai-broker --task
 broker-base-acceptance --reason 'Verify bounded diagnostic and audit path' --
@@ -136,18 +141,29 @@ An unsupported `sudo true` operation was rejected by the adapter before dispatch
 This proves the installed named diagnostic path, not executable-specific caller
 identity or automatic security-reviewed deployment; protected identity remains off.
 
-The personal-home canary was NOT created or run. Installed launcher revision/image
-now differs from the retained instance after real image changes. Existing launch
-setup locking serializes launchers, but supported clients hold only a shared
-history lock, which does not prevent another shared launcher from replacing their
-backend. No instance was stopped. A separate instance-use lifecycle lock is now prepared on the feature branch,
-not live main. Nineteen isolated tests pass, including actual competing processes,
-transport lifetime/release, terminal descriptors, signal forwarding, exit status
-and existing parent-death cleanup. Coordinator inspected the actual diff and
-callers; no unrelated authority expansion was found. Exact build and controlled
-runtime acceptance remain pending. First adoption requires explicit operator
-quiescence because legacy launchers/manual clients do not hold the new lock.
-Do not run reconciliation-based probes until that clearance arrives.
+Lifecycle guard `33bcfce` is integrated into main. Its exact full system build
+succeeded with closure
+`/nix/store/nhqm2dwyycw5jvfr88106afig8afsynr-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
+The operator confirmed Sandbox tasks were closed; the exact built launcher then
+reconciled the idle backend without OS activation. The live personal-home canary
+probe exited zero: the owned nonsecret file was absent/unreadable inside the worker
+and the repository README remained readable. The owned fixture was cleaned up.
+
+A corrected independent flock probe confirmed the instance-use lock was held during
+the live client and released after exit; transport exited zero after 10.3 seconds.
+The first probe targeted the wrong revision because active shared-history policy
+selected a different revision; that attempt supplies no lock evidence. Nineteen
+isolated tests additionally cover busy revision replacement, actual competing
+launchers, transport lifetime/release, terminal descriptors, signal forwarding,
+exit status and existing parent-death cleanup. Live canary/lock acceptance does not
+replace those concurrency tests or establish shutdown cleanup.
+
+Persistent installation of the accepted closure succeeded; runtime, next-boot
+profile and installed launcher script/config were verified as recorded above.
+Review and all experimental controls remain OFF. The separate instance-use lock
+protects supported participating clients; older launchers and manual OpenShell
+clients remain outside it. This first cutover used explicit operator quiescence,
+not an inference that old clients held the new lock.
 
 ## Shutdown investigation checkpoint
 
@@ -180,13 +196,13 @@ was performed; ordering remains experimental and disabled.
 
 | Purpose | Checkout | State to preserve |
 | --- | --- | --- |
-| Main/integration | `/home/v/repos/code/phoenix-os-config` | Awaiting approved sharing-ON source integration |
+| Main/integration | `/home/v/repos/code/phoenix-os-config` | Accepted repairs, sharing promotion and lifecycle guard integrated and persistently installed |
 | Feature | `/home/v/.codex/worktrees/deployment-security-review/phoenix-os-config` | Repair committed; root `AGENTS.md` is an unrelated uncommitted operator-review draft |
 | Trial (`codex/gui-sharing-trial`) | `/home/v/.codex/worktrees/gui-sharing-trial/phoenix-os-config` | Repair merged; sole uncommitted sharing-ON flag remains |
 
 Do not include the root instructions draft in a deployment snapshot, reset it,
 stash it or silently copy it into a deployment snapshot. The approved feature
-source now enables the same sharing flag as the trial; the trial flag becomes
+source now enables the same sharing flag as the trial; the trial flag is
 redundant after integration. Identity, reservations, shutdown ordering, disruption
 guard, security review and authorization explanation remain off.
 

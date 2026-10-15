@@ -173,3 +173,7 @@
   ownership and must not block Native fallback. Test real competing processes,
   not only setup calls. First adoption requires explicit operator quiescence:
   older launchers and manual OpenShell clients do not participate in this lock.
+
+- Once an authorized Polkit request has started, let its native dialog collect
+  authentication and await the result. Do not add redundant availability or
+  confirmation questions; surface expiry or failure when it occurs.
