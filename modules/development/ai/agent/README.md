@@ -68,14 +68,15 @@ rendering, not the host clock or Native configuration.
   desktop/history setup. Remote SSH selects a remote host; selection alone does
   not prevent local task execution. Its persistent server bootstrap also needs
   the existing history/authentication initialization and lifecycle guarantees.
-- **Decision:** Retain the current path while diagnosing its concrete remote
-  error; do not replace it solely to obtain SSH, which it already uses. Reassess
-  if repair requires substantial new mediation. Any replacement needs a small
+- **Decision:** Retain the accepted bridge path: Sandbox automatically selects
+  Custom, actual `pwd` succeeded, and return to Native was accepted. It already
+  uses SSH; there is no current known routing failure. Reassess if future repair
+  requires substantial new mediation. Any replacement needs a small
   isolated proof of retained login, an actual remote task, chat continuation and
   outage behavior before migration or supporting infrastructure.
 - **Cost boundary:** Prioritize one usable sandbox desktop with native CLI as a
   repair lifeline. Further simultaneous-GUI parity and optional reviewer controls
-  are separate work, not prerequisites for diagnosing this backend failure.
+  remain separate work beyond the accepted primary GUI workflow.
 
 ## Active-client replacement guard
 
@@ -88,8 +89,12 @@ forwarding using the existing parent-death cleanup.
 
 First adoption requires a quiescent operator cutover: older launchers and manual
 OpenShell clients do not hold this lock. Isolated process tests cover locking and
-transport behavior; the new guard is not live until controlled acceptance. It is
-not a guarantee against manual lifecycle operations or atomic cleanup after SIGKILL.
+transport behavior. The guard is persistently installed after a quiescent cutover,
+real nonsecret home-canary/repository access checks and held/released lifetime-lock
+acceptance; installed launcher and runtime/boot closure were verified. See
+[installed evidence](HANDOFF.md#recorded-installed-state-and-pending-source). It is
+not a guarantee against older/manual launchers, manual lifecycle operations or
+atomic cleanup after SIGKILL.
 
 ## Shared desktop state (primary GUI workflow accepted)
 
