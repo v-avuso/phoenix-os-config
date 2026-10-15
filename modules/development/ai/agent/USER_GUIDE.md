@@ -6,12 +6,11 @@ conversation resumed in Sandbox, **Custom (config.toml)** was preselected, and
 to Native with workspace-write/auto_review.
 
 Preserve shared history: **do not repeat `codex-history-enable --apply` or restore
-the original Native databases.** The sharing-ON trial is accepted;
-the latest installed and next-boot profiles currently have sharing off. The operator
-has approved persistence, and repository source now enables the same sharing
-setting. Checked build and persistent installation remain pending. See [HANDOFF.md](HANDOFF.md).
+the original Native databases.** The accepted sharing configuration is now installed
+persistently: the running system and next-boot profile both retain it. No new
+sign-in or migration is required. See [HANDOFF.md](HANDOFF.md).
 
-## Normal use after the checked persistent installation
+## Normal use
 
 - Open **ChatGPT Community (Sandboxed)** and use the normal Keep current or
   Close and switch offer. Let active work finish before switching.

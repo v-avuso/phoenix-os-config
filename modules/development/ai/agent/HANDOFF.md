@@ -23,12 +23,12 @@ commands and limits remain in the [module README](README.md),
 
 ## Recorded installed state and pending source
 
-- Human-command routing repair `bd1389f` was authenticated and persistently
-  installed through explicit `ai-broker`. Current runtime and next-boot profile
-  both resolve to
-  `/nix/store/c9idlbl404zv5lhsyrbw4pkq56i57fbm-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
-  That installed source has sharing OFF, so it replaced the temporary sharing-ON
-  trial. The subsequent approved source promotion below is not installed yet.
+- Approved sharing promotion `fb761b9` was built, merged into main and authenticated
+  through explicit `ai-broker` for persistent switch. Current runtime and next-boot
+  profile both resolve to
+  `/nix/store/v8jxcw5jy5nc7lhdlx65lmrcq69qh3mm-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
+  Sharing is ON. All six experimental controls remain OFF. Clean-source GUI on/off
+  evaluation passed; installed Sandbox entry point uses the shared GUI-state guard.
   Published shared-history readiness remains authoritative; never restore originals.
 - The operator clarified that human Phoenix commands must retain terminal
   `nixos-rebuild --sudo` authentication and output. Only explicit `ai-broker`
@@ -44,7 +44,7 @@ commands and limits remain in the [module README](README.md),
   `/nix/store/4c7agrmk05mpidgan14xcig0vgjnzv94-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
   The operator confirmed this exact conversation resumed and a reply was sent
   in Sandbox, then returned to Native. Do not rerun migration or restore stale
-  Native originals over the shared store. Boot profile is still sharing OFF.
+  Native originals over the shared store. The accepted setting is now persistent.
 - Deployment audit completed approximately 65 seconds after readiness; the
   activation service took 3.559 seconds. Foreground launch waits for GUI exit;
   terminal lifetime is not deployment duration.
@@ -108,7 +108,7 @@ commands and limits remain in the [module README](README.md),
   Source now promotes only the accepted trial's
   `phoenix.agent.gui.sharedState.enable = true` in `modules/development/ai/default.nix`;
   the reusable option remains default off. Clean-source build, integration and
-  persistent installation are pending. Preserve published readiness and shared
+  authenticated persistent installation succeeded. Preserve published readiness and shared
   history: no migration, profile copy, extra sign-in or GUI restart is part of this
   source promotion. Identity, reservations, disruption, shutdown ordering,
   AI security review and authorization explanation remain off.
@@ -124,6 +124,26 @@ commands and limits remain in the [module README](README.md),
   Actual cold preflight/apply still reject running writers.
 - Existing old Sandbox chats/containers are retained separately, not merged or
   silently imported into the Native/shared baseline.
+
+## Base broker and next lifecycle correction
+
+Actual native broker acceptance passed with `ai-broker --task
+broker-base-acceptance --reason 'Verify bounded diagnostic and audit path' --
+phoenix-admin kernel-journal 1`: exit zero, one bounded output line, with kernel
+content omitted from the receipt. Root audit recorded preflight and completion for
+`admin.kernel-journal`, automatic decision, UID 1000 and the matching task/PID.
+An unsupported `sudo true` operation was rejected by the adapter before dispatch.
+This proves the installed named diagnostic path, not executable-specific caller
+identity or automatic security-reviewed deployment; protected identity remains off.
+
+The personal-home canary was NOT created or run. Installed launcher revision/image
+now differs from the retained instance after real image changes. Existing launch
+setup locking serializes launchers, but supported clients hold only a shared
+history lock, which does not prevent another shared launcher from replacing their
+backend. No instance was stopped. A separate instance-use lifecycle lock and
+isolated concurrency tests are being scoped on the feature branch; keep it out of
+live main until checked. Its first adoption must account for legacy clients that
+do not participate in the new lock and require a quiescent operator cutover.
 
 ## Shutdown investigation checkpoint
 
@@ -168,15 +188,15 @@ guard, security review and authorization explanation remain off.
 
 ## Integration and next bounded work
 
-The coordinator fast-forwarded main to `1034cc5` after building its exact committed
-sharing-OFF source successfully (closure `avdpmhc3pm8ybyb2ccjjm9zy6rzi98d0`). Main
-was clean; the root instructions draft remained only in the feature worktree.
-Effective main evaluation confirmed sharing, security review, identity,
-reservations, shutdown ordering, disruption and explanation all false. No runtime
-or next-boot change followed that integration. The operator subsequently approved
-persistent sharing explicitly; the feature source promotion now awaits its checked
-clean-source build and persistent installation. The separate human-command routing
-repair remains installed as recorded above.
+Main contains the accepted repairs, separate human/agent command routing and
+approved sharing promotion. Its clean-source full build and GUI-state ON/OFF
+fixture passed. Effective evaluation showed sharing true; security review,
+identity, reservations, shutdown ordering, disruption and explanation false.
+The authenticated persistent controller workflow succeeded through the newly
+separated agent adapter; runtime and boot match the built closure above.
+The root instructions draft remains only in the feature worktree. The older
+`gui-sharing-trial` checkout is retained for preservation, not the deployment
+source: it predates subsequent command repairs. Use reviewed main/current work.
 
 The bounded next shutdown regression plan is in
 [shutdown-acceptance.md](shutdown-acceptance.md#proposed-test-implementation).
@@ -186,11 +206,9 @@ No guest, new runtime images or shutdown patch has been built or run.
 
 1. Cold handoff and primary GUI acceptance are complete. Preserve readiness and
    shared writes; do not repeat one-time setup or request the same GUI trial again.
-2. Coordinator commits only owned promotion files, checks the exact committed
-   source, integrates into main and performs the approved persistent installation
-   through the authenticated agent deployment boundary. Exclude the unrelated
-   root instructions draft from deployment snapshots; preserve the installed
-   human terminal-rebuild versus explicit-agent controller routing contract.
+2. Persistent integration is complete. Continue bounded broker acceptance work;
+   preserve disabled controls until their actual isolated workflows pass. Exclude
+   the unrelated root instructions draft from future deployment snapshots.
 3. Keep the ordinary Native fallback and accepted separate permission preferences.
    Investigate a concrete regression before requesting additional user interaction.
    Broader archive/pin/new-window observations may continue during normal use;
