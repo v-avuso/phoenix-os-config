@@ -110,6 +110,19 @@ First run `python3 -I tests/agent-review-live.py --dry-run` from this module;
 without opt-in it refuses execution. The actual source must be a reviewed immutable
 repository tree (including `tests/agent-deployment.py` and its sibling modules,
 policies, authorization library and transport JSON); it needs no `.git` directory.
+Before a paid trial, run these selected offline cases from that exact packaged
+immutable tree (no authentication or model):
+
+```sh
+python3 -I /nix/store/SOURCE/modules/development/ai/agent/tests/agent-deployment.py \
+  DeploymentTests.test_controller_worker_adapter_and_checkpoints_as_one_disposable_workflow \
+  DeploymentTests.test_optin_integration_branch_with_offline_adapter_double
+```
+
+The fixture supplies its semantic authorization policy explicitly: installed
+`/nix/store` code deliberately rejects the worktree-only compatibility fallback.
+This is fixture configuration, not a change to production authorization.
+
 The reviewed immutable public JSON configuration has exactly these fields:
 
 ```json
@@ -141,7 +154,9 @@ model calls. A deterministic injected failure exercises pending state and exact
 fallback with explicit stubs. One optional context round permits at most two real
 CLI invocations total, 600 seconds each, with no retries; internal API/token costs
 remain uncapped. Output contains status/counts/booleans and bounded static stage/code diagnostics.
-Failure emits no raw model output, prompts, auth or stderr. Stop on the first
+Failure reports a static stage/category and, when available, a line number from
+our integration fixture only; it emits no raw model output, prompts, auth or
+stderr. Stop on the first
 failure and address its category; do not automatically retry.
 
 This is real adapter compatibility plus controller composition evidence. Store,

@@ -36,6 +36,27 @@ def configuration(path):
     return config
 
 
+class TrialResult(unittest.TestResult):
+    """Retain only static exception codes and our fixture's source line."""
+    def capture(self, case, error):
+        value = getattr(error[1], 'code', None)
+        if isinstance(value, str):
+            case.live_failure = value  # Emission remains restricted by the allowlist.
+        trace = error[2]
+        while trace:
+            if Path(trace.tb_frame.f_code.co_filename).resolve() == Path(__file__).with_name('agent-deployment.py').resolve():
+                case.live_fixture_line = trace.tb_lineno
+            trace = trace.tb_next
+
+    def addError(self, case, error):
+        self.capture(case, error)
+        super().addError(case, error)
+
+    def addFailure(self, case, error):
+        self.capture(case, error)
+        super().addFailure(case, error)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--allow-paid-review', action='store_true')
@@ -69,7 +90,7 @@ def main(argv=None):
         spec.loader.exec_module(fixture)
         case = fixture.DeploymentTests('test_controller_worker_adapter_and_checkpoints_as_one_disposable_workflow')
         case.live_review = config
-        result = unittest.TestResult()
+        result = TrialResult()
         # Never emit fixture tracebacks, prompts, model verdicts or CLI stderr.
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             case.run(result)
@@ -88,11 +109,16 @@ def main(argv=None):
                        'review-startup-failed', 'review-timeout', 'review-output-limit',
                        'review-invocation-failed', 'reviewer-invocation-failed', 'schema-invalid',
                        'binding-mismatch', 'context-compacted', 'review-context-oversized',
-                       'context-request-invalid', 'context-request-oversized', 'model-denied'}
+                       'context-request-invalid', 'context-request-oversized', 'model-denied',
+                       'baseline-authentication-required', 'baseline-policy-mismatch',
+                       'baseline-provenance-missing', 'baseline-provenance-invalid',
+                       'baseline-target-mismatch', 'baseline-runtime-mismatch',
+                       'baseline-state-changed', 'baseline-verification-failed'}
             if candidate in allowed:
                 code = candidate
         print(json.dumps(dict(status='blocked-or-failed', stage=stage, code=code,
-                              modelInvocations=calls, activation='stubbed', retry=False)))
+                              modelInvocations=calls, fixtureLine=getattr(case, 'live_fixture_line', None),
+                              activation='stubbed', retry=False)))
         return 1
 
 

@@ -59,6 +59,23 @@ class DeploymentTests(unittest.TestCase):
                 finally:
                     del self.live_review
 
+    def test_live_receipt_preserves_static_pre_adapter_category_and_fixture_line(self):
+        spec = importlib.util.spec_from_file_location('live_runner', Path(__file__).with_name('agent-review-live.py'))
+        runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runner)
+        class Failure(unittest.TestCase):
+            def runTest(case):
+                case.live_stage = 'seed-checkpoint'
+                raise deploy.DeploymentFailure('baseline', 'baseline-policy-mismatch')
+        case = Failure()
+        result = runner.TrialResult()
+        case.run(result)
+        self.assertFalse(result.wasSuccessful())
+        self.assertEqual(case.live_failure, 'baseline-policy-mismatch')
+        self.assertEqual(case.live_stage, 'seed-checkpoint')
+        self.assertGreater(case.live_fixture_line, 0)
+        self.assertEqual(getattr(case, 'live_invocations', 0), 0)
+
     def test_live_runner_requires_explicit_optin_and_immutable_auth_route(self):
         path = Path(__file__).with_name('agent-review-live.py')
         spec = importlib.util.spec_from_file_location('live_runner', path)
@@ -809,8 +826,16 @@ class DeploymentTests(unittest.TestCase):
                         self.assertEqual(bound['action'],'test');self.assertEqual(bound['target'],'metal')
                         self.assertEqual(security.pending.call_args.args[2],1000)
 
+    def test_immutable_source_integration_uses_explicit_fixture_policy(self):
+        # Store-packaged authorization deliberately disables worktree-only fallback.
+        with mock.patch.object(deploy.authorization, '__file__', '/nix/store/' + 'a' * 32 + '-fixture/request.py'):
+            with self.assertRaisesRegex(ValueError, 'installed authorization policy missing'):
+                deploy.authorization.policy({})
+            self.test_controller_worker_adapter_and_checkpoints_as_one_disposable_workflow()
+
     def test_controller_worker_adapter_and_checkpoints_as_one_disposable_workflow(self):
         """Exercise production integration; OS/store/model/activation are explicit stubs."""
+        self.live_stage = "fixture-setup"
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             owner = Path(__file__).resolve().parents[5] / 'modules/development/ai/agent'
@@ -835,7 +860,8 @@ class DeploymentTests(unittest.TestCase):
                 python='python', controller=str(owner / 'deployment.py'), configPath='fixture', systemdRun='systemd-run',
                 reviewScript=str(owner / 'deploy-review.py'), securityReviewScript=str(owner / 'security-review.py'),
                 securityReviewState=str(state), policy=str(owner / 'review-policy.md'), codex='codex', bwrap='bwrap',
-                caBundle='/fixture/cert', model='gpt-6.1-sol', effort='medium', modelReviewEnabled=True, operatorUid=1000, clientUid=1000)
+                caBundle='/fixture/cert', model='gpt-6.1-sol', effort='medium', modelReviewEnabled=True, operatorUid=1000, clientUid=1000,
+                authorizationPolicy=deploy.authorization.default_policy(True, 1000, 1000))
             frozen_sources, closures, prompts = {}, {}, []
             decision = 'context'
             live = getattr(self, 'live_review', None)
@@ -928,6 +954,7 @@ class DeploymentTests(unittest.TestCase):
                  mock.patch.object(deploy, 'activation_guard', return_value=contextlib.nullcontext(42)), \
                  mock.patch.object(deploy.os, 'geteuid', return_value=0), \
                  mock.patch.object(deploy, 'activate_bound', return_value={'ok': True}) as activation, contextlib.redirect_stdout(io.StringIO()) as journal:
+                self.live_stage = 'seed-checkpoint'
                 seeded = deploy.trust_active(config, 1000, 22)
                 self.assertEqual(seeded['source'], str(baseline))
                 self.assertEqual(seeded['closure'], str(profile))
@@ -1010,6 +1037,7 @@ class DeploymentTests(unittest.TestCase):
                 self.assertEqual(activation.call_count, before)
                 before = len(prompts)
                 config['modelReviewEnabled'] = False
+                config['authorizationPolicy'] = deploy.authorization.default_policy(False, 1000, 1000)
                 self.assertTrue(deploy.process(config, request, 1000, 22, operator=True)['ok'])
                 self.assertEqual(len(prompts), before, 'authenticated disabled review uses zero AI')
                 self.assertNotIn('SECRET', journal.getvalue())
