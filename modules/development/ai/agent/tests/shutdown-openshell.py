@@ -126,11 +126,20 @@ try:
         for identifier in containers.values():
             assert re.fullmatch("[a-f0-9]{64}", identifier)
         stage = "supervisor-policy-event"
-        # Deliberately denied guest-local HTTP, no provider or external destination.
-        status, _ = machine.execute(user("openshell sandbox exec --name shutdown-acceptance --timeout 5 --no-tty -- /bin/curl --max-time 2 http://127.0.0.1:17671/readyz </dev/null"), timeout=10)
+        # Exact 0.1.2 network_broker.rs:824 keeps loopback local. Nonloopback
+        # TCP enters staged mediation; supervisor-network/proxy.rs:700 emits
+        # this destination-bound denial before any upstream connection.
+        status, _ = machine.execute(user("openshell sandbox exec --name shutdown-acceptance --timeout 5 --no-tty -- /bin/curl --noproxy '*' --connect-timeout 2 --max-time 3 http://192.0.2.1/ </dev/null"), timeout=10)
         assert status != 0, "default-deny guest policy unexpectedly allowed HTTP"
-        supervisor_events = run("openshell logs shutdown-acceptance -n 100 --source sandbox")
-        assert re.search(r"denied|deny", supervisor_events, re.IGNORECASE), "supervisor deny event missing; stdout is not log evidence"
+        log_deadline = time.monotonic() + 10
+        while True:
+            supervisor_events = run("openshell logs shutdown-acceptance -n 100 --source sandbox", timeout=5)
+            denied = any("192.0.2.1:80" in line and "denied staged transparent connection" in line.lower()
+                         for line in supervisor_events.splitlines())
+            if denied or time.monotonic() >= log_deadline:
+                break
+            time.sleep(1)
+        assert denied, "destination-bound supervisor deny event missing; curl failure/stdout is not log evidence"
         # A bounded supported live log reader spans the ordinary stop.
         run("(timeout 90 openshell logs shutdown-acceptance --tail --source sandbox) </dev/null >/tmp/shutdown-stream.log 2>&1 & echo $! > /tmp/shutdown-stream.pid")
         machine.wait_until_succeeds(user("test -s /tmp/shutdown-stream.log && kill -0 $(cat /tmp/shutdown-stream.pid)"), timeout=10)

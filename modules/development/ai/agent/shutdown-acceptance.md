@@ -217,8 +217,11 @@ rootless API/TLS parameters, a new guest UID 1000 and eight-GiB guest disk. Orde
 stays OFF, stop fallback stays 45 seconds, and the driver has a 300-second global
 limit. The attached supported create stream records TERM/final workload markers;
 Podman runtime logs and the supervisor's supported log stream are separate captures.
-A deliberately denied guest-local HTTP request must produce a supervisor deny
-event before stopping. Ordinary supported stop must finish under ten seconds with
+A direct HTTP request to reserved TEST-NET `192.0.2.1:80`, with curl proxies
+explicitly disabled and bounded connect/total time, must produce the exact
+0.1.2 destination-bound supervisor `Denied staged transparent connection` event
+in gateway sandbox logs before stopping. Log delivery has a bounded ten-second
+poll budget (each query capped at five seconds); the HTTP request is not retried. Ordinary supported stop must finish under ten seconds with
 zero container exit codes and the final workload markers. Bounded before/failure/final
 artifacts include workload stream/status, workload/supervisor logs/inspect and
 user-manager/unit journals. A failure identifies its last explicit stage; it does
@@ -231,6 +234,19 @@ sandbox or shutdown operation was reached; this is archive transport evidence,
 not a supervisor failure. Re-exporting the same verified IDs in supported Docker
 archive format resolved image loading. Ordinary-stop acceptance remains unpassed
 until subsequent stages succeed.
+The small-image ordinary run reached the workload and network probe, but the
+original localhost HTTP request only produced workload-local connection refusal,
+not a supervisor deny event. That was an invalid probe: exact 0.1.2
+`e2e/rust/tests/no_proxy.rs` deliberately tests localhost staying local;
+`openshell-sandbox/src/network_broker.rs:824` bypasses staged policy for loopback.
+The source-backed nonloopback replacement enters staged TCP mediation
+(`network_broker.rs:835`), with the denial emitted before connection by
+`openshell-supervisor-network/src/proxy.rs:700`. Its source-backed proxy mode has
+no ordinary loopback listener when mediation is supplied (`proxy.rs:288–293`),
+so forcing a loopback proxy listener would also be unsupported here. Corrected
+probe runtime acceptance and ordinary shutdown remain pending; the denial
+requirement was preserved rather than accepting curl failure as evidence.
+
 The Docker-archive rerun passed image imports, TLS/gateway readiness and CLI
 status, but failed before workload readiness: CreateSandbox returned its
 30-second API timeout. Exact 0.1.2 source places the last completed channel-volume
