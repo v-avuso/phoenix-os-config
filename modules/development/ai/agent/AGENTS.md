@@ -54,8 +54,8 @@
   workspace eligibility and the import marker before changing access. Import only
   newly seen eligible metadata under the GUI lifetime lock; preserve sandbox-owned
   edits/removals and let the pinned desktop own its app-server migration.
-- Probe readiness through the real loader on managed config links: config is bounded read-only input.
-  Keep non-symlink rules for mutable history paths, so central config links do not weaken migration boundaries.
+- Probe readiness through `inspect_layout` on actual supported paths before a cold window; it reads bounded config and layout only, not writer quiescence or database integrity.
+  Keep non-symlink history rules; allow exact upstream coordination files as auxiliary inputs, never copied database payloads.
 - When sharing desktop metadata, mount its directory for atomic replacements and
   hold one host GUI lifetime lock across both reviewed entry points before exposing
   it. History's shared lifecycle lock permits concurrent clients and cannot protect

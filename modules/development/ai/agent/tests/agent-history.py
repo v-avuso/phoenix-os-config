@@ -76,6 +76,58 @@ class HistoryRuntime(unittest.TestCase):
         self.connection.commit()
         (self.home / "auth.json").write_text("private credential sentinel")
 
+    def test_exact_upstream_layout_and_shared_runtime_maintenance_lock(self):
+        for name in runtime.DATABASES - {"state_5.sqlite"}:
+            with sqlite3.connect(self.home / name) as database:
+                database.execute("CREATE TABLE fixture (value TEXT)")
+        lock = self.home / ".sqlite-maintenance.lock"
+        lock.write_bytes(b"source lock sentinel")
+        self.assertEqual(runtime.inspect_layout(self.config)["status"], "layout-inspection-only")
+        runtime.enable(self.config, apply=True, proc=self.proc)
+        shared = Path(self.config["root"]) / "sqlite"
+        self.assertFalse((shared / lock.name).exists())
+        self.assertEqual(lock.read_bytes(), b"source lock sentinel")
+        (shared / lock.name).touch()
+        self.assertTrue(runtime.status(self.config)["active"])
+        for name in ("future_99.sqlite", ".sqlite-maintenance.lock-wal"):
+            unknown = shared / name; unknown.touch()
+            with self.assertRaisesRegex(ValueError, "unknown file"):
+                runtime.status(self.config)
+            unknown.unlink()
+
+    def test_maintenance_lock_symlink_or_nonregular_is_not_accepted(self):
+        lock = self.home / ".sqlite-maintenance.lock"
+        target = self.root / "lock-target"; target.touch()
+        lock.symlink_to(target)
+        with self.assertRaisesRegex(ValueError, "symlink"):
+            runtime.inspect_layout(self.config)
+        lock.unlink(); lock.mkdir()
+        with self.assertRaisesRegex(ValueError, "file type"):
+            runtime.inspect_layout(self.config)
+        lock.rmdir()
+        runtime.enable(self.config, apply=True, proc=self.proc)
+        lock = Path(self.config["root"]) / "sqlite/.sqlite-maintenance.lock"
+        lock.symlink_to(target)
+        with self.assertRaisesRegex(ValueError, "symlink"):
+            runtime.status(self.config)
+        lock.unlink(); lock.mkdir()
+        with self.assertRaisesRegex(ValueError, "file type"):
+            runtime.status(self.config)
+
+    def test_read_only_layout_inspection_does_not_replace_cold_writer_gate(self):
+        process = self.proc / "42"; process.mkdir()
+        (process / "comm").write_text("codex")
+        before = {str(path): path.stat().st_mtime_ns for path in self.home.iterdir()}
+        self.assertTrue(runtime.inspect_layout(self.config)["coldHandoffRequired"])
+        self.assertEqual(before, {str(path): path.stat().st_mtime_ns for path in self.home.iterdir()})
+        self.assertFalse(Path(self.config["root"]).exists())
+        for apply in (False, True):
+            with self.assertRaisesRegex(ValueError, "exiting every"):
+                runtime.enable(self.config, apply=apply, proc=self.proc)
+        with self.assertRaisesRegex(ValueError, "exiting every"):
+            runtime.cold_preflight(self.config, self.proc)
+        self.assertFalse(Path(self.config["root"]).exists())
+
     def test_central_config_link_is_read_only_input_and_overrides_still_reject(self):
         central = self.root / "central-config.toml"
         central.write_text('model = "fixture"\n')

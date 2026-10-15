@@ -19,6 +19,8 @@ import tomllib
 DATABASES = {"state_5.sqlite", "thread_history_1.sqlite", "goals_1.sqlite",
              "memories_1.sqlite", "queue_1.sqlite", "logs_2.sqlite"}
 DIRECTORIES = ("sessions", "archived_sessions", "thread-writer-locks")
+# Codex 0.160 runtime/reclamation.rs: per-SQLite-home worker election, not data.
+SQLITE_AUXILIARY = {".sqlite-maintenance.lock"}
 
 
 def lifecycle_lock(config, *, shared=False):
@@ -124,7 +126,7 @@ def status(config):
         regular_path(sqlite / name, required=True)
     for item in sqlite.iterdir():
         base = item.name.removesuffix("-wal").removesuffix("-shm")
-        if base not in DATABASES:
+        if base not in DATABASES and item.name not in SQLITE_AUXILIARY:
             raise ValueError("unknown file in credential-free shared SQLite directory")
         regular_path(item)
     for name in DIRECTORIES:
@@ -132,12 +134,14 @@ def status(config):
     return {"active": True, "codexHome": str(home), "sqliteHome": str(sqlite)}
 
 
-def cold_preflight(config, proc=Path("/proc")):
+def inspect_layout(config):
+    """Read-only input/layout checks, callable with writers running; not cold approval."""
     home = regular_path(config["nativeHome"], directory=True, required=True)
     reject_overrides(home)
-    reject_writers(proc)
     for item in home.iterdir():
-        if ".sqlite" in item.name:
+        if item.name in SQLITE_AUXILIARY:
+            regular_path(item)
+        elif ".sqlite" in item.name:
             base = item.name.removesuffix("-wal").removesuffix("-shm")
             if base not in DATABASES:
                 raise ValueError("unknown Native SQLite family; review the exact upstream version first")
@@ -150,6 +154,12 @@ def cold_preflight(config, proc=Path("/proc")):
     for name in DIRECTORIES:
         regular_path(home / name, directory=True, required=True)
     regular_path(home / "state_5.sqlite", required=True)
+    return {"status": "layout-inspection-only", "coldHandoffRequired": True}
+
+
+def cold_preflight(config, proc=Path("/proc")):
+    reject_writers(proc)
+    inspect_layout(config)
     return {"status": "cold-preflight-only", "applySupported": True,
             "next": "Explicit --apply backs up known Native databases through SQLite and publishes shared history atomically; retained sandbox history stays separate."}
 

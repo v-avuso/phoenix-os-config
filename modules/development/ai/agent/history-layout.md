@@ -25,6 +25,11 @@ required database/rollout paths, and rejects Native `sqlite_home` overrides.
 Read-only `config.toml` may link to a central/Nix-managed regular file; parsing is
 bounded to 1 MiB. History directories, databases, readiness and staging remain
 strictly non-symlinked. Dangling/nonregular config inputs fail explicitly.
+Codex 0.160's exact `.sqlite-maintenance.lock` is a regular non-symlink runtime
+coordination file in the SQLite home, not a database; it is accepted there but
+never backed up or migrated. `inspect_layout(config)` provides the same read-only
+config/layout validation before the cold window, without inspecting chat contents
+or claiming stopped writers. Actual preflight/apply always enforce the writer gate.
 Missing/invalid readiness after publication fails closed instead of starting
 blank history. Reviewed Native clients and sandbox transports have a host parent
 holding the shared lifecycle flock; runtime descriptor sanitation cannot drop it.
