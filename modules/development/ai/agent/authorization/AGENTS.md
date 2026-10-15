@@ -1,7 +1,8 @@
 # Authorization interface
 
-- Preserve ordinary Phoenix test/switch/boot without handwritten reasons. Generated
-  context describes the invocation only; never treat it as proven human identity.
+- Preserve human Phoenix test/switch/boot as terminal `nixos-rebuild --sudo`,
+  without required reasons. Bind explicit ai-broker deployment directly to immutable
+  clients; never recurse through human wrappers or use an environment identity flag.
 - Agents use `ai-broker --task TASK --reason PURPOSE -- phoenix-test ...` or the
   closed diagnostic mapping. Reasons/task labels are bounded nonsecret context;
   installed root policy, peer checks and authentication remain authoritative.

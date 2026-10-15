@@ -6,7 +6,6 @@ let
   user = import ../../config/user.nix { inherit (pkgs) lib; };
   sandboxCommands = import ../. {
     inherit pkgs user;
-    deploymentHelper = config.system.build.phoenixDeploymentSandboxClient;
     includeDesktopCommands = false;
   };
   commands = builtins.head (
@@ -22,7 +21,7 @@ let
     authorizationPolicy = config.system.build.phoenixAuthorizationPolicy;
     adminClient = config.system.build.phoenixAdminClient;
     deploymentCommands = pkgs.lib.genAttrs [ "phoenix-test" "phoenix-switch" "phoenix-boot" ]
-      (name: "${sandboxCommands}/bin/${name}");
+      (name: "${config.system.build.phoenixDeploymentSandboxClient}/bin/phoenix-deploy-review");
   };
 in
 assert (builtins.fromJSON config.system.build.phoenixAuthorizationPolicy.text).target == "metal";
@@ -46,11 +45,9 @@ pkgs.runCommand "phoenix-command-packaging" { } ''
     exit 1
   fi
   ${commands}/bin/phoenix-rebuild --print test > activation
-  grep -Fq 'phoenix-deploy-review' activation
-  grep -Fq -- '--worktree' activation
-  grep -Fq -- '--reason' activation
-  if grep -Eq 'nixos-rebuild|--sudo' activation; then
-    echo 'activation bypasses frozen deployment helper' >&2; exit 1
+  grep -Fq 'nixos-rebuild --sudo test --flake ' activation
+  if grep -Fq 'phoenix-deploy-review' activation; then
+    echo 'human activation unexpectedly uses broker helper' >&2; exit 1
   fi
   for package in ${nativeBroker} ${sandboxBroker}; do
     test -x "$package/bin/ai-broker"
@@ -59,21 +56,25 @@ pkgs.runCommand "phoenix-command-packaging" { } ''
     if "$package/bin/ai-broker" --reason fixture -- phoenix-test --reason override > broker-output 2>&1; then exit 1; fi
   done
   ${sandboxCommands}/bin/phoenix-test --print > sandbox-preview
-  grep -Fq 'phoenix-deploy-review' sandbox-preview
+  grep -Fq 'nixos-rebuild --sudo test --flake ' sandbox-preview
   # Packaging only: no deployment-socket preflight, authentication or activation.
   # Existing agent-deployment fixtures exercise the sandbox host-auth branch
   # with explicit disposable preflight stubs; a Nix builder has no live broker.
   ${pkgs.python3}/bin/python3 -I - <<'PY_CHECK'
-  import shlex
   from pathlib import Path
-  for filename, helper in [
-      ('activation', '${config.system.build.phoenixDeploymentClient}/bin/phoenix-deploy-review'),
-      ('sandbox-preview', '${config.system.build.phoenixDeploymentSandboxClient}/bin/phoenix-deploy-review')]:
-      command = shlex.split(Path(filename).read_text())
-      assert command[0] == helper
-      assert command[command.index('--target') + 1] == 'metal'
-      assert command[command.index('--action') + 1] == 'test'
-      assert command[command.index('--reason') + 1] == 'Direct phoenix-test invocation'
+  import importlib.util, json, re
+  spec = importlib.util.spec_from_file_location('adapter', '${../../modules/development/ai/agent/authorization/ai-broker.py}')
+  adapter = importlib.util.module_from_spec(spec); spec.loader.exec_module(adapter)
+  for package, helper in [
+      ('${nativeBroker}', '${config.system.build.phoenixDeploymentClient}/bin/phoenix-deploy-review'),
+      ('${sandboxBroker}', '${config.system.build.phoenixDeploymentSandboxClient}/bin/phoenix-deploy-review')]:
+      wrapper = Path(package + '/bin/ai-broker').read_text()
+      broker_config = json.loads(Path(re.search(r'/nix/store/[A-Za-z0-9-]+-phoenix-ai-broker[.]json', wrapper)[0]).read_text())
+      for action in ('test', 'switch', 'boot'):
+          command = adapter.prepare(broker_config, ['--task','fixture','--reason','Requested deployment','--',
+                                                    'phoenix-' + action,'--worktree',str(Path.cwd())])
+          assert command == [helper,'--target','metal','--action',action,'--task','fixture',
+                             '--reason','Requested deployment','--worktree',str(Path.cwd())]
   PY_CHECK
   touch "$out"
 ''

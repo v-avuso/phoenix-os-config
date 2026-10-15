@@ -50,6 +50,12 @@ automatic selection; `PHOENIX_TARGET=metal` or `vm` overrides it.
 Command implementations are packaged with the system generation; rebuilds use
 the selected live checkout as their flake source.
 
+Human `phoenix-test`/`phoenix-switch`/`phoenix-boot` use `nixos-rebuild --sudo`,
+retaining terminal sudo/fingerprint authentication and rebuild progress. Agents
+use the separate [reasoned broker interface](modules/development/ai/agent/authorization/README.md#command-interface)
+for immutable authenticated deployment. Broker review/reservations do not govern
+an administrator's direct sudo route.
+
 | Command | Effect |
 | --- | --- |
 | `phoenix-dry-build` | Evaluate the build plan without building or activating |

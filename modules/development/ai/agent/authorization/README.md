@@ -39,11 +39,17 @@ validator; it uses neither AI nor Polkit. Default experimental controls stay off
 
 ## Command interface
 
-Ordinary `phoenix-test`, `phoenix-switch` and `phoenix-boot` need no handwritten
-reason. Configured activation supplies neutral audit context such as
-`Direct phoenix-switch invocation`; this describes the entry point, not proven
-human identity. Explicit legacy `--reason`/`--task` remain compatible. Deployment
-still follows the installed security-review or authenticated-human decision.
+Human `phoenix-test`, `phoenix-switch` and `phoenix-boot` run the original
+`nixos-rebuild --sudo` route, retaining terminal sudo/fingerprint authentication,
+rebuild progress and option forwarding. No reason is required. Optional legacy
+`--reason`/`--task` are accepted without creating broker audit context.
+
+Agents must use the explicit broker interface below. Its fixed mapping invokes
+the immutable deployment client directly with action derived from the closed
+command name and target from installed policy; it never calls the human wrapper.
+Broker review/reservations protect broker-mediated requests, not administrator
+sudo/rebuild. With protected identity off, human/agent instructions under one UID
+are not kernel-enforced identity separation; root authentication still applies.
 
 Agents should use structured arguments:
 
@@ -56,8 +62,9 @@ ai-broker --task usb-debug --reason 'Inspect the current kernel log' -- phoenix-
 to `ai-broker` and is bounded to 100 characters. This first adapter accepts
 structured argv after `--`, rather than an illustrative quoted full-command
 string. It never invokes a shell or selects executables from PATH. The closed
-mapping contains only installed `phoenix-test`, `phoenix-switch`, `phoenix-boot`
-and `phoenix-admin` clients. Activation accepts one `--branch` or absolute
+mapping contains only `phoenix-test`, `phoenix-switch`, `phoenix-boot` deployment
+operations bound to the installed immutable client, plus the installed
+`phoenix-admin` client. Activation accepts one `--branch` or absolute
 `--worktree`, plus optional absolute `--reservation-file`; diagnostic arguments
 are the existing typed named operations, optionally preceded by an absolute
 `--reservation-file`. Inner reason/task overrides, arbitrary
@@ -70,9 +77,9 @@ policy decision service or caller-selected configuration is introduced.
 
 Native home and OpenShell tool composition include the adapter when their
 installed authorization dependencies are supplied. Activation mappings require
-the authenticated deployment helper; the adapter never introduces legacy
-nixos-rebuild activation. Ordinary legacy build/dry-build wrappers remain intact
-when that module is disabled. A configured helper failure never falls back.
+the authenticated deployment helper; missing mappings or helper failures never
+fall back to legacy activation. Human wrappers and deterministic updater controller
+requests retain their separate existing ownership.
 
 ## Execution and authentication
 

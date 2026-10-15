@@ -152,15 +152,19 @@ reviewer login commands; it retains authenticated deployment and protected state
 Do not enable live review until the real model, denial/override and activation
 workflow passes isolated acceptance. Current fixtures are not that acceptance.
 
-With the deployment module installed, plain `phoenix-test` (also switch/boot)
-routes through the frozen deployment client with neutral invocation audit context.
-Agents use `ai-broker --task TASK --reason "task purpose" -- phoenix-test ...`;
-explicit legacy `--reason` remains compatible. It accepts
-branch/worktree selectors and no nixos-rebuild option tail; build/dry-build still
-forward build options. Without this module, explicitly packaged legacy wrappers
-retain nixos-rebuild activation. A failed configured helper never falls back.
-OpenShell packages these same commands, but disabled-AI activation requires the
-native host's Polkit flow; the sandbox fails with host guidance. Sources must
+Human `phoenix-test` (also switch/boot) retains `nixos-rebuild --sudo` with
+terminal sudo/fingerprint authentication, rebuild progress, source selectors and
+option forwarding. Reasons are optional compatibility arguments, not broker context.
+Agents must use `ai-broker --task TASK --reason "task purpose" -- phoenix-test ...`.
+That fixed mapping directly invokes the immutable deployment client; it accepts
+bounded branch/worktree selectors and reservations, rejects rebuild-option tails,
+and never falls back to human sudo. Build/dry-build remain unprivileged.
+Broker review/reservations cover broker-mediated requests, not administrator direct
+sudo. With protected identity off, shared-UID instructions alone do not enforce
+human/agent identity separation; root authentication remains required.
+OpenShell packages human commands and the separate sandbox broker client. With AI
+review disabled, broker activation requires native host Polkit; the sandbox
+client fails with host guidance. Sources must
 be visible in configured workspace mounts; `~/.codex/worktrees` is absent by default. Enabled-review
 socket routing has existing mounts, but remains without live runtime acceptance.
 

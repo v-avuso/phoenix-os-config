@@ -38,6 +38,7 @@ def prepare(config, argv):
         raise ValueError("invalid installed client")
     installed = authorization.policy({"authorizationPolicy":config["policy"]})
     forwarded = []
+    deployment = []
     if name == "phoenix-admin":
         # Options belong to this adapter; the client receives canonical semantic args.
         reservation = []
@@ -49,6 +50,7 @@ def prepare(config, argv):
         authorization.validate(request, installed)
         forwarded = reservation + authorization.diagnostic_argv(request)
     else:
+        deployment = ["--target", installed["target"], "--action", name.removeprefix("phoenix-")]
         seen = set()
         while args:
             flag = args.pop(0)
@@ -66,7 +68,7 @@ def prepare(config, argv):
                                       {"target":installed["target"]}, task, reason)
         authorization.validate(request, installed)
     context = ["--authorization-context"] if config.get("explanationEnabled", False) else []
-    return [executable, "--task", task, "--reason", reason, *context, *forwarded]
+    return [executable, *deployment, "--task", task, "--reason", reason, *context, *forwarded]
 
 def main():
     config = json.loads(Path(sys.argv[1]).read_text())

@@ -97,37 +97,14 @@ class Commands(unittest.TestCase):
                                  ["--sudo", action, "--flake", f"{self.repo}#vm"])
                 self.assertEqual(self.recorded()["cwd"], str(self.base))
 
-    def test_configured_activation_routes_reason_and_source_without_raw_fallback(self):
-        helper = self.bin / "deploy-helper"
-        helper.write_text(f"#!{sys.executable}\nimport json, os, sys\nfrom pathlib import Path\nPath(os.environ['COMMAND_RECORD']).write_text(json.dumps({{'command':'deployment','args':sys.argv[1:]}}))\nsys.exit(int(os.environ.get('HELPER_STATUS','0')))\n")
-        helper.chmod(0o755)
+    def test_human_activation_keeps_terminal_rebuild_despite_helper_environment(self):
         other = self.make_worktree()
-        env = {"phoenix_deployment_helper": str(helper), "PHOENIX_TARGET": "vm"}
         for action in ("test", "switch", "boot"):
-            result = self.run_command("phoenix-rebuild", action, "--branch", "feature", "--reason", "Validate requested change", env=env)
+            result = self.run_command("phoenix-rebuild", action, "--branch", "feature",
+                                      "--reason", "Optional human context", "--option", "example", "value",
+                                      env={"phoenix_deployment_helper":"/missing/helper"})
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(self.recorded(), {"command":"deployment", "args":["--worktree",str(other),"--target","vm","--action",action,"--task","phoenix-rebuild","--reason","Validate requested change"]})
-        result = self.run_command("phoenix-rebuild", "test", "--reason", "fixture", env=env)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.recorded()["args"][0:2], ["--worktree", str(self.repo)])
-        result = self.run_command("phoenix-rebuild", "test", "--reason", "fixture", env=env | {"HELPER_STATUS":"23"})
-        self.assertEqual(result.returncode, 23)
-        self.assertEqual(self.recorded()["command"], "deployment")
-        for action in ("test", "switch", "boot"):
-            result = self.run_command("phoenix-rebuild", action, env=env)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(self.recorded()["args"][-2:], ["--reason", "Direct phoenix-" + action + " invocation"])
-        result = self.run_command("phoenix-rebuild", "test", "--reason", "fixture", "--authorization-context", env=env)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.recorded()["args"][-1], "--authorization-context")
-        self.record.unlink()
-        for tail in (("--reason", ""), ("--reason", " "), ("--reason", "line\nbreak"), ("--reason", "x"*2001), ("--reason", "fixture", "--option", "x", "y")):
-            result = self.run_command("phoenix-rebuild", "test", *tail, env=env)
-            self.assertEqual(result.returncode, 2, result.stderr)
-            self.assertFalse(self.record.exists())
-        result = self.run_command("phoenix-rebuild", "test", "--reason", "fixture", env={"phoenix_deployment_helper":"/missing/helper"})
-        self.assertEqual(result.returncode, 127)
-        self.assertFalse(self.record.exists())
+            self.assertEqual(self.recorded()["args"], ["--sudo", action, "--flake", f"{other}#metal", "--option", "example", "value"])
 
     def test_invalid_action_target_and_missing_checkout_stop_before_execution(self):
         cases = [("delete", {}, 2),

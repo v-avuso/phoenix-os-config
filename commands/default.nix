@@ -2,7 +2,6 @@
   pkgs,
   user,
   nixosRebuild ? pkgs.nixos-rebuild-ng,
-  deploymentHelper ? null,
   includeDesktopCommands ? true,
   hyprlandPackage ? pkgs.hyprland,
 }:
@@ -31,7 +30,6 @@ let
       phoenixTarget
     ];
     text = ''
-      phoenix_deployment_helper=${pkgs.lib.escapeShellArg (if deploymentHelper == null then "" else "${deploymentHelper}/bin/phoenix-deploy-review")}
       if [ -z "''${PHOENIX_REPO_ROOT:-}" ]; then
         export PHOENIX_REPO_ROOT=${pkgs.lib.escapeShellArg user.repoDirectory}
       fi

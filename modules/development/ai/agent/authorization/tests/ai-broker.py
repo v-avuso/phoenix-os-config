@@ -28,6 +28,10 @@ class Broker(unittest.TestCase):
     def test_required_reason_and_closed_command_options(self):
         for args in (("--","phoenix-test"), ("--reason"," ","--","phoenix-test"),
           ("--reason","x","--","sh","-c","phoenix-test"),
+          ("--reason","x","--","sudo","nixos-rebuild","switch"),
+          ("--reason","x","--","phoenix-test","--sudo"),
+          ("--reason","x","--","phoenix-test","--target","vm"),
+          ("--reason","x","--","phoenix-test","--action","switch"),
           ("--reason","x","--","phoenix-test","|","sh"),
           ("--reason","x","--","phoenix-test","--reason","override"),
           ("--reason","x","--","phoenix-test","--option","x","y"),
@@ -47,11 +51,19 @@ class Broker(unittest.TestCase):
         self.config.write_text(json.dumps(config))
         result=self.run_adapter("--reason","Validate change","--","phoenix-test")
         self.assertEqual(result.returncode,0,result.stderr)
-        self.assertEqual(json.loads(self.record.read_text()),["--task","ai-broker","--reason","Validate change","--authorization-context"])
+        self.assertEqual(json.loads(self.record.read_text()),["--target","metal","--action","test","--task","ai-broker","--reason","Validate change","--authorization-context"])
         self.record.unlink()
         result=self.run_adapter("--reason","Validate change","--","phoenix-test","--authorization-context")
         self.assertNotEqual(result.returncode,0)
         self.assertFalse(self.record.exists())
+
+    def test_each_agent_activation_uses_fixed_action_and_installed_target(self):
+        for action in ("test", "switch", "boot"):
+            result=self.run_adapter("--task","fixture","--reason","Requested deployment","--",
+                                    "phoenix-"+action,"--worktree",str(self.root))
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertEqual(json.loads(self.record.read_text()),
+                ["--target","metal","--action",action,"--task","fixture","--reason","Requested deployment","--worktree",str(self.root)])
 
     def test_missing_deployment_mapping_never_uses_legacy_or_path(self):
         config=json.loads(self.config.read_text())
@@ -65,7 +77,7 @@ class Broker(unittest.TestCase):
         result=self.run_adapter("--task","fixture","--reason","Inspect requested change","--",
                                 "phoenix-test","--branch","feature")
         self.assertEqual(result.returncode,0,result.stderr)
-        self.assertEqual(json.loads(self.record.read_text()),["--task","fixture","--reason","Inspect requested change","--branch","feature"])
+        self.assertEqual(json.loads(self.record.read_text()),["--target","metal","--action","test","--task","fixture","--reason","Inspect requested change","--branch","feature"])
         result=self.run_adapter("--reason","Inspect current logs","--","phoenix-admin","kernel-journal","42")
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertEqual(json.loads(self.record.read_text()),["--task","ai-broker","--reason","Inspect current logs","kernel-journal","42"])

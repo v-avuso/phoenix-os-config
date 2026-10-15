@@ -166,10 +166,10 @@ selected backend's allowed mounts. See [cold handoff and proof](history-layout.m
   and diagnose readiness/failure stages before requesting sign-in.
 - **Explicit source selection:** Shared rebuild commands and the authenticated
   deployment client accept branch/worktree selectors without switching checkouts.
-  Configured native and OpenShell Phoenix activation wrappers submit frozen
-  requests through the existing deployment client with neutral invocation context
-  when no reason is supplied, and reject
-  nixos-rebuild argument tails. Agents use the [bounded `ai-broker` interface](authorization/README.md#command-interface). Build/dry-build retain argument forwarding.
+  Human Phoenix activation retains terminal `nixos-rebuild --sudo` and option
+  forwarding. Agents use the [bounded `ai-broker` interface](authorization/README.md#command-interface),
+  which directly submits frozen requests to the immutable deployment client. It
+  rejects rebuild-option tails and never falls back to the human sudo route.
   OpenShell can select only mounted workspaces; managed external worktrees are
   absent by default. Disabled AI requires native host Polkit; sandbox clients fail with host guidance. See [agent instructions](AGENTS.md#source-selection) for usage,
   dirty-source behavior and existing-worktree constraints.

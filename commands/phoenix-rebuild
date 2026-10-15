@@ -4,13 +4,13 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  phoenix-rebuild [--print] [--branch NAME | --worktree PATH] [--task TASK] [--reason PURPOSE] [--reservation-file FILE] <action> [nixos-rebuild args...]
-  phoenix-<action> [--print] [--branch NAME | --worktree PATH] [--task TASK] [--reason PURPOSE] [--reservation-file FILE] [nixos-rebuild args...]
+  phoenix-rebuild [--print] [--branch NAME | --worktree PATH] [--task TASK] [--reason PURPOSE] <action> [nixos-rebuild args...]
+  phoenix-<action> [--print] [--branch NAME | --worktree PATH] [--task TASK] [--reason PURPOSE] [nixos-rebuild args...]
 
-Configured authenticated test/switch/boot accept no nixos-rebuild tail.
-Direct invocations supply neutral audit context; --reason remains compatible.
-Enabled testing reservations also require --reservation-file for activation.
-Build/dry-build forward nixos-rebuild arguments.
+Test/switch/boot run nixos-rebuild --sudo with its terminal authentication/output.
+Optional --reason/--task are accepted for compatibility, not broker audit context.
+Agents must use ai-broker for authenticated immutable deployment and reservations.
+All actions forward nixos-rebuild arguments.
 Runs the selected workflow against the auto-selected PhoeNix OS flake target.
 Set PHOENIX_TARGET=vm or PHOENIX_TARGET=metal to override detection.
 EOF
@@ -18,10 +18,8 @@ EOF
 
 print_only=false
 selector=()
-reason=""
 reason_supplied=false
 authorization_context=false
-task="phoenix-rebuild"
 reservation_file=""
 action=""
 if [ "$#" -eq 0 ]; then usage; exit 0; fi
@@ -38,12 +36,12 @@ while [ "$#" -gt 0 ]; do
       reservation_file="$2"; shift 2 ;;
     --task)
       if [ "$#" -lt 2 ] || [ -z "$2" ]; then exit 2; fi
-      task="$2"; shift 2 ;;
+      shift 2 ;;
     --reason)
       if [ "$reason_supplied" = true ] || [ "$#" -lt 2 ]; then
         printf 'phoenix-rebuild: supply one --reason with a value\n' >&2; exit 2
       fi
-      reason="$2"; reason_supplied=true; shift 2 ;;
+      reason_supplied=true; shift 2 ;;
     --branch|--worktree)
       if [ "${#selector[@]}" -ne 0 ] || [ "$#" -lt 2 ] || [ -z "$2" ]; then
         printf 'phoenix-rebuild: supply one --branch or --worktree with a value\n' >&2
@@ -88,23 +86,10 @@ target="$(phoenix-target)"
 
 flake_ref="${repo_root}#${target}"
 
-# Packaging chooses this route explicitly; missing configured helpers fail closed.
-if [[ "$action" =~ ^(test|switch|boot)$ ]] && [ -n "${phoenix_deployment_helper:-}" ]; then
-  if [ "$#" -ne 0 ]; then
-    printf 'phoenix-rebuild: authenticated activation does not support nixos-rebuild options; use build for evaluation/build options\n' >&2; exit 2
-  fi
-  if [ "$reason_supplied" = false ]; then reason="Direct phoenix-$action invocation"; fi
-  if [ -z "${reason//[[:space:]]/}" ] || [ "${#reason}" -gt 300 ] || [[ "$reason" =~ [[:cntrl:]] ]]; then
-    printf 'phoenix-rebuild: explicit reason must be 1–300 characters without control characters\n' >&2; exit 2
-  fi
-  cmd=("$phoenix_deployment_helper" --worktree "$repo_root" --target "$target" --action "$action" --task "$task" --reason "$reason")
-  if [ "$authorization_context" = true ]; then cmd+=(--authorization-context); fi
-  if [ -n "$reservation_file" ]; then cmd+=(--reservation-file "$reservation_file"); fi
-  if [ "$print_only" = true ]; then printf '%q ' "${cmd[@]}"; printf '\n'; exit 0; fi
-  exec "${cmd[@]}"
-fi
-if [ "$authorization_context" = true ] || [ -n "$reason" ] || [ -n "$reservation_file" ]; then
-  printf 'phoenix-rebuild: --reason is supported only for configured authenticated activation\n' >&2; exit 2
+# These human-facing commands retain nixos-rebuild's terminal authentication/UI.
+# Agent deployment is a separate immutable ai-broker mapping, never an env mode.
+if [ "$authorization_context" = true ] || [ -n "$reservation_file" ]; then
+  printf 'phoenix-rebuild: authorization context/reservations require ai-broker deployment\n' >&2; exit 2
 fi
 cmd=(nixos-rebuild)
 

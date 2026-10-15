@@ -15,7 +15,6 @@ let
   zoneinfo = "${pkgs.tzdata}/share/zoneinfo";
   phoenixCommands = import ../../../../commands {
     inherit pkgs user;
-    deploymentHelper = phoenixDeployReviewPackage;
     includeDesktopCommands = false;
   };
   aiBroker = import ./authorization/adapter.nix {
@@ -23,7 +22,7 @@ let
     adminClient = phoenixAdminPackage;
     deploymentCommands = pkgs.lib.optionalAttrs (phoenixDeployReviewPackage != null)
       (pkgs.lib.genAttrs [ "phoenix-test" "phoenix-switch" "phoenix-boot" ]
-        (name: "${phoenixCommands}/bin/${name}"));
+        (name: "${phoenixDeployReviewPackage}/bin/phoenix-deploy-review"));
   };
   tools = pkgs.buildEnv {
     name = "phoenix-agent-tools";

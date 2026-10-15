@@ -23,11 +23,18 @@ commands and limits remain in the [module README](README.md),
 
 ## Recorded installed state and pending source
 
-- Persistent repair source `60d5361` includes maintenance-lock repair `70fb232`
-  and config-link repair `1b27eec`. Boot profile remains
-  `/nix/store/dql2y6v7zhsszffw8gv6fw7zqa8rk18c-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
+- Operator subsequently ran `phoenix-switch` from main. Current runtime and
+  next-boot profile both resolve to
+  `/nix/store/yfdnf706nf8zh6lil1j64c6k8r1s8jm1-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
+  Main's sharing flag is OFF, so this replaced the temporary sharing-ON trial.
+  Published shared-history readiness remains authoritative; never restore originals.
+- The operator clarified that human Phoenix commands must retain terminal
+  `nixos-rebuild --sudo` authentication and output. Only explicit `ai-broker`
+  requests should enter the controller pipeline. The correction separates these
+  routes without changing updater ownership; focused regressions pass, while
+  combined packaging/system checks and repair installation remain pending.
 - The 2026-10-15 cold handoff published readiness and the sharing-ON trial was
-  temporarily activated. Runtime is
+  temporarily activated. Its accepted temporary closure was
   `/nix/store/4c7agrmk05mpidgan14xcig0vgjnzv94-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
   The operator confirmed this exact conversation resumed and a reply was sent
   in Sandbox, then returned to Native. Do not rerun migration or restore stale
