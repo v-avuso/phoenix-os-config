@@ -165,4 +165,5 @@
 - When isolating shared desktop preferences, trace the actual persisted-atom
   setters as well as picker reads/defaults. Permission selection and preferred-mode
   keys can be separate shared writers; guard pinned owners and resumed-thread
-  reconciliation, preserve explicit restricted profiles, and verify Native return.
+  reconciliation. Test restricted/unknown current profiles against saved host-wide
+  modes; current chat policy must outrank stale preferences. Verify Native return.

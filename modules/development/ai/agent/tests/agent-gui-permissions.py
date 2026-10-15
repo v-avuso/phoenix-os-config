@@ -44,7 +44,21 @@ assert.equal(resumed,'custom');
 assert.deepEqual(reconcile(resumed,'auto',':workspace'),{Ce:true,send:true});
 assert.equal(Fci('local',sandbox,false,null,'read-only',':read-only'),'read-only');
 assert.deepEqual(reconcile('read-only','read-only',':read-only'),{Ce:false,send:false});
-for(const mode of ['custom','granular','full-access','unknown'])assert.equal(Fci('local',sandbox,false,null,mode,null),undefined);
+for(const saved of ['custom','auto','full-access']){
+ const preferences={local:saved};
+ assert.equal(Fci('local',preferences,false,null,'read-only',':read-only'),'read-only');
+ assert.deepEqual(reconcile(Fci('local',preferences,false,null,'read-only',':read-only'),'read-only',':read-only'),{Ce:false,send:false});
+ for(const profile of ['named-restricted',':unknown',':danger-full-access']){
+  const picked=Fci('local',preferences,false,null,'auto',profile);
+  assert.equal(picked,undefined);
+  assert.equal(reconcile(picked,'auto',profile).Ce,false);
+ }
+ for(const mode of ['custom','granular','full-access','guardian-approvals']){
+  assert.equal(Fci('local',preferences,false,null,mode,null),mode);
+ }
+ assert.equal(Fci('local',preferences,false,null,'unknown',null),undefined);
+ assert.equal(Fci('local',preferences,false,null,'auto',':workspace'),saved);
+}
 for(const profile of ['named-restricted',':unknown',':danger-full-access']){
  assert.equal(Fci('local',sandbox,false,null,'auto',profile),undefined);
  assert.equal(reconcile(undefined,'auto',profile).Ce,false);

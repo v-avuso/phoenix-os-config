@@ -14,12 +14,18 @@ KEYS = ("`agent-mode-by-host-id`", "`config-derived-agent-mode-by-host-id`",
         "`preferred-non-full-access-agent-mode-by-host-id`")
 LOOKUP = ("function Fci(e,t,n,r){let i=t[e];if(i!=null)return i;"
           "if(n&&r!=null&&t[r]===`guardian-approvals`)return`guardian-approvals`}")
-# A saved choice always wins. Only an absent/default or ordinary workspace mode
-# adopts Custom. Read-only and unknown/named profiles retain their own semantics.
-REPLACEMENT = LOOKUP[:-1].replace("Fci(e,t,n,r)", "Fci(e,t,n,r,mode,profile)") + (
-    ";if(profile!=null&&profile!==`:workspace`&&profile!==`:read-only`)return;"
-    "if(mode===`read-only`||profile===`:read-only`)return`read-only`;"
-    "if(mode==null||mode===`auto`)return`custom`}")
+# Thread-specific restricted/explicit policy outranks a stale host-wide preference.
+# The upstream picker still applies a deliberate current-chat choice directly.
+GUARDS = (
+    "if(profile!=null&&profile!==`:workspace`&&profile!==`:read-only`)return;"
+    "if(profile===`:read-only`)return`read-only`;"
+    "if(mode!=null&&mode!==`auto`){"
+    "if([`read-only`,`custom`,`full-access`,`granular`,`guardian-approvals`].includes(mode))return mode;return;}"
+)
+REPLACEMENT = LOOKUP[:-1].replace("Fci(e,t,n,r)", "Fci(e,t,n,r,mode,profile)").replace(
+    "{let i=t[e];", "{" + GUARDS + "let i=t[e];"
+) + ";return`custom`}"
+
 CALL = "pe=Fci(i,R,de,o)"
 
 

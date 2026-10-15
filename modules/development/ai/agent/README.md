@@ -42,8 +42,10 @@ sandbox, and actions permitted by that outer boundary do not acquire automatic
 command review. **Approve for me** supplies a workspace-write override, whose
 nested Bubblewrap user namespace OpenShell denies. The immutable Sandbox desktop
 adapter uses separate permission preference keys;
-Native's package and saved preferences remain unchanged. Explicit Sandbox choices
-win; read-only and named/unknown profiles are not automatically widened. Read-only
+Native's package and saved preferences remain unchanged. A chat's current explicit
+or restricted policy outranks stale host-wide preferences; deliberate picker
+changes still apply to that chat. Named/unknown profiles are not automatically
+widened. Read-only
 still requires an unsupported nested sandbox here and needs an operator decision.
 Shared chats retain upstream thread permission history, so verify effective Native
 permissions on return; preference isolation alone is not runtime acceptance.
