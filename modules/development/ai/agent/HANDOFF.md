@@ -23,10 +23,10 @@ commands and limits remain in the [module README](README.md),
 
 ## Recorded installed state and pending source
 
-- Main/trial include prepared maintenance-lock repair `70fb232`. The installed
-  system includes config-link repair `1b27eec`, but not the maintenance-lock repair.
-  Runtime and persistent boot currently use this same closure:
-  `/nix/store/v13m62sf1q44zrng2vmw1w82l1wq0j6g-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
+- Installed source `60d5361` includes maintenance-lock repair `70fb232` and
+  config-link repair `1b27eec`. Authenticated persistent deployment succeeded;
+  runtime and boot profile both use
+  `/nix/store/dql2y6v7zhsszffw8gv6fw7zqa8rk18c-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
 - Shared readiness is absent: no history migration and no ON sharing-trial activation
   have occurred. A built ON package or fixture does not change that state.
 - Committed repair `70fb232` accepts Codex 0.160's exact `.sqlite-maintenance.lock` as
@@ -34,7 +34,8 @@ commands and limits remain in the [module README](README.md),
   runtime status. It is not a database and is never copied during migration.
   All 17 synthetic history tests passed. Coordinator also ran the actual patched
   `inspect_layout` successfully against the real Native config/path layout, without
-  migration or a writer-gate bypass. Build and installation remain pending.
+  migration or a writer-gate bypass. Main and trial builds passed; the installed
+  helper's complete read-only layout inspection passed too.
 - `inspect_layout(config)` runs the same read-only config/layout checks while GUI
   writers exist. Its success is not cold approval or database-integrity evidence.
   Actual cold preflight/apply still reject running writers.
@@ -56,9 +57,9 @@ review and authorization explanation remain off.
 
 ## Resume order
 
-1. Coordinator builds/installs the reviewed repaired source through the authenticated
-   deployment boundary. Distinguish source commit, build result, runtime closure
-   and boot profile; the trial source already contains the fix.
+1. Repair installation is complete through the authenticated deployment boundary.
+   The trial source contains the same fix; only its sharing flag differs. Further
+   documentation-only commits do not require reinstalling the unchanged repair.
 2. The real read-only layout check has passed through the actual patched loader.
    Recheck only if relevant state changes, printing bounded success/failure, never
    config/chat contents. Actual stopped-writer/cold checks remain pending.
@@ -88,6 +89,12 @@ GUI and CLI; retain the operator terminal and authenticated controller route.
 - Unit/disposable fixtures demonstrate bounded behavior, not installed operation.
   Package builds demonstrate packaging, not activation or user workflow success.
   Real shared-GUI/history/model-turn acceptance is still pending.
+- This chat is indexed in Native and its conversation file exists in the planned
+  history mounts. Exact Codex 0.160 read/resume of its private backup passed in a
+  disposable network-isolated namespace, with no credentials or model turn.
+  The resume response was 11,771,928 bytes, below the relay's 16 MiB frame cap.
+  Original history was unchanged and processes were reaped. This proves backup
+  format compatibility, not the live OpenShell/GUI/workspace workflow or future sizes.
 - Protected identity, reservations, disruption protection and the full optional
   security-review workflow have separate unfinished live acceptance. The generic
   authorization explanation remains experimental/off; critical exact-pending
