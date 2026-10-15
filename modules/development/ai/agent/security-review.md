@@ -238,12 +238,25 @@ registry entry, if any, is ordinary Nix GC bookkeeping; no global cleanup runs.
 
 This is the deliberately cheaper explicit-trust seed path: ZERO AI, no request
 `process`, reviewer worker, new Nix build or activation callback is invoked. It
-proves root checkpoint/provenance/guard/GC-root behavior only if the actual trial
-passes. The earlier protected reviewer trial is separate composition evidence;
+proved root checkpoint/provenance/guard/GC-root behavior in the actual trial
+below. The earlier protected reviewer trial is separate composition evidence;
 this does not prove root-to-worker review/new-build integration, temporary
-activation or fresh-auth security override. No success is recorded yet. A denied
-review is never automatically overridden. Production security review remains OFF.
+activation or fresh-auth security override. A denied review is never automatically
+overridden. Production security review remains OFF.
 
 Offline checks: `python3 -B tests/review-checkpoint-test.py` tests authentication,
 lock separation, record binding/modes with explicit ownership stubs, and dry-run
 without auth/controller execution. Those tests do not establish root operation.
+
+The actual authenticated root trial passed from exact source
+`f02d64a4d8e58d06dd7f2e5c49ba7b9700365263`, using immutable package
+`/nix/store/7wa7xdndbkb5xgachrwiig9n9mhx3hxz-phoenix-review-checkpoint-trial`:
+
+```json
+{"status":"passed","modelInvocations":0,"activation":false,"rootCheckpoint":true,"exactReuse":true,"ownedRootsCleaned":true,"trialPid":924666}
+```
+
+This used only the explicit-trust checkpoint path and cleaned its owned private
+roots/tree. Production cache, credentials/sign-in, profile and activation were
+untouched; review remains OFF. Full root-to-worker/new-build review, activation
+and fallback authentication remain pending, rather than implied by this receipt.
