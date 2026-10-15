@@ -260,3 +260,60 @@ This used only the explicit-trust checkpoint path and cleaned its owned private
 roots/tree. Production cache, credentials/sign-in, profile and activation were
 untouched; review remains OFF. Full root-to-worker/new-build review, activation
 and fallback authentication remain pending, rather than implied by this receipt.
+
+
+## Root process integration trial (prepared, not executed)
+
+The same on-demand `tests/review-checkpoint.nix` package additionally provides
+argument-free `phoenix-review-integration-trial-dry-run`,
+`phoenix-review-integration-prebuild-plan` and `phoenix-review-integration-trial`.
+The existing zero-AI entries retain their narrower behavior. Build from an exact
+committed Git-flake source; never package the working tree/root instructions draft.
+Production review remains OFF and this creates no service or production endpoint.
+
+First run the dry-run (no auth/model), then the unprivileged prebuild-plan. The
+latter adds a deterministic snapshot to the Nix store using only actual activated
+baseline files/modes plus one fixed README HTML comment; it prints the exact
+source and offline Nix build argv. Preview that argv with `--dry-run`, stop on
+unexpected rebuilds or missing inputs, and explicitly prebuild within a proposed
+five-minute/zero-download budget. A comment changes source provenance and thus
+may require a new system closure. Keep the returned closure/source alive until
+the trial. The paid entry's Nix wrapper disables downloads, local build jobs and
+remote builders: any missing prebuilt output fails before review. No candidate
+content/path/command is accepted from entry-point arguments.
+
+Only after package review and explicit one-call authorization, use the supported
+host Polkit flow with the exact immutable no-argument integration executable;
+wrap it in an overall 180-second timeout with a ten-second kill grace. Authentication
+remains native. Root validates PKEXEC_UID, unchanged runtime/profile, original
+global deployment lock (nonblocking) and activation-guard identity. Private root-owned
+requests/config/checkpoints stay under one owned temporary tree. Config is root
+0444 and traversable for the configured builder/reviewer. Real production process,
+source-store/build commands, setpriv worker, protected reviewer home, adapter and
+root checkpoint/GC-root publication run; no credentials are read/copied by the
+fixture. Separate private policy seeding accounts for its test wrapper identities.
+
+The sole replaced production callback is `activate_bound`: it takes the real
+activation guard, rechecks exact binding/runtime/profile and records the boundary.
+It never activates, updates profiles or restarts services. The second process call
+uses identical files/source with another branch and must reuse the exact checkpoint.
+The receipt reports controller/builder/reviewer UIDs and activation=false. Captured
+controller output/model summaries are not printed; failures expose static stage/code
+and an at-most-one invocation bound. Denial never triggers an override/retry.
+
+Two immutable test wrappers bind one trial-wide token into every adapter `/work`
+namespace and consume it atomically before pinned Codex executes. The root-owned
+budget directory prevents deletion by the reviewer; its reviewer-writable token
+is a normal-fixture cost guard, not authority against a hostile reviewer UID.
+It caps actual CLI invocations at one across context requests and repeated calls,
+not CLI-internal server requests, tokens or billing. A requested context round
+therefore fails closed before another CLI invocation. Protected-UID gate traversal
+still needs the actual trial; offline tests prove normal mode ownership layout,
+concurrent token exclusion and composed callback behavior with explicit doubles.
+
+Production subprocess bounds kill/wait their child process groups on interruption;
+the adapter retains bubblewrap die-with-parent. Temporary cleanup removes only
+owned private checkpoints/GC-root links/config/budget after calls end. The fixture
+may create production audit records labelled review-integration-trial, but no
+production approval/cache. Actual activation, rollback and fresh-auth fallback
+remain separate acceptance work; no full privileged acceptance is claimed here.

@@ -1,6 +1,8 @@
 """Zero-AI isolated root checkpoint/provenance trial, not deployment acceptance."""
 import contextlib
 import fcntl
+import hashlib
+import pwd
 import importlib.util
 import json
 import os
@@ -37,14 +39,18 @@ def private_config(config, root):
     return dict(config, work=str(work), securityReviewState=str(state)), original_lock
 
 
-def verify_records(directory, source, closure):
+def verify_records(directory, source, closure, selected=False):
     info = directory.lstat()
     if info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o700:
         raise ValueError('checkpoint-directory-invalid')
     records = list(directory.glob('*.approved.json'))
     if not records:
         raise ValueError('checkpoint-missing')
+    matched = False
     for record in records:
+        if selected and json.loads(record.read_text()).get('source') != source:
+            continue
+        matched = True
         info = record.lstat()
         if info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o600:
             raise ValueError('checkpoint-owner-invalid')
@@ -56,12 +62,77 @@ def verify_records(directory, source, closure):
             if not root.is_symlink() or root.lstat().st_uid != 0 or str(root.resolve(strict=True)) != expected:
                 raise ValueError('checkpoint-root-invalid')
 
+    if not matched:
+        raise ValueError('checkpoint-missing')
+
+
+def candidate(review, source):
+    files = review.baseline_files(Path(source))
+    modes = review.source_modes(Path(source), files)
+    if 'README.md' not in files:
+        raise ValueError('trial-readme-missing')
+    files['README.md'] += '\n<!-- Isolated review integration acceptance; no configuration change. -->\n'
+    return files, modes
+
+
+def integration(deploy, review, trial, public, root, source, runtime, profile, plan=False):
+    files, modes = candidate(review, source)
+    if plan:
+        with tempfile.TemporaryDirectory(prefix='phoenix-review-plan-') as directory:
+            snapshot = Path(directory)
+            for name, content in files.items():
+                path = snapshot / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content)
+                path.chmod(0o755 if modes[name] == '100755' else 0o644)
+            frozen = review.run([trial['nix'], '--offline', 'store', 'add-path', '--name', 'source', str(snapshot)]).decode().strip()
+        return dict(status='prebuild-plan', source=frozen, modelInvocations=0, activation=False,
+                    buildArgv=[trial['nix'], '--offline', 'build', '--no-link', '--print-out-paths',
+                               '--no-write-lock-file', '--option', 'accept-flake-config', 'false', 'path:' + frozen + '#nixosConfigurations.' + trial['target'] + '.config.system.build.toplevel'])
+    reviewer = pwd.getpwnam(trial['reviewerUser'])
+    budget = root / 'budget'; budget.mkdir(mode=0o755)
+    token = budget / 'used'; token.write_text('0'); token.chmod(0o600)
+    os.chown(token, reviewer.pw_uid, reviewer.pw_gid)
+    trial = dict(trial, bwrap=public['gateBwrap'], codex=public['gateCodex'], nix=public['offlineNix'])
+    config_path = root / 'integration.json'
+    trial['configPath'] = str(config_path)
+    config_path.write_text(json.dumps(trial)); config_path.chmod(0o444)
+    # Gate identities change the policy fingerprint: seed only this private policy.
+    deploy.trust_active(trial, trial['operatorUid'], os.getpid())
+    recorded = []
+    def record(config, binding, temporary, loaded_review, state, uid, pid):
+        del temporary, state, uid, pid
+        with deploy.activation_guard(config):
+            deploy.recheck_bound(config, binding)
+            if str(Path('/run/current-system').resolve()) != runtime or str(Path('/nix/var/nix/profiles/system').resolve()) != profile:
+                raise ValueError('active-binding-changed')
+            recorded.append(binding)
+            return dict(source=binding['source'], closure=binding['closure'], activation=False)
+    deploy.activate_bound = record  # Sole production behavior replaced by this fixture.
+    request = dict(files=files, modes=modes, commit=hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest(),
+                   target=trial['target'], action='test', reason='Isolated root review integration; activation disabled.',
+                   task='review-integration-trial', branch='review-integration-a')
+    # Avoid raw model summaries or controller output in the public receipt.
+    import io
+    with contextlib.redirect_stdout(io.StringIO()):
+        first = deploy.process(trial, request, trial['operatorUid'], os.getpid(), operator=True)
+        if token.read_text() != '1' or len(recorded) != 1:
+            raise ValueError('trial-review-count-invalid')
+        verify_records(Path(trial['securityReviewState']), first['source'], first['closure'], selected=True)
+        request['branch'] = 'review-integration-b'
+        second = deploy.process(trial, request, trial['operatorUid'], os.getpid(), operator=True)
+    if first != second or token.read_text() != '1' or len(recorded) != 2:
+        raise ValueError('exact-reuse-or-state-changed')
+    return dict(status='passed', modelInvocations=1, activation=False, rootCheckpoint=True,
+                exactReuse=True, builderUid=pwd.getpwnam(trial['builderUser']).pw_uid,
+                reviewerUid=reviewer.pw_uid, controllerUid=os.geteuid(), ownedRootsCleaned=True)
+
 
 def interrupt(*_):
     raise InterruptedError("trial-interrupted")
 
 
-def main(descriptor, dry_run=False):
+def main(descriptor, dry_run=False, integration_mode=False, plan=False):
     stage = 'configuration'
     try:
         public = json.loads(immutable(descriptor).read_text())
@@ -69,8 +140,13 @@ def main(descriptor, dry_run=False):
         controller = immutable(public['controller'])
         if dry_run:
             print(json.dumps(dict(status='dry-run', modelInvocations=0, activation=False,
-                                  proof='trust-active-root-checkpoint-only')))
+                                  proof='root-process-review-activation-stub' if integration_mode else 'trust-active-root-checkpoint-only')))
             return 0
+        if plan:
+            spec = importlib.util.spec_from_file_location('checkpoint_controller', controller)
+            deploy = importlib.util.module_from_spec(spec); spec.loader.exec_module(deploy)
+            result = integration(deploy, deploy.load_review(config), config, public, None, str(Path(config['baseline']).resolve(strict=True)), None, None, plan=True)
+            print(json.dumps(result)); return 0
         stage = 'authentication'
         require_operator(config, os.geteuid(), os.environ.get('PKEXEC_UID'))
         signal.signal(signal.SIGTERM, interrupt)
@@ -92,6 +168,7 @@ def main(descriptor, dry_run=False):
         immutable_guard = Path(config['activationLock']).lstat()
         if not stat.S_ISREG(immutable_guard.st_mode) or immutable_guard.st_uid != 0 or stat.S_IMODE(immutable_guard.st_mode) != 0o600 or immutable_guard.st_nlink != 1:
             raise ValueError('activation-guard-unavailable')
+        receipt = None
         with tempfile.TemporaryDirectory(prefix='phoenix-checkpoint-trial-', dir='/var/tmp') as directory:
             root = Path(directory)
             root.chmod(0o711)
@@ -119,6 +196,11 @@ def main(descriptor, dry_run=False):
                     'another-trial-branch', source, review.baseline_files(Path(source)), review, deploy.store_path)
                 if not reused or str(Path('/run/current-system').resolve(strict=True)) != runtime or str(Path('/nix/var/nix/profiles/system').resolve(strict=True)) != profile:
                     raise ValueError('exact-reuse-or-state-changed')
+                if integration_mode:
+                    stage = 'root-process-integration'
+                    receipt = integration(deploy, review, trial, public, root, source, runtime, profile)
+        if receipt is not None:
+            print(json.dumps(receipt)); return 0
         print(json.dumps(dict(status='passed', modelInvocations=0, activation=False,
                               rootCheckpoint=True, exactReuse=True, ownedRootsCleaned=True, trialPid=os.getpid())))
         return 0
@@ -127,16 +209,24 @@ def main(descriptor, dry_run=False):
                  'lock-identities-overlap', 'checkpoint-directory-invalid', 'checkpoint-missing',
                  'checkpoint-owner-invalid', 'checkpoint-binding-mismatch', 'checkpoint-root-invalid',
                  'runtime-profile-mismatch', 'activation-guard-unavailable', 'global-lock-invalid',
-                 'active-binding-changed', 'exact-reuse-or-state-changed', 'baseline-provenance-missing',
+                 'active-binding-changed', 'exact-reuse-or-state-changed', 'trial-readme-missing', 'trial-review-count-invalid', 'baseline-provenance-missing',
                  'baseline-provenance-invalid', 'baseline-verification-failed', 'baseline-target-mismatch'}
+        if hasattr(error, 'stage'):
+            stage = error.stage
+        codes.update({'review-authentication-missing', 'review-authentication-failed', 'review-timeout',
+                      'review-invocation-failed', 'reviewer-invocation-failed', 'schema-invalid', 'binding-mismatch',
+                      'model-denied', 'review-context-oversized', 'baseline-changed', 'profile-changed'})
         candidate = getattr(error, 'code', str(error))
         code = candidate if candidate in codes else ('global-lock-busy' if isinstance(error, BlockingIOError) else 'trial-failed')
-        print(json.dumps(dict(status='blocked-or-failed', stage=stage, code=code, modelInvocations=0,
+        print(json.dumps(dict(status='blocked-or-failed', stage=stage, code=code, modelInvocations='at-most-one' if integration_mode else 0,
                               activation=False, retry=False)))
         return 1
 
 
 if __name__ == '__main__':
-    if len(sys.argv) not in (2, 3) or (len(sys.argv) == 3 and sys.argv[2] != '--dry-run'):
+    allowed = {'--dry-run', '--integration', '--integration-dry-run', '--prebuild-plan'}
+    if len(sys.argv) not in (2, 3) or (len(sys.argv) == 3 and sys.argv[2] not in allowed):
         raise SystemExit(2)
-    raise SystemExit(main(sys.argv[1], len(sys.argv) == 3))
+    mode = sys.argv[2] if len(sys.argv) == 3 else ''
+    raise SystemExit(main(sys.argv[1], mode in {'--dry-run', '--integration-dry-run'},
+                          mode.startswith('--integration'), mode == '--prebuild-plan'))
