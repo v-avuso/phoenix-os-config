@@ -23,16 +23,21 @@ commands and limits remain in the [module README](README.md),
 
 ## Recorded installed state and pending source
 
-- Operator subsequently ran `phoenix-switch` from main. Current runtime and
-  next-boot profile both resolve to
-  `/nix/store/yfdnf706nf8zh6lil1j64c6k8r1s8jm1-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
+- Human-command routing repair `bd1389f` was authenticated and persistently
+  installed through explicit `ai-broker`. Current runtime and next-boot profile
+  both resolve to
+  `/nix/store/c9idlbl404zv5lhsyrbw4pkq56i57fbm-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
   Main's sharing flag is OFF, so this replaced the temporary sharing-ON trial.
   Published shared-history readiness remains authoritative; never restore originals.
 - The operator clarified that human Phoenix commands must retain terminal
   `nixos-rebuild --sudo` authentication and output. Only explicit `ai-broker`
   requests should enter the controller pipeline. The correction separates these
-  routes without changing updater ownership; focused regressions pass, while
-  combined packaging/system checks and repair installation remain pending.
+  routes without changing updater ownership. All 24 focused tests, ShellCheck,
+  Bash/Nix parsing, actual Nix command-packaging fixture and the full system build
+  passed. Controller switch returned success; runtime and next-boot paths match.
+  Installed `phoenix-switch --print` emits `nixos-rebuild --sudo switch --flake ...`;
+  installed agent mappings point directly to the immutable deployment client.
+  No extra activation or live terminal fingerprint prompt was run merely to test.
 - The 2026-10-15 cold handoff published readiness and the sharing-ON trial was
   temporarily activated. Its accepted temporary closure was
   `/nix/store/4c7agrmk05mpidgan14xcig0vgjnzv94-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
