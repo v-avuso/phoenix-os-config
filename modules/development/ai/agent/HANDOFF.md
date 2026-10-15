@@ -250,6 +250,15 @@ archive. Missing old denial after gateway restart does not prove failed flush.
 Use live gateway receipt for delivery and independent journal/Podman logs for
 persistence; see shutdown acceptance for exact source lines and artifact path.
 
+Ordered whole-user-manager shutdown from `fcda58b` returned zero in 1.518
+seconds, manager inactive/status three, TERM/FINAL present, both containers stopped,
+supervisor zero. Direct inspection succeeded without PAM/manager restart. The fixture
+still failed pending transport; runtime exit one remains the known classification
+gap. See shutdown acceptance for artifacts and the invalid prior background-pipe
+attempt. Prompt teardown has isolated runtime evidence; full shutdown acceptance
+and live enablement remain pending. Continue review integration preparation while
+keeping all experimental controls off.
+
 ## Worktrees and preservation
 
 | Purpose | Checkout | State to preserve |

@@ -348,6 +348,23 @@ implemented; no current capture proves final remote flush. Gateway restart must
 continue to exercise normal retained-intent behavior. Canonical transport and
 runtime-status failures remain explicit independent acceptance gaps.
 
+### Ordered user-manager teardown
+
+Source `fcda58b` also exercised root guest `systemctl stop user@1000.service`.
+It returned zero in 1.518 seconds; the manager was immediately inactive (status
+three), TERM/FINAL were present, both exact containers were stopped, and supervisor
+exit was zero. Direct post-stop Podman inspection succeeded without PAM or manager
+restart. Runtime exit one with the known confirmation error and pending attached
+transport remain; the overall fixture deliberately failed that transport assertion.
+Artifacts: `/nix/store/h88jbvg6aixwnjzgixlarcvvkfknnns9-vm-test-run-phoenix-shutdown-openshell/final/shutdown-evidence`.
+
+The prior `9ea9723` manager attempt never stopped the manager: the shell wrapper's
+background AND-list retained driver stdout until its 120/90-second job timeouts.
+A local captured-output comparison confirmed the separated directory-change fix;
+that invalid attempt is not shutdown evidence. The corrected run validates prompt
+ordered manager teardown, not final-event delivery or successful canonical exit.
+No live ordering option, timeout, package pin or production Rust was changed.
+
 ### Proposed ordinary-stop repair (not implemented)
 
 Preserve upstream's deliberate administrative-stop availability contract.

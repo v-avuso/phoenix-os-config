@@ -183,3 +183,8 @@
 - Once an authorized Polkit request has started, let its native dialog collect
   authentication and await the result. Do not add redundant availability or
   confirmation questions; surface expiry or failure when it occurs.
+
+- Before expanding shutdown repairs, check the pinned contracts in
+  `shutdown-acceptance.md`: administrative exit-report skipping prevents hangs,
+  and the gateway log tail is memory-only. Validate supported delivery semantics
+  before treating a negative probe or post-restart absence as a new defect.
