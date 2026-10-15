@@ -1,6 +1,6 @@
 # Explicit first slice: actual OpenShell ordinary stop, ordering OFF.
 # Image arguments are public immutable archives plus independently verified IDs/hash.
-{ pkgs, runtime, supervisor, workload, probeCreateOnly ? false, stopMode ? "ordinary" }:
+{ pkgs, runtime, supervisor, workload, probeCreateOnly ? false, stopMode ? "ordinary", containersConfig ? null }:
 let
   lib = pkgs.lib;
   packages = import ../packages.nix { inherit pkgs; };
@@ -48,6 +48,7 @@ let
     network_policies = { };
   });
 in
+assert containersConfig == null || (lib.hasPrefix "/nix/store/" (toString containersConfig) && builtins.pathExists containersConfig);
 assert builtins.elem stopMode [ "ordinary" "transaction" ];
 assert builtins.all valid (builtins.attrValues images);
 pkgs.testers.runNixOSTest {
@@ -65,6 +66,9 @@ pkgs.testers.runNixOSTest {
     environment.systemPackages = [ packages.cli pkgs.procps pkgs.curl ];
     systemd.user.services.phoenix-openshell-podman = {
       description = "Disposable rootless OpenShell API";
+      environment = lib.optionalAttrs (containersConfig != null) {
+        CONTAINERS_CONF_OVERRIDE = toString containersConfig;
+      };
       unitConfig.ConditionUser = "fixture";
       serviceConfig = {
         ExecStart = "${pkgs.podman}/bin/podman system service --time=0 unix:%t/phoenix-openshell-podman.sock";
@@ -97,6 +101,7 @@ pkgs.testers.runNixOSTest {
     import json
     images = json.loads("""${builtins.toJSON (builtins.mapAttrs (_: image: image // { archive = toString image.archive; }) images)}""")
     probe_create_only = ${if probeCreateOnly then "True" else "False"}
+    ordering_configured = ${if containersConfig != null then "True" else "False"}
     stop_mode = "${stopMode}"
     policy = "${policy}"
   '' + builtins.readFile ./shutdown-openshell.py;

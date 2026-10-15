@@ -50,7 +50,7 @@ def capture(stage, containers):
     bounded("journalctl -b --no-pager -n 400 -u user@1000.service > /tmp/shutdown-evidence/user-manager.log")
     bounded(user("journalctl --user -b --no-pager -n 400 > /tmp/shutdown-evidence/user-units.log"))
     bounded("printf %s " + shlex.quote(json.dumps(probe_timings)) + " > /tmp/shutdown-evidence/probe-timing.json")
-    for name in ("shutdown-stream.log", "workload-stdout.log", "workload-status", "create-driver.log", "probe-baseline.log", "probe-keepid.log", "transaction-outcome.json", "transaction-units.log", "transaction-stop.log", "durable-sandbox.log", "shutdown-stream.status"):
+    for name in ("shutdown-stream.log", "workload-stdout.log", "workload-status", "create-driver.log", "probe-baseline.log", "probe-keepid.log", "transaction-outcome.json", "transaction-units.log", "transaction-stop.log", "durable-sandbox.log", "shutdown-stream.status", "transaction-cgroups.json"):
         bounded("test ! -f /tmp/" + name + " || cp /tmp/" + name + " /tmp/shutdown-evidence/" + name)
     machine.copy_from_machine("/tmp/shutdown-evidence", stage)
 
@@ -153,6 +153,36 @@ try:
                 assert run("systemctl --user show -p LoadState --value " + scope).strip() == "loaded", "recorded container scope not loaded"
             units = "phoenix-openshell-gateway.service " + " ".join(scopes)
             run("systemctl --user show -p Id -p LoadState -p Before -p ControlGroup -p TimeoutStopUSec " + units + " > /tmp/transaction-units.log")
+            placements: dict[str, Any] = {}
+            for role, identifier in containers.items():
+                scope = "libpod-" + identifier + ".scope"
+                before = run("systemctl --user show -p Before --value " + scope).split()
+                control_group = run("systemctl --user show -p ControlGroup --value " + scope).strip()
+                # Podman 5.8 inspect exposes the conmon PID file, not a portable
+                # top-level ConmonPid field. Read only this fixture's file.
+                metadata = json.loads(run("podman inspect " + identifier))[0]
+                pid_file = metadata["ConmonPidFile"]
+                assert pid_file.startswith("/run/user/1000/containers/"), "unexpected fixture conmon PID location"
+                conmon_pid = run("cat " + shlex.quote(pid_file)).strip()
+                assert conmon_pid.isdigit() and int(conmon_pid) > 1
+                workload_pid = metadata["State"]["Pid"]
+                assert isinstance(workload_pid, int) and workload_pid > 1
+                conmon_cgroup = machine.succeed("cat /proc/" + conmon_pid + "/cgroup")
+                workload_cgroup = machine.succeed("cat /proc/" + str(workload_pid) + "/cgroup")
+                placements[role] = dict(scope=scope, before=before, controlGroup=control_group,
+                                        conmonCgroup=conmon_cgroup, workloadCgroup=workload_cgroup)
+            machine.succeed("printf %s " + shlex.quote(json.dumps(placements)) + " > /tmp/transaction-cgroups.json")
+            capture("transaction-placement", containers)
+            if ordering_configured:
+                for placement in placements.values():
+                    assert "phoenix-openshell-gateway.service" in placement["before"], "configured scope Before missing gateway"
+                    assert placement["controlGroup"], "container scope resource cgroup missing"
+                    conmon_paths = [line.split(":", 2)[2] for line in placement["conmonCgroup"].splitlines()]
+                    workload_paths = [line.split(":", 2)[2] for line in placement["workloadCgroup"].splitlines()]
+                    scope_path = placement["controlGroup"].rstrip("/")
+                    assert not any(path == scope_path or path.startswith(scope_path + "/") for path in conmon_paths), "conmon remains inside container scope"
+                    assert any(path == scope_path or path.startswith(scope_path + "/") for path in workload_paths), "workload missing container resource cgroup"
+            run("kill -0 $(cat /tmp/shutdown-stream.pid)")
             stage = "transaction-stop"
             machine.log("PHASE transaction-stop entered")
             started = time.monotonic()
