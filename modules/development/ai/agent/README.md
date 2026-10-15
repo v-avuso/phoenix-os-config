@@ -28,6 +28,12 @@ remains. The boot profile still has sharing off. See [the checkpoint](HANDOFF.md
 Native GUI uses native CLI independently of OpenShell; sandbox GUI retains its
 contained backend.
 
+The Codex package exports one exact kernel executable identity for OpenShell's
+provider and network policies. Policy builds run the packaged app-server locally
+and check `/proc/<pid>/exe`; a changed upstream wrapper layout fails the build
+rather than silently losing model egress. This check does not contact a provider
+or establish live model-turn acceptance.
+
 ## Backend integration choice
 
 - **Current boundary:** The sandbox desktop uses OpenShell's SSH proxy already;

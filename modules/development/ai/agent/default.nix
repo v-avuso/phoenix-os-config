@@ -104,7 +104,7 @@ let
               "chatgpt.com"
               "ab.chatgpt.com"
             ];
-        binaries = [ { path = "${codexCliPackage}/bin/codex"; } ];
+        binaries = [ { path = codexCliPackage.phoenixNetworkExecutable; } ];
       };
       gui_http = {
         name = "gui_http";
@@ -184,7 +184,12 @@ let
       };
     };
   };
-  policy = yaml.generate "phoenix-openshell-policy.yaml" policyContents;
+  checkedPolicy = name: contents:
+    pkgs.runCommand name { } ''
+      test -e ${codexCliPackage.phoenixNetworkExecutableCheck}
+      cp ${yaml.generate name contents} "$out"
+    '';
+  policy = checkedPolicy "phoenix-openshell-policy.yaml" policyContents;
   historyRoot = "${operatorState}/history";
   historyDirectories =
     map (name: "${user.homeDirectory}/.codex/${name}") [
@@ -193,7 +198,7 @@ let
       "thread-writer-locks"
     ]
     ++ [ "${historyRoot}/sqlite" ];
-  sharedPolicy = yaml.generate "phoenix-openshell-shared-history-policy.yaml" (
+  sharedPolicy = checkedPolicy "phoenix-openshell-shared-history-policy.yaml" (
     policyContents
     // {
       filesystem_policy = policyContents.filesystem_policy // {
@@ -291,7 +296,7 @@ let
       sharedMounts = toString sharedDriverConfig;
       profile = toString (
         pkgs.writeText "phoenix-codex-provider.yaml" (
-          builtins.replaceStrings [ "@CODEX_BINARY@" ] [ "${codexCliPackage}/bin/codex" ] (
+          builtins.replaceStrings [ "@CODEX_BINARY@" ] [ codexCliPackage.phoenixNetworkExecutable ] (
             builtins.readFile ./codex-provider.yaml
           )
         )

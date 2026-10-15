@@ -11,8 +11,21 @@ let
   base = assert builtins.elem source [ "nixpkgs" "nixpkgs-unstable" ];
     selectedNixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system}.codex;
   fix = (policy.patches or {}).codex-cli or null;
-  package = if fix == null then base else base.overrideAttrs (old: {
+  selectedPackage = if fix == null then base else base.overrideAttrs (old: {
     patches = (old.patches or []) ++ map (path: ../../../. + "/${path}") fix.patchFiles;
+  });
+  # OpenShell identifies /proc/exe after the Nixpkgs binary wrapper execs.
+  package = selectedPackage.overrideAttrs (old: {
+    passthru = (old.passthru or {}) // {
+      phoenixNetworkExecutable = "${package}/bin/.codex-wrapped";
+      phoenixNetworkExecutableCheck = pkgs.runCommand "codex-network-executable-check" {
+        nativeBuildInputs = [ pkgs.python3 ];
+      } ''
+        python3 ${./agent/tests/codex-executable.py} \
+          ${package}/bin/codex ${package.phoenixNetworkExecutable}
+        touch "$out"
+      '';
+    };
   });
 in {
   # User CLI follows its selected Nixpkgs source. The protected deployment

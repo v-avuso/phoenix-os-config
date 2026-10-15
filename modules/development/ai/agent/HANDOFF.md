@@ -28,7 +28,7 @@ commands and limits remain in the [module README](README.md),
   `/nix/store/dql2y6v7zhsszffw8gv6fw7zqa8rk18c-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
 - The 2026-10-15 cold handoff published readiness and the sharing-ON trial was
   temporarily activated. Runtime is
-  `/nix/store/sinx1jn6la4ghy3nf0i52j3kd5pfg76p-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
+  `/nix/store/5qln8yyn75mi8cg1028rrxqvjsr73h5p-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
   The operator confirmed this exact conversation resumed and a reply was sent
   in Sandbox, then returned to Native. Do not rerun migration or restore stale
   Native originals over the shared store. Boot profile is still sharing OFF.
@@ -40,11 +40,23 @@ commands and limits remain in the [module README](README.md),
   They lack request correlation and underlying OS detail: association with the
   reported "Error running remote" is plausible, not proven. No root cause is
   established. Preserve credentials; these records do not establish expiry.
-- Pending diagnostic repair adds fixed stderr-only OS failure detail (for example
-  connection reset or denied permission), with unchanged RPC error frames. All
-  14 focused HTTP fixtures pass; this repair is not installed or a root-cause fix.
-  Next step: build an isolated sharing-ON source, authenticate temporary deployment
-  when the operator returns, then reproduce once and inspect the safe detail.
+- Diagnostic repair `6301d33` was authenticated and temporarily installed.
+  It adds fixed stderr-only OS detail with unchanged RPC error frames; all 14
+  focused HTTP fixtures passed and the trial system built successfully.
+- The next real `pwd` GUI trial failed before tool execution with
+  `workspace routing discovery failed`. New stderr included remote-disconnected;
+  this alone did not identify the cause. Supported `openshell logs` then showed
+  22 warnings denying the exact Codex kernel executable
+  `/nix/store/np442w66n363ydl8xp92lzkmdj5bih4a-codex-0.160.0/bin/.codex-wrapped`
+  in both `codex` and `_provider_phoenix_codex`. Their declarations name the
+  outer `bin/codex` wrapper instead. This is concrete network-policy identity
+  mismatch evidence; correcting it does not yet prove the full GUI workflow.
+  No Python executable denial appeared in that bounded warning window.
+- Repair both policy owners from one exact package-bound executable identity;
+  retain L7 inspection, destination scopes and existing authentication. Do not
+  accept the policy advisor's rejected L4-only credentialed endpoint proposals
+  as a workaround. Next: build/check the repair, authenticate a temporary trial,
+  and retry the existing chat without migration or sign-in.
 - Committed repair `70fb232` accepts Codex 0.160's exact `.sqlite-maintenance.lock` as
   regular, non-symlink coordination state in both Native preflight and shared
   runtime status. It is not a database and is never copied during migration.

@@ -156,3 +156,8 @@
   the actual running closure; reproducing a store flake can require IFD or lose
   Git metadata. Keep provenance as identity evidence, with fresh operator trust
   supplying approval; missing old-generation provenance must fail closed.
+
+- For exact OpenShell binary admission, authorize the kernel executable after
+  package wrappers exec, not the public launcher. Keep provider and network policy
+  identities centralized and verify `/proc/<pid>/exe` against the packaged launcher
+  at build time; never repair wrapper mismatches with broader path globs.
