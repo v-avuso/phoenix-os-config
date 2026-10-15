@@ -341,3 +341,23 @@ profile and cached candidate, then reissue the same immutable integration entry
 through native Polkit. No new sign-in, source reconstruction or implementation
 workaround is needed. Earlier protected-adapter and zero-AI root-checkpoint
 receipts remain valid within their documented narrower scopes.
+
+### Current retry artifact and authorization regression
+
+Use corrected source `5b0033907c81c915c3fa795c123b62bb3a65e48e`, package
+`/nix/store/sjkshddnlhsrh3bddj9y0r4lfvdgyqz4-phoenix-review-checkpoint-trial`.
+The earlier `75ml...` integration entry is superseded: after authentication it
+used `operator=True`, which production policy correctly rejects for review-enabled
+requests before `process_inner`. That attempt made no reviewer invocation.
+The corrected fixture retains its outer native operator authentication, then
+calls normal process dispatch with the configured client UID. A nine-test suite
+now exercises real authorization, contrasting the rejected operator entrance
+with accepted agent dispatch. Caller UID is supplied synthetically by the fixture;
+socket peer admission remains outside its proof.
+
+Corrected package build, dry-run and prebuild-plan passed; candidate/source/owned
+roots above are unchanged. A new native Polkit invocation of the corrected entry
+expired at 180 seconds without starting the helper (no receipt/model call/activation).
+Do not loop authentication or rerun the superseded entry. On operator availability,
+recheck active source/profile and retained candidate, then invoke only the corrected
+immutable entry with the existing one-call/no-activation limits. No sign-in is needed.

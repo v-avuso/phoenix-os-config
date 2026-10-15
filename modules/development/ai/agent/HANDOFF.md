@@ -294,11 +294,15 @@ has occurred.
 
 ## Immediate authenticated review trial
 
-The root process integration fixture is committed and packaged from `870d851`.
+The current root process integration fixture is committed and packaged from
+`5b00339`; use the corrected `sjkshdd...` package in `security-review.md`, not the
+superseded `870d851`/`75ml...` integration entry.
 Dry-run and zero-download offline candidate prebuild passed; exact package,
 source/closure and owned GC-root links are recorded in `security-review.md`.
-The attempted native Polkit trial expired after 180 seconds before its helper
-started (no model invocation/activation). Wait for operator availability rather
+The first integration artifact later authenticated but was rejected before worker
+execution because it used the human operator route. Real authorization regression
+coverage now checks the corrected agent route; the corrected native Polkit retry
+expired before helper start (no model invocation/activation). Wait for operator availability rather
 than looping authentication. Recheck runtime/profile/source against the prepared
 candidate, then use that same immutable integration executable. It records
 activation only and keeps production review OFF. Actual activation, rollback,
