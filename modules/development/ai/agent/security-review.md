@@ -317,3 +317,24 @@ owned private checkpoints/GC-root links/config/budget after calls end. The fixtu
 may create production audit records labelled review-integration-trial, but no
 production approval/cache. Actual activation, rollback and fresh-auth fallback
 remain separate acceptance work; no full privileged acceptance is claimed here.
+
+The exact `870d8518e916cc9e683b5f91e2ae995481fe6866` package was built:
+`/nix/store/75mlqg6d1q1alp4s5sw1l31jxkiyh34c-phoenix-review-checkpoint-trial`.
+Its integration dry-run passed. The prebuild plan produced
+`/nix/store/j0zn5xxjvkq32br6qgprrvq5qw0y4c8s-source`; direct comparison with the
+actual baseline found only README content changed. Offline prebuild completed
+within the five-minute cap, without downloads, producing
+`/nix/store/prn74jw821yzbw0dz3z9ia6nrzdqhima-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
+The closure's activated-source link matches that candidate. Owned temporary GC
+roots `/tmp/phoenix-review-integration-roots.hqd6tY/{source,closure}` retain both.
+Remove only those owned links/directory after the trial no longer needs them.
+
+The supported Polkit integration invocation reached its 180-second deadline
+(exit 124, no helper receipt). Immediately before expiry, process inspection
+showed only the waiting pkexec and no trial Python process: the fixture/reviewer
+had not started, so this attempt made no model invocation or activation. Do not
+retry automatically. When the operator is available, recheck active baseline,
+profile and cached candidate, then reissue the same immutable integration entry
+through native Polkit. No new sign-in, source reconstruction or implementation
+workaround is needed. Earlier protected-adapter and zero-AI root-checkpoint
+receipts remain valid within their documented narrower scopes.

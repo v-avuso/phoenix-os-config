@@ -292,6 +292,19 @@ the corrected ordinary-stop VM supplied the fast-stop/status-delivery failure
 evidence above. No shutdown fix or production stop
 has occurred.
 
+## Immediate authenticated review trial
+
+The root process integration fixture is committed and packaged from `870d851`.
+Dry-run and zero-download offline candidate prebuild passed; exact package,
+source/closure and owned GC-root links are recorded in `security-review.md`.
+The attempted native Polkit trial expired after 180 seconds before its helper
+started (no model invocation/activation). Wait for operator availability rather
+than looping authentication. Recheck runtime/profile/source against the prepared
+candidate, then use that same immutable integration executable. It records
+activation only and keeps production review OFF. Actual activation, rollback,
+critical fallback and optional identity/reservation/disruption acceptance remain
+separate; do not promote a passing stubbed-activation receipt to live readiness.
+
 ## Resume order
 
 1. Cold handoff and primary GUI acceptance are complete. Preserve readiness and
