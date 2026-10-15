@@ -7,14 +7,16 @@ storage and persistent journal. Never stop the operator's shared services.
 ## Prerequisites
 
 Use locked configuration, OpenShell 0.1.2 CLI/gateway and configured pinned
-supervisor/runtime images, Podman 5.8.7 and systemd 259. Provide cached
+supervisor/runtime images and locked packages (current host: Podman 5.8.7,
+systemd 260.4; the smoke test records actual guest versions). Provide cached
 `localhost/phoenix-codex:0.1.2`, valid sandbox policy and VM-local TLS; no personal
 credentials/providers. Enable `phoenix.agent.shutdownOrdering.enable` in the
 guest before boot. Record package/image identities, effective units and stop
 deadlines. Preserve the observed 45-second scope fallback; shortening it is not
 a fix. The default command sandbox hides `/dev/kvm`; supported host-level read-only
-inspection confirmed the host device exists. Opening it has not been tested, and
-no installed/cached VM runner was found. Actual OpenShell and VM-manager shutdown
+inspection confirmed the host device exists. The host subsequently passed an explicit read/write KVM open and
+`KVM_GET_API_VERSION=12` probe without creating a VM. No realized cached QEMU
+package was found in the bounded store inspection. Actual OpenShell and VM-manager shutdown
 have **not** passed this procedure.
 
 ## Active workload and captures
@@ -115,11 +117,39 @@ is detached. Exact v0.1.3 and inspected main retain these relevant patterns.
 The observed 45-second supervisor stall's exact await remains unknown. Ordering
 is a supported experiment; upgrade or shorter timeout is not a proven remedy.
 
-## Proposed test implementation
+## On-demand smoke and pending regression
 
-Reuse the locked Nixpkgs `pkgs.testers.runNixOSTest` driver and its rootless
-Podman/lingering-user pattern in module-local `tests/shutdown.nix` and
-`tests/shutdown.py`. The upstream OpenShell 0.1.2 Podman gateway restart test
+`tests/shutdown.nix` now defines only a small rootless Podman smoke: one guest,
+4 GiB RAM/two CPUs, fresh UID 1000 with lingering user manager, persistent journal
+and an owned BusyBox image. It loads the image locally, starts/stops a cooperative
+container, checks exit zero/removal and no surviving conmon, then verifies the
+user manager remains active. It is not registered in default flake checks and
+has not been built or run. It has no personal mounts, credentials, gateway or
+OpenShell images. Nix syntax and embedded Python checks are source evidence only.
+
+After committing the owned files, evaluate and inspect download/build costs from
+the exact Git revision (replace COMMIT with its full hash):
+
+```sh
+nix eval --raw --expr 'let
+  f = builtins.getFlake "git+file:///home/v/repos/code/phoenix-os-config?rev=COMMIT";
+  pkgs = f.inputs.nixpkgs.legacyPackages.x86_64-linux;
+  smoke = import (f.outPath + "/modules/development/ai/agent/tests/shutdown.nix") { inherit pkgs; };
+in smoke.drvPath'
+nix build --dry-run --no-link --expr 'let
+  f = builtins.getFlake "git+file:///home/v/repos/code/phoenix-os-config?rev=COMMIT";
+  pkgs = f.inputs.nixpkgs.legacyPackages.x86_64-linux;
+in import (f.outPath + "/modules/development/ai/agent/tests/shutdown.nix") { inherit pkgs; }'
+```
+
+These commands do not request a build/test run. Stop if dry-run requires source
+compilation of QEMU/Rust or exceeds the cost gate below; do not fetch dependencies
+to discover their cost. An actual smoke build/run needs the next explicit execution
+step after this preflight. Never use `path:.` or include the unrelated root draft.
+
+For the full regression, reuse the locked Nixpkgs `pkgs.testers.runNixOSTest` driver and its rootless
+Podman/lingering-user pattern in the existing module-local smoke; extend it only
+after the cost gate. No separate Python harness is currently needed. The upstream OpenShell 0.1.2 Podman gateway restart test
 covers lifecycle intent, but not concurrent systemd scope teardown and durable
 final logs. Running its whole conformance/Ansible setup would add unrelated work.
 
@@ -138,4 +168,5 @@ remain unknown. Verify KVM access and image archives/hashes before proceeding;
 allow at most five minutes for the ready guest's regression run. Preserve the
 10-second cooperative pass and 45-second safety net; stop at the first reproduced
 stall (50-second harness deadline) to identify the last acknowledged cleanup phase
-before choosing a Rust fix. No implementation or test execution is claimed here.
+before choosing a Rust fix. Only the rootless smoke definition exists; full OpenShell regression implementation
+and all VM execution remain pending.
