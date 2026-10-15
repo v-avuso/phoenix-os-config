@@ -44,5 +44,7 @@ pkgs.symlinkJoin {
     (integrationEntry "phoenix-review-integration-trial" "--integration")
     (integrationEntry "phoenix-review-integration-trial-dry-run" "--integration-dry-run")
     (integrationEntry "phoenix-review-integration-prebuild-plan" "--prebuild-plan")
+    (integrationEntry "phoenix-review-pending-trial" "--pending-override")
+    (integrationEntry "phoenix-review-pending-trial-dry-run" "--pending-override-dry-run")
   ];
 }

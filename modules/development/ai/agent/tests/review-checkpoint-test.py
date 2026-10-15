@@ -75,6 +75,49 @@ class CheckpointTrialTests(unittest.TestCase):
                 self.assertEqual(trial.main(str(descriptor), True), 0)
             self.assertEqual(json.loads(output.getvalue())['modelInvocations'], 0)
 
+    def test_pending_override_uses_real_approval_consumption_guard_and_replay_checks(self):
+        owner = Path(__file__).resolve().parents[1]
+        spec = importlib.util.spec_from_file_location('pending_deploy', owner / 'deployment.py')
+        deploy = importlib.util.module_from_spec(spec); spec.loader.exec_module(deploy)
+        security = deploy.load_security({'securityReviewScript': str(owner / 'security-review.py')})
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); (root / 'requests').mkdir(); state = root / 'state'; state.mkdir(mode=0o700)
+            source = root / 'source'; source.mkdir(); closure = root / 'closure'; (closure / 'etc/phoenix-agent').mkdir(parents=True)
+            (closure / 'etc/phoenix-agent/activated-source').symlink_to(source)
+            config = dict(target='metal', operatorUid=1000, clientUid=2000, modelReviewEnabled=True,
+                          work=str(root / 'requests'), securityReviewState=str(state), baseline=str(source),
+                          activationLock=str(root / 'activation.lock'), nixStore='offline-nix-store',
+                          policy=str(owner / 'review-policy.md'), controller=str(owner / 'deployment.py'),
+                          reviewScript=str(owner / 'deploy-review.py'), securityReviewScript=str(owner / 'security-review.py'))
+            def roots(argv):
+                self.assertEqual(argv[0], 'offline-nix-store')
+                Path(argv[argv.index('--add-root') + 1]).symlink_to(argv[-1])
+                return b''
+            review = SimpleNamespace(run=mock.Mock(side_effect=roots), review=mock.Mock(side_effect=AssertionError('no model')))
+            original_lstat, original_fstat, original_resolve = Path.lstat, os.fstat, Path.resolve
+            def root_info(info):
+                values = list(info); values[4] = 0; return os.stat_result(values)
+            def resolve(path, *args, **kwargs):
+                return closure if str(path) in {'/run/current-system', '/nix/var/nix/profiles/system'} else original_resolve(path, *args, **kwargs)
+            # Explicit OS/store-owner and fixed global-path stubs; actual policy,
+            # pending/approve/consume, activation flock and recorder are exercised.
+            with mock.patch.object(os, 'geteuid', return_value=0), \
+                 mock.patch.object(Path, 'lstat', side_effect=lambda *args, **kwargs: root_info(original_lstat(*args, **kwargs)), autospec=True), \
+                 mock.patch.object(os, 'fstat', side_effect=lambda fd: root_info(original_fstat(fd))), \
+                 mock.patch.object(Path, 'resolve', resolve), \
+                 mock.patch.object(deploy, 'store_path', side_effect=lambda value, kind: value), \
+                 mock.patch.object(deploy, 'activation_executable'), \
+                 mock.patch.object(deploy, 'load_review', return_value=review), \
+                 mock.patch.object(deploy, 'load_security', return_value=security):
+                receipt = trial.pending_override(deploy, review, security, config, str(source), str(closure), str(closure))
+                with self.assertRaisesRegex(ValueError, 'override-cache-not-empty'):
+                    trial.pending_override(deploy, review, security, config, str(source), str(closure), str(closure))
+            self.assertTrue(receipt['wrongOperatorRejected']); self.assertTrue(receipt['pendingConsumed'])
+            self.assertTrue(receipt['replayRejected']); self.assertEqual(receipt['modelInvocations'], 0)
+            self.assertFalse(receipt['activation']); self.assertEqual(list(state.glob('*.pending.*')), [])
+            self.assertEqual(len(list(state.glob('*.approved.json'))), 1)
+            review.review.assert_not_called(); self.assertEqual(review.run.call_count, 4)
+
     def test_candidate_changes_only_readme_and_preserves_modes(self):
         review = SimpleNamespace(baseline_files=lambda _: {'README.md': 'original', 'flake.nix': 'nix'},
                                  source_modes=lambda *_: {'README.md': '100644', 'flake.nix': '100755'})

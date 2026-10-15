@@ -75,6 +75,62 @@ def candidate(review, source):
     return files, modes
 
 
+def activation_recorder(deploy, runtime, profile, recorded):
+    def record(config, binding, temporary, loaded_review, state, uid, pid):
+        del temporary, state, uid, pid
+        with deploy.activation_guard(config):
+            deploy.recheck_bound(config, binding)
+            if str(Path('/run/current-system').resolve()) != runtime or str(Path('/nix/var/nix/profiles/system').resolve()) != profile:
+                raise ValueError('active-binding-changed')
+            recorded.append(binding)
+            return dict(source=binding['source'], closure=binding['closure'], activation=False)
+    return record
+
+
+def pending_override(deploy, review, security, trial, source, runtime, profile):
+    if security.records(trial, 'approved'):
+        raise ValueError('override-cache-not-empty')
+    nonce = os.urandom(32).hex()
+    binding = dict(source=source, closure=runtime, target=trial['target'], action='test',
+                   base=source, profile=profile, profileSource=source, nonce=nonce,
+                   reason='Synthetic pending override acceptance; activation disabled.', commit='0' * 40)
+    security.pending(trial, binding, trial['clientUid'], 'override-trial',
+                     'schema-invalid', 'Synthetic fixture failure, not an AI rejection.', review.run)
+    pending = Path(trial['securityReviewState']) / (nonce + '.pending.json')
+    recorded = []
+    deploy.activate_bound = activation_recorder(deploy, runtime, profile, recorded)
+    try:
+        deploy.override(trial, nonce, trial['operatorUid'] + 1, os.getpid())
+    except ValueError as error:
+        if str(error) != 'security override requires authenticated root and enabled review':
+            raise
+    else:
+        raise ValueError('override-wrong-uid-accepted')
+    if recorded or not pending.exists() or security.records(trial, 'approved'):
+        raise ValueError('override-binding-mismatch')
+    result = deploy.override(trial, nonce, trial['operatorUid'], os.getpid())
+    if len(recorded) != 1 or (result['source'], result['closure']) != (source, runtime):
+        raise ValueError('override-binding-mismatch')
+    if pending.exists() or list(pending.parent.glob(nonce + '.pending.*')):
+        raise ValueError('override-pending-remains')
+    verify_records(Path(trial['securityReviewState']), source, runtime)
+    if not any(record.get('branch') == security.branch_key('override-trial')
+               for _, record in security.records(trial, 'approved')):
+        raise ValueError('checkpoint-missing')
+    try:
+        deploy.override(trial, nonce, trial['operatorUid'], os.getpid())
+    except FileNotFoundError:
+        pass
+    else:
+        raise ValueError('override-replay-accepted')
+    if len(recorded) != 1:
+        raise ValueError('override-replay-accepted')
+    return dict(status='passed', modelInvocations=0, activation=False, syntheticPending=True,
+                wrongOperatorRejected=True, pendingConsumed=True, replayRejected=True,
+                rootCheckpoint=True, controllerUid=os.geteuid(), ownedRootsCleaned=True,
+                authentication='generic-pkexec-not-critical-action')
+
+
 def integration(deploy, review, trial, public, root, source, runtime, profile, plan=False):
     files, modes = candidate(review, source)
     if plan:
@@ -100,15 +156,7 @@ def integration(deploy, review, trial, public, root, source, runtime, profile, p
     # Gate identities change the policy fingerprint: seed only this private policy.
     deploy.trust_active(trial, trial['operatorUid'], os.getpid())
     recorded = []
-    def record(config, binding, temporary, loaded_review, state, uid, pid):
-        del temporary, state, uid, pid
-        with deploy.activation_guard(config):
-            deploy.recheck_bound(config, binding)
-            if str(Path('/run/current-system').resolve()) != runtime or str(Path('/nix/var/nix/profiles/system').resolve()) != profile:
-                raise ValueError('active-binding-changed')
-            recorded.append(binding)
-            return dict(source=binding['source'], closure=binding['closure'], activation=False)
-    deploy.activate_bound = record  # Sole production behavior replaced by this fixture.
+    deploy.activate_bound = activation_recorder(deploy, runtime, profile, recorded)
     request = dict(files=files, modes=modes, commit=hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest(),
                    target=trial['target'], action='test', reason='Isolated root review integration; activation disabled.',
                    task='review-integration-trial', branch='review-integration-a')
@@ -134,7 +182,7 @@ def interrupt(*_):
     raise InterruptedError("trial-interrupted")
 
 
-def main(descriptor, dry_run=False, integration_mode=False, plan=False):
+def main(descriptor, dry_run=False, integration_mode=False, plan=False, override_mode=False):
     stage = 'configuration'
     try:
         public = json.loads(immutable(descriptor).read_text())
@@ -142,7 +190,7 @@ def main(descriptor, dry_run=False, integration_mode=False, plan=False):
         controller = immutable(public['controller'])
         if dry_run:
             print(json.dumps(dict(status='dry-run', modelInvocations=0, activation=False,
-                                  proof='root-process-review-activation-stub' if integration_mode else 'trust-active-root-checkpoint-only')))
+                                  proof='synthetic-pending-override-activation-stub' if override_mode else ('root-process-review-activation-stub' if integration_mode else 'trust-active-root-checkpoint-only'))))
             return 0
         if plan:
             spec = importlib.util.spec_from_file_location('checkpoint_controller', controller)
@@ -185,22 +233,26 @@ def main(descriptor, dry_run=False, integration_mode=False, plan=False):
                     raise ValueError('global-lock-invalid')
                 stage = 'global-lock'
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                stage = 'trust-active'
-                # Production function validates provenance and takes its real
-                # activation guard; no worker/process/activation callback exists.
-                result = deploy.trust_active(trial, config['operatorUid'], os.getpid())
-                if (result['source'], result['closure']) != (source, runtime):
-                    raise ValueError('active-binding-changed')
-                stage = 'root-checkpoint'
-                verify_records(Path(trial['securityReviewState']), source, runtime)
-                stage = 'exact-reuse'
-                reused, _, _ = security.choose_checkpoint(trial, config['target'], source, runtime,
-                    'another-trial-branch', source, review.baseline_files(Path(source)), review, deploy.store_path)
-                if not reused or str(Path('/run/current-system').resolve(strict=True)) != runtime or str(Path('/nix/var/nix/profiles/system').resolve(strict=True)) != profile:
-                    raise ValueError('exact-reuse-or-state-changed')
-                if integration_mode:
-                    stage = 'root-process-integration'
-                    receipt = integration(deploy, review, trial, public, root, source, runtime, profile)
+                if override_mode:
+                    stage = 'pending-override'
+                    receipt = pending_override(deploy, review, security, trial, source, runtime, profile)
+                else:
+                    stage = 'trust-active'
+                    # Production function validates provenance and takes its real
+                    # activation guard; no worker/process/activation callback exists.
+                    result = deploy.trust_active(trial, config['operatorUid'], os.getpid())
+                    if (result['source'], result['closure']) != (source, runtime):
+                        raise ValueError('active-binding-changed')
+                    stage = 'root-checkpoint'
+                    verify_records(Path(trial['securityReviewState']), source, runtime)
+                    stage = 'exact-reuse'
+                    reused, _, _ = security.choose_checkpoint(trial, config['target'], source, runtime,
+                        'another-trial-branch', source, review.baseline_files(Path(source)), review, deploy.store_path)
+                    if not reused or str(Path('/run/current-system').resolve(strict=True)) != runtime or str(Path('/nix/var/nix/profiles/system').resolve(strict=True)) != profile:
+                        raise ValueError('exact-reuse-or-state-changed')
+                    if integration_mode:
+                        stage = 'root-process-integration'
+                        receipt = integration(deploy, review, trial, public, root, source, runtime, profile)
         if receipt is not None:
             print(json.dumps(receipt)); return 0
         print(json.dumps(dict(status='passed', modelInvocations=0, activation=False,
@@ -215,7 +267,7 @@ def main(descriptor, dry_run=False, integration_mode=False, plan=False):
                  'baseline-provenance-invalid', 'baseline-verification-failed', 'baseline-target-mismatch'}
         if hasattr(error, 'stage'):
             stage = error.stage
-        codes.update({'review-authentication-missing', 'review-authentication-failed', 'review-timeout',
+        codes.update({'override-cache-not-empty', 'override-wrong-uid-accepted', 'override-binding-mismatch', 'override-pending-remains', 'override-replay-accepted', 'review-authentication-missing', 'review-authentication-failed', 'review-timeout',
                       'review-invocation-failed', 'reviewer-invocation-failed', 'schema-invalid', 'binding-mismatch',
                       'model-denied', 'review-context-oversized', 'baseline-changed', 'profile-changed'})
         candidate = getattr(error, 'code', str(error))
@@ -226,9 +278,9 @@ def main(descriptor, dry_run=False, integration_mode=False, plan=False):
 
 
 if __name__ == '__main__':
-    allowed = {'--dry-run', '--integration', '--integration-dry-run', '--prebuild-plan'}
+    allowed = {'--dry-run', '--integration', '--integration-dry-run', '--prebuild-plan', '--pending-override', '--pending-override-dry-run'}
     if len(sys.argv) not in (2, 3) or (len(sys.argv) == 3 and sys.argv[2] not in allowed):
         raise SystemExit(2)
     mode = sys.argv[2] if len(sys.argv) == 3 else ''
-    raise SystemExit(main(sys.argv[1], mode in {'--dry-run', '--integration-dry-run'},
-                          mode.startswith('--integration'), mode == '--prebuild-plan'))
+    raise SystemExit(main(sys.argv[1], mode in {'--dry-run', '--integration-dry-run', '--pending-override-dry-run'},
+                          mode.startswith('--integration'), mode == '--prebuild-plan', mode.startswith('--pending-override')))

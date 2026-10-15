@@ -407,3 +407,36 @@ SO_PEERCRED, critical pending override/Polkit authentication, boot/switch stagin
 and production-host compatibility remain outside its proof. Production optional
 controls remain OFF; this guest result does not authorize host activation or
 critical security override.
+
+
+## Synthetic pending/override composition (prepared)
+
+The existing on-demand checkpoint package also supplies argument-free
+`phoenix-review-pending-trial-dry-run` and `phoenix-review-pending-trial`.
+Package from an exact committed Git source, run the dry-run unprivileged, then
+use the supported native `timeout 120 pkexec /nix/store/EXACT-PACKAGE/bin/phoenix-review-pending-trial`
+flow only after reviewing that immutable artifact. This is generic native pkexec
+authentication, not the production critical override action or its warning.
+No model, new build, sign-in, credential copy or production review enablement occurs.
+
+The fixture reuses actual active source/runtime/profile validation, the original
+nonblocking deployment lock and activation guard, plus private root-owned
+requests/checkpoints/GC roots. Pending mode skips trust-active approval seeding:
+the cache must be empty before entry and remain unapproved after wrong-UID
+rejection; only the successful override creates approval. It creates one explicitly synthetic pending failure
+bound to the actual runtime/source and current policy; this is not an AI rejection.
+The real production `override` must reject a wrong supplied operator UID, approve
+only the exact protected binding, consume pending JSON/roots, and reject nonce
+replay. Root checkpoint ownership/modes/targets and the override branch record
+are verified. The sole substituted callback records activation under the real
+guard/recheck and verifies runtime/profile unchanged. The outer entry authenticates
+the native operator; wrong-UID probing is synthetic, not socket/peer admission.
+Owned temporary roots/state are cleaned, without touching production cache/auth.
+
+Ten offline checkpoint tests now include real pending/approve/consume and guard
+composition with explicit store/owner/global-path stubs. Actual root execution of
+this new entry remains pending. Its receipt reports zero model calls, synthetic
+pending status, wrong-operator/replay rejection, consumption, root checkpoint and
+activation=false. Production critical-action policy is absent while review is OFF;
+its exact fresh-authentication/UX authority needs a separate isolated policy/helper
+trial. A generic pkexec pass must never be described as proving that action.
