@@ -166,3 +166,10 @@
   modes; current chat policy must outrank stale preferences. Characterize the pinned
   mode decoder through outgoing permissions: Approve for me is guardian-approvals,
   not auto. Verify Native return.
+
+- Sandbox revision replacement must hold the setup lock and a separate exclusive
+  instance-use lock before stopping an old instance; retain shared use locks for
+  supported CLI/app-server transport lifetimes. History/GUI locks have different
+  ownership and must not block Native fallback. Test real competing processes,
+  not only setup calls. First adoption requires explicit operator quiescence:
+  older launchers and manual OpenShell clients do not participate in this lock.

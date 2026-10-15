@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Host launcher protocol and fail-closed fixtures; no real gateway or login."""
 import importlib.util
+import fcntl
+import multiprocessing
+import pty
 import json
 import os
 import shlex
+import signal
 from pathlib import Path
 import subprocess
 import tempfile
@@ -15,10 +19,21 @@ ROOT = Path(__file__).resolve().parents[5]
 SPEC = importlib.util.spec_from_file_location("agent_launch", ROOT / "modules/development/ai/agent/launch.py")
 launch = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(launch)
+REAL_TRANSPORT = launch.locked_transport
 
 
 class LauncherFixture(unittest.TestCase):
     def setUp(self):
+        # Protocol fixtures capture the final transport while closing its owned FDs.
+        def transport(command, env, locks):
+            try:
+                return launch.os.execve(command[0], command, env)
+            finally:
+                for fd in locks:
+                    os.close(fd)
+        patched = mock.patch.object(launch, "locked_transport", side_effect=transport)
+        patched.start()
+        self.addCleanup(patched.stop)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
@@ -36,6 +51,84 @@ class LauncherFixture(unittest.TestCase):
         else:
             output = b'[{"name":"openshell"}]' if "list" in command else b'{}'
         return subprocess.CompletedProcess(command, 0, stdout=output, stderr=b'')
+
+    def test_busy_revision_refuses_before_stop_or_image_load(self):
+        (self.root / "state/instance").write_text("phx-old")
+        with open(self.root / "state/instance-use.lock", "a") as active:
+            fcntl.flock(active, fcntl.LOCK_SH)
+            with mock.patch.object(launch.subprocess, "run", side_effect=self.success) as run, \
+                 mock.patch.object(launch.Path, "is_socket", return_value=True):
+                with self.assertRaisesRegex(SystemExit, "replacement is busy"):
+                    launch.main(self.config, ["--phoenix-exec", "/bin/true"])
+        self.assertFalse(any("stop" in c.args[0] or "load" in c.args[0] for c in run.call_args_list))
+        self.assertEqual((self.root / "state/instance").read_text(), "phx-old")
+
+    def test_same_revision_joins_and_native_history_lock_is_independent(self):
+        with mock.patch.object(launch.subprocess, "run", side_effect=self.success), \
+             mock.patch.object(launch.Path, "is_socket", return_value=True), \
+             mock.patch.object(launch.os, "execve"):
+            launch.main(self.config, [])
+            with open(self.root / "state/instance-use.lock", "a") as active, \
+                 open(self.root / "native-history.lock", "a") as history:
+                fcntl.flock(active, fcntl.LOCK_SH)
+                fcntl.flock(history, fcntl.LOCK_SH)
+                self.config["historyLock"] = str(self.root / "native-history.lock")
+                launch.main(self.config, ["app-server"])
+            # Independent Native history SH also permits a replacement.
+            with open(self.root / "native-history.lock", "a") as history:
+                fcntl.flock(history, fcntl.LOCK_SH)
+                launch.main(self.config | {"image": "/fixed/new-image"}, [])
+        with open(self.root / "state/instance-use.lock", "a") as released:
+            fcntl.flock(released, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+    def test_serialized_launchers_cannot_replace_between_setup_and_transport(self):
+        context = multiprocessing.get_context("fork")
+        setup, proceed, transported, finish = [context.Event() for _ in range(4)]
+        events = context.Queue()
+        def client(config, first):
+            def run(command, **kwargs):
+                if first and "get" in command:
+                    setup.set()
+                    if not proceed.wait(5): raise RuntimeError("fixture setup timeout")
+                if "stop" in command: events.put("stopped")
+                return self.success(command, **kwargs)
+            def transport(command, env, locks):
+                transported.set()
+                try:
+                    if not finish.wait(5): raise RuntimeError("fixture transport timeout")
+                finally:
+                    for fd in locks: os.close(fd)
+            try:
+                with mock.patch.object(launch.subprocess, "run", side_effect=run), \
+                     mock.patch.object(launch.Path, "is_socket", return_value=True), \
+                     mock.patch.object(launch, "locked_transport", side_effect=transport):
+                    launch.main(config, ["--phoenix-exec", "/bin/true"])
+                events.put("finished")
+            except SystemExit as error:
+                events.put(str(error))
+        first = context.Process(target=client, args=(self.config, True))
+        second = context.Process(target=client, args=(self.config | {"image": "/fixed/new-image"}, False))
+        first.start()
+        try:
+            self.assertTrue(setup.wait(5))
+            second.start()  # It must wait behind the first setup lock.
+            proceed.set()
+            self.assertTrue(transported.wait(5))
+            second.join(5)
+            self.assertFalse(second.is_alive())
+            self.assertIn("replacement is busy", events.get(timeout=2))
+            finish.set()
+            first.join(5)
+            self.assertEqual(events.get(timeout=2), "finished")
+            self.assertEqual(first.exitcode, 0)
+            with open(self.root / "state/instance-use.lock", "a") as released:
+                fcntl.flock(released, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        finally:
+            proceed.set(); finish.set()
+            for process in (first, second):
+                if process.pid is not None:
+                    if process.is_alive(): process.kill()
+                    process.join(5)
 
     def test_app_server_keeps_stdio_and_never_falls_back_native(self):
         with mock.patch.object(launch.subprocess, "run", side_effect=self.success) as run, \
@@ -157,6 +250,70 @@ class LauncherFixture(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 launch.main(self.config, [])
         self.assertEqual(run.call_count, 1)
+
+    def test_real_transport_holds_instance_lock_until_child_exit(self):
+        path = self.root / "transport.lock"
+        script = ("import importlib.util,os,sys; "
+                  "s=importlib.util.spec_from_file_location('l',sys.argv[1]); "
+                  "l=importlib.util.module_from_spec(s);s.loader.exec_module(l); "
+                  "f=os.open(sys.argv[2],os.O_RDWR|os.O_CREAT,0o600); "
+                  "l.fcntl.flock(f,l.fcntl.LOCK_SH); "
+                  "sys.exit(l.locked_transport([sys.executable,'-c',"
+                  "\"print('ready',flush=True);input()\"],dict(os.environ),(f,)))")
+        process = subprocess.Popen([sys.executable, "-c", script, str(Path(launch.__file__)), str(path)],
+                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            self.assertEqual(process.stdout.readline().strip(), "ready")
+            with open(path, "a") as contender:
+                with self.assertRaises(BlockingIOError):
+                    fcntl.flock(contender, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                output, errors = process.communicate("exit\n", timeout=5)
+                self.assertEqual((process.returncode, output, errors), (0, "", ""))
+                fcntl.flock(contender, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        finally:
+            if process.poll() is None:
+                process.kill(); process.communicate(timeout=5)
+
+    def test_real_transport_preserves_terminal_descriptors(self):
+        master, slave = pty.openpty()
+        try:
+            script = ("import importlib.util,os,sys; "
+                      "s=importlib.util.spec_from_file_location('l',sys.argv[1]); "
+                      "l=importlib.util.module_from_spec(s);s.loader.exec_module(l); "
+                      "sys.exit(l.locked_transport([sys.executable,'-c',"
+                      "'import os; assert all(os.isatty(fd) for fd in (0,1,2))'],dict(os.environ),()))")
+            result = subprocess.run([sys.executable, "-c", script, str(Path(launch.__file__))],
+                                    stdin=slave, stdout=slave, stderr=slave, timeout=5)
+            self.assertEqual(result.returncode, 0)
+        finally:
+            os.close(master); os.close(slave)
+
+    def test_real_transport_forwards_signals_and_preserves_exit_status(self):
+        for number in (None, signal.SIGTERM, signal.SIGINT):
+            with self.subTest(signal=number):
+                path = self.root / "signal.lock"
+                child = ("import signal,sys; "
+                         "signal.signal(signal.SIGINT,lambda *_:sys.exit(130)); "
+                         "print('ready',flush=True); " + ("sys.exit(7)" if number is None else "signal.pause()"))
+                script = ("import importlib.util,os,sys; "
+                          "s=importlib.util.spec_from_file_location('l',sys.argv[1]); "
+                          "l=importlib.util.module_from_spec(s);s.loader.exec_module(l); "
+                          "f=os.open(sys.argv[2],os.O_RDWR|os.O_CREAT,0o600); "
+                          "l.fcntl.flock(f,l.fcntl.LOCK_SH); "
+                          "sys.exit(l.locked_transport([sys.executable,'-c',sys.argv[3]],dict(os.environ),(f,)))")
+                process = subprocess.Popen([sys.executable, "-c", script, str(Path(launch.__file__)), str(path), child],
+                                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                try:
+                    self.assertEqual(process.stdout.readline().strip(), "ready")
+                    if number is not None: process.send_signal(number)
+                    output, errors = process.communicate(timeout=5)
+                    self.assertEqual(process.returncode, 7 if number is None else 128 + number)
+                    self.assertEqual((output, errors), ("", ""))
+                    with open(path, "a") as released:
+                        fcntl.flock(released, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                finally:
+                    if process.poll() is None:
+                        process.kill(); process.communicate(timeout=5)
 
     def test_supervised_transport_dies_when_test_parent_is_killed(self):
         script = ('import importlib.util,os,sys; '

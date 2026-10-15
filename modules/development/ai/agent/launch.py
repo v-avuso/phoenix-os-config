@@ -1,5 +1,6 @@
 """Trusted host launcher. None of its state/control sockets enters the sandbox."""
 import fcntl
+import contextlib
 import ctypes
 import hashlib
 import json
@@ -16,6 +17,7 @@ import uuid
 
 def locked_transport(command, env, lock):
     """Hold the host lifecycle lock; transport dies if the relay kills us."""
+    locks = (lock,) if isinstance(lock, int) else lock
     parent = os.getpid()
 
     def attach_to_parent():
@@ -26,10 +28,17 @@ def locked_transport(command, env, lock):
         if os.getppid() != parent:
             os.kill(os.getpid(), signal.SIGTERM)
 
-    child = subprocess.Popen(command, env=env, preexec_fn=attach_to_parent)
-    previous = signal.signal(signal.SIGTERM, lambda *_: child.terminate())
     try:
-        return child.wait()
+        child = subprocess.Popen(command, env=env, preexec_fn=attach_to_parent)
+    except BaseException:
+        for descriptor in locks:
+            os.close(descriptor)
+        raise
+    previous = {number: signal.signal(number, lambda number, _: child.send_signal(number))
+                for number in (signal.SIGTERM, signal.SIGINT)}
+    try:
+        status = child.wait()
+        return status if status >= 0 else 128 - status
     finally:
         if child.poll() is None:
             child.terminate()
@@ -38,11 +47,18 @@ def locked_transport(command, env, lock):
             except subprocess.TimeoutExpired:
                 child.kill()
                 child.wait()
-        signal.signal(signal.SIGTERM, previous)
-        os.close(lock)
+        for number, handler in previous.items():
+            signal.signal(number, handler)
+        for descriptor in locks:
+            os.close(descriptor)
 
 
 def main(config, args):
+    with contextlib.ExitStack() as lifetime:
+        return launch(config, args, lifetime)
+
+
+def launch(config, args, lifetime):
     if config.get("identitySocket"):
         import importlib.util
         spec = importlib.util.spec_from_file_location("identity_transport", config["identityTransport"])
@@ -201,20 +217,25 @@ def main(config, args):
         except (OSError, ValueError, TypeError):
             raise SystemExit("Sandbox account selector is missing or invalid; repair saved metadata through Native Codex, without repeating sign-in.") from None
 
+        # Serialize the revision decision with setup, then retain a separate
+        # shared instance-use lock for the full client transport lifetime.
+        revision = hashlib.sha256((config["image"] + config["policy"] + config["mounts"] + ("protected-identity" if config.get("protectedIdentity") else "")).encode()).hexdigest()[:12]
+        name = "phx-" + revision
+        instance_marker = state / "instance"
+        previous = instance_marker.read_text() if instance_marker.exists() else None
+        instance_use = lifetime.enter_context(open(state / "instance-use.lock", "a"))
+        try:
+            fcntl.flock(instance_use, (fcntl.LOCK_EX if previous != name else fcntl.LOCK_SH) | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise SystemExit("Sandbox revision replacement is busy: close supported Sandbox clients and retry; no instance was stopped.") from None
         archive = Path(config["image"])
         image_marker = state / "image.path"
         if not image_marker.exists() or image_marker.read_text() != str(archive):
             run([config["podman"], "load", "--input", str(archive)])
             image_marker.write_text(str(archive))
-        # Filesystem policy is static: a new declaration gets a new sandbox. Stop
-        # the previous managed instance, retaining its workspace/sessions for
-        # deliberate recovery instead of silently deleting user state.
-        revision = hashlib.sha256((config["image"] + config["policy"] + config["mounts"] + ("protected-identity" if config.get("protectedIdentity") else "")).encode()).hexdigest()[:12]
-        # OpenShell v0.1.2 limits sandbox names to 19 characters.
-        name = "phx-" + revision
-        instance_marker = state / "instance"
-        if instance_marker.exists() and instance_marker.read_text() != name:
-            run(cli + ["sandbox", "stop", instance_marker.read_text()], check=False)
+        # Retain the previous instance and its state for deliberate recovery.
+        if previous is not None and previous != name:
+            run(cli + ["sandbox", "stop", previous], check=False)
         sandbox = run(cli + ["sandbox", "get", name, "--output", "json"], check=False)
         if sandbox.returncode:
             mounts = Path(config["mounts"]).read_text()
@@ -227,6 +248,7 @@ def main(config, args):
             # start is idempotent for a Ready instance; fails closed otherwise.
             run(cli + ["sandbox", "start", name])
         instance_marker.write_text(name)
+        fcntl.flock(instance_use, fcntl.LOCK_SH)
         fcntl.flock(lock, fcntl.LOCK_UN)
 
     workdir = str(Path.cwd().resolve())
@@ -280,15 +302,9 @@ def main(config, args):
                "-o", "SetEnv=OPENSHELL_NO_LOGIN_SHELL=1",
                "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3",
                "-o", "ProxyCommand=" + proxy, "sandbox", remote]
-        if history_lock is not None:
-            # SSH may close inherited descriptors. Keep the private lifecycle
-            # lock in this host parent for the full duplex transport lifetime.
-            return locked_transport(ssh, env, history_lock)
-        os.execve(config["ssh"], ssh, env)
+        return locked_transport(ssh, env, (os.dup(instance_use.fileno()),) + ((history_lock,) if history_lock is not None else ()))
     else:
-        if history_lock is not None:
-            return locked_transport(execution + command, env, history_lock)
-        os.execve(config["openshell"], execution + command, env)
+        return locked_transport(execution + command, env, (os.dup(instance_use.fileno()),) + ((history_lock,) if history_lock is not None else ()))
 
 
 if __name__ == "__main__":

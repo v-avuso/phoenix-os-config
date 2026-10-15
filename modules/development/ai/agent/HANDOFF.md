@@ -140,10 +140,14 @@ The personal-home canary was NOT created or run. Installed launcher revision/ima
 now differs from the retained instance after real image changes. Existing launch
 setup locking serializes launchers, but supported clients hold only a shared
 history lock, which does not prevent another shared launcher from replacing their
-backend. No instance was stopped. A separate instance-use lifecycle lock and
-isolated concurrency tests are being scoped on the feature branch; keep it out of
-live main until checked. Its first adoption must account for legacy clients that
-do not participate in the new lock and require a quiescent operator cutover.
+backend. No instance was stopped. A separate instance-use lifecycle lock is now prepared on the feature branch,
+not live main. Nineteen isolated tests pass, including actual competing processes,
+transport lifetime/release, terminal descriptors, signal forwarding, exit status
+and existing parent-death cleanup. Coordinator inspected the actual diff and
+callers; no unrelated authority expansion was found. Exact build and controlled
+runtime acceptance remain pending. First adoption requires explicit operator
+quiescence because legacy launchers/manual clients do not hold the new lock.
+Do not run reconciliation-based probes until that clearance arrives.
 
 ## Shutdown investigation checkpoint
 

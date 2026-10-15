@@ -77,6 +77,20 @@ rendering, not the host clock or Native configuration.
   repair lifeline. Further simultaneous-GUI parity and optional reviewer controls
   are separate work, not prerequisites for diagnosing this backend failure.
 
+## Active-client replacement guard
+
+Supported Sandbox CLI/app-server clients retain a separate instance-use lock for
+their transport lifetime. Revision-changing launches require exclusive ownership
+before replacing a backend and fail busy while another supported client uses it.
+Same-version clients remain concurrent; Native GUI/history locks are independent.
+Transport supervision preserves terminal descriptors, normal exit codes and signal
+forwarding using the existing parent-death cleanup.
+
+First adoption requires a quiescent operator cutover: older launchers and manual
+OpenShell clients do not hold this lock. Isolated process tests cover locking and
+transport behavior; the new guard is not live until controlled acceptance. It is
+not a guarantee against manual lifecycle operations or atomic cleanup after SIGKILL.
+
 ## Shared desktop state (primary GUI workflow accepted)
 
 `modules/development/ai/default.nix` enables
