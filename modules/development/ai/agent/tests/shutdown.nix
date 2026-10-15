@@ -30,7 +30,8 @@ pkgs.testers.runNixOSTest {
     import shlex
 
     def user(command):
-        return "su fixture -l -c " + shlex.quote(command)
+        environment = "export XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus; "
+        return "su fixture -l -c " + shlex.quote(environment + command)
 
     start_all()
     machine.wait_for_unit("multi-user.target")

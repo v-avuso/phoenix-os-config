@@ -124,8 +124,12 @@ is a supported experiment; upgrade or shorter timeout is not a proven remedy.
 and an owned BusyBox image. It loads the image locally, starts/stops a cooperative
 container, checks exit zero/removal and no surviving conmon, then verifies the
 user manager remains active. It is not registered in default flake checks and
-has not been built or run. It has no personal mounts, credentials, gateway or
-OpenShell images. Nix syntax and embedded Python checks are source evidence only.
+was cost-qualified: 245.4 MiB cached downloads/726.9 MiB unpacked, with prebuilt
+QEMU. Its first 55.6-second build/run reached the user manager but failed before
+container creation because the login shell lacked the guest user runtime/bus
+environment. The wrapper now supplies `/run/user/1000` and its bus explicitly;
+Nix/Python syntax checks pass, but a rerun is pending and smoke has not passed.
+It has no personal mounts, credentials, gateway or OpenShell images.
 
 After committing the owned files, evaluate and inspect download/build costs from
 the exact Git revision (replace COMMIT with its full hash):
