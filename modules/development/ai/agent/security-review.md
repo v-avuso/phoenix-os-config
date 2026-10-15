@@ -364,3 +364,46 @@ critical fallback authentication and socket peer admission remain unproved.
 The fixture cleaned its private state/GC roots; separately retained prebuild roots
 above require their own cleanup. Earlier authentication-only expiries made no
 model calls, and the superseded caller-role failure is covered by the regression.
+
+
+## On-demand real guest activation/rollback (accepted bounded slice)
+
+`tests/activation-runtime.nix { pkgs = ...; }` is a separate maintained NixOS-driver
+VM test, not a default check. Use the locked flake's pkgs from an exact committed
+Git source; no checkout-path source or host activation. Two CPUs/2 GiB and a
+180-second guest limit reuse cached driver infrastructure. Preview build cost;
+stop for unexpected uncached large builds or a five-minute build/run budget.
+Actual VM source `a49063faad024ae69f8639789ef79d028e11ce59` passed; evidence:
+`/nix/store/h7j0k43mp3fsjgh65acb9jlq7gz8wn7y-vm-test-run-phoenix-activation-runtime/evidence`.
+Good activation returned zero in 1.460 seconds, selected
+`/nix/store/nmwbrnajcbs4nwcc8nblc2m547lzahbn-nixos-system-machine-test` and marker
+`good`. Failing activation returned one in 2.127 seconds; `failure-observed`
+contains `failing`, while runtime/marker returned to that good specialisation.
+Both retained boot profile
+`/nix/store/rd6blsfrw7vkgffmwwl1miwj9yj98j8p-nixos-system-machine-test`.
+Journal confirms the real controller's candidate command failed; its production
+rollback completed before that failure returned.
+
+The guest has good and failing NixOS specialisations, sharing one immutable
+synthetic `source` provenance. The driver starts the actual production `activate`
+entry in transient systemd services with the real guard, source/profile binding
+checks, packaged subprocess runner and real `switch-to-configuration test`.
+Dependencies are individually packaged and imported during a build-time check.
+No recorder, reviewer, model, authentication agent or activation callback is used.
+Guest-only setup initializes the system profile to its current runtime only if
+its test image omitted that profile; test activations must leave it unchanged.
+
+Success requires the good specialisation to change the actual current runtime
+and `/etc` marker. The failing specialisation changes `/etc`, records that observed
+state and runs `false` in a real activation snippet; the normal NixOS error trap
+returns nonzero. Production `activate()` must invoke rollback to the previous
+runtime; both runtime and marker must return to the good specialisation, while
+the boot profile remains unchanged. Each service is bounded independently and
+journals/status/binding observations are exported even after a failure.
+
+This tests temporary activation and its real failure rollback only. Synthetic
+provenance is not review of guest configuration; root controller admission,
+SO_PEERCRED, critical pending override/Polkit authentication, boot/switch staging
+and production-host compatibility remain outside its proof. Production optional
+controls remain OFF; this guest result does not authorize host activation or
+critical security override.

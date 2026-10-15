@@ -184,9 +184,9 @@ selected backend's allowed mounts. See [cold handoff and proof](history-layout.m
 - **Acceptance limits:** Offline fixtures cover controller/worker/checkpoint and
   failure composition with explicit stubs. Actual protected retained-auth review,
   root process/build/worker/adapter/checkpoint reuse, and recorder-based reservation
-  systemd lifetime trials passed; see [review evidence](security-review.md) and
-  [reservation evidence](reservations.md). Real OS activation/rollback, critical
-  fallback authentication and socket peer admission remain separate. Optional
+  systemd lifetime and actual guest activation/failure-rollback trials passed; see [review evidence](security-review.md) and
+  [reservation evidence](reservations.md). Critical fallback authentication, socket
+  peer admission and production-host activation compatibility remain separate. Optional
   controls stay OFF; these bounded trials do not establish full live readiness.
 - **Explicit source selection:** Shared rebuild commands and the authenticated
   deployment client accept branch/worktree selectors without switching checkouts.
