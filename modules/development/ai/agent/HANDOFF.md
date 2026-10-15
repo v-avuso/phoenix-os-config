@@ -219,14 +219,36 @@ and supervisor exited zero; runtime exited one and attached create did not
 complete within five seconds. Exact 0.1.2 source supports separate terminal-delivery
 and boundary status-classification gaps (references in shutdown acceptance).
 Gateway log push ended gRPC 13/relay EOF; durable final flush remains unproved.
-The original 45-second stall remains unreproduced. Next is an independent combined
-gateway/exact-scope stop mode preserving all failure captures and current deadlines.
+That ordinary run did not reproduce the 45-second stall; the subsequent combined
+transaction below did, while preserving failure captures and current deadlines.
 This deliberately tests control/log/shutdown behavior without the full Phoenix
 image; that image's cold keep-id startup limitation remains unresolved. Follow
 [shutdown acceptance](shutdown-acceptance.md). Keep ordering OFF, the 45-second
 fallback unchanged and the five-minute guest cap; no production stop or Rust fix
-has occurred. Combined gateway/scope teardown, manager shutdown and durable final
-log comparison remain pending.
+has occurred. Manager shutdown and final-event delivery acceptance remain pending;
+combined gateway/scope results follow.
+
+The combined transaction from source `8307f7` now reproduces the 45-second stall:
+45.409 seconds, both containers exit 137/no OOM, TERM present but FINAL absent,
+attached transport pending and log reader exited one. Exact scopes had no Before
+ordering. Sandbox Protocol loss froze the workload immediately; supervisor and
+workload scope were killed at their 45-second limits before gateway stop completed.
+This strongly supports conflicting teardown lifetimes, but does not identify the
+specific pending remote Signal/Wait/Terminate call. This fixture froze the workload;
+the original host report described prompt workload exit. See shutdown acceptance
+for exact source references, artifact path and the proposed existing-ordering A/B.
+This reproduction introduced no timeout reduction or Rust patch. Ordinary
+terminal-delivery/status failures remain separate; the subsequent ordering A/B follows.
+
+The existing module-generated ordering A/B (`089bb10`) reduced the same isolated
+transaction to 1.484 seconds. Actual Before and conmon/resource cgroup separation
+assertions passed; TERM/FINAL appeared and supervisor exited zero. Runtime exit one,
+pending attached transport and log reader exit one remain. No production change
+is accepted yet. The restart denial assertion was invalid: exact 0.1.2 GetSandboxLogs
+reads only a bounded process-memory tail, not persisted history or an instance
+archive. Missing old denial after gateway restart does not prove failed flush.
+Use live gateway receipt for delivery and independent journal/Podman logs for
+persistence; see shutdown acceptance for exact source lines and artifact path.
 
 ## Worktrees and preservation
 
