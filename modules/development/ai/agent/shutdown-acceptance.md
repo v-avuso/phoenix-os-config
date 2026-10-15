@@ -128,7 +128,9 @@ was cost-qualified: 245.4 MiB cached downloads/726.9 MiB unpacked, with prebuilt
 QEMU. Its first 55.6-second build/run reached the user manager but failed before
 container creation because the login shell lacked the guest user runtime/bus
 environment. The wrapper now supplies `/run/user/1000` and its bus explicitly;
-Nix/Python syntax checks pass, but a rerun is pending and smoke has not passed.
+The corrected smoke passed in 21.9 seconds, producing
+`/nix/store/r7j4ilpb5gd34s7kxf283jhsqawrnld9-vm-test-run-phoenix-shutdown-smoke`.
+This proves guest/rootless prerequisites, not OpenShell shutdown.
 It has no personal mounts, credentials, gateway or OpenShell images.
 
 After committing the owned files, evaluate and inspect download/build costs from
@@ -151,9 +153,57 @@ compilation of QEMU/Rust or exceeds the cost gate below; do not fetch dependenci
 to discover their cost. An actual smoke build/run needs the next explicit execution
 step after this preflight. Never use `path:.` or include the unrelated root draft.
 
+### Explicit OpenShell ordinary-stop slice
+
+`tests/shutdown-openshell.nix` takes `{ pkgs, runtime, supervisor, workload }`.
+Each image argument is `{ archive, sha256, id }`: an explicit immutable public
+archive path, its hexadecimal SHA256 and its independently verified OCI image
+configuration ID (without `sha256:`). Evaluation checks archive hashes; the guest
+checks loaded IDs and references images by those IDs, avoiding lost registry
+digest names after OCI import. It never adopts host container state or credentials.
+Do not add binary archives to Git. For a verified export, verify the exact
+configured repository digest, export only that image with `podman save --format
+oci-archive`, record its archive SHA256 and image ID, and publish the archive into
+the Nix store. A future fixed-output `dockerTools.pullImage` may supply the same
+contract after its image/hash binding is independently verified.
+
+The already prepared public archive bindings are:
+
+| Image | Archive SHA256 | Image ID |
+| --- | --- | --- |
+| runtime | `f6aff91497d959304240b0b8f6595be197f4c065300c1459d3ab6476abf0940a` | `e7a78d2e2c9c7d6ffc801e429a3304b51ffd65a84692530f2bbceea11e6e1558` |
+| supervisor | `898903978d972013a816d1948705374c5df2e6acdb5ccf4a161e19d428b1fbe3` | `494b86855b51987cd68e205aa1b08d67592d4ea7b989f94c66e7179e17a97388` |
+| workload | `581c4cbbbbeac1aee7481c14e9702e9c39c2906627e1a3e28f4652492e1405aa` | `d090ea4d6e2780f9ee6aaf8e89543f70808d792731dc3e733438d4ccd5c77623` |
+
+Use the previous exact-Git-revision expression, importing
+`tests/shutdown-openshell.nix` instead, and pass the three bindings. For example,
+`runtime.archive = builtins.storePath "/nix/store/...-runtime.oci.tar";` retains
+its dependency context. No host archive locations are defaults. Evaluate/dry-run
+this explicit derivation before authorizing its build/run.
+
+This first slice uses exact release CLI/gateway packages and production-equivalent
+rootless API/TLS parameters, a new guest UID 1000 and eight-GiB guest disk. Ordering
+stays OFF, stop fallback stays 45 seconds, and the driver has a 300-second global
+limit. The attached supported create stream records TERM/final workload markers;
+Podman runtime logs and the supervisor's supported log stream are separate captures.
+A deliberately denied guest-local HTTP request must produce a supervisor deny
+event before stopping. Ordinary supported stop must finish under ten seconds with
+zero container exit codes and the final workload markers. Bounded before/failure/final
+artifacts include workload stream/status, workload/supervisor logs/inspect and
+user-manager/unit journals. A failure identifies its last explicit stage; it does
+not prove which internal await stalled.
+
+The ordinary-stop definition has syntax checks only, not VM acceptance yet.
+Combined gateway/exact-scope stop, manager-wide shutdown and durable final
+supervisor-event comparison after gateway restart remain pending; workload stdout
+or a closed tail alone never proves final log persistence. Do not extend or patch
+Rust until this first actual OpenShell slice produces evidence.
+
 For the full regression, reuse the locked Nixpkgs `pkgs.testers.runNixOSTest` driver and its rootless
 Podman/lingering-user pattern in the existing module-local smoke; extend it only
-after the cost gate. No separate Python harness is currently needed. The upstream OpenShell 0.1.2 Podman gateway restart test
+after the cost gate. The maintained NixOS driver owns the harness; the adjacent
+`shutdown-openshell.py` is only its test script. The upstream OpenShell 0.1.2
+Podman gateway restart test
 covers lifecycle intent, but not concurrent systemd scope teardown and durable
 final logs. Running its whole conformance/Ansible setup would add unrelated work.
 
@@ -172,5 +222,7 @@ remain unknown. Verify KVM access and image archives/hashes before proceeding;
 allow at most five minutes for the ready guest's regression run. Preserve the
 10-second cooperative pass and 45-second safety net; stop at the first reproduced
 stall (50-second harness deadline) to identify the last acknowledged cleanup phase
-before choosing a Rust fix. Only the rootless smoke definition exists; full OpenShell regression implementation
-and all VM execution remain pending.
+before choosing a Rust fix. The rootless smoke passed. The ordinary OpenShell
+slice is defined and syntax-checked, with runtime acceptance pending. Combined
+gateway/scope stop, full user-manager shutdown and durable final-log persistence
+remain pending.

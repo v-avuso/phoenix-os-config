@@ -46,6 +46,10 @@
   embedded helper content individually: whole-repository source prefixes otherwise
   invalidate reuse on unrelated changes. Test relocation and actual helper changes;
   retain helper-byte hashing rather than normalizing away changed authority.
+- OpenShell 0.1.2 nonterminal gRPC exec buffers stdin until EOF. Give probes
+  requiring no input explicit DEVNULL/`</dev/null`; otherwise a blocked probe
+  does not establish readiness or authentication failure. Fully redirect all
+  descriptors of background capture groups so they cannot retain driver pipes.
 - Preserve retained authentication. Diagnose readiness and typed failure stages
   before asking for sign-in; compare the recorded instance to the installed
   launcher revision before attributing an old startup failure to current auth.
