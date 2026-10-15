@@ -229,3 +229,35 @@ death, expiry/revocation during mutation, rollback exclusion, process-group time
 owner baseline advancement/runtime hold, fresh contender baseline and mapped broker
 socket rejection. It does not prove live systemd cgroup, graphical Polkit or VM
 activation acceptance; those remain the final isolated acceptance window.
+
+
+## On-demand systemd lifetime acceptance (prepared)
+
+`tests/reservation-lifetime.nix { pkgs = ...; }` uses locked Nixpkgs'
+`testers.runNixOSTest` (two CPUs, 2 GiB, 120-second global bound). It is not a
+default check and has not yet run. Build from an exact committed Git-flake source,
+not the checkout path, then select this factory with that flake's locked pkgs.
+
+The guest supplies synthetic immutable source provenance to its own current
+runtime; if its initial system profile is absent, setup points it at that runtime.
+A separate immutable candidate closure contains only a fixed recorder executable
+and matching provenance. Real `recheck_bound`, root ownership checks, default
+Management mapping, activation guard, `activate_reserved`, reservation operation
+and inherited-descriptor child runner execute. No baseline/store/identity methods
+are mocked. Recorder activation only starts a child, waits for a guest release
+marker and records completion; successful recorder execution does not activate
+NixOS or update a profile. On unexpected candidate failure, production rollback
+may reassert the disposable guest configuration; no host path is involved.
+
+After recorder readiness the driver kills only the submitting `systemd-run`
+client. The actual transient service and recorder descendant must survive, reject
+a competing activation helper, finish after release and relinquish exclusion.
+A separate short `Operation.run_child` timeout must kill a delayed descendant
+before it can write after return; subsequent gate entry must succeed. The service
+has a 30-second runtime bound/five-second stop bound; captures retain its unit
+properties and journals even on failure, excluding capability/config/envelopes.
+
+This is prepared actual-systemd lifecycle coverage, not runtime evidence yet.
+It excludes Polkit, broker SO_PEERCRED admission, protected identity, real OS
+activation/rollback and broad reservation workflow acceptance. Production
+reservations remain OFF; every service/state/profile operation above is guest-only.
