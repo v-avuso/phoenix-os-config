@@ -16,7 +16,7 @@ def user(command):
                    "OPENSHELL_LOCAL_TLS_DIR=/home/fixture/.local/state/phoenix-openshell/tls ")
     return ("/run/current-system/sw/bin/setpriv --reuid=1000 --regid=$(id -g fixture) --init-groups "
             + environment + "/run/current-system/sw/bin/bash -c "
-            + shlex.quote("cd /home/fixture && " + command))
+            + shlex.quote("cd /home/fixture || exit 1; " + command))
 
 
 def run(command, timeout=30):
