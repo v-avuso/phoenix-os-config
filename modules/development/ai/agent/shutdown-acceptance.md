@@ -153,6 +153,30 @@ compilation of QEMU/Rust or exceeds the cost gate below; do not fetch dependenci
 to discover their cost. An actual smoke build/run needs the next explicit execution
 step after this preflight. Never use `path:.` or include the unrelated root draft.
 
+### Small representative workload
+
+`tests/shutdown-workload.nix` is an on-demand `{ pkgs }` image factory using the
+maintained `dockerTools.buildLayeredImage`. It contains Bash, curl, coreutils,
+`/bin/sh`, CA certificates and numeric sandbox UID/GID 1000 accounts, with private
+owned `/sandbox` and sticky `/tmp`. Fakeroot supplies archive ownership without a
+root build or build-time VM. It contains no Codex, Nix CLI, agent/broker config,
+history, credentials or host mounts. Build from the exact committed Git source:
+
+```sh
+nix build --no-link --print-out-paths --expr 'let
+  f = builtins.getFlake "git+file:///home/v/repos/code/phoenix-os-config?rev=COMMIT";
+  pkgs = f.inputs.nixpkgs.legacyPackages.x86_64-linux;
+in import (f.outPath + "/modules/development/ai/agent/tests/shutdown-workload.nix") { inherit pkgs; }'
+```
+
+Record the built archive SHA256 and Docker config/image ID from its manifest;
+pass that normal `{ archive, sha256, id }` workload record to the unchanged driver.
+There is no default host path or import-from-derivation step. First run
+`probeCreateOnly = true` with this image. Only if it passes should a fresh ordinary
+OpenShell test use it, with the same exact runtime/supervisor images and keep-id.
+The image tests shutdown/control and the policy log stream, not Codex/model or
+full Phoenix-image startup. The large-image result below remains unresolved.
+
 ### Explicit OpenShell ordinary-stop slice
 
 `tests/shutdown-openshell.nix` takes `{ pkgs, runtime, supervisor, workload }`.
@@ -215,7 +239,15 @@ No workload-create completion was observed. A same-image identity inspection had
 completed quickly; cold keep-id/rootfs preparation remains a hypothesis, not a
 permission or hardware diagnosis. This did not exercise ordinary shutdown.
 
-For the next isolated run, pass `probeCreateOnly = true;` to the same test import.
+The full Phoenix-image remote probe completed baseline create in 0.25 seconds
+(exit zero), but keep-id reached 35.034 seconds and status 124. Subsequent guest
+container inspections also blocked. This isolates an observed flag-dependent
+startup difference; cold UID remapping/storage locking is a hypothesis, not a
+proved underlying cause. The next workload should be the small synthetic image
+above, preserving keep-id and all runtime/containment parameters rather than
+raising deadlines or treating the large-image startup limitation as fixed.
+
+For an isolated comparison, pass `probeCreateOnly = true;` to the same test import.
 It starts only the dedicated guest API after image import, then uses maintained
 `podman --remote --url unix:///run/user/1000/phoenix-openshell-podman.sock create`
 with the exact workload ID and no execution. Baseline uses `--network=none`,

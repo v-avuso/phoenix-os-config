@@ -200,18 +200,24 @@ Podman driver stops supervisor before workload (`driver.rs:1400-1435`); gateway
 compute cleanup precedes final session cleanup (`gateway/lib.rs:997-1013`).
 These are candidate blocking paths, not identification of the observed stall.
 
-Host-level read-only inspection confirmed `/dev/kvm` exists; its absence inside
-the command sandbox was not evidence of host absence. No installed/cached VM
-runner was found. The repository has no maintained disposable NixOS test-driver
-fixture; its VMware host configuration is not suitable. Reuse the NixOS driver or
-a prepared disposable guest, but budget the new guest/TLS/isolated gateway and
-Podman/image setup as a separate integration step. Follow
-[shutdown-acceptance.md](shutdown-acceptance.md): active workload plus policy log
-stream; compare ordinary stop against combined gateway/scope shutdown. Cooperative
-pass is under ten seconds; retain the 45-second safety net and a 50-second harness
-stop. Stop after the first reproduced stall and identify entered/completed phases
-before proposing a Rust cleanup change. No production stop or shutdown code change
-was performed; ordering remains experimental and disabled.
+Host KVM read/write open and API version 12 passed without creating a VM. The
+maintained NixOS-driver rootless smoke subsequently passed in 21.9 seconds.
+Actual OpenShell guest imports and TLS/gateway readiness passed with verified
+Docker image archives, but sandbox creation timed out before workload readiness.
+The bounded same-image remote API probe completed baseline create in 0.25 seconds
+(exit zero), while keep-id reached 35.034 seconds/status 124; subsequent container
+inspection blocked. This is a startup flag-dependent observation, not proof of UID
+remapping/storage-lock cause and not a shutdown reproduction.
+
+The next on-demand `tests/shutdown-workload.nix` supplies a small Bash/curl/coreutils
+image for the same exact runtime/supervisor, keep-id, TERM trap and supervisor
+policy log stream. Its build and probe/ordinary-stop acceptance remain pending.
+This deliberately tests control/log/shutdown behavior without the full Phoenix
+image; that image's cold keep-id startup limitation remains unresolved. Follow
+[shutdown acceptance](shutdown-acceptance.md). Keep ordering OFF, the 45-second
+fallback unchanged and the five-minute guest cap; no production stop or Rust fix
+has occurred. Combined gateway/scope teardown, manager shutdown and durable final
+log comparison remain pending.
 
 ## Worktrees and preservation
 
