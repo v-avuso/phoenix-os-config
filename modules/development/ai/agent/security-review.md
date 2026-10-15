@@ -147,8 +147,13 @@ pkexec /nix/store/UTIL-LINUX/bin/setpriv \
   --allow-paid-review --config /nix/store/PUBLIC-CONFIG.json
 ```
 
-The runner validates immutable public paths and the protected UID/home before
-calling the fixture. It reviews one comment-only change, checks a bound verdict,
+The runner validates immutable public paths and the protected UID, then runs the
+selected offline integration case as that same actual UID before accessing the
+protected home or live adapter. An offline failure stops with an `offline-*` stage
+and zero model invocations. Fixture requests and their parent deployment lock stay
+inside the owned private temporary tree; unrelated `/tmp/deployment.lock` is never
+adopted or repaired. Only after that check passes does it validate the protected
+home and run the live adapter. It reviews one comment-only change, checks a bound verdict,
 then reuses identical source/closure across a different branch with zero extra
 model calls. A deterministic injected failure exercises pending state and exact
 fallback with explicit stubs. One optional context round permits at most two real

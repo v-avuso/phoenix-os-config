@@ -80,14 +80,24 @@ def main(argv=None):
         account = pwd.getpwnam('phoenix-deploy-review')
         if os.getuid() != account.pw_uid or os.geteuid() != account.pw_uid or account.pw_uid == 0:
             raise ValueError('run only as protected reviewer')
+        stage, code = 'offline-fixture', 'fixture-assertion-failed'
+        spec = importlib.util.spec_from_file_location('integration_fixture', Path(__file__).with_name('agent-deployment.py'))
+        fixture = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(fixture)
+        case = fixture.DeploymentTests('test_controller_worker_adapter_and_checkpoints_as_one_disposable_workflow')
+        result = TrialResult()
+        # Exercise the packaged harness as this actual UID before auth/model access.
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            case.run(result)
+        if not result.wasSuccessful():
+            case.live_stage = 'offline-' + getattr(case, 'live_stage', 'fixture')
+            raise ValueError('offline fixture failed; no model attempted')
+        case = None
         stage, code = 'auth-home', 'auth-home-unavailable'
         home = Path(config['reviewHome']).lstat()
         if not stat.S_ISDIR(home.st_mode) or home.st_uid != account.pw_uid or home.st_mode & 0o077:
             raise ValueError('protected reviewer home unavailable')
         stage, code = 'fixture', 'fixture-assertion-failed'
-        spec = importlib.util.spec_from_file_location('integration_fixture', Path(__file__).with_name('agent-deployment.py'))
-        fixture = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(fixture)
         case = fixture.DeploymentTests('test_controller_worker_adapter_and_checkpoints_as_one_disposable_workflow')
         case.live_review = config
         result = TrialResult()
@@ -96,7 +106,7 @@ def main(argv=None):
             case.run(result)
         if not result.wasSuccessful():
             raise ValueError('isolated live trial failed; no automatic retry')
-        print(json.dumps(case.live_receipt, sort_keys=True))
+        print(json.dumps(dict(case.live_receipt, offlinePrecheck=True), sort_keys=True))
         return 0
     except (ValueError, OSError, KeyError, TypeError):
         if case is not None:

@@ -17,7 +17,9 @@
 - When changing the review boundary, exercise controller → worker → adapter →
   checkpoint together in `tests/agent-deployment.py`, not only mocked worker
   envelopes. Keep fixture ownership/store/build/model/activation stubs explicit;
-  passing fixtures do not establish retained-auth or live OS acceptance. Check
+  passing fixtures do not establish retained-auth or live OS acceptance. Run the
+  packaged offline fixture as the actual protected UID before model use; keep
+  request-parent locks inside its owned temporary tree, not shared `/tmp`. Check
   incremental context against the smallest content/mode diff among independently
   approved same-policy/target checkpoints across branches, not an assumed latest
   approval. A merged/combined new source still requires residual integration review.

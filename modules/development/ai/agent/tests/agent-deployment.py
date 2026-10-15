@@ -76,6 +76,34 @@ class DeploymentTests(unittest.TestCase):
         self.assertGreater(case.live_fixture_line, 0)
         self.assertEqual(getattr(case, 'live_invocations', 0), 0)
 
+    def test_live_runner_stops_at_same_uid_offline_failure_before_auth_or_model(self):
+        spec = importlib.util.spec_from_file_location('live_runner', Path(__file__).with_name('agent-review-live.py'))
+        runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runner)
+        class OfflineFailure(unittest.TestCase):
+            def runTest(case):
+                case.live_stage = 'seed-checkpoint'
+                raise deploy.DeploymentFailure('baseline', 'baseline-verification-failed')
+        factory = mock.Mock(side_effect=lambda _: OfflineFailure())
+        fixture = mock.Mock(DeploymentTests=factory)
+        original_lstat = Path.lstat
+        def no_auth(path):
+            if str(path) == '/var/lib/phoenix-deploy-review':
+                raise AssertionError('offline failure must precede auth home access')
+            return original_lstat(path)
+        with mock.patch.object(runner, 'configuration', return_value={'reviewHome': '/var/lib/phoenix-deploy-review'}), \
+             mock.patch.object(runner.pwd, 'getpwnam', return_value=mock.Mock(pw_uid=989)), \
+             mock.patch.object(runner.os, 'getuid', return_value=989), \
+             mock.patch.object(runner.os, 'geteuid', return_value=989), \
+             mock.patch.object(runner.importlib.util, 'spec_from_file_location', return_value=mock.Mock()), \
+             mock.patch.object(runner.importlib.util, 'module_from_spec', return_value=fixture), \
+             mock.patch.object(Path, 'lstat', no_auth), contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(runner.main(['--allow-paid-review', '--config', '/fixed/public']), 1)
+        receipt = json.loads(output.getvalue())
+        self.assertEqual((receipt['stage'], receipt['code'], receipt['modelInvocations']),
+                         ('offline-seed-checkpoint', 'baseline-verification-failed', 0))
+        factory.assert_called_once()
+
     def test_live_runner_requires_explicit_optin_and_immutable_auth_route(self):
         path = Path(__file__).with_name('agent-review-live.py')
         spec = importlib.util.spec_from_file_location('live_runner', path)
@@ -826,6 +854,17 @@ class DeploymentTests(unittest.TestCase):
                         self.assertEqual(bound['action'],'test');self.assertEqual(bound['target'],'metal')
                         self.assertEqual(security.pending.call_args.args[2],1000)
 
+    def test_integration_lock_is_private_and_distinct_between_fixture_owners(self):
+        owners = []
+        for _ in range(2):
+            self.test_controller_worker_adapter_and_checkpoints_as_one_disposable_workflow()
+            self.assertTrue(self.fixture_lock_paths)
+            parents = {str(Path(path).parent) for path in self.fixture_lock_paths}
+            self.assertEqual(len(parents), 1)
+            self.assertNotIn('/tmp', parents)
+            owners.append(parents)
+        self.assertNotEqual(owners[0], owners[1])
+
     def test_immutable_source_integration_uses_explicit_fixture_policy(self):
         # Store-packaged authorization deliberately disables worktree-only fallback.
         with mock.patch.object(deploy.authorization, '__file__', '/nix/store/' + 'a' * 32 + '-fixture/request.py'):
@@ -836,6 +875,7 @@ class DeploymentTests(unittest.TestCase):
     def test_controller_worker_adapter_and_checkpoints_as_one_disposable_workflow(self):
         """Exercise production integration; OS/store/model/activation are explicit stubs."""
         self.live_stage = "fixture-setup"
+        self.fixture_lock_paths = []
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             owner = Path(__file__).resolve().parents[5] / 'modules/development/ai/agent'
@@ -855,7 +895,9 @@ class DeploymentTests(unittest.TestCase):
             (auth / 'auth.json').write_text('fixture-only')
             review = deploy.load_review({'reviewScript': str(owner / 'deploy-review.py')})
             security = self.security()
-            config = dict(target='metal', work=directory, builderUser='builder', reviewerUser='reviewer',
+            requests = root / 'requests'
+            requests.mkdir(mode=0o700)
+            config = dict(target='metal', work=str(requests), builderUser='builder', reviewerUser='reviewer',
                 reviewHome=str(auth), nix='nix', nixStore='nix-store', baseline=str(baseline),
                 python='python', controller=str(owner / 'deployment.py'), configPath='fixture', systemdRun='systemd-run',
                 reviewScript=str(owner / 'deploy-review.py'), securityReviewScript=str(owner / 'security-review.py'),
@@ -928,6 +970,13 @@ class DeploymentTests(unittest.TestCase):
                     deploy.worker(config, argv[-1])
                 return output.getvalue().encode()
 
+            original_open = Path.open
+            def owned_open(path, *args, **kwargs):
+                if path.name == 'deployment.lock':
+                    self.assertEqual(path.parent, root, 'fixture deployment lock escaped owned tree')
+                    self.fixture_lock_paths.append(str(path))
+                return original_open(path, *args, **kwargs)
+
             original_resolve = Path.resolve
 
             def resolve(path, *args, **kwargs):
@@ -949,6 +998,7 @@ class DeploymentTests(unittest.TestCase):
                  mock.patch.object(review, 'run', side_effect=command), mock.patch.object(deploy, 'as_user', side_effect=user_command), \
                  mock.patch.object(deploy, 'store_path'), mock.patch.object(deploy, 'activation_executable'), mock.patch.object(deploy, 'store_file', side_effect=lambda path: path), \
                  mock.patch.object(deploy.pwd, 'getpwnam', return_value=account), mock.patch.object(Path, 'resolve', resolve), \
+                 mock.patch.object(Path, 'open', owned_open), \
                  mock.patch.object(security, 'state_directory', return_value=state), \
                  mock.patch.object(security, 'read_record', side_effect=lambda path: json.loads(path.read_text())), \
                  mock.patch.object(deploy, 'activation_guard', return_value=contextlib.nullcontext(42)), \
