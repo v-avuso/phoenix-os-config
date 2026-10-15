@@ -308,14 +308,13 @@ pre-helper authentication expiries made no model calls; do not use the supersede
 integration artifact.
 
 The reservation systemd VM passed from source
-`41a5cc897500d2b200fc6552ce26722889be861c`, evidence
-`/nix/store/fj746s5l34g3y5v26nm7n602fwsyr9g3-vm-test-run-phoenix-reservation-lifetime/evidence`.
+`ecd35ed25e419e9f8962353a897c183e200ff6d1`, evidence
+`/nix/store/cnwjwkjxy1hy0br7l94mnjhn54h69c0y-vm-test-run-phoenix-reservation-lifetime/evidence`.
 Killing the verified submitting systemd-run client left the distinct real helper
 service/recorder descendant alive. The competitor failed with activation guard
 `mutation-still-running`; completion and unit successful deactivation, timeout
 cleanup and gate reuse passed. A fixed immutable recorder substituted for OS
-activation, using synthetic guest provenance. The new explicit competitor-reason
-assertion is not yet rerun. Reservations stay OFF; peer admission, Polkit/identity,
+activation, using synthetic guest provenance. The exact rerun also passed the explicit competitor-reason assertion. Reservations stay OFF; peer admission, Polkit/identity,
 real activation/rollback, critical fallback and general recovery remain separate.
 
 ## Resume order

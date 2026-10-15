@@ -237,8 +237,8 @@ activation acceptance; those remain the final isolated acceptance window.
 `tests/reservation-lifetime.nix { pkgs = ...; }` uses locked Nixpkgs'
 `testers.runNixOSTest` (two CPUs, 2 GiB, 120-second global bound). It is not a
 default check. The actual VM passed from source
-`41a5cc897500d2b200fc6552ce26722889be861c`; evidence is in
-`/nix/store/fj746s5l34g3y5v26nm7n602fwsyr9g3-vm-test-run-phoenix-reservation-lifetime/evidence`. Build from an exact committed Git-flake source,
+`ecd35ed25e419e9f8962353a897c183e200ff6d1`; evidence is in
+`/nix/store/cnwjwkjxy1hy0br7l94mnjhn54h69c0y-vm-test-run-phoenix-reservation-lifetime/evidence`. Build from an exact committed Git-flake source,
 not the checkout path, then select this factory with that flake's locked pkgs.
 
 The guest supplies synthetic immutable source provenance to its own current
@@ -264,8 +264,8 @@ The actual guest run verified the killed process was the submitting `systemd-run
 client, distinct from the service PID. The real transient helper retained the
 activation guard; its competitor reported `mutation-still-running`, and the unit
 journal recorded successful deactivation. Descendant completion, timeout cleanup
-and subsequent gate reuse assertions passed. A later assertion makes that exact
-competitor reason mandatory; this assertion change has syntax checks only.
+and subsequent gate reuse assertions passed. The rerun also passed the explicit assertion requiring that exact competitor
+rejection reason.
 It excludes Polkit, broker SO_PEERCRED admission, protected identity, real OS
 activation/rollback and broad reservation workflow acceptance. Production
 reservations remain OFF; every service/state/profile operation above is guest-only.
