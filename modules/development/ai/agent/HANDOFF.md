@@ -292,22 +292,31 @@ the corrected ordinary-stop VM supplied the fast-stop/status-delivery failure
 evidence above. No shutdown fix or production stop
 has occurred.
 
-## Immediate authenticated review trial
+## Root review integration and reservation lifetime acceptance
 
-The current root process integration fixture is committed and packaged from
-`5b00339`; use the corrected `sjkshdd...` package in `security-review.md`, not the
-superseded `870d851`/`75ml...` integration entry.
-Dry-run and zero-download offline candidate prebuild passed; exact package,
-source/closure and owned GC-root links are recorded in `security-review.md`.
-The first integration artifact later authenticated but was rejected before worker
-execution because it used the human operator route. Real authorization regression
-coverage now checks the corrected agent route; the corrected native Polkit retry
-expired before helper start (no model invocation/activation). Wait for operator availability rather
-than looping authentication. Recheck runtime/profile/source against the prepared
-candidate, then use that same immutable integration executable. It records
-activation only and keeps production review OFF. Actual activation, rollback,
-critical fallback and optional identity/reservation/disruption acceptance remain
-separate; do not promote a passing stubbed-activation receipt to live readiness.
+Native-authenticated root integration passed from corrected source `5b00339`,
+package `/nix/store/sjkshddnlhsrh3bddj9y0r4lfvdgyqz4-phoenix-review-checkpoint-trial`:
+`status=passed`, `modelInvocations=1`, `activation=false`, `rootCheckpoint=true`,
+`exactReuse=true`, `builderUid=990`, `reviewerUid=989`, `controllerUid=0`,
+`ownedRootsCleaned=true`. Actual process/source/cached build/worker/adapter/root
+checkpoint and another-branch reuse passed. Activation alone was recorded under
+the real guard/recheck; no OS activation occurred. Protected auth needed no copy
+or sign-in; CLI internal requests/tokens/cost remain unmeasured. Production review
+stays OFF. See security-review.md for exact source, candidate and retained prebuild
+roots, which have separate cleanup ownership. Earlier caller-role failure and
+pre-helper authentication expiries made no model calls; do not use the superseded
+integration artifact.
+
+The reservation systemd VM passed from source
+`41a5cc897500d2b200fc6552ce26722889be861c`, evidence
+`/nix/store/fj746s5l34g3y5v26nm7n602fwsyr9g3-vm-test-run-phoenix-reservation-lifetime/evidence`.
+Killing the verified submitting systemd-run client left the distinct real helper
+service/recorder descendant alive. The competitor failed with activation guard
+`mutation-still-running`; completion and unit successful deactivation, timeout
+cleanup and gate reuse passed. A fixed immutable recorder substituted for OS
+activation, using synthetic guest provenance. The new explicit competitor-reason
+assertion is not yet rerun. Reservations stay OFF; peer admission, Polkit/identity,
+real activation/rollback, critical fallback and general recovery remain separate.
 
 ## Resume order
 
@@ -344,8 +353,9 @@ GUI and CLI; retain the operator terminal and authenticated controller route.
   format compatibility, not the live OpenShell/GUI/workspace workflow or future sizes.
 - Protected identity, reservations, disruption protection and the full optional
   security-review workflow have separate unfinished live acceptance. The protected
-  reviewer adapter/auth/schema and stubbed composition trial above passed; it
-  does not establish root checkpoint/activation/fallback-auth authority. The generic
+  reviewer adapter/auth/schema, root integration/checkpoints and recorder-based
+  systemd lifetime trials above passed; real activation and fallback authentication
+  remain unproved. The generic
   authorization explanation remains experimental/off; critical exact-pending
   override handling is a separate flow.
 - On 2026-10-06 at 08:32, OpenShell 0.1.2 shutdown hit the 45-second supervisor

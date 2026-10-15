@@ -23,6 +23,7 @@ try:
     machine.succeed("kill -KILL $(cat " + root + "/submit.pid)")
     machine.succeed("systemctl is-active " + unit)
     machine.fail(python + " -I " + controller + " " + root + "/config.json activate-reserved " + "b" * 64 + " >" + root + "/competitor.log 2>&1", timeout=5)
+    machine.succeed("grep -Fq 'DeploymentFailure: activation: mutation-still-running' " + root + "/competitor.log")
     machine.succeed("test ! -f " + root + "/finished && kill -0 $(cat " + root + "/ready)")
     machine.succeed("touch " + root + "/release")
     machine.wait_until_succeeds("test -f " + root + "/descendant-done && test -f " + root + "/finished && ! systemctl is-active --quiet " + unit, timeout=10)

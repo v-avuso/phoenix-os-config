@@ -3,7 +3,8 @@
 `phoenix.agent.reservations.enable` defaults to **false**. When enabled, management
 uses the existing admin broker, and test/switch/boot plus configured mapped fixed
 admin operations require a private task capability. Build/dry-build remain independent.
-Implementation fixtures pass; live VM/Polkit/systemd acceptance is still pending.
+Implementation fixtures and the bounded systemd VM lifetime test pass; Polkit
+and broader live acceptance remain pending.
 Keep this experimental feature off on the daily driver.
 
 The engine supplies SQLite state and kernel flock exclusion; the management
@@ -231,11 +232,13 @@ socket rejection. It does not prove live systemd cgroup, graphical Polkit or VM
 activation acceptance; those remain the final isolated acceptance window.
 
 
-## On-demand systemd lifetime acceptance (prepared)
+## On-demand systemd lifetime acceptance
 
 `tests/reservation-lifetime.nix { pkgs = ...; }` uses locked Nixpkgs'
 `testers.runNixOSTest` (two CPUs, 2 GiB, 120-second global bound). It is not a
-default check and has not yet run. Build from an exact committed Git-flake source,
+default check. The actual VM passed from source
+`41a5cc897500d2b200fc6552ce26722889be861c`; evidence is in
+`/nix/store/fj746s5l34g3y5v26nm7n602fwsyr9g3-vm-test-run-phoenix-reservation-lifetime/evidence`. Build from an exact committed Git-flake source,
 not the checkout path, then select this factory with that flake's locked pkgs.
 
 The guest supplies synthetic immutable source provenance to its own current
@@ -257,7 +260,12 @@ before it can write after return; subsequent gate entry must succeed. The servic
 has a 30-second runtime bound/five-second stop bound; captures retain its unit
 properties and journals even on failure, excluding capability/config/envelopes.
 
-This is prepared actual-systemd lifecycle coverage, not runtime evidence yet.
+The actual guest run verified the killed process was the submitting `systemd-run`
+client, distinct from the service PID. The real transient helper retained the
+activation guard; its competitor reported `mutation-still-running`, and the unit
+journal recorded successful deactivation. Descendant completion, timeout cleanup
+and subsequent gate reuse assertions passed. A later assertion makes that exact
+competitor reason mandatory; this assertion change has syntax checks only.
 It excludes Polkit, broker SO_PEERCRED admission, protected identity, real OS
 activation/rollback and broad reservation workflow acceptance. Production
 reservations remain OFF; every service/state/profile operation above is guest-only.

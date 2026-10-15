@@ -181,13 +181,13 @@ selected backend's allowed mounts. See [cold handoff and proof](history-layout.m
   authentication and accepts only that protected source/closure/action. Approval
   remains reusable after an activation failure; current baseline/profile checks
   still apply. Never include secrets in task reasons.
-- **Acceptance limits:** `python3 -B modules/development/ai/agent/tests/agent-deployment.py` exercises the
-  controller, worker, review adapter and checkpoint together with disposable state
-  and explicit OS ownership/store/build/model/activation stubs. The retained login
-  has moved to the protected controller; existing helpers offer no isolated
-  authenticated reviewer diagnostic after migration. Real retained-auth review,
-  live isolation and OS activation remain unverified. Use retained authentication
-  and diagnose readiness/failure stages before requesting sign-in.
+- **Acceptance limits:** Offline fixtures cover controller/worker/checkpoint and
+  failure composition with explicit stubs. Actual protected retained-auth review,
+  root process/build/worker/adapter/checkpoint reuse, and recorder-based reservation
+  systemd lifetime trials passed; see [review evidence](security-review.md) and
+  [reservation evidence](reservations.md). Real OS activation/rollback, critical
+  fallback authentication and socket peer admission remain separate. Optional
+  controls stay OFF; these bounded trials do not establish full live readiness.
 - **Explicit source selection:** Shared rebuild commands and the authenticated
   deployment client accept branch/worktree selectors without switching checkouts.
   Human Phoenix activation retains terminal `nixos-rebuild --sudo` and option

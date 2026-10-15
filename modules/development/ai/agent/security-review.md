@@ -258,11 +258,12 @@ The actual authenticated root trial passed from exact source
 
 This used only the explicit-trust checkpoint path and cleaned its owned private
 roots/tree. Production cache, credentials/sign-in, profile and activation were
-untouched; review remains OFF. Full root-to-worker/new-build review, activation
-and fallback authentication remain pending, rather than implied by this receipt.
+untouched; review remains OFF. This receipt alone excludes root-to-worker/build
+review, which the separate integration trial below subsequently exercised. Actual
+activation and fallback authentication remain pending.
 
 
-## Root process integration trial (prepared, not executed)
+## Root process integration trial (bounded acceptance passed)
 
 The same on-demand `tests/review-checkpoint.nix` package additionally provides
 argument-free `phoenix-review-integration-trial-dry-run`,
@@ -310,8 +311,8 @@ budget directory prevents deletion by the reviewer; its reviewer-writable token
 is a normal-fixture cost guard, not authority against a hostile reviewer UID.
 It caps actual CLI invocations at one across context requests and repeated calls,
 not CLI-internal server requests, tokens or billing. A requested context round
-therefore fails closed before another CLI invocation. Protected-UID gate traversal
-still needs the actual trial; offline tests prove normal mode ownership layout,
+therefore fails closed before another CLI invocation. Protected-UID gate traversal passed in the actual trial below; offline tests also
+cover normal mode ownership layout,
 concurrent token exclusion and composed callback behavior with explicit doubles.
 
 Production subprocess bounds kill/wait their child process groups on interruption;
@@ -332,16 +333,6 @@ The closure's activated-source link matches that candidate. Owned temporary GC
 roots `/tmp/phoenix-review-integration-roots.hqd6tY/{source,closure}` retain both.
 Remove only those owned links/directory after the trial no longer needs them.
 
-The supported Polkit integration invocation reached its 180-second deadline
-(exit 124, no helper receipt). Immediately before expiry, process inspection
-showed only the waiting pkexec and no trial Python process: the fixture/reviewer
-had not started, so this attempt made no model invocation or activation. Do not
-retry automatically. When the operator is available, recheck active baseline,
-profile and cached candidate, then reissue the same immutable integration entry
-through native Polkit. No new sign-in, source reconstruction or implementation
-workaround is needed. Earlier protected-adapter and zero-AI root-checkpoint
-receipts remain valid within their documented narrower scopes.
-
 ### Current retry artifact and authorization regression
 
 Use corrected source `5b0033907c81c915c3fa795c123b62bb3a65e48e`, package
@@ -355,9 +346,21 @@ now exercises real authorization, contrasting the rejected operator entrance
 with accepted agent dispatch. Caller UID is supplied synthetically by the fixture;
 socket peer admission remains outside its proof.
 
-Corrected package build, dry-run and prebuild-plan passed; candidate/source/owned
-roots above are unchanged. A new native Polkit invocation of the corrected entry
-expired at 180 seconds without starting the helper (no receipt/model call/activation).
-Do not loop authentication or rerun the superseded entry. On operator availability,
-recheck active source/profile and retained candidate, then invoke only the corrected
-immutable entry with the existing one-call/no-activation limits. No sign-in is needed.
+Corrected package build, dry-run and prebuild-plan passed; the candidate above
+was unchanged. Actual native-authenticated integration then passed using the
+corrected immutable entry:
+
+```json
+{"status":"passed","modelInvocations":1,"activation":false,"rootCheckpoint":true,"exactReuse":true,"builderUid":990,"reviewerUid":989,"controllerUid":0,"ownedRootsCleaned":true}
+```
+
+This proves actual root process → frozen source/cached Nix realization as builder
+990 → real reviewer worker/adapter as UID 989 → root-owned exact checkpoint and
+cross-branch reuse. The one CLI invocation used pinned Codex 0.159.0 with requested
+`gpt-6-luna`/`high`; internal API calls/tokens/billing were not measured. Protected
+retained authentication worked without sign-in/copy. Only activation was a guarded
+recording callback; production review remains OFF. Actual activation, rollback,
+critical fallback authentication and socket peer admission remain unproved.
+The fixture cleaned its private state/GC roots; separately retained prebuild roots
+above require their own cleanup. Earlier authentication-only expiries made no
+model calls, and the superseded caller-role failure is covered by the regression.
