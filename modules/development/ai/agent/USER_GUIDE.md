@@ -1,24 +1,26 @@
 # Shared chats trial
 
-Sharing trial is **not active**. Copy this guide before quitting.
+The 2026-10-15 cold handoff is complete. This conversation was resumed in
+Sandbox and then Native. Preserve shared history: **do not repeat
+`codex-history-enable --apply` or restore the original Native databases.**
+Sharing is temporarily active; the next-boot profile still has sharing off.
+Reliable task execution remains under investigation. See [HANDOFF.md](HANDOFF.md).
 
-Open a terminal. Quit Native normally via tray/menu, close Sandbox and all Codex
-CLI clients. Paste:
+## Next diagnostic trial
 
-```sh
-codex-history-enable &&
-codex-history-enable --apply &&
-ai-broker --task gui-sharing-trial \
-  --reason 'Temporarily test shared chats and GUI switching' -- \
-  phoenix-test --worktree /home/v/.codex/worktrees/gui-sharing-trial/phoenix-os-config &&
-codex-desktop-sandboxed
-```
+Wait for the coordinator's checked installation request. Keep Native open while
+authenticating that OS dialog; no ChatGPT sign-in or history migration is needed.
+When installation is complete and the coordinator asks for the trial:
 
-Authenticate one OS dialog; no sign-in.
+- Open **ChatGPT Community (Sandboxed)** from the launcher and accept the normal
+  close-and-switch offer. Let current work finish first.
+- Resume this conversation and try the requested harmless task. Report the exact
+  visible error if it fails; do not sign in again or repeat migration.
+- Return to Native through its launcher if needed. Preserve shared history and
+  report any missing chats or changes to pins.
 
-If it fails, stop. Reopen Native normally and report the terminal error. Do not
-rerun apply or change history.
+If starting `codex-desktop-sandboxed` in a terminal, it intentionally stays in the
+foreground until the GUI exits. This waiting is not an unfinished deployment.
 
-- Check existing/archived Native chats and pins.
-- Resume this chat; send a reply.
-- Open the other variant: test Keep/Close; confirm your reply remains. No extra login.
+First-time setup on a different, uninitialized installation belongs in the
+[technical cold handoff guide](history-layout.md#explicit-cold-handoff).
