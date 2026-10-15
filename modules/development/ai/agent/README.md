@@ -68,14 +68,15 @@ rendering, not the host clock or Native configuration.
   desktop/history setup. Remote SSH selects a remote host; selection alone does
   not prevent local task execution. Its persistent server bootstrap also needs
   the existing history/authentication initialization and lifecycle guarantees.
-- **Decision:** Retain the current path while diagnosing its concrete remote
-  error; do not replace it solely to obtain SSH, which it already uses. Reassess
-  if repair requires substantial new mediation. Any replacement needs a small
+- **Decision:** Retain the accepted bridge path: Sandbox automatically selects
+  Custom, actual `pwd` succeeded, and return to Native was accepted. It already
+  uses SSH; there is no current known routing failure. Reassess if future repair
+  requires substantial new mediation. Any replacement needs a small
   isolated proof of retained login, an actual remote task, chat continuation and
   outage behavior before migration or supporting infrastructure.
 - **Cost boundary:** Prioritize one usable sandbox desktop with native CLI as a
   repair lifeline. Further simultaneous-GUI parity and optional reviewer controls
-  are separate work, not prerequisites for diagnosing this backend failure.
+  remain separate work beyond the accepted primary GUI workflow.
 
 ## Active-client replacement guard
 
@@ -88,8 +89,12 @@ forwarding using the existing parent-death cleanup.
 
 First adoption requires a quiescent operator cutover: older launchers and manual
 OpenShell clients do not hold this lock. Isolated process tests cover locking and
-transport behavior; the new guard is not live until controlled acceptance. It is
-not a guarantee against manual lifecycle operations or atomic cleanup after SIGKILL.
+transport behavior. The guard is persistently installed after a quiescent cutover,
+real nonsecret home-canary/repository access checks and held/released lifetime-lock
+acceptance; installed launcher and runtime/boot closure were verified. See
+[installed evidence](HANDOFF.md#recorded-installed-state-and-pending-source). It is
+not a guarantee against older/manual launchers, manual lifecycle operations or
+atomic cleanup after SIGKILL.
 
 ## Shared desktop state (primary GUI workflow accepted)
 
@@ -176,13 +181,13 @@ selected backend's allowed mounts. See [cold handoff and proof](history-layout.m
   authentication and accepts only that protected source/closure/action. Approval
   remains reusable after an activation failure; current baseline/profile checks
   still apply. Never include secrets in task reasons.
-- **Acceptance limits:** `python3 -B modules/development/ai/agent/tests/agent-deployment.py` exercises the
-  controller, worker, review adapter and checkpoint together with disposable state
-  and explicit OS ownership/store/build/model/activation stubs. The retained login
-  has moved to the protected controller; existing helpers offer no isolated
-  authenticated reviewer diagnostic after migration. Real retained-auth review,
-  live isolation and OS activation remain unverified. Use retained authentication
-  and diagnose readiness/failure stages before requesting sign-in.
+- **Acceptance limits:** Offline fixtures cover controller/worker/checkpoint and
+  failure composition with explicit stubs. Actual protected retained-auth review,
+  root process/build/worker/adapter/checkpoint reuse, and recorder-based reservation
+  systemd lifetime trials passed; see [review evidence](security-review.md) and
+  [reservation evidence](reservations.md). Real OS activation/rollback, critical
+  fallback authentication and socket peer admission remain separate. Optional
+  controls stay OFF; these bounded trials do not establish full live readiness.
 - **Explicit source selection:** Shared rebuild commands and the authenticated
   deployment client accept branch/worktree selectors without switching checkouts.
   Human Phoenix activation retains terminal `nixos-rebuild --sudo` and option

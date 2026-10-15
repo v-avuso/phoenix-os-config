@@ -17,7 +17,9 @@
 - When changing the review boundary, exercise controller → worker → adapter →
   checkpoint together in `tests/agent-deployment.py`, not only mocked worker
   envelopes. Keep fixture ownership/store/build/model/activation stubs explicit;
-  passing fixtures do not establish retained-auth or live OS acceptance. Check
+  passing fixtures do not establish retained-auth or live OS acceptance. Run the
+  packaged offline fixture as the actual protected UID before model use; keep
+  request-parent locks inside its owned temporary tree, not shared `/tmp`. Check
   incremental context against the smallest content/mode diff among independently
   approved same-policy/target checkpoints across branches, not an assumed latest
   approval. A merged/combined new source still requires residual integration review.
@@ -46,6 +48,10 @@
   embedded helper content individually: whole-repository source prefixes otherwise
   invalidate reuse on unrelated changes. Test relocation and actual helper changes;
   retain helper-byte hashing rather than normalizing away changed authority.
+- OpenShell 0.1.2 nonterminal gRPC exec buffers stdin until EOF. Give probes
+  requiring no input explicit DEVNULL/`</dev/null`; otherwise a blocked probe
+  does not establish readiness or authentication failure. Fully redirect all
+  descriptors of background capture groups so they cannot retain driver pipes.
 - Preserve retained authentication. Diagnose readiness and typed failure stages
   before asking for sign-in; compare the recorded instance to the installed
   launcher revision before attributing an old startup failure to current auth.
@@ -177,3 +183,8 @@
 - Once an authorized Polkit request has started, let its native dialog collect
   authentication and await the result. Do not add redundant availability or
   confirmation questions; surface expiry or failure when it occurs.
+
+- Before expanding shutdown repairs, check the pinned contracts in
+  `shutdown-acceptance.md`: administrative exit-report skipping prevents hangs,
+  and the gateway log tail is memory-only. Validate supported delivery semantics
+  before treating a negative probe or post-restart absence as a new defect.

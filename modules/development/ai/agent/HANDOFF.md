@@ -165,6 +165,27 @@ protects supported participating clients; older launchers and manual OpenShell
 clients remain outside it. This first cutover used explicit operator quiescence,
 not an inference that old clients held the new lock.
 
+## Optional reviewer bounded acceptance
+
+The protected real-adapter fixture passed as actual UID 989 through native Polkit
+and setpriv, using source `91112be` at
+`/nix/store/lc944afdgl4hamk1cjpxvswca3kfvnwk-source` and public configuration
+`/nix/store/ajhmkb0js5ngcgg9wk7wmpmkl023ddgq-phoenix-review-trial.json`.
+Pinned reviewer Codex 0.159.0 requested `gpt-6-luna`/`high`. Receipt:
+`status=passed`, `modelInvocations=1`, `offlinePrecheck=true`, `exactReuse=true`,
+`injectedFailure=true`, `stubFallbackBound=true`. Protected retained authentication
+worked without sign-in/copy. Same source/closure on another branch incurred zero
+extra AI. Deterministic injected failure and exact pending fallback were fixture
+operations; Nix store/build, root checkpoint ownership, activation and fallback's
+human authentication were stubs. Production review remains OFF; no deployment
+was performed by the trial. See [review acceptance](security-review.md).
+
+Two earlier protected attempts stopped before model use on fixture policy/lock
+setup, with zero model invocations; regressions now cover those cases. Future
+paid runs assert prompt scope before entering the real adapter; the placement
+correction itself required no additional model call. Full privileged review
+acceptance remains separate from this bounded compatibility/composition result.
+
 ## Shutdown investigation checkpoint
 
 Read-only refresh against exact v0.1.2 release source confirmed supervisor/driver
@@ -179,18 +200,64 @@ Podman driver stops supervisor before workload (`driver.rs:1400-1435`); gateway
 compute cleanup precedes final session cleanup (`gateway/lib.rs:997-1013`).
 These are candidate blocking paths, not identification of the observed stall.
 
-Host-level read-only inspection confirmed `/dev/kvm` exists; its absence inside
-the command sandbox was not evidence of host absence. No installed/cached VM
-runner was found. The repository has no maintained disposable NixOS test-driver
-fixture; its VMware host configuration is not suitable. Reuse the NixOS driver or
-a prepared disposable guest, but budget the new guest/TLS/isolated gateway and
-Podman/image setup as a separate integration step. Follow
-[shutdown-acceptance.md](shutdown-acceptance.md): active workload plus policy log
-stream; compare ordinary stop against combined gateway/scope shutdown. Cooperative
-pass is under ten seconds; retain the 45-second safety net and a 50-second harness
-stop. Stop after the first reproduced stall and identify entered/completed phases
-before proposing a Rust cleanup change. No production stop or shutdown code change
-was performed; ordering remains experimental and disabled.
+Host KVM read/write open and API version 12 passed without creating a VM. The
+maintained NixOS-driver rootless smoke subsequently passed in 21.9 seconds.
+Actual OpenShell guest imports and TLS/gateway readiness passed with verified
+Docker image archives, but sandbox creation timed out before workload readiness.
+The bounded same-image remote API probe completed baseline create in 0.25 seconds
+(exit zero), while keep-id reached 35.034 seconds/status 124; subsequent container
+inspection blocked. This is a startup flag-dependent observation, not proof of UID
+remapping/storage-lock cause and not a shutdown reproduction.
+
+The small `tests/shutdown-workload.nix` Bash/curl/coreutils image was built and
+its same-image create probe passed: baseline 0.264 seconds and keep-id 13.584
+seconds, both exit zero. Exact runtime/supervisor pins and keep-id were retained.
+The ordinary test reached the workload but failed on an invalid localhost deny
+probe before attempting stop. Corrected source `82a9669` passed nonloopback policy
+denial and ordinary stop returned in 1.498 seconds. TERM/FINAL markers appeared
+and supervisor exited zero; runtime exited one and attached create did not
+complete within five seconds. Exact 0.1.2 source supports separate terminal-delivery
+and boundary status-classification gaps (references in shutdown acceptance).
+Gateway log push ended gRPC 13/relay EOF; durable final flush remains unproved.
+That ordinary run did not reproduce the 45-second stall; the subsequent combined
+transaction below did, while preserving failure captures and current deadlines.
+This deliberately tests control/log/shutdown behavior without the full Phoenix
+image; that image's cold keep-id startup limitation remains unresolved. Follow
+[shutdown acceptance](shutdown-acceptance.md). Keep ordering OFF, the 45-second
+fallback unchanged and the five-minute guest cap; no production stop or Rust fix
+has occurred. Manager shutdown and final-event delivery acceptance remain pending;
+combined gateway/scope results follow.
+
+The combined transaction from source `8307f7` now reproduces the 45-second stall:
+45.409 seconds, both containers exit 137/no OOM, TERM present but FINAL absent,
+attached transport pending and log reader exited one. Exact scopes had no Before
+ordering. Sandbox Protocol loss froze the workload immediately; supervisor and
+workload scope were killed at their 45-second limits before gateway stop completed.
+This strongly supports conflicting teardown lifetimes, but does not identify the
+specific pending remote Signal/Wait/Terminate call. This fixture froze the workload;
+the original host report described prompt workload exit. See shutdown acceptance
+for exact source references, artifact path and the proposed existing-ordering A/B.
+This reproduction introduced no timeout reduction or Rust patch. Ordinary
+terminal-delivery/status failures remain separate; the subsequent ordering A/B follows.
+
+The existing module-generated ordering A/B (`089bb10`) reduced the same isolated
+transaction to 1.484 seconds. Actual Before and conmon/resource cgroup separation
+assertions passed; TERM/FINAL appeared and supervisor exited zero. Runtime exit one,
+pending attached transport and log reader exit one remain. No production change
+is accepted yet. The restart denial assertion was invalid: exact 0.1.2 GetSandboxLogs
+reads only a bounded process-memory tail, not persisted history or an instance
+archive. Missing old denial after gateway restart does not prove failed flush.
+Use live gateway receipt for delivery and independent journal/Podman logs for
+persistence; see shutdown acceptance for exact source lines and artifact path.
+
+Ordered whole-user-manager shutdown from `fcda58b` returned zero in 1.518
+seconds, manager inactive/status three, TERM/FINAL present, both containers stopped,
+supervisor zero. Direct inspection succeeded without PAM/manager restart. The fixture
+still failed pending transport; runtime exit one remains the known classification
+gap. See shutdown acceptance for artifacts and the invalid prior background-pipe
+attempt. Prompt teardown has isolated runtime evidence; full shutdown acceptance
+and live enablement remain pending. Continue review integration preparation while
+keeping all experimental controls off.
 
 ## Worktrees and preservation
 
@@ -218,9 +285,37 @@ The root instructions draft remains only in the feature worktree. The older
 `gui-sharing-trial` checkout is retained for preservation, not the deployment
 source: it predates subsequent command repairs. Use reviewed main/current work.
 
-The bounded next shutdown regression plan is in
-[shutdown-acceptance.md](shutdown-acceptance.md#proposed-test-implementation).
-No guest, new runtime images or shutdown patch has been built or run.
+The current shutdown procedure/evidence is in
+[shutdown-acceptance.md](shutdown-acceptance.md#on-demand-smoke-and-pending-regression).
+Disposable guests, the rootless smoke and small workload have been built/run;
+the corrected ordinary-stop VM supplied the fast-stop/status-delivery failure
+evidence above. No shutdown fix or production stop
+has occurred.
+
+## Root review integration and reservation lifetime acceptance
+
+Native-authenticated root integration passed from corrected source `5b00339`,
+package `/nix/store/sjkshddnlhsrh3bddj9y0r4lfvdgyqz4-phoenix-review-checkpoint-trial`:
+`status=passed`, `modelInvocations=1`, `activation=false`, `rootCheckpoint=true`,
+`exactReuse=true`, `builderUid=990`, `reviewerUid=989`, `controllerUid=0`,
+`ownedRootsCleaned=true`. Actual process/source/cached build/worker/adapter/root
+checkpoint and another-branch reuse passed. Activation alone was recorded under
+the real guard/recheck; no OS activation occurred. Protected auth needed no copy
+or sign-in; CLI internal requests/tokens/cost remain unmeasured. Production review
+stays OFF. See security-review.md for exact source, candidate and retained prebuild
+roots, which have separate cleanup ownership. Earlier caller-role failure and
+pre-helper authentication expiries made no model calls; do not use the superseded
+integration artifact.
+
+The reservation systemd VM passed from source
+`ecd35ed25e419e9f8962353a897c183e200ff6d1`, evidence
+`/nix/store/cnwjwkjxy1hy0br7l94mnjhn54h69c0y-vm-test-run-phoenix-reservation-lifetime/evidence`.
+Killing the verified submitting systemd-run client left the distinct real helper
+service/recorder descendant alive. The competitor failed with activation guard
+`mutation-still-running`; completion and unit successful deactivation, timeout
+cleanup and gate reuse passed. A fixed immutable recorder substituted for OS
+activation, using synthetic guest provenance. The exact rerun also passed the explicit competitor-reason assertion. Reservations stay OFF; peer admission, Polkit/identity,
+real activation/rollback, critical fallback and general recovery remain separate.
 
 ## Resume order
 
@@ -256,7 +351,10 @@ GUI and CLI; retain the operator terminal and authenticated controller route.
   Original history was unchanged and processes were reaped. This proves backup
   format compatibility, not the live OpenShell/GUI/workspace workflow or future sizes.
 - Protected identity, reservations, disruption protection and the full optional
-  security-review workflow have separate unfinished live acceptance. The generic
+  security-review workflow have separate unfinished live acceptance. The protected
+  reviewer adapter/auth/schema, root integration/checkpoints and recorder-based
+  systemd lifetime trials above passed; real activation and fallback authentication
+  remain unproved. The generic
   authorization explanation remains experimental/off; critical exact-pending
   override handling is a separate flow.
 - On 2026-10-06 at 08:32, OpenShell 0.1.2 shutdown hit the 45-second supervisor
