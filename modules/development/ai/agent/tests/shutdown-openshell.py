@@ -3,6 +3,7 @@ import json
 import re
 import shlex
 import time
+from typing import Any
 
 
 def user(command):
@@ -157,7 +158,7 @@ try:
             started = time.monotonic()
             status, _ = machine.execute(user("timeout 50 systemctl --user stop " + units + " > /tmp/transaction-stop.log 2>&1"), timeout=55)
             elapsed = time.monotonic() - started
-            outcome = dict(stopStatus=status, stopSeconds=round(elapsed, 3))
+            outcome: dict[str, Any] = dict(stopStatus=status, stopSeconds=round(elapsed, 3))
             # Record independent results before assertions; known attached-create
             # and bootstrap failures must not prevent observing the transaction.
             outcome["transportStatus"] = run("cat /tmp/workload-status 2>/dev/null || echo pending").strip()
