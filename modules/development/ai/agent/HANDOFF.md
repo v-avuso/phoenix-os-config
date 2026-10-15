@@ -149,6 +149,20 @@ stash it or silently copy it into the clean trial source. Only the trial enables
 sharing; identity, reservations, shutdown ordering, disruption guard, security
 review and authorization explanation remain off.
 
+## Integration and next bounded work
+
+The coordinator fast-forwarded main to `1034cc5` after building its exact committed
+sharing-OFF source successfully (closure `avdpmhc3pm8ybyb2ccjjm9zy6rzi98d0`). Main
+was clean; the root instructions draft remained only in the feature worktree.
+Effective main evaluation confirmed sharing, security review, identity,
+reservations, shutdown ordering, disruption and explanation all false. No runtime
+or next-boot change followed this integration. The explicit permanent-sharing
+approval question remains pending; never treat the merge as that approval.
+
+The bounded next shutdown regression plan is in
+[shutdown-acceptance.md](shutdown-acceptance.md#proposed-test-implementation).
+No guest, new runtime images or shutdown patch has been built or run.
+
 ## Resume order
 
 1. Cold handoff and primary GUI acceptance are complete. Preserve readiness and

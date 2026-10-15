@@ -12,8 +12,10 @@ supervisor/runtime images, Podman 5.8.7 and systemd 259. Provide cached
 credentials/providers. Enable `phoenix.agent.shutdownOrdering.enable` in the
 guest before boot. Record package/image identities, effective units and stop
 deadlines. Preserve the observed 45-second scope fallback; shortening it is not
-a fix. This task environment lacked visible `/dev/kvm` and QEMU. Actual
-OpenShell and VM-manager shutdown have **not** passed this procedure.
+a fix. The default command sandbox hides `/dev/kvm`; supported host-level read-only
+inspection confirmed the host device exists. Opening it has not been tested, and
+no installed/cached VM runner was found. Actual OpenShell and VM-manager shutdown
+have **not** passed this procedure.
 
 ## Active workload and captures
 
@@ -112,3 +114,28 @@ wait five seconds, terminate, then wait without one overall deadline; log push
 is detached. Exact v0.1.3 and inspected main retain these relevant patterns.
 The observed 45-second supervisor stall's exact await remains unknown. Ordering
 is a supported experiment; upgrade or shorter timeout is not a proven remedy.
+
+## Proposed test implementation
+
+Reuse the locked Nixpkgs `pkgs.testers.runNixOSTest` driver and its rootless
+Podman/lingering-user pattern in module-local `tests/shutdown.nix` and
+`tests/shutdown.py`. The upstream OpenShell 0.1.2 Podman gateway restart test
+covers lifecycle intent, but not concurrent systemd scope teardown and durable
+final logs. Running its whole conformance/Ansible setup would add unrelated work.
+
+Use one guest (4 GiB RAM, two CPUs), fresh user/home, isolated Podman/gateway
+state, local TLS, persistent journal and exact pinned packages. Pre-import the
+Phoenix workload image and two pinned runtime images; no runtime image pulls,
+GUI/history mounts or personal provider credentials. Verify a guest-local policy
+HTTP event is present in supervisor and gateway logs before running both stop
+cases above. Account for intended gateway restart/resume semantics when checking
+post-stop state.
+
+Estimate: 2–4 hours implementation/integration, not a measured completion promise.
+Proposed preflight limit: 30 minutes, 8 GiB downloads and 25 GiB scratch; stop and
+reassess if exceeded or if Rust/QEMU must build from source. Cold closure sizes
+remain unknown. Verify KVM access and image archives/hashes before proceeding;
+allow at most five minutes for the ready guest's regression run. Preserve the
+10-second cooperative pass and 45-second safety net; stop at the first reproduced
+stall (50-second harness deadline) to identify the last acknowledged cleanup phase
+before choosing a Rust fix. No implementation or test execution is claimed here.
