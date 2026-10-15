@@ -5,9 +5,13 @@ let
     mkdir -p $out
     echo 'Synthetic guest provenance for lifetime acceptance.' > $out/README.md
   '';
+  authorization = pkgs.writeText "reservation-authorization.py" (builtins.readFile ../authorization/request.py);
+  transport = pkgs.writeText "reservation-transport.json" (builtins.readFile ../transport.json);
+  engine = pkgs.writeText "reservation-engine.py" (builtins.readFile ../reservations.py);
+  adapter = pkgs.writeText "reservation-management.py" (builtins.readFile ../reservation-client.py);
   controller = pkgs.replaceVars ../deployment.py {
-    deploymentTransportPolicy = toString ../transport.json;
-    authorizationLibrary = toString ../authorization/request.py;
+    deploymentTransportPolicy = toString transport;
+    authorizationLibrary = toString authorization;
   };
   recorder = pkgs.writeScript "reservation-recorder" ''
     #!${pkgs.python3}/bin/python3
@@ -38,13 +42,13 @@ let
         module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
         return module
     deploy = load('deployment', '${controller}')
-    management = load('management', '${../reservation-client.py}')
+    management = load('management', '${adapter}')
     root = Path('/var/lib/reservation-lifetime')
     config = dict(target='metal', baseline='/etc/phoenix-agent/activated-source',
         activationSpool=str(root / 'spool'), activationLock=str(root / 'activation.lock'),
-        activationEnvironment={}, reservations=dict(engine='${../reservations.py}',
-        adapter='${../reservation-client.py}', state=str(root / 'state'),
-        mapping=load('engine', '${../reservations.py}').DEFAULT_MAPPING, bounds={}))
+        activationEnvironment={}, reservations=dict(engine='${engine}',
+        adapter='${adapter}', state=str(root / 'state'),
+        mapping=load('engine', '${engine}').DEFAULT_MAPPING, bounds={}))
     if sys.argv[1] == 'setup':
         deploy.store_path('${source}', 'source')
         deploy.store_path('${closure}', 'closure')
@@ -79,6 +83,16 @@ let
             elif sys.argv[1] == 'probe': (root / 'gate-free').touch()
             else: raise AssertionError('unsupported fixed fixture mode')
   '';
+  runtimeInputs = pkgs.runCommand "reservation-runtime-import-check" { nativeBuildInputs = [ pkgs.python3 ]; } ''
+    python3 -I - <<'PYTHON'
+    import importlib.util
+    for name, path in [('controller', '${controller}'), ('engine', '${engine}'), ('management', '${adapter}')]:
+        spec = importlib.util.spec_from_file_location(name, path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    PYTHON
+    touch $out
+  '';
 in
 assert pkgs.lib.hasSuffix "-source" (toString source);
 assert pkgs.lib.hasSuffix "-nixos-system-reservation-fixture" (toString closure);
@@ -87,6 +101,7 @@ pkgs.testers.runNixOSTest {
   globalTimeout = 120;
   nodes.machine = { ... }: {
     virtualisation = { cores = 2; memorySize = 2048; diskSize = 2048; };
+    system.extraDependencies = [ runtimeInputs ];
     environment.etc."phoenix-agent/activated-source".source = source;
     environment.systemPackages = [ pkgs.python3 ];
   };
