@@ -288,7 +288,10 @@ wrap it in an overall 180-second timeout with a ten-second kill grace. Authentic
 remains native. Root validates PKEXEC_UID, unchanged runtime/profile, original
 global deployment lock (nonblocking) and activation-guard identity. Private root-owned
 requests/config/checkpoints stay under one owned temporary tree. Config is root
-0444 and traversable for the configured builder/reviewer. Real production process,
+0444 and traversable for the configured builder/reviewer. The fixture supplies the configured client UID to the review-enabled daemon
+entrance (`operator=False`); its separate native entry still authenticates the
+operator. This synthetic caller identity does not prove SO_PEERCRED/socket admission.
+Real production process,
 source-store/build commands, setpriv worker, protected reviewer home, adapter and
 root checkpoint/GC-root publication run; no credentials are read/copied by the
 fixture. Separate private policy seeding accounts for its test wrapper identities.

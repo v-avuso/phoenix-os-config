@@ -108,11 +108,33 @@ class CheckpointTrialTests(unittest.TestCase):
             self.assertEqual(sorted(child.wait(timeout=5) for child in children), [0, 1])
             self.assertEqual(token.read_text(), '1')
 
+    def test_real_authorization_dispatch_distinguishes_fixture_auth_from_daemon_caller(self):
+        spec = importlib.util.spec_from_file_location('real_deployment', Path(__file__).resolve().parents[1] / 'deployment.py')
+        deploy = importlib.util.module_from_spec(spec); spec.loader.exec_module(deploy)
+        config = dict(target='metal', modelReviewEnabled=True, operatorUid=1000, clientUid=2000,
+                      authorizationPolicy=deploy.authorization.default_policy(True, 2000, 1000))
+        request = dict(files={'flake.nix': '{}', 'flake.lock': '{}'},
+                       modes={'flake.nix': '100644', 'flake.lock': '100644'},
+                       commit='a' * 40, target='metal', action='test', task='review-integration-trial',
+                       reason='Offline authorization entrance regression')
+        with tempfile.TemporaryDirectory() as directory:
+            token = Path(directory) / 'used'; token.write_text('0')
+            with mock.patch.object(deploy, 'process_inner', return_value={'offline': True}) as inner:
+                with self.assertRaises(deploy.DeploymentFailure) as rejected:
+                    deploy.process(config, request, 1000, 123, operator=True)
+                self.assertEqual((rejected.exception.stage, rejected.exception.code), ('request', 'rejected-or-failed'))
+                inner.assert_not_called()
+                self.assertEqual(token.read_text(), '0')
+                self.assertEqual(deploy.process(config, request, 2000, 123), {'offline': True})
+                inner.assert_called_once()
+                self.assertEqual(inner.call_args.args[2], 2000)
+                self.assertEqual(token.read_text(), '0')
+
     def test_real_process_entry_and_guarded_recording_boundary_are_composed(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             config = dict(reviewerUser='reviewer', builderUser='builder', target='metal',
-                          operatorUid=1000, securityReviewState=str(root / 'checkpoints'))
+                          operatorUid=1000, clientUid=2000, securityReviewState=str(root / 'checkpoints'))
             public = dict(gateBwrap='/immutable/bwrap-gate', gateCodex='/immutable/codex-gate', offlineNix='/immutable/nix-offline')
             review = SimpleNamespace(baseline_files=lambda _: {'README.md': 'baseline'},
                                      source_modes=lambda *_: {'README.md': '100644'})
@@ -120,7 +142,7 @@ class CheckpointTrialTests(unittest.TestCase):
                                      activation_guard=mock.Mock(return_value=contextlib.nullcontext()))
             calls = []
             def process(cfg, request, uid, pid, operator=False):
-                self.assertTrue(operator); self.assertEqual(uid, 1000)
+                self.assertFalse(operator); self.assertEqual(uid, 2000)
                 self.assertEqual(cfg['codex'], public['gateCodex'])
                 self.assertEqual(Path(cfg['configPath']).stat().st_mode & 0o777, 0o444)
                 self.assertEqual(request['files']['README.md'], 'baseline\n<!-- Isolated review integration acceptance; no configuration change. -->\n')

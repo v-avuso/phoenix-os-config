@@ -115,12 +115,14 @@ def integration(deploy, review, trial, public, root, source, runtime, profile, p
     # Avoid raw model summaries or controller output in the public receipt.
     import io
     with contextlib.redirect_stdout(io.StringIO()):
-        first = deploy.process(trial, request, trial['operatorUid'], os.getpid(), operator=True)
+        # Authenticated fixture supplies the configured daemon caller identity;
+        # this is not proof of socket peer admission.
+        first = deploy.process(trial, request, trial['clientUid'], os.getpid())
         if token.read_text() != '1' or len(recorded) != 1:
             raise ValueError('trial-review-count-invalid')
         verify_records(Path(trial['securityReviewState']), first['source'], first['closure'], selected=True)
         request['branch'] = 'review-integration-b'
-        second = deploy.process(trial, request, trial['operatorUid'], os.getpid(), operator=True)
+        second = deploy.process(trial, request, trial['clientUid'], os.getpid())
     if first != second or token.read_text() != '1' or len(recorded) != 2:
         raise ValueError('exact-reuse-or-state-changed')
     return dict(status='passed', modelInvocations=1, activation=False, rootCheckpoint=True,
@@ -209,7 +211,7 @@ def main(descriptor, dry_run=False, integration_mode=False, plan=False):
                  'lock-identities-overlap', 'checkpoint-directory-invalid', 'checkpoint-missing',
                  'checkpoint-owner-invalid', 'checkpoint-binding-mismatch', 'checkpoint-root-invalid',
                  'runtime-profile-mismatch', 'activation-guard-unavailable', 'global-lock-invalid',
-                 'active-binding-changed', 'exact-reuse-or-state-changed', 'trial-readme-missing', 'trial-review-count-invalid', 'baseline-provenance-missing',
+                 'active-binding-changed', 'exact-reuse-or-state-changed', 'trial-readme-missing', 'trial-review-count-invalid', 'rejected-or-failed', 'baseline-provenance-missing',
                  'baseline-provenance-invalid', 'baseline-verification-failed', 'baseline-target-mismatch'}
         if hasattr(error, 'stage'):
             stage = error.stage
