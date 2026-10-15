@@ -28,7 +28,7 @@ commands and limits remain in the [module README](README.md),
   `/nix/store/dql2y6v7zhsszffw8gv6fw7zqa8rk18c-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
 - The 2026-10-15 cold handoff published readiness and the sharing-ON trial was
   temporarily activated. Runtime is
-  `/nix/store/ks5zgixbhlq85p0ikk66sxlkj60iq58y-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
+  `/nix/store/4c7agrmk05mpidgan14xcig0vgjnzv94-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
   The operator confirmed this exact conversation resumed and a reply was sent
   in Sandbox, then returned to Native. Do not rerun migration or restore stale
   Native originals over the shared store. Boot profile is still sharing OFF.
@@ -107,6 +107,10 @@ commands and limits remain in the [module README](README.md),
   restrictive profiles and explicit Sandbox selections. Tests must start from the
   actual decoder and cover outgoing Custom policy, not only an assumed mode name.
   This explains Sandbox's failed default, not Native's earlier transient display.
+  Correction `6c1847c` passed decoder-to-outgoing-request characterization and the
+  full system build; authenticated temporary deployment succeeded and the runtime
+  path matches the closure above. Repeat real GUI acceptance is still pending;
+  the persistent next-boot profile remains unchanged.
 - Committed repair `70fb232` accepts Codex 0.160's exact `.sqlite-maintenance.lock` as
   regular, non-symlink coordination state in both Native preflight and shared
   runtime status. It is not a database and is never copied during migration.
