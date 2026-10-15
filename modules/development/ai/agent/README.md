@@ -1,6 +1,7 @@
 # Agent containment and deployment
 
 For operator setup and testing, see the short [shared chats trial guide](USER_GUIDE.md).
+For technical continuation and evidence limits, see [HANDOFF.md](HANDOFF.md).
 
 ## Intentions
 

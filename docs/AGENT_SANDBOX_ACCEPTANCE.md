@@ -1,5 +1,8 @@
 # Agent sandbox acceptance
 
+> Historical evidence from 2026-10-04, not current acceptance of the shared-history
+> trial. Current task state and remaining checks: [technical recovery checkpoint](../modules/development/ai/agent/HANDOFF.md).
+
 Updated 2026-10-04. [Operating guide](AGENT_SANDBOX.md) records lasting behavior;
 this checkpoint records installed acceptance and remaining hardening.
 
