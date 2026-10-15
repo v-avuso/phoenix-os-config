@@ -28,7 +28,7 @@ commands and limits remain in the [module README](README.md),
   `/nix/store/dql2y6v7zhsszffw8gv6fw7zqa8rk18c-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
 - The 2026-10-15 cold handoff published readiness and the sharing-ON trial was
   temporarily activated. Runtime is
-  `/nix/store/5qln8yyn75mi8cg1028rrxqvjsr73h5p-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
+  `/nix/store/fw5v28pbsarb1k46k203107ldcf44zy2-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
   The operator confirmed this exact conversation resumed and a reply was sent
   in Sandbox, then returned to Native. Do not rerun migration or restore stale
   Native originals over the shared store. Boot profile is still sharing OFF.
@@ -52,11 +52,26 @@ commands and limits remain in the [module README](README.md),
   outer `bin/codex` wrapper instead. This is concrete network-policy identity
   mismatch evidence; correcting it does not yet prove the full GUI workflow.
   No Python executable denial appeared in that bounded warning window.
-- Repair both policy owners from one exact package-bound executable identity;
-  retain L7 inspection, destination scopes and existing authentication. Do not
-  accept the policy advisor's rejected L4-only credentialed endpoint proposals
-  as a workaround. Next: build/check the repair, authenticate a temporary trial,
-  and retry the existing chat without migration or sign-in.
+- Executable repair `a1d9c80` was built and authenticated for temporary activation.
+  Both policy owners now use one exact package-bound identity, guarded by a build
+  check. L7 inspection, destination scopes and credentials remain unchanged.
+- The next GUI/model turn reached `pwd`, but inner Bubblewrap failed to create a
+  namespace. OpenShell 0.1.2 intentionally denies CLONE_NEWUSER. Do not weaken
+  host sysctls, outer seccomp or accept rejected L4 credential proposals.
+- The operator selected **Custom (config.toml)** in Sandbox, and the next actual
+  `pwd` tool call succeeded with `/home/v/repos/code/phoenix-os-config`. The desktop
+  Custom option uses backend configuration: the existing worker config delegates
+  containment to OpenShell. Approve for me overrides it with workspace-write and
+  recreates the incompatible inner sandbox. No RPC policy rewriting was added.
+  Ordinary OpenShell-permitted commands do not trigger Codex command Auto-review;
+  eligible approval requests and the separate privileged boundary remain distinct.
+- Operator returned to Native; current supplied permission context is workspace-write
+  with auto_review. Chat continuation and one shell command are demonstrated,
+  not all filesystem/network denials. Check defaults/persistence and scoped denied
+  access with nonsecret fixtures before declaring everyday acceptance complete.
+- Operator reported Sandbox two hours behind the host. Host configuration is
+  Europe/Berlin; the worker image omitted localtime/TZ. Timezone integration is
+  pending; this is not evidence of an incorrect system clock.
 - Committed repair `70fb232` accepts Codex 0.160's exact `.sqlite-maintenance.lock` as
   regular, non-symlink coordination state in both Native preflight and shared
   runtime status. It is not a database and is never copied during migration.

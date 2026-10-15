@@ -14,10 +14,16 @@ When installation is complete and the coordinator asks for the trial:
 
 - Open **ChatGPT Community (Sandboxed)** from the launcher and accept the normal
   close-and-switch offer. Let current work finish first.
-- Resume this conversation and try the requested harmless task. Report the exact
-  visible error if it fails; do not sign in again or repeat migration.
-- Return to Native through its launcher if needed. Preserve shared history and
-  report any missing chats or changes to pins.
+- In Sandbox's permission selector beneath the composer, use **Custom
+  (config.toml)**. This uses the existing worker configuration with OpenShell as
+  the containment boundary; **Approve for me** requests incompatible nested
+  Bubblewrap. No extra configuration file needs manual maintenance.
+- Resume this conversation and try the requested harmless task. `pwd` succeeded
+  in this mode during the 2026-10-15 trial; broader containment acceptance remains.
+  Report exact failures; do not sign in again or repeat migration.
+- Return to Native through its launcher if needed. Confirm **Approve for me**
+  before subsequent Native commands because permission selections may be shared.
+  Preserve shared history and report missing chats or changes to pins.
 
 If starting `codex-desktop-sandboxed` in a terminal, it intentionally stays in the
 foreground until the GUI exits. This waiting is not an unfinished deployment.

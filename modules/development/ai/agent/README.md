@@ -34,6 +34,21 @@ and check `/proc/<pid>/exe`; a changed upstream wrapper layout fails the build
 rather than silently losing model egress. This check does not contact a provider
 or establish live model-turn acceptance.
 
+For the sandbox desktop, select **Custom (config.toml)** to use its existing
+worker settings: `danger-full-access`, `on-request`, and `auto_review`. OpenShell
+remains the filesystem/network boundary; Codex adds no inner workspace/read-only
+sandbox, and actions permitted by that outer boundary do not acquire automatic
+command review. **Approve for me** supplies a workspace-write override, whose
+nested Bubblewrap user namespace OpenShell denies. Keep this choice explicit;
+Native uses its own backend configuration. Check Native's effective permissions
+after changing variants rather than assuming shared conversation settings isolate
+permission choices.
+
+The worker image and sandbox GUI use `time.timeZone` with pinned Nixpkgs timezone
+data (UTC when unset). The worker's immutable `/etc/localtime` also handles SSH
+sessions that discard timezone environment variables. This changes local time
+rendering, not the host clock or Native configuration.
+
 ## Backend integration choice
 
 - **Current boundary:** The sandbox desktop uses OpenShell's SSH proxy already;

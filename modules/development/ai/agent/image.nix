@@ -8,8 +8,11 @@
   authorizationLibrary,
   authorizationPolicy,
   explanationEnabled,
+  timeZone ? "UTC",
 }:
 let
+  zone = if timeZone == null then "UTC" else timeZone;
+  zoneinfo = "${pkgs.tzdata}/share/zoneinfo";
   phoenixCommands = import ../../../../commands {
     inherit pkgs user;
     deploymentHelper = phoenixDeployReviewPackage;
@@ -66,6 +69,15 @@ let
     build-users-group =
     accept-flake-config = false
     EOF
+    # /etc/localtime also works when OpenShell/SSH sanitizes the environment.
+    test -f ${pkgs.lib.escapeShellArg "${zoneinfo}/${zone}"}
+    ln -s ${pkgs.lib.escapeShellArg "${zoneinfo}/${zone}"} "$out/etc/localtime"
+    # Exercise packaged localtime with a sanitized environment in both seasons.
+    for instant in '2026-01-15 12:00 UTC' '2026-07-15 12:00 UTC'; do
+      actual=$(${pkgs.coreutils}/bin/env -i TZ=:$out/etc/localtime ${pkgs.coreutils}/bin/date -d "$instant" '+%F %T %z')
+      expected=$(${pkgs.coreutils}/bin/env -i TZDIR=${zoneinfo} TZ=${pkgs.lib.escapeShellArg zone} ${pkgs.coreutils}/bin/date -d "$instant" '+%F %T %z')
+      test "$actual" = "$expected"
+    done
     cp ${phoenixAgentCodexConfig} "$out/etc/codex/config.toml"
     ln -s ${pkgs.coreutils}/bin/env "$out/usr/bin/env"
   '';
@@ -109,6 +121,8 @@ pkgs.dockerTools.buildLayeredImage {
       "HOME=/sandbox"
       "PATH=/bin:/usr/bin"
       "SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt"
+      "TZ=${zone}"
+      "TZDIR=${zoneinfo}"
       "LANG=C.UTF-8"
       "TERM=xterm-256color"
     ];

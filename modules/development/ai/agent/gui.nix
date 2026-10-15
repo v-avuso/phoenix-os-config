@@ -11,6 +11,8 @@
 }:
 let
   cfg = config.phoenix.agent;
+  timeZone = if config.time.timeZone == null then "UTC" else config.time.timeZone;
+  zoneinfo = "${pkgs.tzdata}/share/zoneinfo";
   python = "${pkgs.python3}/bin/python3";
   runtime = "/run/user/${toString config.users.users.${user.name}.uid}";
   profile = "${user.homeDirectory}/.local/state/phoenix-agent-gui";
@@ -85,6 +87,8 @@ let
         pkgs.coreutils
       ];
       env = {
+        TZ = timeZone;
+        TZDIR = zoneinfo;
         HOME = user.homeDirectory;
         USER = user.name;
         PATH = "${client}/bin:${toolPath}";
@@ -143,6 +147,7 @@ let
         "--ro-bind-try /etc/group /.host-etc/group"
         "--ro-bind-try /etc/nsswitch.conf /.host-etc/nsswitch.conf"
         "--ro-bind-try /etc/os-release /.host-etc/os-release"
+        "--ro-bind ${lib.escapeShellArg "${zoneinfo}/${timeZone}"} /.host-etc/localtime"
         "--dev-bind-try /dev/dri /dev/dri"
         "--chdir ${lib.escapeShellArg user.repoDirectory}"
       ];
