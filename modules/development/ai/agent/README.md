@@ -20,13 +20,14 @@ For technical continuation and evidence limits, see [HANDOFF.md](HANDOFF.md).
   keep native credentials outside the contained CLI; share only the data needed
   for the agreed workflow.
 
-Shared state is opt-in and disabled by default. In the 2026-10-15 temporary
-trial, the operator resumed this existing conversation and sent a message in
-Sandbox, then returned to Native. This proves that conversation's continuity,
-not all chat operations or reliable tool execution: an unexplained remote error
-remains. The boot profile still has sharing off. See [the checkpoint](HANDOFF.md).
-Native GUI uses native CLI independently of OpenShell; sandbox GUI retains its
-contained backend.
+Shared state remains opt-in and disabled in repository defaults. The accepted
+2026-10-15 temporary installation shares this existing chat: Sandbox preselected
+Custom, `pwd` returned `/home/v/repos/code/phoenix-os-config`, and Native resumed
+with workspace-write/auto_review. This establishes the primary shared-chat/tool
+flow, not every archive/pin action or optional broker control. The boot profile
+still has sharing off. Permanent default promotion awaits explicit approval;
+see [the checkpoint](HANDOFF.md). Native GUI and CLI remain independent OpenShell
+recovery paths; the sandbox GUI retains its contained backend.
 
 The Codex package exports one exact kernel executable identity for OpenShell's
 provider and network policies. Policy builds run the packaged app-server locally
@@ -75,9 +76,10 @@ rendering, not the host clock or Native configuration.
   repair lifeline. Further simultaneous-GUI parity and optional reviewer controls
   are separate work, not prerequisites for diagnosing this backend failure.
 
-## Shared desktop state (opt-in; GUI acceptance pending)
+## Shared desktop state (opt-in; primary GUI workflow accepted)
 
-Set `phoenix.agent.gui.sharedState.enable = true` only for a planned cold trial.
+The accepted temporary trial uses `phoenix.agent.gui.sharedState.enable = true`.
+Repository and next-boot defaults remain off pending permanent-promotion approval.
 Both reviewed GUI launchers require validated `codex-history-enable` readiness
 and hold one host exclusive GUI lock for the process lifetime. A same-variant
 launch asks the current owner to restore its window; `--new-instance`

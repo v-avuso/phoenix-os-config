@@ -67,8 +67,8 @@ commands and limits remain in the [module README](README.md),
   eligible approval requests and the separate privileged boundary remain distinct.
 - Operator returned to Native; current supplied permission context is workspace-write
   with auto_review. Chat continuation and one shell command are demonstrated,
-  not all filesystem/network denials. Check defaults/persistence and scoped denied
-  access with nonsecret fixtures before declaring everyday acceptance complete.
+  not all filesystem/network denials. Subsequent automatic-default acceptance
+  and the focused nonsecret mount check are recorded below.
 - Timezone repair `15ac5e1` was built and temporarily installed through native
   authentication. The updated worker returned `CEST +0200` through the supported
   sandbox-exec launcher. GUI timezone settings are packaged; visual confirmation
@@ -77,40 +77,25 @@ commands and limits remain in the [module README](README.md),
   readability while a temporary host-only /tmp canary was invisible; probe exited
   zero and the host fixture was removed. This is a focused mount-isolation check,
   not exhaustive personal-data, credential, egress or broker acceptance.
-- Automatic permission selection is now implemented in an immutable Sandbox-only
-  desktop adapter (`76e7871`, corrected by `f8b93cc`). The full trial built and
-  authenticated temporary installation succeeded; real GUI acceptance remains. It namespaces
-  all four identified permission preference keys and defaults absent ordinary
-  workspace/new-chat choices to Custom. Explicit selections, read-only and named/
-  unknown profiles retain their semantics. Native's package/settings are untouched.
-  Current chat policy is checked before stale saved host preferences; added cross-
-  product tests cover saved Custom/Auto/Full access against restrictive/unknown
-  current profiles and modes. The initial build was temporarily installed before
-  this final precedence defect was caught, then replaced before any requested GUI
-  trial. Exact pinned bundle guards and focused resolver/reconciliation fixtures cover the
-  source seams; they do not establish effective Native permissions after a shared
-  chat resumes. Requirements-only filtering was rejected because Codex 0.160 requires
-  explicit allowed-mode lists to include read-only, retaining the nested-sandbox gap.
-  No managed requirements or RPC policy rewriting was added.
-- Actual automatic-mode acceptance FAILED after the corrected installation:
-  Native appeared to change from Approve for me to the least permissive option;
-  operator restored Approve for me, closed Native, then opened Sandbox. Sandbox
-  still showed Approve for me instead of Custom. No Sandbox command was run;
-  operator returned to Native. The apparent Native mode change has no established
-  cause. Read-only inspection confirmed the installed Sandbox bundle contains the
-  patch and Native's bundle retains the original permission resolver. The four
-  Sandbox preference keys were absent; Native's restored mode and selection were
-  `guardian-approvals`. The pinned decoder maps workspace-write/on-request with
-  auto_review to that mode, labelled Approve for me. The adapter mistakenly treated
-  it as a distinct explicit policy and preserved it before selecting Custom. The
-  next correction handles ordinary workspace guardian mode like auto, while keeping
-  restrictive profiles and explicit Sandbox selections. Tests must start from the
-  actual decoder and cover outgoing Custom policy, not only an assumed mode name.
-  This explains Sandbox's failed default, not Native's earlier transient display.
-  Correction `6c1847c` passed decoder-to-outgoing-request characterization and the
-  full system build; authenticated temporary deployment succeeded and the runtime
-  path matches the closure above. Repeat real GUI acceptance is still pending;
-  the persistent next-boot profile remains unchanged.
+- Automatic permission selection is accepted after correction `6c1847c`: the
+  operator opened Sandbox, observed Custom preselected, resumed this same chat and
+  ran `pwd`, which returned `/home/v/repos/code/phoenix-os-config`. They returned
+  to Native; supplied effective context is workspace-write/auto_review. This closes
+  the primary automatic-default/shared-chat/command/Native-return trial.
+- The immutable Sandbox adapter namespaces four permission preference keys.
+  Current restricted/named/unknown profiles outrank stale host-wide preferences;
+  explicit current-chat picker actions remain upstream. Exact pinned decoder-to-
+  request characterization covers Approve for me (`guardian-approvals`) and the
+  Custom worker policy. Native's permission code remains unmodified. One earlier
+  transient Native least-permissive display remains unexplained and was not
+  reproduced in the accepted return; do not claim its cause or a dedicated fix.
+- Permanent promotion is pending explicit operator approval. Automatic approval
+  review twice rejected enabling the repository sharing default: it distinguished
+  the authorized temporary trial/continuation from permanent shared-history access.
+  No configuration or fixture change was made. Preserve the accepted runtime and
+  published readiness; do not bypass this rejection through another writer.
+  Identity, reservations, disruption, shutdown ordering, AI security review and
+  authorization explanation remain off.
 - Committed repair `70fb232` accepts Codex 0.160's exact `.sqlite-maintenance.lock` as
   regular, non-symlink coordination state in both Native preflight and shared
   runtime status. It is not a database and is never copied during migration.
@@ -166,28 +151,19 @@ review and authorization explanation remain off.
 
 ## Resume order
 
-1. Repair installation and the cold handoff are complete. Preserve published
-   readiness and shared writes; do not repeat one-time setup.
-2. Finish the checked automatic-mode trial: install through the authenticated
-   deployment boundary, open Sandbox normally, verify Custom without manual choice,
-   resume this chat and run `pwd`; return to Native and verify Approve for me with
-   workspace-write/auto_review. Preserve explicit restrictive choices. Read
-   [the integration decision](README.md#backend-integration-choice) before replacing
-   transport; the current path already uses SSH.
-3. Any code repair needs focused checks/build and authenticated temporary
-   installation before the next live trial. The current GUI remains untouched
-   until an agreed switch; use broker → `phoenix-test`, not direct activation
-   of a packaging-only closure.
-4. Verify existing and archived chats/pins, resume this chat and save a reply,
-   exercise same-variant restore/new-window plus Keep/Close choices, and confirm
-   the reply survives Sandbox → Native continuation. No extra sign-in is expected.
-   Native fallback needs real acceptance; a private failed-transport probe is
-   bounded evidence, not proof of a complete OpenShell outage.
-5. Fix scoped failures or disable the experiment through the same deployment
-   boundary. Preserve published readiness, shared databases/WAL and rollout state.
-   Disabling GUI sharing retains shared-history routing. Native originals become
-   stale after shared writes: never restore them over the shared store, delete
-   readiness, rerun apply, or merge browser/profile databases to repair a failure.
+1. Cold handoff and primary GUI acceptance are complete. Preserve readiness and
+   shared writes; do not repeat one-time setup or request the same GUI trial again.
+2. Coordinator records the narrow approval decision for permanent GUI/history
+   sharing before changing repository defaults or requesting persistent installation.
+   Main integration of checked repairs is separate from that blocked promotion.
+   Exclude the unrelated root instructions draft from deployment snapshots.
+3. Keep the ordinary Native fallback and accepted separate permission preferences.
+   Investigate a concrete regression before requesting additional user interaction.
+   Broader archive/pin/new-window observations may continue during normal use;
+   optional identity/reservation/disruption/review/shutdown controls remain off.
+4. On a scoped failure, preserve databases/WAL, rollout state and readiness.
+   Disabling GUI sharing retains shared-history routing; original Native databases
+   are stale after shared writes and must never replace the shared store.
 
 No browser login, credential migration or general profile/database merger is part
 of shared-history setup. On failure, stop and report the terminal error; do not repeat
@@ -198,8 +174,9 @@ GUI and CLI; retain the operator terminal and authenticated controller route.
 
 - Unit/disposable fixtures demonstrate bounded behavior, not installed operation.
   Package builds demonstrate packaging, not activation or user workflow success.
-  This exact shared conversation was resumed in Sandbox; broad history and reliable
-  tool/model workflow acceptance remain pending.
+  This exact shared conversation, automatic Custom selection, a real `pwd`, and
+  Native return passed. Broader history/UI behavior remains observation work; these
+  results do not establish all personal-data, network or privileged boundaries.
 - This chat is indexed in Native and its conversation file exists in the planned
   history mounts. Exact Codex 0.160 read/resume of its private backup passed in a
   disposable network-isolated namespace, with no credentials or model turn.
