@@ -20,10 +20,33 @@ For technical continuation and evidence limits, see [HANDOFF.md](HANDOFF.md).
   keep native credentials outside the contained CLI; share only the data needed
   for the agreed workflow.
 
-Shared state is opt-in and disabled by default; its owner-mediated switching
-implementation is prepared for isolated acceptance, not enabled on the installed system.
-Real GUI sharing and switching acceptance remain pending. Native GUI uses native
-CLI independently of OpenShell; sandbox GUI retains its contained backend.
+Shared state is opt-in and disabled by default. In the 2026-10-15 temporary
+trial, the operator resumed this existing conversation and sent a message in
+Sandbox, then returned to Native. This proves that conversation's continuity,
+not all chat operations or reliable tool execution: an unexplained remote error
+remains. The boot profile still has sharing off. See [the checkpoint](HANDOFF.md).
+Native GUI uses native CLI independently of OpenShell; sandbox GUI retains its
+contained backend.
+
+## Backend integration choice
+
+- **Current boundary:** The sandbox desktop uses OpenShell's SSH proxy already;
+  its extra adapters reconcile desktop account/routing behavior with opaque
+  worker credentials. Nix-Bwrapper owns frontend permissions independently.
+- **Reuse alternative:** [Codex Remote SSH](https://learn.chatgpt.com/docs/remote-connections)
+  and [NVIDIA's pinned app-server example](https://github.com/NVIDIA/OpenShell/blob/v0.1.2/examples/codex-app-server/README.md)
+  provide maintained building blocks, not a verified equivalent of this combined
+  desktop/history setup. Remote SSH selects a remote host; selection alone does
+  not prevent local task execution. Its persistent server bootstrap also needs
+  the existing history/authentication initialization and lifecycle guarantees.
+- **Decision:** Retain the current path while diagnosing its concrete remote
+  error; do not replace it solely to obtain SSH, which it already uses. Reassess
+  if repair requires substantial new mediation. Any replacement needs a small
+  isolated proof of retained login, an actual remote task, chat continuation and
+  outage behavior before migration or supporting infrastructure.
+- **Cost boundary:** Prioritize one usable sandbox desktop with native CLI as a
+  repair lifeline. Further simultaneous-GUI parity and optional reviewer controls
+  are separate work, not prerequisites for diagnosing this backend failure.
 
 ## Shared desktop state (opt-in; GUI acceptance pending)
 

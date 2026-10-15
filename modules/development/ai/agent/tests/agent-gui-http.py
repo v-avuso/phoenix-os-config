@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Desktop HTTP/auth boundaries without real accounts, services or sockets."""
 import base64
+import errno
+import http.client
 import importlib.util
 import io
 import json
@@ -139,6 +141,48 @@ class DesktopHTTP(unittest.TestCase):
             self.assertEqual(output, [{"error": {"stage": "routing-discovery", "category": category}}])
             self.assertNotIn("secret", journal.getvalue() + json.dumps(output))
             self.assertIn("retained login preserved", journal.getvalue())
+
+    def test_io_failure_detail_stays_on_stderr_and_preserves_protocol(self):
+        cases = [
+            (ConnectionResetError(errno.ECONNRESET, "secret-token /private/path"), "connection-reset", "local-io"),
+            (BrokenPipeError(errno.EPIPE, "secret-token"), "broken-pipe", "local-io"),
+            (OSError(errno.ENETUNREACH, "secret-url"), "network-unreachable", "local-io"),
+            (PermissionError(errno.EACCES, "secret-path"), "permission-denied", "local-io"),
+            (FileNotFoundError(errno.ENOENT, "secret-path"), "file-missing", "local-io"),
+            (http.client.RemoteDisconnected("secret-response"), "remote-disconnected", "local-io"),
+            (OSError(9999, "secret-token\nforged-diagnostic"), "other", "local-io"),
+            (worker.urllib.error.URLError(ConnectionResetError(errno.ECONNRESET, "secret")), "connection-reset", "transport"),
+        ]
+        for error, detail, category in cases:
+            with self.subTest(detail=detail, category=category):
+                output, journal = [], io.StringIO()
+                with patch.object(worker.sys, "stdin", type("Input", (), {"buffer": io.BytesIO(b'{"url":"https://chatgpt.com/backend-api/me"}\n')})()), \
+                     patch.object(worker, "apply_routing", side_effect=error), \
+                     patch.object(worker, "emit", output.append), patch.object(worker.sys, "stderr", journal):
+                    self.assertEqual(worker.main(), 1)
+                self.assertEqual(output, [{"error": {"stage": "routing-discovery", "category": category}}])
+                self.assertIn("detail=" + detail + ";", journal.getvalue())
+                self.assertNotIn("secret", journal.getvalue() + json.dumps(output))
+                self.assertNotIn("forged", journal.getvalue())
+                self.assertEqual(len(journal.getvalue().splitlines()), 1)
+
+    def test_stream_failure_does_not_add_a_protocol_error_frame(self):
+        class Response:
+            status = 200
+            headers = {}
+            def __enter__(self): return self
+            def __exit__(self, *_): pass
+            def read1(self, _): raise ConnectionResetError(errno.ECONNRESET, "secret-body")
+        output, journal = [], io.StringIO()
+        with patch.object(worker.sys, "stdin", type("Input", (), {"buffer": io.BytesIO(b'{"url":"https://chatgpt.com/backend-api/me"}\n')})()), \
+             patch.object(worker.urllib.request, "build_opener") as opener, \
+             patch.object(worker, "apply_routing"), patch.object(worker, "emit", output.append), \
+             patch.object(worker.sys, "stderr", journal):
+            opener.return_value.open.return_value = Response()
+            self.assertEqual(worker.main(), 1)
+        self.assertEqual(output, [{"status": 200, "headers": {}}])
+        self.assertIn("stage=response-stream category=local-io detail=connection-reset;", journal.getvalue())
+        self.assertNotIn("secret", journal.getvalue())
 
     def test_worker_diagnostic_is_strictly_validated_before_rpc(self):
         config = {"python": "/fixture/python", "launcher": "/fixture/launcher",

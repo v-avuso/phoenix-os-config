@@ -5,6 +5,8 @@ are deliberately disabled: neither upstream nor caller can widen credential
 scope. No host credential file, gateway socket or bearer export is involved.
 """
 import base64
+import errno
+import http.client
 import json
 import os
 import functools
@@ -134,6 +136,26 @@ def failure_category(error):
     return "invalid-data"
 
 
+def failure_detail(error):
+    # Stderr-only diagnostics: inspect types/errno, never exception text or paths.
+    reason = error.reason if isinstance(error, urllib.error.URLError) else error
+    if isinstance(reason, http.client.RemoteDisconnected):
+        return "remote-disconnected"
+    if isinstance(reason, OSError):
+        return {
+            errno.ECONNRESET: "connection-reset",
+            errno.EPIPE: "broken-pipe",
+            errno.ENETUNREACH: "network-unreachable",
+            errno.EHOSTUNREACH: "host-unreachable",
+            errno.ECONNREFUSED: "connection-refused",
+            errno.ETIMEDOUT: "timed-out",
+            errno.EACCES: "permission-denied",
+            errno.EPERM: "permission-denied",
+            errno.ENOENT: "file-missing",
+        }.get(reason.errno, "other")
+    return "other"
+
+
 def main():
     stage = "request-validation"
     started = False
@@ -169,7 +191,7 @@ def main():
         # Reflect neither upstream error text nor request headers: credentials
         # and task content must never reach stderr/journal on adapter failure.
         category = failure_category(error)
-        print(f"Sandbox desktop HTTP failed: stage={stage} category={category}; "
+        print(f"Sandbox desktop HTTP failed: stage={stage} category={category} detail={failure_detail(error)}; "
               "retained login preserved; inspect gateway policy/credential diagnostics before signing in",
               file=sys.stderr)
         if not started:

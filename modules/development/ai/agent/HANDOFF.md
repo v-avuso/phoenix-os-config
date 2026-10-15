@@ -23,12 +23,28 @@ commands and limits remain in the [module README](README.md),
 
 ## Recorded installed state and pending source
 
-- Installed source `60d5361` includes maintenance-lock repair `70fb232` and
-  config-link repair `1b27eec`. Authenticated persistent deployment succeeded;
-  runtime and boot profile both use
+- Persistent repair source `60d5361` includes maintenance-lock repair `70fb232`
+  and config-link repair `1b27eec`. Boot profile remains
   `/nix/store/dql2y6v7zhsszffw8gv6fw7zqa8rk18c-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
-- Shared readiness is absent: no history migration and no ON sharing-trial activation
-  have occurred. A built ON package or fixture does not change that state.
+- The 2026-10-15 cold handoff published readiness and the sharing-ON trial was
+  temporarily activated. Runtime is
+  `/nix/store/sinx1jn6la4ghy3nf0i52j3kd5pfg76p-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
+  The operator confirmed this exact conversation resumed and a reply was sent
+  in Sandbox, then returned to Native. Do not rerun migration or restore stale
+  Native originals over the shared store. Boot profile is still sharing OFF.
+- Deployment audit completed approximately 65 seconds after readiness; the
+  activation service took 3.559 seconds. Foreground launch waits for GUI exit;
+  terminal lifetime is not deployment duration.
+- Around 10:22:02 CEST, sandbox HTTPS diagnostics recorded two
+  `backend-request/local-io` and one `routing-discovery/local-io` failures.
+  They lack request correlation and underlying OS detail: association with the
+  reported "Error running remote" is plausible, not proven. No root cause is
+  established. Preserve credentials; these records do not establish expiry.
+- Pending diagnostic repair adds fixed stderr-only OS failure detail (for example
+  connection reset or denied permission), with unchanged RPC error frames. All
+  14 focused HTTP fixtures pass; this repair is not installed or a root-cause fix.
+  Next step: build an isolated sharing-ON source, authenticate temporary deployment
+  when the operator returns, then reproduce once and inspect the safe detail.
 - Committed repair `70fb232` accepts Codex 0.160's exact `.sqlite-maintenance.lock` as
   regular, non-symlink coordination state in both Native preflight and shared
   runtime status. It is not a database and is never copied during migration.
@@ -57,17 +73,15 @@ review and authorization explanation remain off.
 
 ## Resume order
 
-1. Repair installation is complete through the authenticated deployment boundary.
-   The trial source contains the same fix; only its sharing flag differs. Further
-   documentation-only commits do not require reinstalling the unchanged repair.
-2. The real read-only layout check has passed through the actual patched loader.
-   Recheck only if relevant state changes, printing bounded success/failure, never
-   config/chat contents. Actual stopped-writer/cold checks remain pending.
-3. Keep this guide available outside the GUI. Use the one-time cold setup in
-   [USER_GUIDE.md](USER_GUIDE.md), with the [technical sequence](history-layout.md#bounded-live-gui-sharing-trial)
-   supplying immutable paths and recovery details. The operator continues in a
-   terminal after normal application quits. Use broker → `phoenix-test`, not a
-   direct activation of a packaging-only closure.
+1. Repair installation and the cold handoff are complete. Preserve published
+   readiness and shared writes; do not repeat one-time setup.
+2. Diagnose the reported remote error with bounded secret-safe diagnostics.
+   Read [the integration decision](README.md#backend-integration-choice) before
+   adding adapters or replacing transport. The current path already uses SSH.
+3. Any code repair needs focused checks/build and authenticated temporary
+   installation before the next live trial. The current GUI remains untouched
+   until an agreed switch; use broker → `phoenix-test`, not direct activation
+   of a packaging-only closure.
 4. Verify existing and archived chats/pins, resume this chat and save a reply,
    exercise same-variant restore/new-window plus Keep/Close choices, and confirm
    the reply survives Sandbox → Native continuation. No extra sign-in is expected.
@@ -88,7 +102,8 @@ GUI and CLI; retain the operator terminal and authenticated controller route.
 
 - Unit/disposable fixtures demonstrate bounded behavior, not installed operation.
   Package builds demonstrate packaging, not activation or user workflow success.
-  Real shared-GUI/history/model-turn acceptance is still pending.
+  This exact shared conversation was resumed in Sandbox; broad history and reliable
+  tool/model workflow acceptance remain pending.
 - This chat is indexed in Native and its conversation file exists in the planned
   history mounts. Exact Codex 0.160 read/resume of its private backup passed in a
   disposable network-isolated namespace, with no credentials or model turn.
