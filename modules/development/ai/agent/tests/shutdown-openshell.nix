@@ -1,6 +1,6 @@
 # Explicit first slice: actual OpenShell ordinary stop, ordering OFF.
 # Image arguments are public immutable archives plus independently verified IDs/hash.
-{ pkgs, runtime, supervisor, workload, probeCreateOnly ? false }:
+{ pkgs, runtime, supervisor, workload, probeCreateOnly ? false, stopMode ? "ordinary" }:
 let
   lib = pkgs.lib;
   packages = import ../packages.nix { inherit pkgs; };
@@ -48,6 +48,7 @@ let
     network_policies = { };
   });
 in
+assert builtins.elem stopMode [ "ordinary" "transaction" ];
 assert builtins.all valid (builtins.attrValues images);
 pkgs.testers.runNixOSTest {
   name = "phoenix-shutdown-openshell";
@@ -96,6 +97,7 @@ pkgs.testers.runNixOSTest {
     import json
     images = json.loads("""${builtins.toJSON (builtins.mapAttrs (_: image: image // { archive = toString image.archive; }) images)}""")
     probe_create_only = ${if probeCreateOnly then "True" else "False"}
+    stop_mode = "${stopMode}"
     policy = "${policy}"
   '' + builtins.readFile ./shutdown-openshell.py;
 }

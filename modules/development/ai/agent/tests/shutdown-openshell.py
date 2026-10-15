@@ -49,7 +49,7 @@ def capture(stage, containers):
     bounded("journalctl -b --no-pager -n 400 -u user@1000.service > /tmp/shutdown-evidence/user-manager.log")
     bounded(user("journalctl --user -b --no-pager -n 400 > /tmp/shutdown-evidence/user-units.log"))
     bounded("printf %s " + shlex.quote(json.dumps(probe_timings)) + " > /tmp/shutdown-evidence/probe-timing.json")
-    for name in ("shutdown-stream.log", "workload-stdout.log", "workload-status", "create-driver.log", "probe-baseline.log", "probe-keepid.log"):
+    for name in ("shutdown-stream.log", "workload-stdout.log", "workload-status", "create-driver.log", "probe-baseline.log", "probe-keepid.log", "transaction-outcome.json", "transaction-units.log", "transaction-stop.log", "durable-sandbox.log", "shutdown-stream.status"):
         bounded("test ! -f /tmp/" + name + " || cp /tmp/" + name + " /tmp/shutdown-evidence/" + name)
     machine.copy_from_machine("/tmp/shutdown-evidence", stage)
 
@@ -141,27 +141,68 @@ try:
             time.sleep(1)
         assert denied, "destination-bound supervisor deny event missing; curl failure/stdout is not log evidence"
         # A bounded supported live log reader spans the ordinary stop.
-        run("(timeout 90 openshell logs shutdown-acceptance --tail --source sandbox) </dev/null >/tmp/shutdown-stream.log 2>&1 & echo $! > /tmp/shutdown-stream.pid")
+        run("(timeout 90 openshell logs shutdown-acceptance --tail --source sandbox; echo $? > /tmp/shutdown-stream.status) </dev/null >/tmp/shutdown-stream.log 2>&1 & echo $! > /tmp/shutdown-stream.pid")
         machine.wait_until_succeeds(user("test -s /tmp/shutdown-stream.log && kill -0 $(cat /tmp/shutdown-stream.pid)"), timeout=10)
         capture("before-stop", containers)
         run("kill -0 $(cat /tmp/shutdown-stream.pid)")
-        stage = "ordinary-stop"
-        machine.log("PHASE ordinary-stop entered")
-        started = time.monotonic()
-        run("openshell sandbox stop shutdown-acceptance", timeout=50)
-        elapsed = time.monotonic() - started
-        machine.log("PHASE ordinary-stop completed seconds=" + str(round(elapsed, 3)))
-        stage = "ordinary-stop-assertions"
-        machine.wait_until_succeeds(user("test -f /tmp/workload-status"), timeout=5)
-        output = run("cat /tmp/workload-stdout.log")
-        assert run("cat /tmp/workload-status").strip() == "0", "attached workload transport did not exit zero"
-        assert "ACCEPT_TERM" in output and "ACCEPT_FINAL" in output, "workload final markers missing"
-        for role, identifier in containers.items():
-            state = json.loads(run("podman inspect --format '{{json .State}}' " + identifier))
-            assert not state["Running"], "fixture container survived: " + role
-            assert state["ExitCode"] == 0, "fixture forced/nonzero exit: " + role
-        assert elapsed < 10, "cooperative ordinary stop exceeded ten seconds; preserve 45s fallback"
-        machine.log("Ordinary stop markers and container exit passed; final supervisor drain is separate evidence")
+        if stop_mode == "transaction":
+            # Exact recorded scopes only; never enumerate or stop unrelated units.
+            scopes = ["libpod-" + containers[role] + ".scope" for role in ("sandbox", "supervisor")]
+            for scope in scopes:
+                assert run("systemctl --user show -p LoadState --value " + scope).strip() == "loaded", "recorded container scope not loaded"
+            units = "phoenix-openshell-gateway.service " + " ".join(scopes)
+            run("systemctl --user show -p Id -p LoadState -p Before -p ControlGroup -p TimeoutStopUSec " + units + " > /tmp/transaction-units.log")
+            stage = "transaction-stop"
+            machine.log("PHASE transaction-stop entered")
+            started = time.monotonic()
+            status, _ = machine.execute(user("timeout 50 systemctl --user stop " + units + " > /tmp/transaction-stop.log 2>&1"), timeout=55)
+            elapsed = time.monotonic() - started
+            outcome = dict(stopStatus=status, stopSeconds=round(elapsed, 3))
+            # Record independent results before assertions; known attached-create
+            # and bootstrap failures must not prevent observing the transaction.
+            outcome["transportStatus"] = run("cat /tmp/workload-status 2>/dev/null || echo pending").strip()
+            outcome["logReaderStatus"] = run("cat /tmp/shutdown-stream.status 2>/dev/null || echo pending").strip()
+            outcome["logReaderAlive"] = machine.execute(user("kill -0 $(cat /tmp/shutdown-stream.pid)"), timeout=5)[0] == 0
+            output = run("cat /tmp/workload-stdout.log")
+            outcome["termMarker"] = "ACCEPT_TERM" in output
+            outcome["finalMarker"] = "ACCEPT_FINAL" in output
+            outcome["containers"] = {}
+            for role, identifier in containers.items():
+                outcome["containers"][role] = json.loads(run("podman inspect --format '{{json .State}}' " + identifier, timeout=10))
+            machine.succeed("printf %s " + shlex.quote(json.dumps(outcome)) + " > /tmp/transaction-outcome.json")
+            capture("after-transaction", containers)
+            # A first stall ends the experiment after evidence, without restart.
+            assert status == 0 and elapsed < 10, "combined stop failed or stalled; retain 45s fallback and captured phase"
+            stage = "transaction-durable-log"
+            run("systemctl --user start phoenix-openshell-gateway.service", timeout=35)
+            durable = run("openshell logs shutdown-acceptance -n 200 --source sandbox", timeout=10)
+            machine.succeed("printf %s " + shlex.quote(durable) + " > /tmp/durable-sandbox.log")
+            outcome["durableDeny"] = any("192.0.2.1:80" in line and "denied staged transparent connection" in line.lower() for line in durable.splitlines())
+            machine.succeed("printf %s " + shlex.quote(json.dumps(outcome)) + " > /tmp/transaction-outcome.json")
+            capture("after-gateway-restart", containers)
+            assert outcome["durableDeny"], "pre-stop policy deny event unavailable after gateway restart"
+            assert outcome["termMarker"] and outcome["finalMarker"], "transaction workload final markers missing"
+            assert all(not state["Running"] for state in outcome["containers"].values()), "transaction container survived"
+            assert outcome["transportStatus"] == "0", "transaction attached transport incomplete/nonzero; timing alone is not full acceptance"
+            assert all(state["ExitCode"] == 0 for state in outcome["containers"].values()), "transaction bootstrap/container nonzero exit"
+        else:
+            stage = "ordinary-stop"
+            machine.log("PHASE ordinary-stop entered")
+            started = time.monotonic()
+            run("openshell sandbox stop shutdown-acceptance", timeout=50)
+            elapsed = time.monotonic() - started
+            machine.log("PHASE ordinary-stop completed seconds=" + str(round(elapsed, 3)))
+            stage = "ordinary-stop-assertions"
+            machine.wait_until_succeeds(user("test -f /tmp/workload-status"), timeout=5)
+            output = run("cat /tmp/workload-stdout.log")
+            assert run("cat /tmp/workload-status").strip() == "0", "attached workload transport did not exit zero"
+            assert "ACCEPT_TERM" in output and "ACCEPT_FINAL" in output, "workload final markers missing"
+            for role, identifier in containers.items():
+                state = json.loads(run("podman inspect --format '{{json .State}}' " + identifier))
+                assert not state["Running"], "fixture container survived: " + role
+                assert state["ExitCode"] == 0, "fixture forced/nonzero exit: " + role
+            assert elapsed < 10, "cooperative ordinary stop exceeded ten seconds; preserve 45s fallback"
+            machine.log("Ordinary stop markers and container exit passed; final supervisor drain is separate evidence")
 finally:
     capture(stage, containers)
     machine.execute(user("test ! -f /tmp/shutdown-stream.pid || kill $(cat /tmp/shutdown-stream.pid)"), timeout=5)
