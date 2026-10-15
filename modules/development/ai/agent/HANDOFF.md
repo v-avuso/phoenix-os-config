@@ -28,7 +28,7 @@ commands and limits remain in the [module README](README.md),
   `/nix/store/dql2y6v7zhsszffw8gv6fw7zqa8rk18c-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
 - The 2026-10-15 cold handoff published readiness and the sharing-ON trial was
   temporarily activated. Runtime is
-  `/nix/store/rmq7wy970wi75cygy7lr1lbrcgyd72qx-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
+  `/nix/store/ks5zgixbhlq85p0ikk66sxlkj60iq58y-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
   The operator confirmed this exact conversation resumed and a reply was sent
   in Sandbox, then returned to Native. Do not rerun migration or restore stale
   Native originals over the shared store. Boot profile is still sharing OFF.
@@ -78,11 +78,16 @@ commands and limits remain in the [module README](README.md),
   zero and the host fixture was removed. This is a focused mount-isolation check,
   not exhaustive personal-data, credential, egress or broker acceptance.
 - Automatic permission selection is now implemented in an immutable Sandbox-only
-  desktop adapter, pending full build/install and real GUI acceptance. It namespaces
+  desktop adapter (`76e7871`, corrected by `f8b93cc`). The full trial built and
+  authenticated temporary installation succeeded; real GUI acceptance remains. It namespaces
   all four identified permission preference keys and defaults absent ordinary
   workspace/new-chat choices to Custom. Explicit selections, read-only and named/
   unknown profiles retain their semantics. Native's package/settings are untouched.
-  Exact pinned bundle guards and focused resolver/reconciliation fixtures cover the
+  Current chat policy is checked before stale saved host preferences; added cross-
+  product tests cover saved Custom/Auto/Full access against restrictive/unknown
+  current profiles and modes. The initial build was temporarily installed before
+  this final precedence defect was caught, then replaced before any requested GUI
+  trial. Exact pinned bundle guards and focused resolver/reconciliation fixtures cover the
   source seams; they do not establish effective Native permissions after a shared
   chat resumes. Requirements-only filtering was rejected because Codex 0.160 requires
   explicit allowed-mode lists to include read-only, retaining the nested-sandbox gap.
@@ -99,6 +104,33 @@ commands and limits remain in the [module README](README.md),
   Actual cold preflight/apply still reject running writers.
 - Existing old Sandbox chats/containers are retained separately, not merged or
   silently imported into the Native/shared baseline.
+
+## Shutdown investigation checkpoint
+
+Read-only refresh against exact v0.1.2 release source confirmed supervisor/driver
+hashes. `supervisor/lib.rs:1159-1181` performs signal, five-second wait, terminate,
+a second wait, then boundary termination. The second wait at 1167 can prevent
+boundary termination at 1176: `sandbox-backend/runtime.rs:1314-1337` has no idle
+timeout. Control RPCs separately have 30-second deadlines (46, 506-523,
+1261-1306). Terminal output drain is bounded to two seconds
+(`sandbox/main_session.rs:211,489-505`); log push is detached
+(`supervisor/main.rs:328-342`), so an awaited log-flush stall is not established.
+Podman driver stops supervisor before workload (`driver.rs:1400-1435`); gateway
+compute cleanup precedes final session cleanup (`gateway/lib.rs:997-1013`).
+These are candidate blocking paths, not identification of the observed stall.
+
+Host-level read-only inspection confirmed `/dev/kvm` exists; its absence inside
+the command sandbox was not evidence of host absence. No installed/cached VM
+runner was found. The repository has no maintained disposable NixOS test-driver
+fixture; its VMware host configuration is not suitable. Reuse the NixOS driver or
+a prepared disposable guest, but budget the new guest/TLS/isolated gateway and
+Podman/image setup as a separate integration step. Follow
+[shutdown-acceptance.md](shutdown-acceptance.md): active workload plus policy log
+stream; compare ordinary stop against combined gateway/scope shutdown. Cooperative
+pass is under ten seconds; retain the 45-second safety net and a 50-second harness
+stop. Stop after the first reproduced stall and identify entered/completed phases
+before proposing a Rust cleanup change. No production stop or shutdown code change
+was performed; ordering remains experimental and disabled.
 
 ## Worktrees and preservation
 
