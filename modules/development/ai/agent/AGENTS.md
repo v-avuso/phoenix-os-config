@@ -161,3 +161,8 @@
   package wrappers exec, not the public launcher. Keep provider and network policy
   identities centralized and verify `/proc/<pid>/exe` against the packaged launcher
   at build time; never repair wrapper mismatches with broader path globs.
+
+- When isolating shared desktop preferences, trace the actual persisted-atom
+  setters as well as picker reads/defaults. Permission selection and preferred-mode
+  keys can be separate shared writers; guard pinned owners and resumed-thread
+  reconciliation, preserve explicit restricted profiles, and verify Native return.

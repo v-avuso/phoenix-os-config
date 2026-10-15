@@ -39,6 +39,7 @@ let
       # confirmation, bounds persistence and normal quit cleanup. Remove this
       # adapter when upstream close/reopen works under the same filtered bus.
       ${python} -I ${./gui-lifecycle.py} phoenix-app
+      ${python} -I ${./gui-permissions.py} phoenix-app
       ${lib.optionalString cfg.gui.sharedState.enable ''
         ${python} -I ${./gui-control-patch.py} phoenix-app/.vite/build
         { printf '%s\n' 'require(${builtins.toJSON (toString ./gui-control.cjs)});'; cat "$bootstrap"; } > phoenix-control.js

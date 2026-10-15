@@ -77,15 +77,16 @@ commands and limits remain in the [module README](README.md),
   readability while a temporary host-only /tmp canary was invisible; probe exited
   zero and the host fixture was removed. This is a focused mount-isolation check,
   not exhaustive personal-data, credential, egress or broker acceptance.
-- Automatic mode selection remains unfinished. Upstream requirements filter the
-  picker and choose Custom, but that fallback writes shared local-host mode keys.
-  Native currently records `auto` and supplies workspace-write/auto_review context.
-  Do not mutate real preference maps or claim independent defaults without checking
-  shared thread permissions and resumed-thread behavior too. A bounded source
-  check found Codex 0.160 rejects danger-full-access-only allowed-mode lists:
-  explicit lists must include read-only. Requirements-based fallback can therefore
-  still select an incompatible inner sandbox. No preference patch or new managed
-  requirement was implemented; explicit Custom remains the tested path.
+- Automatic permission selection is now implemented in an immutable Sandbox-only
+  desktop adapter, pending full build/install and real GUI acceptance. It namespaces
+  all four identified permission preference keys and defaults absent ordinary
+  workspace/new-chat choices to Custom. Explicit selections, read-only and named/
+  unknown profiles retain their semantics. Native's package/settings are untouched.
+  Exact pinned bundle guards and focused resolver/reconciliation fixtures cover the
+  source seams; they do not establish effective Native permissions after a shared
+  chat resumes. Requirements-only filtering was rejected because Codex 0.160 requires
+  explicit allowed-mode lists to include read-only, retaining the nested-sandbox gap.
+  No managed requirements or RPC policy rewriting was added.
 - Committed repair `70fb232` accepts Codex 0.160's exact `.sqlite-maintenance.lock` as
   regular, non-symlink coordination state in both Native preflight and shared
   runtime status. It is not a database and is never copied during migration.
@@ -116,9 +117,12 @@ review and authorization explanation remain off.
 
 1. Repair installation and the cold handoff are complete. Preserve published
    readiness and shared writes; do not repeat one-time setup.
-2. Diagnose the reported remote error with bounded secret-safe diagnostics.
-   Read [the integration decision](README.md#backend-integration-choice) before
-   adding adapters or replacing transport. The current path already uses SSH.
+2. Finish the checked automatic-mode trial: install through the authenticated
+   deployment boundary, open Sandbox normally, verify Custom without manual choice,
+   resume this chat and run `pwd`; return to Native and verify Approve for me with
+   workspace-write/auto_review. Preserve explicit restrictive choices. Read
+   [the integration decision](README.md#backend-integration-choice) before replacing
+   transport; the current path already uses SSH.
 3. Any code repair needs focused checks/build and authenticated temporary
    installation before the next live trial. The current GUI remains untouched
    until an agreed switch; use broker → `phoenix-test`, not direct activation

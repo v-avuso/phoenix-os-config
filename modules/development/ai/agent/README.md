@@ -34,15 +34,19 @@ and check `/proc/<pid>/exe`; a changed upstream wrapper layout fails the build
 rather than silently losing model egress. This check does not contact a provider
 or establish live model-turn acceptance.
 
-For the sandbox desktop, select **Custom (config.toml)** to use its existing
-worker settings: `danger-full-access`, `on-request`, and `auto_review`. OpenShell
+The sandbox desktop defaults new chats and resumed ordinary workspace chats to
+**Custom (config.toml)** using its existing worker settings: `danger-full-access`,
+`on-request`, and `auto_review`. OpenShell
 remains the filesystem/network boundary; Codex adds no inner workspace/read-only
 sandbox, and actions permitted by that outer boundary do not acquire automatic
 command review. **Approve for me** supplies a workspace-write override, whose
-nested Bubblewrap user namespace OpenShell denies. Keep this choice explicit;
-Native uses its own backend configuration. Check Native's effective permissions
-after changing variants rather than assuming shared conversation settings isolate
-permission choices.
+nested Bubblewrap user namespace OpenShell denies. The immutable Sandbox desktop
+adapter uses separate permission preference keys;
+Native's package and saved preferences remain unchanged. Explicit Sandbox choices
+win; read-only and named/unknown profiles are not automatically widened. Read-only
+still requires an unsupported nested sandbox here and needs an operator decision.
+Shared chats retain upstream thread permission history, so verify effective Native
+permissions on return; preference isolation alone is not runtime acceptance.
 
 The worker image and sandbox GUI use `time.timeZone` with pinned Nixpkgs timezone
 data (UTC when unset). The worker's immutable `/etc/localtime` also handles SSH
