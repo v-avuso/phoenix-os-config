@@ -456,5 +456,41 @@ Polkit authentication tests in `nixos/tests/cosmic/test-script.py` and `lomiri.n
 no lightweight headless cancellation/fresh-auth pattern was verified in that
 search. This is not a claim that none exists. A controlled live critical-policy
 trial requires an operator test window and a concrete return to the retained
-review-OFF closure. A nonexistent-nonce request, if deliberately selected later,
-is only a negative policy-gating probe; it cannot prove the pending workflow.
+review-OFF closure. The controlled absent-nonce probe below is only negative policy gating; it
+cannot prove the pending workflow or fresh/cancelled authentication.
+
+
+## Controlled critical-policy trial (OFF restored; cancellation unvalidated)
+
+The operator authorized a five-minute live policy window. Candidate
+`/nix/store/3ys5za7ivy19kzdxpr9vyh9n7lfkzdnf-nixos-system-phoenix-26.05.20261004.0d9e9b8`
+was built from clean main `af696bf57e89c892d150c310e9a422aa720c4ce2` with review ON
+only as an evaluation overlay; source/default and boot remained OFF. The fixed
+zero nonce was confirmed absent using the correct Coreutils test entry point.
+A native five-minute `phoenix-review-off-rollback-trial` timer targeted the exact
+accepted OFF closure, with ten-second failure retries limited to three per 120s.
+Its first guard safely refused a mismatched uptime clock; the corrected guard
+used `time.monotonic_ns()` and a freshly reset timer before ON activation.
+
+Actual ON activation succeeded: DBus and deployment reloaded, Polkit/Home Manager
+restarted, with no GUI/OpenShell restart reported. The registered action was
+`org.phoenix.security-review.override`, annotated to
+`/nix/store/bbw3kwadyz0drjjgxci1y0c9h630idkx-phoenix-security-review-override`,
+with active `AUTH_ADMIN` (not keep). The operator subsequently confirmed approving
+all authorization requests, including this one: chat labels did not clearly
+identify which dialog was meant to be cancelled. The helper then rejected the
+absent pending file with FileNotFoundError, as expected after approval. No approval
+record or reviewed deployment occurred; this path makes no model call. Cancellation
+was not exercised. Operator authentication was observed generally, but precise
+critical-warning recognition and a separately isolated fresh-auth step were not
+established. There is no evidence here of a PAM/cache bypass or unexplained
+authorization; the coordinator acknowledged unclear dialog sequencing.
+
+The exact OFF closure `nhqm2dwyycw5jvfr88106afig8afsynr` was restored successfully;
+runtime and system profile both resolve to it and the critical action is absent.
+The first owned timer-stop request expired (exit 124); the explicit operator-
+authorized retry succeeded. Independent checks found both owned timer and service
+not-found/inactive/dead, with service Result=success. Cleanup is complete; runtime
+and profile remain accepted OFF and the critical action is absent. No trial/probe is running; repeat cancellation only in a clearly identified
+operator-coordinated window. Optional
+controls remain OFF; fresh-auth/cancel acceptance remains open.

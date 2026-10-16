@@ -183,6 +183,14 @@
 - Once an authorized Polkit request has started, let its native dialog collect
   authentication and await the result. Do not add redundant availability or
   confirmation questions; surface expiry or failure when it occurs.
+  For cancellation acceptance, establish explicit readiness and identify the
+  particular critical dialog before issuing it; do not interleave approval dialogs
+  with different cancel instructions that depend only on chat labels.
+
+- Check the selected clock before guarding a systemd rollback timer. For the
+  non-waking timer used here, compare `NextElapseUSecMonotonic` with
+  `time.monotonic_ns()`, not `/proc/uptime` (which includes suspend). Verify the
+  clock and armed deadline before a privileged trial.
 
 - Before expanding shutdown repairs, check the pinned contracts in
   `shutdown-acceptance.md`: administrative exit-report skipping prevents hangs,
