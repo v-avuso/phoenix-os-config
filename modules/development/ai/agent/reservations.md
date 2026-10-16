@@ -3,8 +3,8 @@
 `phoenix.agent.reservations.enable` defaults to **false**. When enabled, management
 uses the existing admin broker, and test/switch/boot plus configured mapped fixed
 admin operations require a private task capability. Build/dry-build remain independent.
-Implementation fixtures and the bounded systemd VM lifetime test pass; Polkit
-and broader live acceptance remain pending.
+Engine/adapter fixtures and the packaged broker/systemd lifetime VM pass.
+Native Polkit and broader live acceptance remain pending.
 Keep this experimental feature off on the daily driver.
 
 The engine supplies SQLite state and kernel flock exclusion; the management
@@ -266,6 +266,38 @@ activation guard; its competitor reported `mutation-still-running`, and the unit
 journal recorded successful deactivation. Descendant completion, timeout cleanup
 and subsequent gate reuse assertions passed. The rerun also passed the explicit assertion requiring that exact competitor
 rejection reason.
-It excludes Polkit, broker SO_PEERCRED admission, protected identity, real OS
-activation/rollback and broad reservation workflow acceptance. Production
+That original recorder-only receipt excludes Polkit, broker SO_PEERCRED admission,
+protected identity, real OS activation/rollback and broad reservation workflow
+acceptance; the extended packaged-broker receipt below adds kernel-peer evidence. Production
 reservations remain OFF; every service/state/profile operation above is guest-only.
+
+## Packaged broker and recovery acceptance
+
+The extended `tests/reservation-lifetime.nix` passed using actual broker/reservation
+modules, installed client, kernel peer UIDs and production private state settings.
+Evidence: `/nix/store/5340x28qlgfa8hbb5qg90i6y0asd316w-vm-test-run-phoenix-reservation-lifetime/evidence`;
+the driver completed in 21.79 seconds with a 180-second global bound.
+
+Two task capabilities acquired owned/queued generations through the broker; an
+outsider admitted by socket permissions and a forged operator envelope were denied.
+After submitting-client death the recorder retained the activation guard. Management
+remained responsive; a real two-second renewed lease expired and promoted task two,
+without stopping the recorder, overlapping mutation or triggering rollback. The
+promoted task's independently bound competitor still hit the held guard. The exact
+installed recovery helper revoked its generation; normal-helper recovery and wrong
+operator identity failed. A fresh task then completed recorder activation, retained
+its runtime-validation lease, passed the existing child-timeout/gate-reuse checks
+and explicitly released. All issued capabilities were absent from the guest journal.
+
+The trial exposed missing dynamic-import dependencies: plain `toString` repository
+paths did not retain engine/adapter in the closure. Those files are now individually
+packaged and shared by broker/deployment clients; both native and sandbox deployment
+client derivation closures retain the adapter. No whole-source dependency was added.
+The fixture recreates a consumed competitor envelope with the promoted capability;
+it never replaces the active helper's envelope or reuses revoked authority.
+
+Activation remains a recorder and provenance synthetic. The real immutable operator
+helper and root socket run, but `PKEXEC_UID` is explicitly doubled: native Polkit
+session authentication/dialogs are not proved. This is not real NixOS activation,
+protected OpenShell, model or broad host workflow acceptance. Production
+reservations remain OFF.

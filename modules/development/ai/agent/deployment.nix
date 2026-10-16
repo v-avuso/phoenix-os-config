@@ -93,7 +93,7 @@ let
     builtins.toJSON {
       repo = user.repoDirectory;
       sourceSelector = toString sourceSelector;
-      reservationAdapter = if config.phoenix.agent.reservations.enable then toString ./reservation-client.py else null;
+      reservationAdapter = if config.phoenix.agent.reservations.enable then phoenixReservationSettings.adapter else null;
       inherit authorizationPolicy;
       authorizationPresentation = toString config.system.build.phoenixAuthorizationPresentation;
       authorizationLibrary = authorizationLibrary;
@@ -125,7 +125,7 @@ let
     builtins.toJSON {
       repo = user.repoDirectory;
       sourceSelector = toString sourceSelector;
-      reservationAdapter = if config.phoenix.agent.reservations.enable then toString ./reservation-client.py else null;
+      reservationAdapter = if config.phoenix.agent.reservations.enable then phoenixReservationSettings.adapter else null;
       inherit authorizationPolicy;
       authorizationPresentation = toString config.system.build.phoenixAuthorizationPresentation;
       authorizationLibrary = authorizationLibrary;

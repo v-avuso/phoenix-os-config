@@ -10,7 +10,8 @@ let
   cfg = config.phoenix.agent;
   authorizationPolicy = toString config.system.build.phoenixAuthorizationPolicy;
   substitutions = {
-    reservationAdapter = toString ./reservation-client.py;
+    reservationAdapter = if cfg.reservations.enable then phoenixReservationSettings.adapter
+      else toString (pkgs.writeText "phoenix-reservation-management.py" (builtins.readFile ./reservation-client.py));
     authorizationLibrary = toString config.system.build.phoenixAuthorizationLibrary;
   };
   operatorScript = pkgs.replaceVars ./admin.py (substitutions // { authorizationClientConfig = ""; });

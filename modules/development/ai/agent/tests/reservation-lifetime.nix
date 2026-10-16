@@ -46,9 +46,7 @@ let
     root = Path('/var/lib/reservation-lifetime')
     config = dict(target='metal', baseline='/etc/phoenix-agent/activated-source',
         activationSpool=str(root / 'spool'), activationLock=str(root / 'activation.lock'),
-        activationEnvironment={}, reservations=dict(engine='${engine}',
-        adapter='${adapter}', state=str(root / 'state'),
-        mapping=load('engine', '${engine}').DEFAULT_MAPPING, bounds={}))
+        activationEnvironment={}, reservations=json.loads(Path('/etc/reservation-fixture-settings.json').read_text()))
     if sys.argv[1] == 'setup':
         deploy.store_path('${source}', 'source')
         deploy.store_path('${closure}', 'closure')
@@ -58,17 +56,48 @@ let
         if not profile.exists():
             profile.parent.mkdir(parents=True, exist_ok=True)
             profile.symlink_to(Path('/run/current-system').resolve(strict=True))
-        manager = management.Management(config['reservations'])
-        ticket = manager.engine.acquire(1000, 'lifetime-fixture', 'deployment.test', manager.engine.baseline())
-        capability = {key: ticket[key] for key in ('generation', 'capability')}
-        (root / 'ticket.json').write_text(json.dumps(capability)); (root / 'ticket.json').chmod(0o600)
         (root / 'config.json').write_text(json.dumps(config)); (root / 'config.json').chmod(0o600)
-        for nonce in ('a' * 64, 'b' * 64):
+    elif sys.argv[1] in ('bind', 'bind-second'):
+        second = sys.argv[1] == 'bind-second'
+        capability = json.loads(Path('/home/client/' + ('second' if second else 'first') + '.json').read_text())
+        if not second:
+            (root / 'ticket.json').write_text(json.dumps(capability)); (root / 'ticket.json').chmod(0o600)
+        seen = root / 'seen-capabilities.json'
+        values = json.loads(seen.read_text()) if seen.exists() else []
+        seen.write_text(json.dumps(values + [capability['capability']]))
+        seen.chmod(0o600)
+        profile = Path('/nix/var/nix/profiles/system')
+        # Failed activation consumes its envelope; never replace the active a binding.
+        for nonce in (('b' * 64,) if second else ('a' * 64, 'b' * 64)):
             binding = dict(nonce=nonce, target='metal', action='test', closure='${closure}', source='${source}',
                 base='${source}', profile=str(profile.resolve(strict=True)), profileSource='${source}',
                 reservation=capability, reservationUid=1000)
             envelope = root / 'spool' / (nonce + '.json')
             envelope.write_text(json.dumps(binding)); envelope.chmod(0o600)
+    elif sys.argv[1] == 'recover':
+        # Authentication deliberately doubled: actual immutable helper validation/socket run.
+        settings = config['reservations']
+        capability = json.loads(Path('/home/client/second.json').read_text())
+        request = json.dumps(dict(operation='force-unlock', generation=capability['generation'], reason='guest owner recovery')) + '\n'
+        import xml.etree.ElementTree as ET
+        policy = ET.parse('/etc/polkit-1/actions/org.phoenix.reservation.policy')
+        def installed(action):
+            return policy.find(".//action[@id='org.phoenix.reservation." + action + "']/annotate").text
+        helper, normal = installed('recover'), installed('manage')
+        def invoke(path, uid):
+            return subprocess.run([str(path)], input=request, text=True, capture_output=True, timeout=8, env={'PKEXEC_UID':str(uid), 'LANG':'C'})
+        assert invoke(normal, 1000).returncode != 0, 'normal helper admitted recovery'
+        assert invoke(helper, 1001).returncode != 0, 'wrong operator admitted'
+        assert invoke(helper, 1000).returncode == 0, 'fixed recovery failed'
+    elif sys.argv[1] == 'spoof':
+        code = "import socket,json; s=socket.socket(socket.AF_UNIX); s.connect('/run/phoenix-admin/socket'); s.sendall(b'{\"reservation\":{\"operation\":\"status\"},\"operator_uid\":1000}\\n'); value=json.loads(s.makefile('rb').readline()); assert value['ok'] is False"
+        subprocess.run(['${pkgs.python3}/bin/python3', '-I', '-c', code], user=1000, group=100, check=True, timeout=8, stdin=subprocess.DEVNULL)
+    elif sys.argv[1] == 'audit':
+        text = subprocess.check_output(['${pkgs.systemd}/bin/journalctl', '-b', '--no-pager'], text=True)
+        for token in json.loads((root / 'seen-capabilities.json').read_text()):
+            assert token not in text, 'original capability leaked to journal'
+        for path in Path('/home/client').glob('*.json'):
+            assert json.loads(path.read_text())['capability'] not in text, 'capability leaked to journal'
     else:
         manager = management.Management(config['reservations'])
         capability = json.loads((root / 'ticket.json').read_text())
@@ -98,12 +127,24 @@ assert pkgs.lib.hasSuffix "-source" (toString source);
 assert pkgs.lib.hasSuffix "-nixos-system-reservation-fixture" (toString closure);
 pkgs.testers.runNixOSTest {
   name = "phoenix-reservation-lifetime";
-  globalTimeout = 120;
-  nodes.machine = { ... }: {
+  globalTimeout = 180;
+  nodes.machine = { config, lib, phoenixReservationSettings, ... }: {
+    imports = [ ../broker.nix ../reservations.nix ];
+    options.phoenix.agent.identity = {
+      enable = lib.mkOption { type = lib.types.bool; default = false; };
+      uid = lib.mkOption { type = lib.types.int; default = 980; };
+    };
+    config = {
+    _module.args.user = { name = "client"; homeDirectory = "/home/client"; };
+    users.users.client = { isNormalUser = true; uid = 1000; };
+    users.users.outsider = { isNormalUser = true; uid = 1001; extraGroups = [ "phoenix-authorization" ]; };
+    phoenix.agent.reservations = { enable = true; leaseSeconds = 12; };
+    environment.etc."reservation-fixture-settings.json".text = builtins.toJSON phoenixReservationSettings;
     virtualisation = { cores = 2; memorySize = 2048; diskSize = 2048; };
     system.extraDependencies = [ runtimeInputs ];
     environment.etc."phoenix-agent/activated-source".source = source;
-    environment.systemPackages = [ pkgs.python3 ];
+    environment.systemPackages = [ pkgs.python3 pkgs.util-linux ];
+    };
   };
   testScript = ''
     python = "${pkgs.python3}/bin/python3"

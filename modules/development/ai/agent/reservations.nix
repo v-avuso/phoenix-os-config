@@ -4,8 +4,9 @@ let
   mapping = builtins.listToAttrs (map (name: { name = "deployment.${name}"; value = "system-testing"; })
     [ "test" "switch" "boot" "update" "override" "rollback" ]);
   settings = {
-    engine = toString ./reservations.py;
-    adapter = toString ./reservation-client.py;
+    # Plain toString source paths do not retain these dynamic imports in closures.
+    engine = toString (pkgs.writeText "phoenix-reservation-engine.py" (builtins.readFile ./reservations.py));
+    adapter = toString (pkgs.writeText "phoenix-reservation-management.py" (builtins.readFile ./reservation-client.py));
     state = "/var/lib/phoenix-reservations";
     socket = "/run/phoenix-admin/socket";
     operator_uid = config.users.users.${user.name}.uid;
