@@ -219,8 +219,16 @@ containment, decision and execution responsibilities.
   forwarding. Agents use the [bounded `ai-broker` interface](authorization/README.md#command-interface),
   which directly submits frozen requests to the immutable deployment client. It
   rejects rebuild-option tails and never falls back to the human sudo route.
-  OpenShell can select only mounted workspaces; managed external worktrees are
-  absent by default. Disabled AI requires native host Polkit; sandbox clients fail with host guidance. See [agent instructions](AGENTS.md#source-selection) for usage,
+  OpenShell can select only mounted workspaces. Repository composition appends
+  `~/.codex/worktrees` to the code/Projects defaults; explicit operator workspace
+  lists replace those defaults. The directory must already exist and resolve
+  canonically. Only that subtree is mounted, not sibling CLI profile/auth data;
+  the trusted GUI frontend retains its separate shared-profile contract. Linked
+  worktrees also require their common Git directory under an approved mount.
+  Disposable current-UID tests cover launch cwd, common Git metadata, sibling
+  isolation and dirty immutable selection; future protected-UID Git trust and
+  full contained caller acceptance remain separate. Disabled AI requires native
+  host Polkit; sandbox clients fail with host guidance. See [agent instructions](AGENTS.md#source-selection) for usage,
   dirty-source behavior and existing-worktree constraints.
 - **Testing coordination:** Default-off reservations span activation and later runtime
   validation. Private task capabilities, a service-owned mutation/rollback gate and

@@ -106,7 +106,8 @@ class ReviewTests(unittest.TestCase):
             git("add", "flake.nix", "flake.lock")
             git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
                 "commit", "-m", "fixture")
-            other = base / "other worktree"
+            other = base / "home/.codex/worktrees/task/repo"
+            other.parent.mkdir(parents=True)
             git("worktree", "add", "-b", "feature", str(other))
             (other / "flake.nix").write_text("dirty selected content")
             executable = base / "selector"
@@ -128,8 +129,10 @@ class ReviewTests(unittest.TestCase):
                      mock.patch.object(review, "snapshot", side_effect=snapshot), \
                      self.assertRaisesRegex(RuntimeError, "stop before authentication"):
                     review.main()
+            self.assertEqual((repo / "flake.nix").read_text(), "{}")
+            self.assertEqual(subprocess.check_output(["git", "-C", str(repo), "branch", "--show-current"]).strip(), b"main")
 
-    def test_dispatcher_to_actual_snapshot_and_authenticated_stub_is_closed(self):
+    def test_selected_worktree_to_actual_snapshot_and_authenticated_stub_is_closed(self):
         import os
 
         root = Path(__file__).resolve().parents[5]
@@ -148,7 +151,8 @@ class ReviewTests(unittest.TestCase):
             git("add", ".")
             git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
                 "commit", "-m", "fixture")
-            other = base / "selected"
+            other = base / "home/.codex/worktrees/task/repo"
+            other.parent.mkdir(parents=True)
             git("worktree", "add", "-b", "feature", str(other))
             (other / "flake.nix").write_text("dirty selected content")
             (other / "new.nix").write_text("new selected content")
@@ -168,10 +172,6 @@ class ReviewTests(unittest.TestCase):
             selector.write_text((root / "commands/phoenix-source").read_text().replace(
                 "#!/usr/bin/env python3", "#!" + sys.executable))
             selector.chmod(0o755)
-            target = base / "phoenix-target"
-            target.write_text("#!/bin/sh\nprintf metal\n")
-            target.chmod(0o755)
-
             cfg = base / "config.json"
             config = dict(repo=str(repo), git=shutil.which("git"),
                           sourceSelector=str(selector), clientOnly=True,
@@ -183,12 +183,10 @@ class ReviewTests(unittest.TestCase):
                 f'#!/bin/sh\nexec {sys.executable} {client_script} {cfg} "$@"\n'
             )
             helper.chmod(0o755)
-            env = os.environ | {
-                "PATH": str(base) + ":" + os.environ["PATH"],
-                "PHOENIX_REPO_ROOT": str(repo),
-                "phoenix_deployment_helper": str(helper),
-            }
-            args = ["bash", str(root / "commands/phoenix-rebuild"), "test",
+            # The agent route invokes this immutable client, never the human rebuild
+            # wrapper's deliberately ignored legacy helper environment variable.
+            env = os.environ | {"PATH": str(base) + ":" + os.environ["PATH"]}
+            args = [str(helper), "--target", "metal", "--action", "test",
                     "--branch", "feature", "--reason", "Validate requested dirty source"]
             result = subprocess.run(args, env=env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)

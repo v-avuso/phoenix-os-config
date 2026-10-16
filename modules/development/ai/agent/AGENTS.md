@@ -88,7 +88,10 @@
 - Configure agent-visible project directories through `phoenix.agent.workspaces`;
   OpenShell filesystem policy and mounts enforce that boundary. Keep personal home
   data outside those mounts. Broker caller authorization is a separate boundary;
-  workspace access does not grant privileged operations.
+  workspace access does not grant privileged operations. For linked worktrees,
+  retain mounted common Git metadata and test the actual selector/client route
+  plus sibling-profile isolation; do not substitute the human rebuild route or
+  widen Git trust globally to make a fixture pass.
 - Agents requesting deployment must provide the task, intended action and reason,
   plus the source worktree. Prefer `test` during development and `switch` after
   integration into main. Reasons and branch labels are context, never authority.
@@ -119,8 +122,8 @@
   context, not identity or privilege. Broker review/reservations do not constrain
   native administrator sudo; shared-UID instructions are not identity enforcement.
 - OpenShell's explicit broker uses the sandbox deployment client and existing
-  deployment socket. Sources must be in configured mounted workspaces; external
-  managed worktrees under `~/.codex/worktrees` are not mounted by default. Disabled
+  deployment socket. Sources must be in configured mounted workspaces; repository
+  defaults include the narrow `~/.codex/worktrees` root, not the full profile. Disabled
   AI requires native host Polkit; sandbox clients reject with host guidance. Do not
   mount authentication or bypass containment to repair this. Identity/reservation
   live acceptance remains separate.

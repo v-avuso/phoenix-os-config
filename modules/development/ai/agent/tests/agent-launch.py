@@ -130,6 +130,19 @@ class LauncherFixture(unittest.TestCase):
                     if process.is_alive(): process.kill()
                     process.join(5)
 
+    def test_managed_worktree_cwd_reaches_contained_transport(self):
+        managed = self.root / "home/.codex/worktrees"
+        checkout = managed / "task/repo"
+        checkout.mkdir(parents=True)
+        self.config["workspaces"] = [str(managed)]
+        with mock.patch.object(launch.subprocess, "run", side_effect=self.success), \
+             mock.patch.object(launch.Path, "is_socket", return_value=True), \
+             mock.patch.object(launch.os, "execve") as execute, \
+             mock.patch.object(launch.Path, "cwd", return_value=checkout):
+            launch.main(self.config, ["--phoenix-exec", "/bin/true"])
+        execution = execute.call_args.args[1]
+        self.assertEqual(execution[execution.index("--workdir") + 1], str(checkout))
+
     def test_app_server_keeps_stdio_and_never_falls_back_native(self):
         with mock.patch.object(launch.subprocess, "run", side_effect=self.success) as run, \
              mock.patch.object(launch.Path, "is_socket", return_value=True), \

@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -120,15 +121,51 @@ class Commands(unittest.TestCase):
         return subprocess.run(["git", "-C", str(self.repo), *args], check=True,
                               capture_output=True, text=True).stdout
 
-    def make_worktree(self):
+    def make_worktree(self, destination=None):
         self.git("init", "-b", "main")
         self.git("add", "flake.nix")
         self.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
                  "commit", "-m", "fixture")
-        other = self.base / "other worktree"
+        other = destination or self.base / "other worktree"
+        other.parent.mkdir(parents=True, exist_ok=True)
         self.git("worktree", "add", "-b", "feature", str(other))
         (other / "flake.nix").write_text("{ dirty = true; }\n")
         return other
+
+    def test_narrow_managed_worktree_namespace_keeps_profile_sibling_private(self):
+        bwrap = shutil.which("bwrap")
+        if not bwrap: self.skipTest("Bubblewrap unavailable; namespace acceptance pending")
+        home = self.base / "home"
+        managed = home / ".codex/worktrees"
+        other = self.make_worktree(managed / "task/repo")
+        canary = home / ".codex/auth-canary"
+        canary.write_text("synthetic-private-profile")
+        git = str(Path(shutil.which("git")).resolve())
+        code = """import os,subprocess
+from pathlib import Path
+repo,other,canary,git=__import__('sys').argv[1:]
+assert str(Path.cwd())==other
+assert not Path(canary).exists()
+common=subprocess.check_output([git,'rev-parse','--git-common-dir'],text=True).strip()
+assert Path(common).resolve()==Path(repo)/'.git'
+Path('flake.nix').write_text('namespace dirty content')
+assert 'flake.nix' in subprocess.check_output([git,'status','--porcelain'],text=True)
+print('cwd/common-metadata/edit/profile-isolation passed')
+"""
+        command=[bwrap,'--unshare-user','--unshare-pid','--die-with-parent',
+                 '--ro-bind','/nix/store','/nix/store','--proc','/proc','--dev','/dev',
+                 '--tmpfs','/tmp','--bind',str(self.repo),str(self.repo),
+                 '--bind',str(managed),str(managed),'--setenv','HOME',str(home),
+                 '--setenv','GIT_CONFIG_GLOBAL','/dev/null','--setenv','GIT_CONFIG_SYSTEM','/dev/null',
+                 '--chdir',str(other),sys.executable,'-I','-c',code,str(self.repo),str(other),str(canary),git]
+        result=subprocess.run(command,capture_output=True,text=True,timeout=15)
+        if result.returncode and any(message in result.stderr for message in (
+                'No permissions to create a new namespace','Creating new namespace failed: Operation not permitted')):
+            self.skipTest('User namespace unavailable; no privileged fallback')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertEqual((other/'flake.nix').read_text(),'namespace dirty content')
+        self.assertEqual((self.repo/'flake.nix').read_text(),'{}\n')
+        self.assertEqual(canary.read_text(),'synthetic-private-profile')
 
     def test_explicit_sources_include_dirty_worktree_without_checkout_switch(self):
         other = self.make_worktree()
