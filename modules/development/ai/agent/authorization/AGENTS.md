@@ -3,9 +3,15 @@
 - Preserve human Phoenix test/switch/boot as terminal `nixos-rebuild --sudo`,
   without required reasons. Bind explicit ai-broker deployment directly to immutable
   clients; never recurse through human wrappers or use an environment identity flag.
-- Agents use `ai-broker --task TASK --reason PURPOSE -- phoenix-test ...` or the
+- Agents use `phoenix-authorize --task TASK --reason PURPOSE -- phoenix-test ...` or the
   closed diagnostic mapping. Reasons/task labels are bounded nonsecret context;
   installed root policy, peer checks and authentication remain authoritative.
+  Preserve `ai-broker` as a compatible alias; gate naming must not alter human commands.
+- Keep automatic diagnostic defaults documented by bounded-operation rationale.
+  `automaticDiagnostics.enable=false` defaults to human and must reject explicit
+  automatic overrides; denied decisions and deployment-review ownership stay intact.
+- Future authority extensions require explicit opt-in options and dependency
+  assertions; an available dependency must never automatically enable authority.
 - `security-review` is routing admission, not a successful verdict: require a
   separately validated exact-bound review before execution. Preserve the diagnostic
   daemon's CAP_SYSLOG boundary; delegate protected reviewer UID/GID work to the

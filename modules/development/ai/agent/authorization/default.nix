@@ -3,7 +3,17 @@ let
   # A declarative account owner avoids policy -> ExecStart -> policy recursion.
   updaterName = config.phoenix.authorization.updaterUser;
   updaterUid = config.users.users.${updaterName}.uid;
-  names = [ "kernel-journal" "dmesg" "trace-summary" "trace-format" "service-status" "wakeup-get" "wakeup-set" ];
+  # Each automatic default is a fixed typed operation, not arbitrary root execution.
+  rationale = {
+    kernel-journal = "Bounded kernel journal read; no state mutation.";
+    dmesg = "Bounded kernel ring-buffer read; no clear or write operation.";
+    trace-summary = "Bounded summary of the fixed trace source; no state mutation.";
+    trace-format = "Reads fixed trace format metadata; no tracing configuration writes.";
+    service-status = "Reads status only for installed allowlisted services; cannot control units.";
+    wakeup-get = "Reads wakeup state only for explicitly configured PCI devices.";
+    wakeup-set = "Reversible wakeup toggle only for explicitly configured PCI devices and typed values.";
+  };
+  names = builtins.attrNames rationale;
   policy = pkgs.writeText "phoenix-authorization-policy.json" (builtins.toJSON {
     version = 1;
     securityReviewEnabled = config.services.phoenixDeployment.securityReview.enable;
@@ -22,11 +32,16 @@ in {
     default = user.name;
     description = "Static account shared by the update service and its operation-specific authorization role.";
   };
+  options.phoenix.authorization.automaticDiagnostics.enable = lib.mkOption {
+    type = lib.types.bool;
+    default = true;
+    description = "Allow deterministic automatic diagnostics; disabled defaults to native human authentication and rejects explicit automatic decisions.";
+  };
   options.phoenix.authorization.diagnostics = lib.mkOption {
     type = lib.types.submodule { options = lib.listToAttrs (map (name: {
       inherit name;
-      value = lib.mkOption { type = lib.types.enum [ "automatic" "human" "denied" ]; default = "automatic";
-        description = "Installed authorization for the bounded ${name} diagnostic."; };
+      value = lib.mkOption { type = lib.types.enum [ "automatic" "human" "denied" ]; default = if config.phoenix.authorization.automaticDiagnostics.enable then "automatic" else "human";
+        description = "Installed authorization for ${name}. ${rationale.${name}}"; };
     }) names); };
     default = { };
     description = "Closed named diagnostic policy; deployment decisions derive from securityReview.enable.";
@@ -36,6 +51,11 @@ in {
     default = false;
     description = "Experimental native explanation before Polkit for ai-broker human requests; enable after isolated GUI acceptance.";
   };
+  config.assertions = [ {
+    assertion = config.phoenix.authorization.automaticDiagnostics.enable
+      || builtins.all (name: config.phoenix.authorization.diagnostics.${name} != "automatic") names;
+    message = "phoenix.authorization.automaticDiagnostics.enable=false forbids explicit automatic diagnostic decisions; select human or denied.";
+  } ];
   config.system.build.phoenixAuthorizationPresentation = pkgs.writeText "phoenix-authorization-presentation.json"
     (builtins.toJSON (if config.phoenix.authorization.explanation.enable then {
       module = toString (pkgs.writeText "phoenix-authorization-presentation.py" (builtins.readFile ./presentation.py));

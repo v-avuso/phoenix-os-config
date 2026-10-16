@@ -9,6 +9,10 @@ let
       phoenix-admin = "${adminClient}/bin/phoenix-admin";
     };
   });
-in pkgs.writeShellScriptBin "ai-broker" ''
+in (pkgs.writeShellScriptBin "ai-broker" ''
   exec ${pkgs.python3}/bin/python3 -I ${./ai-broker.py} ${config} "$@"
-''
+'').overrideAttrs (old: {
+  buildCommand = old.buildCommand + ''
+    ln -s ai-broker "$out/bin/phoenix-authorize"
+  '';
+})

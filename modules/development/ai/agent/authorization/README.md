@@ -44,6 +44,37 @@ add constraints after policy acceptance rather than granting denied commands;
 provide containment, not a verified host-root approval path. Neither replaces the
 remaining project-specific typed execution and protected policy-publication boundary.
 
+## Public gate and deterministic diagnostics
+
+`phoenix-authorize` is the neutral public authorization gate; `ai-broker` remains
+an equivalent supported alias in the same package, including its historical default
+task label. Existing launchers and human Phoenix/sudo commands are unchanged.
+Both names map fixed typed argv to existing clients, never a shell. Reasons and
+task labels are context, not authority.
+
+`phoenix.authorization.automaticDiagnostics.enable` defaults to `true`, preserving
+the seven deterministic automatic defaults. Set it to `false` to default every
+operation to native human authentication; explicit `denied` remains denied.
+An explicit per-operation `automatic` with the flag off fails a Nix assertion.
+Each option's description records its bounded read or reversible-toggle rationale;
+this switch expands no operation, device or service allowlist. Deployment security
+review remains independently controlled, and review-off still requires human
+authentication with immutable binding and rollback.
+
+Future review/policy-publication responsibilities need explicit opt-in Nix options
+and assertions for their required controller/adapter capabilities. Availability of
+a dependency must never auto-enable authority. Route deployment to its existing
+diff reviewer without a second generic AI pass; unsupported command families and
+mutable inputs that cannot be frozen require native human fallback. No generic
+hook engine or command-review feature is introduced by this gate name.
+
+Focused checks (evaluation/build only, no activation):
+
+```sh
+nix eval --impure --file modules/development/ai/agent/authorization/tests/automatic-diagnostics.nix
+nix build --impure --no-link --file modules/development/ai/agent/authorization/tests/alias.nix
+```
+
 ## Requests and policy
 
 A metadata request contains exactly `version`, `operation`, `arguments`, `task`

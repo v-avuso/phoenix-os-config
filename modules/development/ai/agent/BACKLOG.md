@@ -49,8 +49,8 @@ independently toggleable. Removing an import can break required module arguments
 
 | Responsibility | Existing control | Reusable default / repository selection | Gap |
 | --- | --- | --- | --- |
-| Authorization policy/core public interface | No core `enable`; imported by broker and deployment | Installed by composition | No supported overall enable/disable contract. |
-| Diagnostic broker | No broker `enable`; `phoenix.authorization.diagnostics.<name>` is `automatic`, `human` or `denied` | Seven diagnostics default automatic | Denying operations does not disable broker installation. |
+| Authorization policy/core public interface | `phoenix-authorize` gate (`ai-broker` alias); no core `enable`; imported by broker and deployment | Installed by composition | No supported overall enable/disable contract. |
+| Diagnostic broker | `phoenix.authorization.automaticDiagnostics.enable` defaults true; no broker `enable`; `phoenix.authorization.diagnostics.<name>` is `automatic`, `human` or `denied` | Seven diagnostics default automatic; flag OFF defaults human and forbids automatic overrides | Denying operations does not disable broker installation. |
 | Deployment controller | No deployment-engine `enable` | Installed by composition | Review switch does not remove authentication/controller/rollback. |
 | Security review | `services.phoenixDeployment.securityReview.enable`; legacy `modelReview.enable` alias | OFF / **ON** | General command review and adaptive publication have no implementation or switches. |
 | OpenShell runtime | No runtime `enable` | Imported; installs runtime/services | No independent supported disable contract; identity/shutdown options alter it. |

@@ -16,7 +16,7 @@ assert settings off == null;
 assert on.phoenix.authorization.explanation.enable;
 assert lib.hasInfix "zenity" (settings on).program;
 assert lib.hasInfix "phoenix-authorization-presentation.py" (settings on).module;
-assert !on.services.phoenixDeployment.securityReview.enable;
+assert on.services.phoenixDeployment.securityReview.enable == off.services.phoenixDeployment.securityReview.enable;
 { passed = true; nativeBroker = broker; nativeClient = on.system.build.phoenixDeploymentClient;
   adminClient = on.system.build.phoenixAdminClient;
   presentationConfig = on.system.build.phoenixAuthorizationPresentation; }

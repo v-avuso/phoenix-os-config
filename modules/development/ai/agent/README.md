@@ -164,7 +164,8 @@ containment, decision and execution responsibilities.
   launch transport and offline retained-state preparation. Disabled by default;
   see [identity usage, compatibility and acceptance](identity.md).
 - **Bounded diagnostics:** A separately authorized broker exposes named diagnostic
-  operations rather than arbitrary privileged commands. Workspace visibility does
+  operations rather than arbitrary privileged commands. `phoenix-authorize` is the
+  neutral public gate; `ai-broker` remains a compatible alias. Workspace visibility does
   not grant broker authority. Each request requires a nonsecret bounded `--reason`.
   The [authorization module](authorization/README.md) owns installed decisions,
   native human authentication and structured root audit metadata. Its default-off

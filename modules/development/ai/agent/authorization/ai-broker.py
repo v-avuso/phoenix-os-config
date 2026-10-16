@@ -1,4 +1,4 @@
-"""Reasoned agent requests through fixed existing Phoenix clients; no shell."""
+"""Authorization requests through fixed existing Phoenix clients; no shell."""
 import argparse
 import importlib.util
 import json
@@ -11,8 +11,8 @@ COMMANDS = {"phoenix-test", "phoenix-switch", "phoenix-boot", "phoenix-admin"}
 def prepare(config, argv):
     spec = importlib.util.spec_from_file_location("phoenix_authorization", config["library"])
     authorization = importlib.util.module_from_spec(spec); spec.loader.exec_module(authorization)
-    parser = argparse.ArgumentParser(prog="ai-broker", allow_abbrev=False,
-        description="Use ai-broker --reason PURPOSE [--task TASK] -- phoenix-test|switch|boot|admin ...")
+    parser = argparse.ArgumentParser(prog="phoenix-authorize", allow_abbrev=False,
+        description="Use phoenix-authorize (alias: ai-broker) --reason PURPOSE [--task TASK] -- phoenix-test|switch|boot|admin ...; reasons are context, not authority")
     parser.add_argument("--reason", required=True, action="append")
     parser.add_argument("--task", action="append")
     if argv == ["--help"]:
