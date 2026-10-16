@@ -139,6 +139,20 @@ Sharing preserves saved conversations, not running commands or provider prompt
 caches. Resume requires the chat's workspace/rollout paths to exist inside the
 selected backend's allowed mounts. See [cold handoff and proof](history-layout.md).
 
+## Architecture and dependencies
+
+The AI composition module selects repository defaults; these owners retain distinct
+containment, decision and execution responsibilities.
+
+| Responsibility | Owner | Dependencies and boundary |
+| --- | --- | --- |
+| Authorization | `authorization/` | Installed decision policy and shared request library; consumes security-review selection and declared caller/operator identities. |
+| Diagnostics | `broker.nix`, `admin.py` | Authorization policy/library, fixed root socket dispatcher and native Polkit helpers; seven typed operations. |
+| Deployment and security review | `deployment.nix`, `deployment.py`, `security-review.nix` | Authorization, immutable source/build binding, activation/rollback helpers; optional isolated reviewer and exact approval checkpoints. |
+| OpenShell runtime | `default.nix`, `image.nix`, `launch.py` | Pinned OpenShell and Podman, workspace/network policy, history and broker clients; enforces the worker boundary. |
+| Bubblewrap GUI | `gui.nix`, `gui-*.py` | nix-bwrapper desktop preset and pinned Flatpak manifest; CLI/HTTP relays enter OpenShell, with separately controlled GUI state sharing. |
+| Experimental controls | `identity.nix`, `reservations.nix`, `shutdown-ordering.nix`, deployment disruption guard and authorization explanation | Optional runtime identity/lifetime, deployment coordination/inspection and native presentation extensions; remain off independently of enabled security review and GUI sharing. |
+
 ## Current behavior
 
 - **Containment:** OpenShell CLI and desktop launchers restrict filesystem/network
@@ -189,8 +203,10 @@ selected backend's allowed mounts. See [cold handoff and proof](history-layout.m
   failure composition with explicit stubs. Actual protected retained-auth review,
   root process/build/worker/adapter/checkpoint reuse, and recorder-based reservation
   systemd lifetime and actual guest activation/failure-rollback trials passed; see [review evidence](security-review.md) and
-  [reservation evidence](reservations.md). Critical fallback authentication, socket
-  peer admission and production-host activation compatibility remain separate. Optional
+  [reservation evidence](reservations.md). The isolated deployment socket VM also passed
+  kernel peer admission and denial cases with model/activation doubles. Controlled host
+  reviewed deployment/recovery passed; critical fallback authentication and optional
+  control workflows retain separate acceptance limits. Optional
   controls stay OFF; these bounded trials do not establish full live readiness.
 - **Explicit source selection:** Shared rebuild commands and the authenticated
   deployment client accept branch/worktree selectors without switching checkouts.
@@ -204,7 +220,8 @@ selected backend's allowed mounts. See [cold handoff and proof](history-layout.m
 - **Testing coordination:** Default-off reservations span activation and later runtime
   validation. Private task capabilities, a service-owned mutation/rollback gate and
   current baseline checks enforce exclusivity; see [reservations](reservations.md).
-  Live VM/Polkit/systemd acceptance remains pending.
+  Recorder-based systemd VM lifetime/exclusion passed; reservation-mediated real OS
+  activation/rollback, Polkit/identity and full live workflow acceptance remain pending.
 
 - **Operator identity (experimental):** Dedicated account and native/OpenShell
   transport are prepared and default off. Distinct caller/operator authority and

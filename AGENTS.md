@@ -54,6 +54,10 @@
   `nix flake check --no-build --no-write-lock-file .`
 - For mutable settings, command, desktop, or security changes, run the
   appropriate focused fixtures from tests/README.md.
+- Run fast fixtures first; use disposable nixpkgs `runNixOSTest` VMs for real systemd,
+  root UID, socket, activation and rollback semantics; see [VM fixtures](modules/development/ai/agent/tests/activation-runtime.nix)
+  and [acceptance limits](modules/development/ai/agent/security-review.md). Prefer isolated trials to disruptive host experiments;
+  VM passes do not establish host desktop, biometric or reboot acceptance.
 - Metal hardware configuration is tracked. VM hardware is a tracked
   placeholder; VM deployment requires a real reviewed snapshot.
   Evaluation does not establish bootability.
