@@ -98,6 +98,16 @@ Keep OFF pending representative real-model/native-auth acceptance and explicit
 approval of the caller boundary. Protected identity is still OFF: shared host UID
 is a limitation, not proof that requests came from Codex or from a human.
 
+A controlled real-model/root-noop trial is prepared in
+[`tests/command-model-trial.nix`](tests/command-model-trial.nix) (`{ flake; }`).
+Its argument-free helper requires fresh native root/operator authentication, uses
+only the candidate's fixed reviewed `id -u` entry and existing retained reviewer,
+and repeats the exact request under the existing one-CLI-call gate to check cache
+reuse. Separate dry-run/offline safety checks read no credentials. Private state
+and only observed owned units are cleaned; no activation/profile update is requested.
+Actual model/native authentication acceptance is **pending**, not established by
+preparation; the production registry remains OFF and empty.
+
 ## Future protected policy maintenance
 
 Adaptive protected allowlist publication remains unimplemented. Persistent policy
