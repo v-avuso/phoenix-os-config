@@ -1,4 +1,13 @@
-# Desktop media viewers
+# Desktop apps
+
+## Typst document publishing
+
+The [documents module](documents/typst/README.md) installs Typst and makes
+Phoenix's Omd2Typst-compatible template adapters available under
+`~/.local/share/phoenix/typst/templates`. Omd2Typst itself remains managed per
+Obsidian vault.
+
+## Desktop media viewers
 
 `media-viewers.nix` owns the Home Manager viewer settings and video, audio,
 and image MIME defaults. Thunar uses the packaged `mpv.desktop` and
