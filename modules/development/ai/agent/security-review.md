@@ -3,8 +3,11 @@
 `services.phoenixDeployment.securityReview.enable` defaults OFF in the reusable
 module. The repository now explicitly selects ON in `modules/development/ai/default.nix`
 following the controlled real reviewed deployment/recovery acceptance. Persistent
-installation/verification is pending; the accepted running/boot closure remains
-OFF until the coordinator deploys it. Its legacy `modelReview.enable` option is an alias. Authentication, dirty-source
+installation is verified: runtime and boot profile both resolve to
+`cq08hmp1izm7m9yr4arfl1xyxrig6csl`, from frozen clean-main source `n2w6...-source`
+(commit `efcd866`). The active controller/policy select review ON, `gpt-6-luna`/
+`high`; other experimental controls remain OFF. Its legacy `modelReview.enable`
+option is an alias. Authentication, dirty-source
 freezing, exact closure binding, disruption checks, reservations and rollback
 apply independently of AI. Routine updates use the deterministic validator with
 zero AI and Polkit calls.
@@ -136,9 +139,14 @@ unverified. No agent/PAM change or restart occurred.
 The controlled user-level KDE6.6.6 cutover subsequently passed: old GNOME PID2911
 exited and sole KDE agent PID1055506 used the expected package; a generic harmless
 Polkit request returned127 promptly and the operator confirmed Cancel worked.
-Cue readability was unobserved, not failed. Persistent startup and successful
-authentication await the normal installation approval; no extra approval probe is
-needed. This generic request is not a repeat of the exact critical policy dialog.
+Cue readability was unobserved, not failed. Persistent startup installation and successful security-key fingerprint
+authentication subsequently passed in the normal installation approval; no extra
+approval probe was needed. The operator reports no fingerprint hint and a password
+field visible initially. Installed PAM is byte-identical to accepted OFF. Exact
+KDE6.6.6 QML always shows/focuses its password field; `request()` ignores prompt
+text/echo arguments, while `showInfo()` forwards nonempty info to an inline label.
+No relevant supported hint-first configuration option was found. This is a
+presentation difference; biometric authentication and Cancel both passed. This generic request is not a repeat of the exact critical policy dialog.
 
 No verified GNOME upstream fix was found in the bounded search. Official sources:
 [GNOME0.105 archive](https://download.gnome.org/sources/polkit-gnome/0.105/polkit-gnome-0.105.tar.xz),
