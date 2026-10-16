@@ -98,15 +98,17 @@ Keep OFF pending representative real-model/native-auth acceptance and explicit
 approval of the caller boundary. Protected identity is still OFF: shared host UID
 is a limitation, not proof that requests came from Codex or from a human.
 
-A controlled real-model/root-noop trial is prepared in
-[`tests/command-model-trial.nix`](tests/command-model-trial.nix) (`{ flake; }`).
-Its argument-free helper requires fresh native root/operator authentication, uses
-only the candidate's fixed reviewed `id -u` entry and existing retained reviewer,
-and repeats the exact request under the existing one-CLI-call gate to check cache
-reuse. Separate dry-run/offline safety checks read no credentials. Private state
-and only observed owned units are cleaned; no activation/profile update is requested.
-Actual model/native authentication acceptance is **pending**, not established by
-preparation; the production registry remains OFF and empty.
+The controlled real-model/root-noop trial
+([factory](tests/command-model-trial.nix), fixture committed as `6d219ff`) passed using fixed helper
+`/nix/store/5lwnfqwp3dkhj275yml3d66ismzpb3li-phoenix-command-model-trial` and one
+native Polkit authentication. The actual controller independently reviewed fixed
+`id -u`; the repeated exact request reused approval and returned root UID `0`.
+Receipt `modelInvocations=1` counts one reviewer CLI invocation through the existing
+gate, not independently metered internal API calls, tokens or cost. Owned units/state
+were cleaned, runtime/profile were observed unchanged, and activation was false.
+This controlled helper is not the installed normal or **CRITICAL** command-client
+dialog workflow or protected/exact-Codex caller acceptance. Those remain pending;
+the production registry stays OFF and empty. No retained credentials were copied.
 
 ## Future protected policy maintenance
 

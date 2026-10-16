@@ -31,7 +31,9 @@
   When changing agent identity, test distinct UIDs: operator-owned retained auth
   and critical override must remain operator authority; pending requests retain
   their original configured client owner. Prove mapped launch paths before
-  restricting broker callers.
+  restricting broker callers. Use explicit pipes/DEVNULL for noninteractive
+  guest probes and test PTY behavior separately, so inherited driver terminals do
+  not confound admission tests.
 - Disruption guarding is default off and protects concrete immutable active unit
   artifacts only. Query/layout uncertainty requires a fresh exact operator exception;
   never describe it as proof against arbitrary activation shell effects. Read

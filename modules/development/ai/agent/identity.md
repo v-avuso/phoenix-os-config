@@ -129,7 +129,7 @@ duplex/EOF, stderr/status, cancellation, PTY resize/restoration, isolated-file
 packaging, partial sends and safe diagnostics. Setup uses synthetic state with
 privilege/installed-account/quiescence and full-workflow ACL calls mocked;
 EXDEV is emulated while GNU cp and verification actually run. A separate actual
-recursive ACL fixture touches only temporary directories. None proves real
+recursive ACL fixture touches only temporary directories. These fast fixtures do not prove real
 distinct-account containment or retained provider/model operation.
 
 Before enabling, a provisioned VM must prove operator launcher → fixed dedicated
@@ -140,3 +140,22 @@ edits, and history listing/resume/archive. Exercise retained model response,
 desktop HTTP/app-server, interactive CLI, resize/interrupt/EOF/close cleanup and
 restart. Verify Native CLI/auth/Polkit separately and no AI-disabled sandbox
 activation bypass. Keep OFF until the entire workflow passes.
+
+## Isolated distinct-UID transport and broker slice
+
+The on-demand [identity peer VM](tests/identity-peer.nix) passed; evidence is
+`/nix/store/69sjnz0v464x0dqy6647908f3y740ask-vm-test-run-phoenix-identity-peer/evidence`.
+It imports the actual identity/broker modules and verifies operator UID1000 through
+the fixed launcher/SCM_RIGHTS service to agent UID980 and one real bounded kernel
+journal diagnostic. Direct operator/outsider broker sockets are reachable but
+execution is denied with matching audit records. Actual `ProtectHome`/narrow binds,
+workspace ACL/default inheritance, separate stdio/status, malformed-rights rejection,
+outside-workspace refusal and cancellation/child reaping pass. Noninteractive probes
+use explicit pipes/DEVNULL; real interactive PTY acceptance remains separate.
+
+Gateway/Podman readiness and the post-transport OpenShell backend are fixed doubles.
+Only the real ACL helper runs, not full migration/setup. No retained credentials,
+model, actual OpenShell worker, GUI/history or host enablement are exercised. This
+proves a dedicated-UID slice for OpenShell only. Exact Codex-only admission spanning
+Native and contained CLI is not implemented; Native retains the operator identity
+and human recovery contract. The identity option stays OFF pending the full workflow.
