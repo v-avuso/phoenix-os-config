@@ -1,6 +1,6 @@
 # Agent containment and deployment
 
-- Deployment security review is optional and disabled by default. Keep all review
+- Deployment security review is optional; its reusable option defaults OFF. Keep all review
   authority, prompts, cache and override UI behind `securityReview.enable`.
   Authenticated deployment, immutable source/closure binding and rollback are
   independent safeguards; disabling AI must not grant unattended root access.
@@ -14,6 +14,10 @@
 - Freeze Git-visible working-tree changes before builds, including new files and
   deletions. A clean commit is not an activation prerequisite. Ignore branch names
   as authority; only root-owned exact source/closure/policy checkpoints authorize reuse.
+- Before declaring final integration/updater readiness, synchronize intended tracked
+  content with the activated/staged approved source: new documentation commits also
+  change that boundary. Report the final binding in the journal/operator handoff;
+  do not start a new tracked receipt edit merely to refresh its own source hash.
 - When changing the review boundary, exercise controller → worker → adapter →
   checkpoint together in `tests/agent-deployment.py`, not only mocked worker
   envelopes. Keep fixture ownership/store/build/model/activation stubs explicit;
