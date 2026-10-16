@@ -159,3 +159,22 @@ model, actual OpenShell worker, GUI/history or host enablement are exercised. Th
 proves a dedicated-UID slice for OpenShell only. Exact Codex-only admission spanning
 Native and contained CLI is not implemented; Native retains the operator identity
 and human recovery contract. The identity option stays OFF pending the full workflow.
+
+
+## Protected Podman keep-id gate
+
+The [protected Podman VM gate](tests/identity-openshell.nix) passed with fresh
+UID980 storage and the unmodified identity service User/environment, `ProtectHome`,
+narrow binds and `Delegate` settings. Evidence is
+`/nix/store/salj3rjbxrqik603jpwrr341i7wbvwxa-vm-test-run-phoenix-identity-openshell-podman-gate/evidence`.
+The SHA/config-ID-verified cached small public workload loaded through the real
+remote API, created/started with keep-id, and executed as container UID1000 with
+host UID980 workspace ownership. Operator access through inherited ACLs passed;
+forced removal succeeded and the named-container query was empty. No host state,
+credentials, gateway, model or migration participated.
+
+The smallest next slice reuses this fixture, workload and cached runtime/supervisor
+images: start the real protected gateway with fresh guest state, create one sandbox
+and execute a fixed workspace/broker probe. Prove host UID980 reaches the real
+broker while operator/outsider access remains denied. This is pending; full launcher,
+history, retained authentication, GUI/PTY and Native admission remain separate.
