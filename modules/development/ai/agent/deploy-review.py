@@ -451,7 +451,9 @@ def warn_large_diff(config, diff):
 
 
 def warn_deployment_diff(config, files, modes):
-    if not config.get('modelReviewEnabled', False):
+    # The contained client intentionally lacks host baseline metadata. This is
+    # only a local estimate; root performs the defining review/binding checks.
+    if not config.get('modelReviewEnabled', False) or 'baseline' not in config:
         return
     try:
         baseline = Path(config['baseline']).resolve(strict=True)

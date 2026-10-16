@@ -27,6 +27,10 @@
   incremental context against the smallest content/mode diff among independently
   approved same-policy/target checkpoints across branches, not an assumed latest
   approval. A merged/combined new source still requires residual integration review.
+- Exercise review-ON sandbox client configuration through real source freezing and
+  submission when changing client advisories; native/review-OFF fixtures can miss
+  absent host-only metadata. Optional estimates must not block root submission or
+  replace the protected controller's defining review and binding checks.
 - Keep operator authentication/migration ownership separate from broker caller UID.
   When changing agent identity, test distinct UIDs: operator-owned retained auth
   and critical override must remain operator authority; pending requests retain

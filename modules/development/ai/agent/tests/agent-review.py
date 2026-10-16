@@ -6,6 +6,8 @@ import io
 import json
 from pathlib import Path
 import shutil
+import socket
+import threading
 import subprocess
 import sys
 import tempfile
@@ -132,7 +134,7 @@ class ReviewTests(unittest.TestCase):
             self.assertEqual((repo / "flake.nix").read_text(), "{}")
             self.assertEqual(subprocess.check_output(["git", "-C", str(repo), "branch", "--show-current"]).strip(), b"main")
 
-    def test_selected_worktree_to_actual_snapshot_and_authenticated_stub_is_closed(self):
+    def test_review_enabled_sandbox_worktree_reaches_socket_submission(self):
         import os
 
         root = Path(__file__).resolve().parents[5]
@@ -175,7 +177,8 @@ class ReviewTests(unittest.TestCase):
             cfg = base / "config.json"
             config = dict(repo=str(repo), git=shutil.which("git"),
                           sourceSelector=str(selector), clientOnly=True,
-                          modelReviewEnabled=False, operatorCommand=[str(controller)])
+                          modelReviewEnabled=True, sandboxClient=True, operatorCommand=[],
+                          deploymentSocket=str(base / "deployment.sock"))
             cfg.write_text(json.dumps(config))
             helper = base / "client"
             client_script = root / "modules/development/ai/agent/deploy-review.py"
@@ -188,7 +191,29 @@ class ReviewTests(unittest.TestCase):
             env = os.environ | {"PATH": str(base) + ":" + os.environ["PATH"]}
             args = [str(helper), "--target", "metal", "--action", "test",
                     "--branch", "feature", "--reason", "Validate requested dirty source"]
-            result = subprocess.run(args, env=env, capture_output=True, text=True)
+            # Actual sandbox shape: review ON, no baseline/host authentication,
+            # real selector/freeze, and a fixed local socket controller double.
+            self.assertNotIn("baseline", config)
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
+                listener.bind(config["deploymentSocket"])
+                listener.listen()
+                listener.settimeout(3)
+                def submit():
+                    try:
+                        connection, _ = listener.accept()
+                    except socket.timeout:
+                        return
+                    with connection, connection.makefile("rb") as stream:
+                        request = json.loads(stream.readline())
+                        record.write_text(json.dumps(request))
+                        connection.sendall(b'{"ok":true}\n')
+                worker = threading.Thread(target=submit)
+                worker.start()
+                try:
+                    result = subprocess.run(args, env=env, capture_output=True, text=True, timeout=10)
+                finally:
+                    worker.join(timeout=4)
+                self.assertFalse(worker.is_alive())
             self.assertEqual(result.returncode, 0, result.stderr)
             request = json.loads(record.read_text())
             self.assertEqual(request["reason"], "Validate requested dirty source")
@@ -197,6 +222,8 @@ class ReviewTests(unittest.TestCase):
             self.assertEqual((request["target"], request["action"]), ("metal", "test"))
 
             controller.write_text("#!/bin/sh\nexit 23\n")
+            config.update(modelReviewEnabled=False, sandboxClient=False, operatorCommand=[str(controller)])
+            cfg.write_text(json.dumps(config))
             result = subprocess.run(args, env=env, capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)
             config["sandboxClient"] = True
