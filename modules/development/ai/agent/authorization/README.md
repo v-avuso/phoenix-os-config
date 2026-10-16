@@ -16,6 +16,16 @@ privileged command interface.
   authentication. Its experimental implementation stays off until isolated native
   GUI acceptance; presentation never supplies execution authority.
 
+## Intended extension (not implemented)
+
+An independent AI reviewer should assess supported privileged requests outside the
+installed deterministic allowlist, escalating rejected requests or unavailable
+review to the human operator. The reviewer may maintain narrow, reasonably safe
+command types with typed arguments and rationale comments through independent
+protected policy deployment, reducing repeat AI review. The requesting worker must never directly mutate live authority.
+Current fixed diagnostic/deployment mappings do not implement this general review
+or policy-maintenance flow. Codex “Approve for me” is not OS root authorization.
+
 ## Requests and policy
 
 A metadata request contains exactly `version`, `operation`, `arguments`, `task`

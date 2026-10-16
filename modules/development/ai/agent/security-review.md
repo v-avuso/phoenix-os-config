@@ -6,6 +6,28 @@ freezing, exact closure binding, disruption checks, reservations and rollback
 apply independently of AI. Routine updates use the deterministic validator with
 zero AI and Polkit calls.
 
+## Isolated deployment socket composition
+
+The NixOS VM fixture `tests/deployment-peer.nix` passed at exact source
+`d13dd5eca051b75d51d5f2843702a0545abab655`; evidence is under
+`/nix/store/q7radgkhbndj4sa5c2jjbyc8p3gicp17-vm-test-run-phoenix-deployment-peer/evidence`.
+A real socket-activated root daemon reads kernel SO_PEERCRED and runs production
+request dispatch, authorization, worker and bound-verdict validation. Configured
+client/operator metadata succeeds; a DAC-admitted outsider UID, operator execution
+and updater `test` execution return `invalid-or-denied`. The client’s injected
+adapter error returns `review-invocation-failed`, rejection returns `model-denied`,
+and neither reaches activation. Three worker/model-boundary visits and one approved
+activation callback are asserted, including per-failure counts.
+
+Nix realization, reviewer subprocess/UID transition, model decision and activation
+are explicit doubles; no model or host deployment occurs. This establishes socket
+composition in isolation, not installed review-enabled operation, executable-specific
+identity, critical-action authentication or general privileged-command AI review.
+The installed shared client/operator UID remains the authority boundary while
+protected identity is OFF. A controlled real reviewed deployment and clearly
+identified critical-dialog cancellation/fresh-auth observation remain live gates;
+optional identity/reservations/disruption/explanation are separate milestones.
+
 ## Adapter and bounds
 
 ```nix
