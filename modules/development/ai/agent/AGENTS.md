@@ -54,6 +54,9 @@
   embedded helper content individually: whole-repository source prefixes otherwise
   invalidate reuse on unrelated changes. Test relocation and actual helper changes;
   retain helper-byte hashing rather than normalizing away changed authority.
+- Pass generated gateway configuration directly by immutable store path. OpenShell
+  0.1.2 preflight rejects symlinks (including NixOS `/etc` links); preserve that
+  strict check rather than copying configuration or skipping preflight.
 - OpenShell 0.1.2 nonterminal gRPC exec buffers stdin until EOF. Give probes
   requiring no input explicit DEVNULL/`</dev/null`; otherwise a blocked probe
   does not establish readiness or authentication failure. Fully redirect all

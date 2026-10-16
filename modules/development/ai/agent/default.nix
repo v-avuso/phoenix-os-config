@@ -396,6 +396,7 @@ in
     _module.args.phoenixAgentImage = image;
     _module.args.phoenixAgentPackages = packages;
     _module.args.phoenixAgentLauncherConfig = launcherConfig;
+    _module.args.phoenixAgentGatewayConfig = gatewayConfig;
     environment.systemPackages = [
       packages.cli
       packages.gateway

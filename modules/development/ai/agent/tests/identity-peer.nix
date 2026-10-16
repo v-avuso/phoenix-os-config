@@ -40,6 +40,7 @@ in pkgs.testers.runNixOSTest {
       config = {
         _module.args = {
           user = { name = "operator"; homeDirectory = "/home/operator"; repoDirectory = workspace; };
+          phoenixAgentGatewayConfig = pkgs.writeText "unused-gateway-config.toml" "";
           phoenixAgentLauncherConfig = pkgs.writeText "unused-openshell-config.json" "{}";
           phoenixAgentPackages.gateway = idle;
         };

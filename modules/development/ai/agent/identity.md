@@ -173,8 +173,27 @@ host UID980 workspace ownership. Operator access through inherited ACLs passed;
 forced removal succeeded and the named-container query was empty. No host state,
 credentials, gateway, model or migration participated.
 
-The smallest next slice reuses this fixture, workload and cached runtime/supervisor
-images: start the real protected gateway with fresh guest state, create one sandbox
-and execute a fixed workspace/broker probe. Prove host UID980 reaches the real
-broker while operator/outsider access remains denied. This is pending; full launcher,
-history, retained authentication, GUI/PTY and Native admission remain separate.
+The fixture also has explicit `mode = "gateway"` with verified cached runtime and
+supervisor records. The first run exposed strict OpenShell 0.1.2 preflight rejection
+of the NixOS `/etc` configuration symlink. Protected and native gateways now receive
+the same direct generated immutable configuration path; the strict preflight is
+unchanged. The owning config is passed as `phoenixAgentGatewayConfig` to avoid a
+runtime copy or divergent configuration.
+
+The next run passed actual protected gateway preflight/readiness and fresh synthetic
+TLS registration, but sandbox creation failed: Podman could not add its healthcheck
+because `/run/phoenix-agent/private/systemd` does not exist. Final diagnostic evidence
+is the log for
+`/nix/store/4kqha237fq74075ay428nq1k07gh8ixg-vm-test-run-phoenix-identity-openshell-gateway-gate.drv`.
+This is a protected system-service/rootless user-manager integration gap, not a
+successful OpenShell → broker proof. No healthcheck, filesystem or cgroup restriction
+was relaxed. The fixture attempts forced removal of its managed guest containers
+and stops the guest gateway; failed create also rolled back containers. This does
+not establish shutdown grace/log durability or a passing full cleanup acceptance.
+
+The pending slice is one real gateway sandbox through the actual operator launcher
+and transport, with an explicit fixed exec bridge replacing Codex/history launcher
+semantics, then a workspace write and real broker UID audit. Only workspace/broker
+paths and read-only Nix dependencies are requested workload mounts; no private
+control credentials are mounted. Full launcher/history, retained authentication,
+GUI/PTY, migration and exact Native Codex admission remain separate and unproved.

@@ -4,6 +4,7 @@
   pkgs,
   user,
   phoenixAgentLauncherConfig,
+  phoenixAgentGatewayConfig,
   phoenixAgentPackages,
   ...
 }:
@@ -210,7 +211,7 @@ in
       after = [ "phoenix-agent-podman.service" ];
       environment = environment // {
         PATH = lib.mkForce environment.PATH;
-        OPENSHELL_GATEWAY_CONFIG = "/etc/phoenix-openshell/gateway.toml";
+        OPENSHELL_GATEWAY_CONFIG = toString phoenixAgentGatewayConfig;
       };
       serviceConfig = {
         ProtectHome = "tmpfs";
