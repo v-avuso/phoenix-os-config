@@ -23,6 +23,17 @@ commands and limits remain in the [module README](README.md),
 
 ## Recorded installed state and pending source
 
+- Repository selection now prepares `securityReview.enable=true` after the real
+  reviewed deployment/recovery pass. This is not yet persistently installed:
+  current runtime/profile remain accepted OFF `nhqm...`. GUI sharing stays ON;
+  identity/reservations/disruption/explanation/shutdown ordering stay OFF. Human
+  Phoenix commands retain terminal sudo; routine updates remain zero-AI. General
+  command review/policy maintenance is intended, not implemented. KDE6.6.6 user-level
+  cutover and generic-request Cancel passed; persistent startup and successful
+  authentication await the ordinary installation approval. Cue readability was
+  unobserved, not failed.
+
+
 - Lifecycle guard `33bcfce`, accepted repairs and approved sharing promotion are
   integrated into main and persistently installed. Actual `ai-broker` switch
   returned `ok=true`, action `switch`, source

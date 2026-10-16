@@ -1,9 +1,12 @@
-# Run: nix eval --impure --file modules/development/ai/agent/tests/security-review.nix
+# Run: nix eval --impure --file modules/development/ai/agent/tests/security-review.nix --apply 'f: f {}'
 # Declaration/packaging evidence only; never invokes a model, Polkit or activation.
+{ flake ? builtins.getFlake ("git+file://" + toString ../../../../..) }:
 let
-  flake = builtins.getFlake ("git+file://" + toString ../../../../..);
   lib = flake.inputs.nixpkgs.lib;
-  off = flake.nixosConfigurations.metal.config;
+  repository = flake.nixosConfigurations.metal.config;
+  off = (flake.nixosConfigurations.metal.extendModules {
+    modules = [ { services.phoenixDeployment.securityReview.enable = lib.mkForce false; } ];
+  }).config;
   on = (flake.nixosConfigurations.metal.extendModules {
     modules = [ { services.phoenixDeployment.securityReview.enable = true; } ];
   }).config;
@@ -25,6 +28,8 @@ assert (builtins.fromJSON (builtins.unsafeDiscardStringContext on.environment.et
   target = (builtins.fromJSON (builtins.unsafeDiscardStringContext on.system.build.phoenixAuthorizationPolicy.text)).target;
   source = toString on.environment.etc."phoenix-agent/activated-source".source;
 };
+assert flake.nixosConfigurations.metal.options.services.phoenixDeployment.securityReview.enable.default == false;
+assert repository.services.phoenixDeployment.securityReview.enable;
 assert !off.services.phoenixDeployment.securityReview.enable;
 assert !(off.environment.etc ? ${baselinePolicy});
 assert helper off.environment.systemPackages == [ ];
