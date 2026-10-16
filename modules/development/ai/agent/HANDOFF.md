@@ -340,26 +340,27 @@ This supersedes the expired attempt. Supplied UID checks are not socket admissio
 synthetic pending is not AI rejection, and recorded activation is not execution.
 Production critical-action fresh authentication remains unproved; controls stay OFF.
 
-## Latest controlled critical-policy window
+## Latest controlled reviewed window
 
-The explicitly authorized five-minute trial used clean-main `af696bf` review-ON
-overlay closure `3ys5za7ivy19kzdxpr9vyh9n7lfkzdnf`; main/default/boot stayed OFF.
-Native rollback timer `phoenix-review-off-rollback-trial` was armed for exact OFF,
-with bounded retries. A guard first refused safely because /proc/uptime includes
-suspend; corrected CLOCK_MONOTONIC comparison and a fresh timer preceded ON.
-ON activation succeeded (DBus/deployment reload, Polkit/HM restart; no reported
-GUI/OpenShell restart). Exact critical action/helper registered as AUTH_ADMIN/no-keep.
-The intended CANCEL probe was approved: the operator explicitly reports approving
-all requests because the chat label did not clearly identify the cancel-target
-dialog. Missing-pending rejection was expected after approval; no approval record,
-reviewed deployment or model call occurred. Cancellation was not exercised;
-precise critical-warning recognition/fresh-auth isolation remain unproved. No
-PAM/cache bypass is established; the coordinator acknowledged sequencing ambiguity.
-Immediate OFF restoration succeeded; runtime/profile both match accepted `nhqm...`
-and critical action is absent. The initial timer-stop request expired (124); the explicit operator-authorized
-retry succeeded. Independent checks found timer/service not-found, inactive/dead
-and service Result=success. Cleanup is complete; runtime/profile remain accepted
-OFF and critical action absent. No further authentication dialogs are requested. See security-review.md.
+Authenticated fixed helper `mv6m57...` reached `on-ready` (exit0). Real native
+`ai-broker controlled-reviewed-deployment` completed actual review→activation
+(action `test`, exit0) for clean main `baac836`, source `h3n90...-source`, closure
+`ngdi4win5kwsqknnn2bs009mdsvyg58m-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
+Review journal bound20473 diff bytes, invocation limit2/context131072; actual
+runtime matched candidate, boot stayed accepted `nhqm...`, and OFF controller
+config `400iw2...` became active. Root checkpoint follows production success path;
+private root state was not separately inspected. No per-request human approval.
+Automatic recovery passed: `recovery-queued` → `off-restored` → owned-timer cleanup.
+Independent checks found timer/service not-found/inactive/dead, Result=success;
+runtime/profile both exact accepted `nhqm...` OFF. No trial or auth request remains.
+
+Critical absent-nonce probe expired60s (124), with no helper output; operator
+reports Cancel twice had no effect. Cancellation remains unvalidated. Exact
+unpatched GNOME0.105 source identifies a likely Cancel-response gap outside nested
+password-prompt loops during biometric wait. This is authentication-agent fallback
+UX, not a demonstrated deployment review failure. Maintained locked
+hyprpolkitagent0.1.3 is a source-backed alternative, not yet runtime-tested/replaced.
+Details and earlier controlled-policy evidence are in [security-review.md](security-review.md).
 
 ## Resume order
 
@@ -411,8 +412,8 @@ Production review remains OFF; this does not establish general command AI review
   reviewer adapter/auth/schema, root integration/checkpoints and recorder-based
   systemd lifetime trials, real guest activation/rollback and generic-authenticated
   synthetic pending trial and isolated real-peer socket composition above passed.
-  Exact critical-action cancellation/fresh authentication and a live reviewed
-  deployment remain unproved. The generic
+  A live reviewed deployment passed. Exact critical-action cancellation remains
+  unvalidated; its agent UX diagnosis is recorded above. The generic
   authorization explanation remains experimental/off; critical exact-pending
   override handling is a separate flow.
 - On 2026-10-06 at 08:32, OpenShell 0.1.2 shutdown hit the 45-second supervisor
