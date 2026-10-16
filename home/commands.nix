@@ -14,6 +14,7 @@ let
     explanationEnabled = nixosConfig.phoenix.authorization.explanation.enable or false;
     authorizationLibrary = nixosConfig.system.build.phoenixAuthorizationLibrary;
     authorizationPolicy = nixosConfig.system.build.phoenixAuthorizationPolicy;
+    commandClient = nixosConfig.system.build.phoenixCommandClient or null;
     adminClient = nixosConfig.system.build.phoenixAdminClient or null;
     deploymentCommands = pkgs.lib.optionalAttrs (deploymentHelper != null)
       (pkgs.lib.genAttrs [ "phoenix-test" "phoenix-switch" "phoenix-boot" ]

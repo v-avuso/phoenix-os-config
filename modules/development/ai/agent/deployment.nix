@@ -24,6 +24,40 @@ let
     exec ${pkgs.python3}/bin/python3 -I ${controllerScript} ${deploymentConfig} operator
   '';
   operatorCommand = [ "/run/wrappers/bin/pkexec" "--disable-internal-agent" (toString nativeDeployHelper) ];
+  commandLibrary = pkgs.writeText "phoenix-command-policy.py" (builtins.readFile ./authorization/command-policy.py);
+  commandPolicy = pkgs.writeText "phoenix-command-review-policy.md" (builtins.readFile ./authorization/command-review-policy.md);
+  commandPublication = pkgs.writeText "phoenix-command-authority.json" (builtins.toJSON {
+    registry = config.phoenix.authorization.commands;
+    executor = builtins.hashString "sha256" (builtins.readFile ./authorization/command-exec.py);
+    operatorUid = config.users.users.${user.name}.uid;
+    clientUid = if config.phoenix.agent.identity.enable then config.phoenix.agent.identity.uid else config.users.users.${user.name}.uid;
+    implementation = builtins.hashString "sha256" (builtins.readFile ./authorization/command-policy.py);
+    controller = builtins.hashString "sha256" (builtins.readFile ./deployment.py);
+    review = builtins.hashString "sha256" (builtins.readFile ./deploy-review.py);
+    prompt = builtins.hashString "sha256" (builtins.readFile ./authorization/command-review-policy.md);
+    provider = if cfg.securityReview.enable then toString reviewerCodexPackage else null;
+    inherit (cfg.securityReview) adapter model effort;
+    reviewerUser = "phoenix-deploy-review";
+    inherit (config.phoenix.agent) identity;
+  });
+  commandHelper = pkgs.writeShellScript "phoenix-command-authorize" ''
+    if [ "$#" -ne 0 ]; then exit 2; fi
+    exec ${pkgs.python3}/bin/python3 -I ${controllerScript} ${deploymentConfig} command-operator
+  '';
+  commandCriticalHelper = pkgs.writeShellScript "phoenix-command-critical-override" ''
+    if [ "$#" -ne 0 ]; then exit 2; fi
+    exec ${pkgs.python3}/bin/python3 -I ${controllerScript} ${deploymentConfig} command-critical
+  '';
+  commandClient = sandbox: let
+    clientSettings = pkgs.writeText "phoenix-command-client.json" (builtins.toJSON {
+      socket = "/run/phoenix-deploy/control.sock";
+      authority = toString commandPublication;
+      operatorCommand = lib.optionals (!sandbox) [ "/run/wrappers/bin/pkexec" "--disable-internal-agent" (toString commandHelper) ];
+      criticalCommand = lib.optionals (!sandbox) [ "/run/wrappers/bin/pkexec" "--disable-internal-agent" (toString commandCriticalHelper) ];
+    });
+  in pkgs.writeShellScriptBin "phoenix-command" ''
+    exec ${pkgs.python3}/bin/python3 -I ${./authorization/command-client.py} ${clientSettings} "$@"
+  '';
   # The caller supplies only a protected pending-record nonce. The controller
   # validates UID, policy, source/closure, target/action and current baseline;
   # no caller-provided command, store path or source is accepted here.
@@ -129,6 +163,13 @@ let
   deploymentConfig = pkgs.writeText "phoenix-deployment.json" (
     builtins.toJSON ({
       inherit authorizationPolicy;
+      commandLibrary = toString commandLibrary;
+      commandReviewPolicy = toString commandPolicy;
+      commandAuthority = toString commandPublication;
+      commandCurrentAuthority = "/etc/phoenix-authorization/command-authority.json";
+      commands = config.phoenix.authorization.commands;
+      commandState = "/var/lib/phoenix-deploy/commands";
+      commandExec = toString (pkgs.writeText "phoenix-command-exec.py" (builtins.readFile ./authorization/command-exec.py));
       authorizationLibrary = authorizationLibrary;
       deploymentTransportPolicy = toString transportPolicy;
       modelReviewEnabled = cfg.securityReview.enable;
@@ -188,6 +229,9 @@ in
   options.services.phoenixDeployment.disruptionGuard.enable =
     lib.mkEnableOption "experimental protected desktop unit deployment guard";
   config = {
+    system.build.phoenixCommandClient = commandClient false;
+    system.build.phoenixCommandSandboxClient = commandClient true;
+
     system.build.phoenixDeploymentTransportPolicy = transportPolicy;
     system.build.phoenixDeploymentClient = deployReview;
     system.build.phoenixDeploymentSandboxClient = deployClient;
@@ -214,6 +258,8 @@ in
     # Fresh authentication, never auth_admin_keep: a rejected review is critical.
     # This policy is absent while the experimental security-review switch is off.
     environment.etc = lib.mkMerge [
+      { "phoenix-authorization/command-authority.json".source = commandPublication; }
+
       {
         "phoenix-agent/activated-source".source = inputs.self.outPath;
         "phoenix-agent/active-provenance.json".text = builtins.toJSON {
@@ -248,6 +294,29 @@ in
               <annotate key="org.freedesktop.policykit.exec.path">${disruptionOverride}</annotate>
             </action>
           </policyconfig>
+        '';
+      })
+      (lib.optionalAttrs config.phoenix.authorization.commands.enable {
+        "polkit-1/actions/org.phoenix.command-critical.policy".text = ''
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN" "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+          <policyconfig><action id="org.phoenix.command.critical-override">
+            <description>CRITICAL: override registered-command security review</description>
+            <message>CRITICAL SECURITY OVERRIDE: authorize the exact installed command despite rejected or unavailable independent review. Read its command and context in the terminal.</message>
+            <icon_name>dialog-warning</icon_name>
+            <defaults><allow_any>no</allow_any><allow_inactive>no</allow_inactive><allow_active>auth_admin</allow_active></defaults>
+            <annotate key="org.freedesktop.policykit.exec.path">${commandCriticalHelper}</annotate>
+          </action></policyconfig>
+        '';
+        "polkit-1/actions/org.phoenix.command.policy".text = ''
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN" "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+          <policyconfig><action id="org.phoenix.command.authorize">
+            <description>Authenticate an exact installed Phoenix command</description>
+            <message>Authenticate the exact registered command shown in the terminal. Task and reason are context, not authority.</message>
+            <defaults><allow_any>no</allow_any><allow_inactive>no</allow_inactive><allow_active>auth_admin</allow_active></defaults>
+            <annotate key="org.freedesktop.policykit.exec.path">${commandHelper}</annotate>
+          </action></policyconfig>
         '';
       })
       (lib.optionalAttrs cfg.securityReview.enable {
@@ -299,6 +368,7 @@ in
       ++ [
         "d /var/lib/phoenix-deploy 0711 root root -"
         "d /var/lib/phoenix-deploy/activation 0700 root root -"
+        "d /var/lib/phoenix-deploy/commands 0700 root root -"
         "d /var/lib/phoenix-deploy/requests 0711 root root -"
         "d /var/lib/phoenix-deploy-review 0700 phoenix-deploy-review phoenix-deploy-review -"
         "d /run/phoenix-deploy 0755 root root -"

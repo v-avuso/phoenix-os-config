@@ -6,13 +6,13 @@ import os
 from pathlib import Path
 import sys
 
-COMMANDS = {"phoenix-test", "phoenix-switch", "phoenix-boot", "phoenix-admin"}
+COMMANDS = {"phoenix-test", "phoenix-switch", "phoenix-boot", "phoenix-admin", "phoenix-command"}
 
 def prepare(config, argv):
     spec = importlib.util.spec_from_file_location("phoenix_authorization", config["library"])
     authorization = importlib.util.module_from_spec(spec); spec.loader.exec_module(authorization)
     parser = argparse.ArgumentParser(prog="phoenix-authorize", allow_abbrev=False,
-        description="Use phoenix-authorize (alias: ai-broker) --reason PURPOSE [--task TASK] -- phoenix-test|switch|boot|admin ...; reasons are context, not authority")
+        description="Use phoenix-authorize (alias: ai-broker) --reason PURPOSE [--task TASK] -- phoenix-test|switch|boot|admin|command ...; reasons are context, not authority")
     parser.add_argument("--reason", required=True, action="append")
     parser.add_argument("--task", action="append")
     if argv == ["--help"]:
@@ -39,7 +39,13 @@ def prepare(config, argv):
     installed = authorization.policy({"authorizationPolicy":config["policy"]})
     forwarded = []
     deployment = []
-    if name == "phoenix-admin":
+    if name == "phoenix-command":
+        import re
+        identifier = args[1:] if args[:1] == ["--human-override"] else args
+        if len(identifier) != 1 or not re.fullmatch(r"[a-z][a-z0-9-]{0,63}", identifier[0]):
+            raise ValueError("select one installed operation identifier")
+        forwarded = args
+    elif name == "phoenix-admin":
         # Options belong to this adapter; the client receives canonical semantic args.
         reservation = []
         if args[:1] == ["--reservation-file"]:
@@ -67,7 +73,7 @@ def prepare(config, argv):
         request = authorization.named("deployment." + name.removeprefix("phoenix-"),
                                       {"target":installed["target"]}, task, reason)
         authorization.validate(request, installed)
-    context = ["--authorization-context"] if config.get("explanationEnabled", False) else []
+    context = ["--authorization-context"] if name != "phoenix-command" and config.get("explanationEnabled", False) else []
     return [executable, *deployment, "--task", task, "--reason", reason, *context, *forwarded]
 
 def main():

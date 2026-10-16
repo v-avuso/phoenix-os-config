@@ -165,7 +165,10 @@ containment, decision and execution responsibilities.
   see [identity usage, compatibility and acceptance](identity.md).
 - **Bounded diagnostics:** A separately authorized broker exposes named diagnostic
   operations rather than arbitrary privileged commands. `phoenix-authorize` is the
-  neutral public gate; `ai-broker` remains a compatible alias. Workspace visibility does
+  neutral public gate; `ai-broker` remains a compatible alias. The separate default-off
+  [exact command registry](authorization/README.md#exact-registered-commands-experimental-off)
+  adds fixed installed ELF operations through the capable deployment controller;
+  no live entries or general shell are installed. Workspace visibility does
   not grant broker authority. Each request requires a nonsecret bounded `--reason`.
   The [authorization module](authorization/README.md) owns installed decisions,
   native human authentication and structured root audit metadata. Its default-off

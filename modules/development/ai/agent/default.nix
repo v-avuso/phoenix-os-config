@@ -14,6 +14,7 @@ let
   packages = import ./packages.nix { inherit pkgs; };
   image = import ./image.nix {
     timeZone = config.time.timeZone;
+    phoenixCommandClient = config.system.build.phoenixCommandSandboxClient;
     explanationEnabled = config.phoenix.authorization.explanation.enable;
     authorizationLibrary = config.system.build.phoenixAuthorizationLibrary;
     authorizationPolicy = config.system.build.phoenixAuthorizationPolicy;

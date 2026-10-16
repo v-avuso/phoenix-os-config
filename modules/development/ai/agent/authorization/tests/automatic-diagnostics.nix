@@ -6,11 +6,12 @@ let
   evaluate = extra: (lib.evalModules {
     specialArgs = { inherit pkgs; user = { name = "operator"; }; };
     modules = [ ../default.nix {
-      _module.freeformType = lib.types.attrsOf lib.types.anything;
-      users.users.operator.uid = 1000;
-      phoenix.agent.identity.enable = false;
-      phoenix.agent.wakeupDevices = [ ];
-      networking.hostName = "fixture";
+      options.assertions = lib.mkOption { type = lib.types.listOf lib.types.anything; default = [ ]; };
+      config._module.freeformType = lib.types.attrsOf lib.types.anything;
+      config.users.users.operator.uid = 1000;
+      config.phoenix.agent.identity.enable = false;
+      config.phoenix.agent.wakeupDevices = [ ];
+      config.networking.hostName = "fixture";
     } extra ];
   }).config;
   normal = evaluate { };

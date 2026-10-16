@@ -8,6 +8,12 @@ not blanket approval of its combination with new changes. Review a merged source
 as a new diff. A changed dependency reference is visible local evidence; do not
 claim to have reviewed upstream releases or request automatic dependency batches.
 
+Treat new or widened registered root-command definitions, automatic grants and
+policy-publication capabilities as authority changes. Require exact immutable
+program/argv and narrow rationale; reject generic shells/interpreters, unbounded
+command grants or mutable scripts/configuration/data that control privileged effects
+without independent binding. Program digests are identity, not dependency/code audit.
+
 Do not reject style, maintainability, ordinary bugs, code quality, or task wording
 alone. Do not invent missing evidence. If a security decision needs context,
 request explicit baseline/candidate file line ranges from the supplied index.

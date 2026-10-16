@@ -26,7 +26,7 @@ let
     statusServices = [ "coolercontrold.service" "clamav-daemon.service" "clamav-clamonacc.service" "opensnitchd.service" "NetworkManager.service" ];
   });
 in {
-  imports = [ ../security-review.nix ];
+  imports = [ ../security-review.nix ./commands.nix ];
   options.phoenix.authorization.updaterUser = lib.mkOption {
     type = lib.types.str;
     default = user.name;

@@ -16,33 +16,98 @@ privileged command interface.
   authentication. Its experimental implementation stays off until isolated native
   GUI acceptance; presentation never supplies execution authority.
 
-## Intended extension (not implemented)
+## Exact registered commands (experimental, OFF)
 
-An independent AI reviewer should assess supported privileged requests outside the
-installed deterministic allowlist; rejection or unavailable review requires explicit
-native human fallback. Reuse the existing peer-checked controller with a cohesive
-typed-command module, preserving the seven diagnostics and deployment workflow.
-Bind approval to exact immutable code, typed arguments, relevant configuration/state
-and installed policy; scripts that cannot be safely reviewed and executed from the
-same frozen inputs go to the human rather than a general root shell.
+`phoenix.authorization.commands.enable` explicitly opts into an empty-by-default
+registry. Each `entries.NAME` supplies an immutable installed ELF `executable`
+(for example a Nix package interpolation plus `/bin/program`), exact `arguments`,
+nonempty bounded `rationale`, `mode = "automatic" | "review" | "human"`, and a
+1–60 second `timeout`. Disabling the feature retains definitions but rejects all
+execution and removes its Polkit actions. Enabled review entries currently require
+explicit `securityReview.enable`: this reuses the existing protected provider,
+not an enduring requirement to couple these responsibilities or auto-enable them.
 
-Persistent allowlist definitions and rationale remain Nix/version-tracked. The
-independent reviewer may maintain narrow safe entries through reviewed protected
-policy deployment, within explicit capability limits; the requesting worker cannot
-directly edit live authority. Root state stores only exact bound approval-cache
-records, not an independently expanding persistent rule registry. Proposed recurring
-budget: `gpt-6-luna`/`high`, at most two CLI invocations and one bounded context round
-per uncached decision, no automatic retries; exact valid cache reuse costs zero AI.
+```sh
+phoenix-authorize --task bounded-operation --reason 'Requested diagnostic purpose' -- phoenix-command NAME
+# Only after a rejected/unavailable review and explicit operator authorization:
+phoenix-authorize --task bounded-operation --reason 'Authorized exact override' -- phoenix-command --human-override NAME
+```
 
-No useful recurring unsupported command family is evidenced after deployment
-automation acceptance. Start the next implementation from a real unsupported
-request, not an invented demonstration executor. Existing mappings do not implement
-this command review or rule-maintenance flow; Codex “Approve for me” is not OS root
-authorization. [Sudo approval plugins](https://www.sudo.ws/docs/man/sudo_plugin.man/)
-add constraints after policy acceptance rather than granting denied commands;
-[OpenShell policies](https://docs.nvidia.com/openshell/latest/sandboxes/policies)
-provide containment, not a verified host-root approval path. Neither replaces the
-remaining project-specific typed execution and protected policy-publication boundary.
+The caller selects only an installed identifier and context, never a program,
+argv, environment, source snapshot or verdict. Existing deployment/diagnostic
+routes and human Phoenix/sudo are unchanged. The existing capable root controller
+owns the disjoint socket envelope; the diagnostic daemon retains CAP_SYSLOG.
+No new root daemon, global sudo interception or generic shell is introduced.
+
+Automatic entries use a reviewed deterministic grant. Human entries enter the
+normal fixed native Polkit helper after a matched root decision. Review entries
+use retained protected Luna/high and the existing isolated reviewer loop with a
+command-specific policy; root independently validates the complete bound verdict.
+Denial/error never automatically prompts or executes. Explicit override has a
+separate **CRITICAL SECURITY OVERRIDE** immutable helper/action, fresh `auth_admin`
+and operator UID check; the ordinary human helper cannot execute review entries.
+Contained clients give an exact native route instead of mounting authentication.
+Reviewer denial rationale is sanitized/bounded advisory client text; typed static
+errors preserve causes without raw model stderr. Command output and model-generated explanation are excluded from
+the controller authorization journal; supplied bounded nonsecret task/reason are
+recorded as request context.
+
+Root checks both declared/resolved Nix-store paths, root-owned nonwritable objects,
+ELF identity and program bytes. Immutable argv[0] is preserved for multicall tools.
+Scripts, known shell/interpreter/trampoline families and generic execution flags
+are unsupported. This is an exact program/argv binding, **not** proof that ELF code,
+all dependencies or mutable inputs are safe. Do not register operations whose
+privileged effects depend on unbound mutable scripts/configuration/data. Published
+root code remains trusted; this is not an adversarial root-code sandbox.
+
+A current `/etc/phoenix-authorization/command-authority.json` publication binds the
+registry, helper/controller/reviewer implementation, prompt, provider and configured
+identities. Old controllers/helpers and cached approvals reject a changed current
+publication, including after slow review and before execution. Root-only exact
+approvals also bind program bytes, argv, caller, task/reason; TTL is 120 seconds,
+at most 32 records. No automatic rule publication or persistent self-learning occurs.
+Execution uses a fixed sanitized environment and owned transient systemd cgroup
+with a 1–60 second runtime bound, two-second stop bound and 64 KiB combined output.
+The fixed cleanup stops/resets that unit, including setsid descendants. It cannot
+make arbitrary trusted root code incapable of delegating to other host services.
+
+Command review permits at most two CLI invocations of 120 seconds, one existing
+bounded context round (eight ranges/128 KiB), and a 300-second outer worker bound;
+no automatic retries. Native CLI internal API requests/tokens are not hard capped.
+Deployment review retains its existing 600-second per-invocation default.
+
+An agent may propose a narrow Nix definition/rationale and publish it through the
+existing independent deployment diff review. Grant broadening is an authority
+change. This reviewed maintenance workflow removes a manual editing bottleneck;
+it is not an automatic adaptive publisher. No recurring unsupported operation
+family is evidenced yet, so the repository installs no live entries. Universal
+arbitrary root requests remain outside this partial closed-registry surface.
+
+The disposable [root/socket fixture](tests/command-root.nix) passed with real root
+UID/socket admission, exact verdict/cache checks, cache expiry/revocation, old-helper
+revocation, actual multicall ELF execution, bounded output and setsid cgroup cleanup.
+Evidence: `/nix/store/3mm3dmvq9c1r3iv56pcvhh2yimgcbgg9-vm-test-run-phoenix-command-root/evidence`.
+The final trial also checks normal-helper rejection of review entries, separate
+critical-route operator checks, and structured request/decision/result audit with
+validated task/reason and cache/new/critical distinctions; output canaries are absent
+from the controller and authorization journals. Socket records use kernel peer UID/PID;
+authenticated helper records use the checked operator UID and helper process PID.
+Its reviewer and native authentication are explicit doubles. It does not prove retained
+model judgment, native Polkit dialog UX, executable dependency safety or host use.
+Keep OFF pending representative real-model/native-auth acceptance and explicit
+approval of the caller boundary. Protected identity is still OFF: shared host UID
+is a limitation, not proof that requests came from Codex or from a human.
+
+## Future protected policy maintenance
+
+Adaptive protected allowlist publication remains unimplemented. Persistent policy
+and rationale remain Nix/version-tracked; only independently reviewed protected
+publication may widen them. Root approval cache is not a growing rule registry.
+Keep future controls explicit opt-in with dependency assertions and bounded trials.
+[Sudo approval plugins](https://www.sudo.ws/docs/man/sudo_plugin.man/) run after
+policy acceptance; [agent-sudo](https://github.com/Z7Lab/agent-sudo) checks the program
+while passing arguments through. Neither supplies this exact argv/immutable
+publication/review contract. Codex auto-review is not OS root authority.
 
 ## Public gate and deterministic diagnostics
 
@@ -66,7 +131,7 @@ and assertions for their required controller/adapter capabilities. Availability 
 a dependency must never auto-enable authority. Route deployment to its existing
 diff reviewer without a second generic AI pass; unsupported command families and
 mutable inputs that cannot be frozen require native human fallback. No generic
-hook engine or command-review feature is introduced by this gate name.
+hook engine is introduced; exact registered-command review is a separate opt-in feature.
 
 Focused checks (evaluation/build only, no activation):
 

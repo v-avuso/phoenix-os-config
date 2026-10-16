@@ -863,6 +863,59 @@ def pending_metadata(binding):
                 pendingAction=binding['action'], pendingTarget=binding['target'])
 
 
+def command_module(config):
+    spec = importlib.util.spec_from_file_location('phoenix_commands', config['commandLibrary'])
+    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+    return module
+
+
+def command_process(config, request, uid, operator=False, critical=False, pid=None):
+    module = command_module(config)
+    identifier=secrets.token_hex(16); metadata=None; decision='denied'
+    pid=os.getpid() if pid is None else pid
+    def audit_command(event,value,category):
+        nonlocal metadata,decision
+        # Callback occurs only after the full exact request/entry/UID is validated.
+        metadata=dict(operation='command.'+request['operation'],arguments={},task=request['task'],reason=request['reason'])
+        decision=value
+        authorization.audit('command-'+event,identifier,uid,pid,metadata,value,category=category)
+    def review_command(entry, binding):
+        review = load_review(config)
+        with tempfile.TemporaryDirectory(prefix='command-', dir=config['work']) as directory:
+            parent = Path(directory); parent.chmod(0o711)
+            work = parent/'review'; work.mkdir(mode=0o700)
+            reviewer = pwd.getpwnam(config['reviewerUser'])
+            os.chown(work, reviewer.pw_uid, reviewer.pw_gid)
+            definition = json.dumps({'definition':entry,'binding':binding,
+                'limits':'Exact program bytes and argv; executable source/dependency closure not audited.'}, sort_keys=True)
+            payload = {'binding':binding,'files':{'definition.json':definition},
+                       'diff':'Installed exact-command definition follows: '+definition}
+            output = as_user(config, config['reviewerUser'], [config['python'],'-I',config['controller'],
+                config['configPath'],'command-worker',str(work)], review.run,
+                data=json.dumps(payload).encode(), timeout=300,
+                env={'HOME':config['reviewHome'],'PATH':'/nonexistent'})
+            result = json.loads(output)
+            if isinstance(result,dict) and set(result) == {'status','code'} and result['status']=='error':
+                allowed = {'review-timeout','review-authentication-missing','review-authentication-failed',
+                    'review-rate-limit-suspected','review-model-unavailable-suspected','review-transport-failed-suspected',
+                    'review-cli-incompatible-suspected','review-output-limit','schema-invalid','binding-mismatch',
+                    'context-compacted','review-context-oversized','context-request-invalid','context-request-oversized'}
+                code = result['code']
+                raise module.Rejected('command-'+code if code in allowed else 'command-review-error')
+            if not isinstance(result,dict) or set(result) != {'status','verdict'} or result['status'] != 'verdict':
+                raise module.Rejected('command-review-error')
+            # Independent root validation; routing or worker status is not approval.
+            module.validate_verdict(result['verdict'],binding)
+            return result['verdict']
+    try:
+        result = module.process(config,request,uid,operator=operator,critical=critical,reviewer=review_command,audit=audit_command)
+    except (module.Rejected,ValueError,OSError) as error:
+        result = dict(ok=False,stage='command',code=error.code if isinstance(error,module.Rejected) else 'command-invalid-or-denied')
+        if getattr(error,'summary',None): result['summary']=error.summary
+    authorization.audit('command-result',identifier,uid,pid,metadata,decision,category=result['code'])
+    return result
+
+
 def serve(config):
     if os.getuid() != 0:
         raise ValueError('controller requires installed root service')
@@ -895,14 +948,21 @@ def serve(config):
                 if len(data) > LIMIT:
                     raise DeploymentFailure('source-transport', 'wire-capacity-exceeded')
             request = json.loads(data)
-            if isinstance(request, dict) and set(request) == {'authorization'}:
+            command_request = isinstance(request,dict) and set(request) == {'command'}
+            if command_request:
+                if len(data)>4096: raise ValueError("command transport bound")
+                result = command_process(config,request['command'],uid,pid=pid)
+            elif isinstance(request, dict) and set(request) == {'authorization'}:
                 result = authorization.preflight(request['authorization'], authorization.policy(config), uid, pid)
             else:
                 operation = 'deployment.' + request.get('action', '') if isinstance(request, dict) and isinstance(request.get('action'), str) else None
                 if not authorization.execution_caller(operation, authorization.policy(config), uid):
                     raise ValueError('caller may not execute this socket operation')
                 result = process(config, request, uid, pid)
-            print(json.dumps(dict(event='activated', uid=uid, pid=pid, **result)), flush=True)
+            if command_request:
+                print(json.dumps(dict(event='registered-command',uid=uid,pid=pid,ok=result.get('ok',False),code=result.get('code','command-error'))),flush=True)
+            else:
+                print(json.dumps(dict(event='activated', uid=uid, pid=pid, **result)), flush=True)
         except Exception as error:
             # Avoid attacker strings, model output, task contents or credentials in journal.
             stage = error.stage if isinstance(error, DeploymentFailure) else 'protocol'
@@ -999,7 +1059,7 @@ def bootstrap_transfer(config, home_fd):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('config')
-    parser.add_argument('mode', choices=['serve', 'worker', 'bootstrap', 'activate', 'activate-reserved', 'operator', 'override', 'disruption-override', 'trust-active'])
+    parser.add_argument('mode', choices=['serve', 'worker', 'bootstrap', 'activate', 'activate-reserved', 'operator', 'override', 'disruption-override', 'trust-active', 'command-operator', 'command-critical', 'command-worker'])
     parser.add_argument('directory', nargs='?')
     parser.add_argument('action', nargs='?', choices=['test', 'switch', 'boot', 'update'])
     parser.add_argument('--expected-base')
@@ -1008,7 +1068,22 @@ def main():
     args = parser.parse_args()
     config = json.loads(Path(args.config).read_text())
     config['configPath'] = args.config
-    if args.mode == 'trust-active':
+    if args.mode in {'command-operator','command-critical'}:
+        # Only the immutable Polkit helper reaches this explicit fresh-auth path.
+        try:
+            if os.geteuid() != 0 or args.directory is not None or args.action is not None:
+                raise ValueError('operator route')
+            data = command_module(config).read_request(sys.stdin.fileno())
+            envelope = json.loads(data)
+            if not isinstance(envelope,dict) or set(envelope) != {'command'}: raise ValueError('envelope')
+            result = command_process(config,envelope['command'],int(os.environ.get('PKEXEC_UID','-1')),operator=True,critical=args.mode=='command-critical')
+        except Exception:
+            result = dict(ok=False,stage='command',code='command-invalid-or-denied')
+        print(json.dumps(result))
+    elif args.mode == 'command-worker':
+        config = dict(config,policy=config['commandReviewPolicy'],reviewTimeout=120)
+        worker(config,args.directory)
+    elif args.mode == 'trust-active':
         try:
             if args.directory is not None or args.action is not None or args.expected_base or args.expected_source or args.expected_profile:
                 raise DeploymentFailure('baseline', 'baseline-arguments-denied')

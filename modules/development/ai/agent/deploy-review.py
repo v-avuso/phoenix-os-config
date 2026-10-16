@@ -347,7 +347,7 @@ def review(config, binding, files, diff, temporary, baseline=None):
     # Native CLI may make internal requests; this does not cap those requests.
     for round_number in range(2):
         try:
-            run(command, data=instruction_bytes, timeout=600, fail_on_compaction=True)
+            run(command, data=instruction_bytes, timeout=config.get("reviewTimeout", 600), fail_on_compaction=True)
         except OSError:
             raise ReviewVerdictError("review-startup-failed") from None
         verdict_path = work / "verdict.json"

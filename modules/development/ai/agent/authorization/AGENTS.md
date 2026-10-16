@@ -27,3 +27,13 @@
   UI/model stderr. Distinguish untrusted context events from root authorization.
   Source-build/stub tests do not establish live readability/focus/Polkit acceptance;
   keep exact pending review overrides independent of this generic presentation.
+
+- Registered execution stays default OFF with no live entries until representative
+  model/native-auth acceptance and explicit caller-boundary approval. Preserve exact
+  immutable program/argv and current-authority rechecks before/after review; old
+  helpers/cache must not revive revoked grants. Keep normal authentication and the
+  explicit critical review override in distinct immutable helpers/actions.
+- Test actual Nix-store objects (including sticky group-writable store boundary and
+  multicall argv[0]) plus real transient cgroup cleanup; program-byte hashes do not
+  establish dependency or mutable-input safety. Never broaden diagnostic capabilities
+  to run the reviewer. Output/advisory rationale belong only in client responses.

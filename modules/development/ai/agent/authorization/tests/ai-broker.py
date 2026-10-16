@@ -21,10 +21,19 @@ class Broker(unittest.TestCase):
               updaterUid=os.getuid(),target="metal",diagnostics={"admin."+n:"automatic" for n in
               ("kernel-journal","dmesg","trace-summary","trace-format","service-status","wakeup-get","wakeup-set")},
               wakeupDevices=["0000:00:14.0"],statusServices=["NetworkManager.service"]),
-            commands={name:str(client) for name in ("phoenix-test","phoenix-switch","phoenix-boot","phoenix-admin")})))
+            commands={name:str(client) for name in ("phoenix-test","phoenix-switch","phoenix-boot","phoenix-admin","phoenix-command")})))
     def run_adapter(self, *args):
         return subprocess.run([sys.executable,"-I",str(ROOT / "ai-broker.py"),str(self.config),*args],
             env=dict(os.environ,RECORD=str(self.record)),capture_output=True,text=True)
+    def test_registered_command_identifier_and_explicit_override_only(self):
+        result=self.run_adapter("--reason","Inspect fixed operation","--","phoenix-command","identity")
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertEqual(json.loads(self.record.read_text()),["--task","ai-broker","--reason","Inspect fixed operation","identity"])
+        result=self.run_adapter("--reason","Explicit operator request","--","phoenix-command","--human-override","identity")
+        self.assertEqual(result.returncode,0,result.stderr)
+        for extra in (("identity","extra"),("identity | sh",),("--human-override","identity","extra")):
+            self.assertNotEqual(self.run_adapter("--reason","bounded","--","phoenix-command",*extra).returncode,0)
+
     def test_required_reason_and_closed_command_options(self):
         for args in (("--","phoenix-test"), ("--reason"," ","--","phoenix-test"),
           ("--reason","x","--","sh","-c","phoenix-test"),
