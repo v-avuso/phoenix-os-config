@@ -111,7 +111,8 @@ let
         ;;
     esac
   '';
-  # NixOS owns the GeoClue user agent; retain only upstream's polkit path fix.
+  # NixOS owns GeoClue. Use the maintained KDE Polkit agent in Caelestia too:
+  # its Cancel path remains connected while PAM emits biometric/PIN messages.
   caelestiaDots = pkgs.stdenvNoCC.mkDerivation {
     pname = "caelestia-dots-phoenix";
     version = inputs.caelestia-dots.lastModifiedDate or "locked";
@@ -120,7 +121,7 @@ let
 
     postPatch = ''
       substituteInPlace hypr/hyprland/execs.lua \
-        --replace-fail '"/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1"' '"${pkgs.polkit_gnome}/libexec/polkit-gnome-authentication-agent-1"' \
+        --replace-fail '"/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1"' '"${pkgs.kdePackages.polkit-kde-agent-1}/libexec/polkit-kde-authentication-agent-1"' \
         --replace-fail 'hl.exec_cmd("/usr/lib/geoclue-2.0/demos/agent")' '-- GeoClue agent is managed by NixOS.' \
         --replace-fail 'hl.exec_cmd("caelestia shell -d")' 'hl.exec_cmd("${pkgs.dbus}/bin/dbus-update-activation-environment --systemd DISPLAY HYPRLAND_INSTANCE_SIGNATURE WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE && ${pkgs.systemd}/bin/systemctl --user stop hyprland-session.target && ${pkgs.systemd}/bin/systemctl --user start hyprland-session.target")'
     '';

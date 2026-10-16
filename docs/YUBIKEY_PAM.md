@@ -49,7 +49,14 @@ home access for the mapping and HID access for the key.
 | Terminal `sudo` | `sudo` | Visible in the terminal's PAM conversation. |
 | SDDM | `sddm` → `login` | SDDM forwards PAM informational messages to the greeter; whether the active theme renders them is theme-dependent, so the cue is not guaranteed. |
 | KDE lock screen | `kde-fingerprint` | The non-interactive authenticator starts automatically. The user verified that a Bio touch immediately unlocks the screen. |
-| Polkit | `polkit-1` | Plasma's Polkit dialog displays PAM informational messages. |
+| Polkit | `polkit-1` | The selected KDE agent displays PAM informational messages under Hyprland and Plasma. |
+
+Caelestia starts the maintained KDE Polkit agent through its existing single
+startup command; no second autostart/service is added. Its direct cancellation
+path and visible PAM informational messages replace the legacy GNOME agent's
+Cancel-response gap during biometric waiting. PAM/U2F rules, Bio→PIN→password
+fallback and recovery remain unchanged. The source change is prepared; actual
+Hyprland cutover, cue visibility and Cancel behavior still need operator acceptance.
 
 No graphical cue shim is installed. A PAM frontend that does not render
 `PAM_TEXT_INFO` can still authenticate with the key; it simply will not show
