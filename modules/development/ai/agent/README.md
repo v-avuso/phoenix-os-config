@@ -2,6 +2,7 @@
 
 For operator setup and testing, see the short [shared chats trial guide](USER_GUIDE.md).
 For technical continuation and evidence limits, see [HANDOFF.md](HANDOFF.md).
+For remaining epic scope, rough completion/complexity estimates and switch gaps, see [BACKLOG.md](BACKLOG.md).
 
 ## Intentions
 
