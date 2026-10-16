@@ -1,7 +1,10 @@
 # Optional deployment security review
 
-`services.phoenixDeployment.securityReview.enable` remains off by default. Its
-legacy `modelReview.enable` option is an alias. Authentication, dirty-source
+`services.phoenixDeployment.securityReview.enable` defaults OFF in the reusable
+module. The repository now explicitly selects ON in `modules/development/ai/default.nix`
+following the controlled real reviewed deployment/recovery acceptance. Persistent
+installation/verification is pending; the accepted running/boot closure remains
+OFF until the coordinator deploys it. Its legacy `modelReview.enable` option is an alias. Authentication, dirty-source
 freezing, exact closure binding, disruption checks, reservations and rollback
 apply independently of AI. Routine updates use the deterministic validator with
 zero AI and Polkit calls.
@@ -64,8 +67,12 @@ exit. Check both owned units are gone/inactive and runtime/profile OFF afterward
 On validation/lock/command failure, stop and inspect static stage/code journals;
 no model retry, operator override or force-kill of an in-flight deployment occurs.
 
-Prepare the canonical OFF request from a clean main checkout, never this dirty
-feature checkout. Freeze its Git-visible files/modes with the existing production
+The recorded canonical OFF candidate was frozen from clean main `baac836` while
+repository review was still OFF. Current main may select ON; never assume it is
+an OFF candidate. This one-off helper requires the exact accepted OFF runtime/boot
+and is not the normal ongoing deployment interface. To repeat that historical
+trial, use its recorded immutable candidate or a separately reviewed explicit OFF
+source, never a dirty feature checkout. Freeze its Git-visible files/modes with the existing production
 source-freezing code and prebuild the resulting exact `path:/nix/store/...-source`
 metal target offline/no builders; stop on downloads or unexpected rebuilds. Bind
 and record this candidate closure/source before setup. The candidate may differ
@@ -126,6 +133,13 @@ loops. Real biometric/PIN/password cancellation and completion ordering still ne
 one representative test before replacement. Locked0.1.3 only logs PAM show-info
 messages rather than displaying them, so biometric/PIN cue readability is also
 unverified. No agent/PAM change or restart occurred.
+The controlled user-level KDE6.6.6 cutover subsequently passed: old GNOME PID2911
+exited and sole KDE agent PID1055506 used the expected package; a generic harmless
+Polkit request returned127 promptly and the operator confirmed Cancel worked.
+Cue readability was unobserved, not failed. Persistent startup and successful
+authentication await the normal installation approval; no extra approval probe is
+needed. This generic request is not a repeat of the exact critical policy dialog.
+
 No verified GNOME upstream fix was found in the bounded search. Official sources:
 [GNOME0.105 archive](https://download.gnome.org/sources/polkit-gnome/0.105/polkit-gnome-0.105.tar.xz),
 [Polkit127 session cancellation](https://github.com/polkit-org/polkit/blob/127/src/polkitagent/polkitagentsession.c#L655-L668).
@@ -134,7 +148,7 @@ No verified GNOME upstream fix was found in the bounded search. Official sources
 
 ```nix
 services.phoenixDeployment.securityReview = {
-  enable = true; # isolated trial only until live acceptance
+  enable = true; # repository selection; reusable default remains false
   adapter = "codex";
   model = "gpt-6-luna";
   effort = "high";

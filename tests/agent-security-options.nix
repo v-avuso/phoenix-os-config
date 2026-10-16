@@ -1,8 +1,11 @@
 # Pure declaration checks; never starts a service or enables live review.
+{ flake ? builtins.getFlake ("git+file://" + toString ../.) }:
 let
-  flake = builtins.getFlake ("git+file://" + toString ../.);
   lib = flake.inputs.nixpkgs.lib;
-  off = flake.nixosConfigurations.metal.config;
+  repository = flake.nixosConfigurations.metal.config;
+  off = (flake.nixosConfigurations.metal.extendModules {
+    modules = [ { services.phoenixDeployment.securityReview.enable = lib.mkForce false; } ];
+  }).config;
   on =
     (flake.nixosConfigurations.metal.extendModules {
       modules = [ { services.phoenixDeployment.securityReview.enable = true; } ];
@@ -25,7 +28,14 @@ in
 assert lib.hasInfix ''host_gateway_ip = "127.0.0.1"'' (
   builtins.readFile off.environment.etc."phoenix-openshell/gateway.toml".source
 );
+assert repository.services.phoenixDeployment.securityReview.enable;
 assert !off.services.phoenixDeployment.securityReview.enable;
+assert repository.phoenix.agent.gui.sharedState.enable;
+assert !repository.phoenix.agent.identity.enable;
+assert !repository.phoenix.agent.reservations.enable;
+assert !repository.phoenix.agent.shutdownOrdering.enable;
+assert !repository.services.phoenixDeployment.disruptionGuard.enable;
+assert !repository.phoenix.authorization.explanation.enable;
 assert !off.phoenix.agent.shutdownOrdering.enable;
 assert !(off.environment.etc ? ${policy});
 assert on.services.phoenixDeployment.securityReview.enable;

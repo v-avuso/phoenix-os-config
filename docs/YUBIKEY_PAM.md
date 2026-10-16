@@ -55,8 +55,12 @@ Caelestia starts the maintained KDE Polkit agent through its existing single
 startup command; no second autostart/service is added. Its direct cancellation
 path and visible PAM informational messages replace the legacy GNOME agent's
 Cancel-response gap during biometric waiting. PAM/U2F rules, Bio→PIN→password
-fallback and recovery remain unchanged. The source change is prepared; actual
-Hyprland cutover, cue visibility and Cancel behavior still need operator acceptance.
+fallback and recovery remain unchanged. The focused exact-source dotfile build passed. A controlled user-level Hyprland
+cutover to KDE6.6.6 passed a generic harmless Polkit Cancel request (exit127,
+operator-confirmed cancellation); no desktop/PAM/Polkit restart occurred. Cue
+readability was not observed, not reported broken. Persistent startup installation
+and successful authentication remain pending; use the normal installation approval
+for that check rather than another artificial approval dialog.
 
 No graphical cue shim is installed. A PAM frontend that does not render
 `PAM_TEXT_INFO` can still authenticate with the key; it simply will not show

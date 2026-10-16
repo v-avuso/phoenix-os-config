@@ -14,7 +14,7 @@ python3 -B modules/development/ai/agent/tests/agent-admin.py
 python3 -B modules/development/ai/agent/tests/agent-launch.py
 python3 -B modules/development/ai/agent/tests/agent-history.py
 python3 -B modules/development/ai/agent/tests/agent-review.py
-nix eval --impure --file modules/development/ai/agent/tests/security-review.nix
+nix eval --impure --file modules/development/ai/agent/tests/security-review.nix --apply 'f: f {}'
 python3 -B modules/development/ai/agent/tests/agent-gui.py
 python3 -B modules/development/ai/agent/tests/agent-gui-profile.py
 python3 -B modules/development/ai/agent/tests/agent-gui-lifecycle.py
