@@ -24,9 +24,111 @@ are explicit doubles; no model or host deployment occurs. This establishes socke
 composition in isolation, not installed review-enabled operation, executable-specific
 identity, critical-action authentication or general privileged-command AI review.
 The installed shared client/operator UID remains the authority boundary while
-protected identity is OFF. A controlled real reviewed deployment and clearly
-identified critical-dialog cancellation/fresh-auth observation remain live gates;
+protected identity is OFF. A controlled real reviewed deployment passed below; critical-dialog
+cancellation remains unresolved;
 optional identity/reservations/disruption/explanation are separate milestones.
+
+## Controlled review-window helper
+
+`tests/review-window.nix { flake; offClosure; onClosure; }` packages fixed,
+argument-free setup/recovery/dry-run commands. Explicit closure inputs must be
+canonical immutable store paths. For the already accepted pair, OFF is `nhqm...`
+and temporary ON is `3ys5...` (full paths in HANDOFF); packaging does not activate
+either. Build from an exact committed Git-flake source, excluding the root draft:
+
+```nix
+let f = builtins.getFlake "git+file:///PATH?rev=COMMIT";
+in import (f.outPath + "/modules/development/ai/agent/tests/review-window.nix") {
+  flake = f; offClosure = "/nix/store/FULL-OFF"; onClosure = "/nix/store/FULL-ON";
+}
+```
+
+Exact helper source `e72a49796bc15b1f921c6d72f3b8e391c7a07d94` built successfully
+as `/nix/store/mv6m57y7pgisflg7v0jxpa8cqssxhy9c-phoenix-controlled-review-window`
+(five small derivations, no downloads). Its host-namespaced unprivileged dry-run
+passed with `package-valid-no-state-change`. Live setup, reviewed deployment and final recovery passed below.
+Run the packaged `phoenix-review-window-dry-run` unprivileged first (host tool
+namespace, so immutable ownership is visible). Only the coordinator invokes the
+setup through native graphical authentication. Setup requires actual OFF runtime
+and boot profile, shared UID1000, absent owned units and idle existing production
+locks. It arms `phoenix-controlled-review-off.timer` before ON `test`; ON is ready
+only while its non-waking monotonic timer has at least150 seconds left. A queued
+or too-short timer causes OFF recovery after releasing setup locks, never a reset.
+Recovery signals only the exact ON controller, queues at five minutes, waits up
+to8100 seconds across deployment then activation locks, and restores exact OFF
+with `test`. This queues behind the bounded build/review/activation request; it
+does **not** promise OFF at five minutes. Guard FDs survive into the foreground
+activation child. It never changes the boot profile or existing lock permissions.
+After verified OFF it stops its owned timer; transient service collection follows
+exit. Check both owned units are gone/inactive and runtime/profile OFF afterward.
+On validation/lock/command failure, stop and inspect static stage/code journals;
+no model retry, operator override or force-kill of an in-flight deployment occurs.
+
+Prepare the canonical OFF request from a clean main checkout, never this dirty
+feature checkout. Freeze its Git-visible files/modes with the existing production
+source-freezing code and prebuild the resulting exact `path:/nix/store/...-source`
+metal target offline/no builders; stop on downloads or unexpected rebuilds. Bind
+and record this candidate closure/source before setup. The candidate may differ
+from the older accepted recovery OFF closure: a successful reviewed candidate is
+then temporary; fixed recovery deliberately returns to accepted OFF afterward.
+Do not cancel recovery merely because the reviewed candidate has review disabled.
+After explicit readiness for the single identifiable Cancel dialog, use the newly
+installed ON-policy native `ai-broker` (resolve `/etc/profiles/per-user/v/bin/ai-broker`
+after activation), `--task ... --reason ... -- phoenix-test --worktree /CLEAN/MAIN`.
+An old immutable OFF client fails policy preflight; do not bypass it. Verify real
+review/checkpoint/audit and candidate runtime, then final fixed OFF recovery.
+No concurrent deployment/update/human rebuild belongs in this coordinated window.
+
+The offline test checks ordering, real disposable flock contention/modes, failure
+recovery and timer readiness. Packaging/dry-run/live acceptance remain separate;
+this fixture introduces no production service, default enablement or general
+privileged-command reviewer.
+
+## Controlled real reviewed deployment (passed; cancellation unresolved)
+
+The fixed helper `/nix/store/mv6m57y7pgisflg7v0jxpa8cqssxhy9c-phoenix-controlled-review-window`
+completed authenticated setup (`on-ready`, exit0). The exact native ON-policy
+`ai-broker` then completed `controlled-reviewed-deployment`, action `test`, exit0:
+source `/nix/store/h3n90h28yzv85rwd0q3rb8p5s7f8gyby-source` (clean main `baac836`)
+and closure `/nix/store/ngdi4win5kwsqknnn2bs009mdsvyg58m-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
+Root journal recorded real review (`diffBytes=20473`, controller invocation limit2,
+context byte limit131072) and actual activation. Runtime matched the candidate;
+boot profile stayed accepted `nhqm...`. The OFF controller became active with
+`/nix/store/400iw2wnq636v76dppri0v6lr1f60inr-phoenix-deployment.json`.
+No per-request human approval was needed. Actual model internal API calls/token
+cost were not measured. Root checkpoint publication follows this production success
+path; its0700 state directory was not directly inspected using another authorization.
+Final recovery passed: journal stages were `recovery-queued` → `off-restored` →
+`owned-timer-stopped-service-exits`. Independent checks found timer/service
+not-found/inactive/dead, Result=success; runtime and boot profile both returned
+to exact accepted `nhqm...` OFF. No trial or authentication request remains running.
+
+The separately coordinated critical absent-nonce probe produced no root-helper
+output and expired after60 seconds (124). The operator reports clicking Cancel
+twice without effect. This does not prove cancellation, authorization or a policy
+bypass; the behavior is consistent with the source-backed authentication-agent
+UX gap below, not a demonstrated review engine failure. Installed agent is unpatched `polkit-gnome0.105`, Polkit127, with
+biometric→PIN→password PAM fallback. The official0.105 source hash matches locked
+nixpkgs. `polkitgnomeauthenticator.c:261–268` connects delete-event/user selection
+but no dialog response handler; `authenticationdialog.c:533–535` emits a Cancel
+response. That response is consumed by nested `gtk_dialog_run` during selection/
+password prompts (`:953`,`:1005`), while biometric show-info displays the dialog
+and outer authentication waits (`authenticator.c:346–361`,`:432`). Thus an ignored
+Cancel during biometric waiting has a concrete source-backed explanation; runtime
+click/handler delivery was not instrumented. Window-delete uses the explicit cancel
+path; it was not tested as an alternative in this trial.
+
+Prefer a maintained agent trial over a custom C patch: locked nixpkgs already has
+[hyprpolkitagent0.1.3](https://github.com/hyprwm/hyprpolkitagent/tree/v0.1.3).
+Its QML Cancel always calls `setResult("fail")`, routed through Agent to
+`cancelPending()`/Polkit Session cancellation independently of password-prompt
+loops. Real biometric/PIN/password cancellation and completion ordering still need
+one representative test before replacement. Locked0.1.3 only logs PAM show-info
+messages rather than displaying them, so biometric/PIN cue readability is also
+unverified. No agent/PAM change or restart occurred.
+No verified GNOME upstream fix was found in the bounded search. Official sources:
+[GNOME0.105 archive](https://download.gnome.org/sources/polkit-gnome/0.105/polkit-gnome-0.105.tar.xz),
+[Polkit127 session cancellation](https://github.com/polkit-org/polkit/blob/127/src/polkitagent/polkitagentsession.c#L655-L668).
 
 ## Adapter and bounds
 
@@ -381,8 +483,8 @@ This proves actual root process → frozen source/cached Nix realization as buil
 cross-branch reuse. The one CLI invocation used pinned Codex 0.159.0 with requested
 `gpt-6-luna`/`high`; internal API calls/tokens/billing were not measured. Protected
 retained authentication worked without sign-in/copy. Only activation was a guarded
-recording callback; production review remains OFF. Actual activation, rollback,
-critical fallback authentication and socket peer admission remain unproved.
+recording callback. Separate guest activation/rollback, socket-peer and controlled
+real reviewed deployment trials passed; precise critical cancellation remains unresolved.
 The fixture cleaned its private state/GC roots; separately retained prebuild roots
 above require their own cleanup. Earlier authentication-only expiries made no
 model calls, and the superseded caller-role failure is covered by the regression.
