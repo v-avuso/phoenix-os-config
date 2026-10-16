@@ -67,12 +67,19 @@
   the task explicitly requests a pause, without reminders to save mutable
   desktop settings. This does not authorize unrelated privileged actions.
   Never activate merely to validate an edit.
-- Use the available graphical Polkit flow for privileged OS actions:
-  `pkexec` with a concrete absolute executable and reviewed arguments,
-  or a helper's supported graphical flow.
-- The project's pinned nixos-rebuild-ng hardcodes sudo;
-  `NIX_SUDO=pkexec` is unsupported. Build as the user, then use
-  `pkexec /nix/store/<built-system>/bin/switch-to-configuration test`
-  for authorized temporary activation.
-- Persistent switch additionally requires a deliberate system-profile
-  update; temporary activation does not perform that update.
+- Before privileged broker operations, explicitly read
+  `modules/development/ai/agent/AGENTS.md` and the
+  [authorization usage](modules/development/ai/agent/authorization/README.md);
+  root-started chats do not automatically load subtree guidance.
+- Agents deploy through `ai-broker --task TASK --reason PURPOSE -- phoenix-test
+  --worktree /absolute/selected-worktree`; use `phoenix-switch` in that mapping
+  for authorized persistent deployment. Build/evaluate as the user first. The
+  installed controller freezes source, reviews and binds activation; switch owns
+  the system-profile update, while test leaves the boot profile unchanged.
+- Human `phoenix-test`/`phoenix-switch`/`phoenix-boot` retain terminal
+  `nixos-rebuild --sudo` authentication and progress. The pinned rebuild hardcodes
+  sudo; `NIX_SUDO=pkexec` is unsupported, not an agent deployment workaround.
+- For authorized operations not yet broker-mapped, use a supported native human
+  Polkit flow with a concrete immutable helper and reviewed arguments. A rejected
+  or unavailable review requires its explicit human fallback; never bypass that
+  boundary with direct `pkexec`, sudo or a manual profile update.
