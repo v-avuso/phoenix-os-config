@@ -6,6 +6,10 @@
 - Agents use `ai-broker --task TASK --reason PURPOSE -- phoenix-test ...` or the
   closed diagnostic mapping. Reasons/task labels are bounded nonsecret context;
   installed root policy, peer checks and authentication remain authoritative.
+- `security-review` is routing admission, not a successful verdict: require a
+  separately validated exact-bound review before execution. Preserve the diagnostic
+  daemon's CAP_SYSLOG boundary; delegate protected reviewer UID/GID work to the
+  existing capable controller rather than broadening diagnostic capabilities.
 - Keep this adapter a thin immutable-path argv mapping into existing clients;
   reject arbitrary commands, shells, inner reason overrides and option tails.
   Do not add a daemon, PATH lookup, caller-selected policy or legacy activation fallback.
