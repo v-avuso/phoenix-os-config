@@ -340,6 +340,27 @@ This supersedes the expired attempt. Supplied UID checks are not socket admissio
 synthetic pending is not AI rejection, and recorded activation is not execution.
 Production critical-action fresh authentication remains unproved; controls stay OFF.
 
+## Latest controlled critical-policy window
+
+The explicitly authorized five-minute trial used clean-main `af696bf` review-ON
+overlay closure `3ys5za7ivy19kzdxpr9vyh9n7lfkzdnf`; main/default/boot stayed OFF.
+Native rollback timer `phoenix-review-off-rollback-trial` was armed for exact OFF,
+with bounded retries. A guard first refused safely because /proc/uptime includes
+suspend; corrected CLOCK_MONOTONIC comparison and a fresh timer preceded ON.
+ON activation succeeded (DBus/deployment reload, Polkit/HM restart; no reported
+GUI/OpenShell restart). Exact critical action/helper registered as AUTH_ADMIN/no-keep.
+The intended CANCEL probe was approved: the operator explicitly reports approving
+all requests because the chat label did not clearly identify the cancel-target
+dialog. Missing-pending rejection was expected after approval; no approval record,
+reviewed deployment or model call occurred. Cancellation was not exercised;
+precise critical-warning recognition/fresh-auth isolation remain unproved. No
+PAM/cache bypass is established; the coordinator acknowledged sequencing ambiguity.
+Immediate OFF restoration succeeded; runtime/profile both match accepted `nhqm...`
+and critical action is absent. The initial timer-stop request expired (124); the explicit operator-authorized
+retry succeeded. Independent checks found timer/service not-found, inactive/dead
+and service Result=success. Cleanup is complete; runtime/profile remain accepted
+OFF and critical action absent. No further authentication dialogs are requested. See security-review.md.
+
 ## Resume order
 
 1. Cold handoff and primary GUI acceptance are complete. Preserve readiness and
