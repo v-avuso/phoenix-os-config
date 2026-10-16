@@ -329,18 +329,16 @@ NixOS activation, with synthetic guest provenance and no model/auth. Critical
 pending override, peer admission, boot/switch staging and host compatibility remain
 separate; optional controls remain OFF. See security-review.md for exact bindings.
 
-The synthetic pending/override fixture is built from source
-`7a5a85519e70013731277b0ee73f42a3398af3bc` as
+The synthetic pending/override trial passed through native authentication from
+source `7a5a85519e70013731277b0ee73f42a3398af3bc`, package
 `/nix/store/xl1z4sf500ik35sp51qxlaqdwmiwzk0h-phoenix-review-checkpoint-trial`.
-Host dry-run passed; native invocation expired at 120 seconds/exit 124 with no
-receipt, so runtime acceptance remains pending. Do not retry automatically.
-Security-review.md records the exact graphical-only pkexec resume command with
-a bounded kill grace and binding recheck. Locked upstream GUI auth fixtures were
-inspected; no small headless pattern was verified. Any live critical-policy trial
-needs an operator window and retained review-OFF rollback plan.
-The fixture creates no model call or real activation; generic pkexec authentication
-would not prove the production critical override action, which remains absent
-while review is OFF.
+Receipt: zero model invocations, activation=false, syntheticPending=true,
+wrongOperatorRejected=true, pendingConsumed=true, replayRejected=true,
+rootCheckpoint=true, controllerUid=0, ownedRootsCleaned=true; authentication was
+`generic-pkexec-not-critical-action`. Host runtime/boot remained unchanged.
+This supersedes the expired attempt. Supplied UID checks are not socket admission,
+synthetic pending is not AI rejection, and recorded activation is not execution.
+Production critical-action fresh authentication remains unproved; controls stay OFF.
 
 ## Resume order
 

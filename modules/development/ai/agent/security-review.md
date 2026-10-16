@@ -409,7 +409,7 @@ controls remain OFF; this guest result does not authorize host activation or
 critical security override.
 
 
-## Synthetic pending/override composition (prepared)
+## Synthetic pending/override composition (bounded acceptance passed)
 
 The existing on-demand checkpoint package also supplies argument-free
 `phoenix-review-pending-trial-dry-run` and `phoenix-review-pending-trial`.
@@ -433,24 +433,20 @@ guard/recheck and verifies runtime/profile unchanged. The outer entry authentica
 the native operator; wrong-UID probing is synthetic, not socket/peer admission.
 Owned temporary roots/state are cleaned, without touching production cache/auth.
 
-Ten offline checkpoint tests now include real pending/approve/consume and guard
-composition with explicit store/owner/global-path stubs. Actual root execution of
-this new entry remains pending. Exact source
-`7a5a85519e70013731277b0ee73f42a3398af3bc` built package
-`/nix/store/xl1z4sf500ik35sp51qxlaqdwmiwzk0h-phoenix-review-checkpoint-trial`;
-the host dry-run passed. The supported native invocation expired at 120 seconds
-(exit 124) without a receipt, so it establishes no runtime pass. Do not retry
-automatically. A separately authorized resume uses the same immutable entry after
-rechecking actual runtime/profile:
+Ten offline checkpoint tests include real pending/approve/consume and guard
+composition with explicit store/owner/global-path stubs. Actual native-authenticated
+execution passed from source `7a5a85519e70013731277b0ee73f42a3398af3bc`, package
+`/nix/store/xl1z4sf500ik35sp51qxlaqdwmiwzk0h-phoenix-review-checkpoint-trial`:
 
-```sh
-timeout --kill-after=10 120 /run/wrappers/bin/pkexec --disable-internal-agent /nix/store/xl1z4sf500ik35sp51qxlaqdwmiwzk0h-phoenix-review-checkpoint-trial/bin/phoenix-review-pending-trial
+```json
+{"status":"passed","modelInvocations":0,"activation":false,"syntheticPending":true,"wrongOperatorRejected":true,"pendingConsumed":true,"replayRejected":true,"rootCheckpoint":true,"controllerUid":0,"ownedRootsCleaned":true,"authentication":"generic-pkexec-not-critical-action"}
 ```
 
-The fixture has no model or actual activation path by design. Its expected receipt
-reports zero model calls, synthetic
-pending status, wrong-operator/replay rejection, consumption, root checkpoint and
-activation=false. Production critical-action policy is absent while review is OFF;
+Host runtime/boot remained unchanged. Pending creation was synthetic, wrong UID
+was supplied by the fixture rather than SO_PEERCRED, and activation was recorded
+rather than executed. Authentication was generic native pkexec, not the production
+critical action. Earlier expiry is superseded by this pass; no retry remains pending.
+Production critical-action policy is absent while review is OFF;
 its exact fresh-authentication/UX authority needs a separate isolated policy/helper
 trial. A generic pkexec pass must never be described as proving that action.
 
