@@ -381,6 +381,18 @@ of shared-history setup. On failure, stop and report the terminal error; do not 
 migration automatically. Damaged published history may block both reviewed Native
 GUI and CLI; retain the operator terminal and authenticated controller route.
 
+## Isolated deployment socket composition
+
+Exact source `d13dd5eca051b75d51d5f2843702a0545abab655` passed the real socket/
+SO_PEERCRED VM fixture. Evidence:
+`/nix/store/q7radgkhbndj4sa5c2jjbyc8p3gicp17-vm-test-run-phoenix-deployment-peer/evidence`.
+Configured metadata was admitted; outsider/operator/updater execution was rejected.
+Production worker error/denial returned `review-invocation-failed`/`model-denied`
+without activation; counters were three reviews/one approved activation double.
+Nix/model/subprocess/activation doubles and live acceptance limits are detailed in
+[security review](security-review.md#isolated-deployment-socket-composition).
+Production review remains OFF; this does not establish general command AI review.
+
 ## Evidence limits and separate unfinished work
 
 - Unit/disposable fixtures demonstrate bounded behavior, not installed operation.
@@ -397,8 +409,10 @@ GUI and CLI; retain the operator terminal and authenticated controller route.
 - Protected identity, reservations, disruption protection and the full optional
   security-review workflow have separate unfinished live acceptance. The protected
   reviewer adapter/auth/schema, root integration/checkpoints and recorder-based
-  systemd lifetime trials above passed; real activation and fallback authentication
-  remain unproved. The generic
+  systemd lifetime trials, real guest activation/rollback and generic-authenticated
+  synthetic pending trial and isolated real-peer socket composition above passed.
+  Exact critical-action cancellation/fresh authentication and a live reviewed
+  deployment remain unproved. The generic
   authorization explanation remains experimental/off; critical exact-pending
   override handling is a separate flow.
 - On 2026-10-06 at 08:32, OpenShell 0.1.2 shutdown hit the 45-second supervisor
