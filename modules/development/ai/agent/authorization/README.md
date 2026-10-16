@@ -19,12 +19,30 @@ privileged command interface.
 ## Intended extension (not implemented)
 
 An independent AI reviewer should assess supported privileged requests outside the
-installed deterministic allowlist, escalating rejected requests or unavailable
-review to the human operator. The reviewer may maintain narrow, reasonably safe
-command types with typed arguments and rationale comments through independent
-protected policy deployment, reducing repeat AI review. The requesting worker must never directly mutate live authority.
-Current fixed diagnostic/deployment mappings do not implement this general review
-or policy-maintenance flow. Codex “Approve for me” is not OS root authorization.
+installed deterministic allowlist; rejection or unavailable review requires explicit
+native human fallback. Reuse the existing peer-checked controller with a cohesive
+typed-command module, preserving the seven diagnostics and deployment workflow.
+Bind approval to exact immutable code, typed arguments, relevant configuration/state
+and installed policy; scripts that cannot be safely reviewed and executed from the
+same frozen inputs go to the human rather than a general root shell.
+
+Persistent allowlist definitions and rationale remain Nix/version-tracked. The
+independent reviewer may maintain narrow safe entries through reviewed protected
+policy deployment, within explicit capability limits; the requesting worker cannot
+directly edit live authority. Root state stores only exact bound approval-cache
+records, not an independently expanding persistent rule registry. Proposed recurring
+budget: `gpt-6-luna`/`high`, at most two CLI invocations and one bounded context round
+per uncached decision, no automatic retries; exact valid cache reuse costs zero AI.
+
+No useful recurring unsupported command family is evidenced after deployment
+automation acceptance. Start the next implementation from a real unsupported
+request, not an invented demonstration executor. Existing mappings do not implement
+this command review or rule-maintenance flow; Codex “Approve for me” is not OS root
+authorization. [Sudo approval plugins](https://www.sudo.ws/docs/man/sudo_plugin.man/)
+add constraints after policy acceptance rather than granting denied commands;
+[OpenShell policies](https://docs.nvidia.com/openshell/latest/sandboxes/policies)
+provide containment, not a verified host-root approval path. Neither replaces the
+remaining project-specific typed execution and protected policy-publication boundary.
 
 ## Requests and policy
 
