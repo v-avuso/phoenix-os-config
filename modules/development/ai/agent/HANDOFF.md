@@ -281,6 +281,27 @@ attempt. Prompt teardown has isolated runtime evidence; full shutdown acceptance
 and live enablement remain pending. Continue review integration preparation while
 keeping all experimental controls off.
 
+## Contained managed-worktree deployment acceptance
+
+The clean release worktree at `05cb746e58c892f27a2a3be9ff3c33982f6549fd`
+passed actual contained `phoenix-authorize` → reviewed `phoenix-test --worktree`
+with a temporary tracked README comment. Result: action `test`, exit 0,
+source `/nix/store/j3b9i8sijjz7vvdcrsg5mjy09bblgr89-source`, closure
+`/nix/store/irs0c2sdmzi9z04mpm0a53i95alygynr-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
+Native inspection independently matched frozen README SHA256
+`52e52cafe92b32afde2ddc3468cbbfcb2714133325f318e889c54d28d78f3480`
+and appended-marker SHA256
+`c8f6f45b84dc5eb2cbbc1b832874efc86f22e9b5a9e8953dcb782835c884ac1f`.
+The guarded restoration returned the release worktree to clean Git status. Runtime
+and activated source matched the result; boot profile remained `vmapfndrxy895bgvm8v5kmanfwrsz2vh`.
+Native stayed open and no human authentication was needed. Earlier contained
+cwd/common-Git metadata and owned-file round-trip passed at `04c3c20` with the same
+workspace configuration. This accepts the bounded current-UID workflow, not protected
+identity or valid-pending critical override. This trial establishes real temporary
+activation only; verify final persistent installation against actual runtime/profile
+and the authorization journal.
+The concrete trial receipts above remain fixed.
+
 ## Worktrees and preservation
 
 | Purpose | Checkout | State to preserve |

@@ -21,16 +21,16 @@ verification. Historical receipts do not identify today's running generation.
 
 ## Daily-baseline release checklist
 
-1. **High value · complexity 3:** Build/evaluate the exact committed combined source,
-   preserving main's Typst changes and excluding the unrelated root instructions
-   draft; release through the existing reviewed deployment route. Review is already
-   ON: do not repeat the historical OFF/ON rollout-window procedure.
-2. **High value · complexity 2–3:** After installation, accept contained managed
-   worktree cwd/edit/common-Git access, narrow sibling isolation and dirty immutable
-   source selection through one normal reviewed deployment. Configuration and
-   disposable fixtures exist; actual contained caller acceptance is the remaining
-   baseline check. Preserve accepted shared chats and Native recovery without
-   migration or fresh sign-in. Future protected-UID Git trust is separate.
+1. **High value · remaining complexity 3:** Combined-source build and native/contained
+   reviewed temporary activation passed, preserving Typst and excluding the root
+   draft. Integrate and persist the exact documented baseline through the existing
+   review-ON route; verify actual source, runtime and profile. Do not repeat the
+   historical OFF window.
+2. **High-value primary acceptance complete:** Current-UID contained managed-worktree
+   cwd/common-Git access, disposable edit/cleanup and dirty immutable deployment
+   passed. README restoration/Git cleanliness and frozen-source content were verified.
+   No remaining primary implementation; protected-UID Git trust is a future milestone.
+   Preserve accepted shared chats and Native recovery without migration/sign-in.
 3. **Medium-value acceptance complete:** Exact installed CRITICAL security-override
    Cancel and warning readability are operator-confirmed; both requests returned
    127 without activation/model calls. No remaining Cancel task. Successful
@@ -47,7 +47,7 @@ baseline checklist or treat their aggregate percentages as baseline deficits.
 | --- | --- | --- | --- | --- |
 | Primary shared GUI/CLI workflow | **100% primary accepted** | **0 known implementation** | Low | Optional observation of archive/pin, broader history/UI behavior and relay sizes is not unfinished primary functionality; investigate only an actual regression. Preserve independent Native recovery. [Evidence](HANDOFF.md#evidence-limits-and-separate-unfinished-work). |
 | Bounded authorization interface and seven diagnostics | **100% installed bounded scope** | **0 known implementation** | Low | Revalidate mapped callers/denial paths only when identity or policy changes. Shared UID is a documented limit addressed by the distinct identity milestone, not a hypothetical diagnostic bug. [Contract](authorization/README.md). |
-| Immutable deployment and optional security review | **90–95% broader workflow** (primary reviewed test/switch accepted) | 3–5 | High | Finish valid-pending critical override/recovery and contained/alternate-worktree caller acceptance. Exact installed-action Cancel and warning readability are accepted. Reviewed test/switch and recovery passed; socket-peer VM and guest activation/rollback are separate passed slices. [Evidence](security-review.md), [handoff](HANDOFF.md). |
+| Immutable deployment and optional security review | **90–95% broader workflow** (primary reviewed test/switch accepted) | 3–5 | High | Contained managed-worktree dirty-source deployment is accepted; finish valid-pending critical override/recovery separately. Exact installed-action Cancel and warning readability are accepted. Reviewed test/switch and recovery passed; socket-peer VM and guest activation/rollback are separate passed slices. [Evidence](security-review.md), [handoff](HANDOFF.md). |
 | Common agent authorization pipeline | **55–75% broader agreed scope** | 8–13 | Low | Existing fixed interface is complete for its closed mappings; independent new-command review, immutable adapters and protected adaptive publication remain. This aggregate is a judgment, not a weighted sum. |
 | OpenShell backend | **85–95% everyday scope** | 5–13 | Medium | Everyday contained backend works; full shutdown/status/log behavior remains a specific unresolved risk, tracked separately below. Keep native recovery and verify host/worktree boundaries when changed. |
 | General privileged-command review and typed execution | **60–80% bounded registry scope** (broader arbitrary-command goal remains partial) | 8–13 | Low | Default-off exact ELF registry and independent review/controller path are implemented with disposable root/socket/model-double proof. Controlled fixed-helper retained-model root-id/cache trial passed (one reviewer CLI call, not an API/token/cost meter). Finish native normal/critical command-client dialog acceptance and explicit caller-boundary approval; select a real operation before any live entry. Scripts/unbound mutable effects and universal root requests remain unsupported. [Registered commands](authorization/README.md#exact-registered-commands-experimental-off). |
@@ -58,7 +58,7 @@ baseline checklist or treat their aggregate percentages as baseline deficits.
 | Native authorization explanation | **70–90%** | 3–5 | Low | Verify native GUI presentation/cancel/auth flow and contained host guidance; weigh extra Continue click against useful context. It supplies no authority and is separate from critical security override. [Usage](authorization/README.md#native-explanation-experimental-default-off). |
 | Shutdown ordering, status, logs and cleanup | **40–65%** | 8–13 | Medium | Identify the exact stalled await before any Rust repair; finish ordinary-stop terminal/attached-transport cleanup and user-manager teardown. Ordered guest A/B mitigated the combined-stop delay, but is not full acceptance. Verify final supervisor-event delivery with gateway alive and compare independent persistent captures for combined stop; upstream's gateway tail is memory-only. Preserve administrative report-skip semantics and resource cgroups. [Contracts and evidence](shutdown-acceptance.md). |
 | Reviewer cost visibility (optional extension) | Not estimated; no agreed additional feature scope | 3–5 | Low | Expose bounded nonsecret usage/limit outcomes and distinguish controller invocations from model-internal requests/tokens. Current input/output/time/invocation bounds exist; internal API requests and cumulative tokens lack hard caps. Establish any new recurring budget before widening review; routine updates stay zero AI. [Limits](security-review.md). |
-| Managed-worktree sandbox access | **80–90% bounded scope** | 2–3 | High | Narrow root/default-override configuration, current-UID namespace/common-Git isolation and registered dirty immutable selection pass disposable fixtures. Full contained caller acceptance and future protected-UID Git ownership/trust remain; no wildcard trust or full-profile mount. [Source selection](AGENTS.md#source-selection). |
+| Managed-worktree sandbox access | **100% bounded current-UID primary accepted** | **0 known primary implementation** | Low | Actual contained cwd/common-Git access, owned temporary-file cleanup and dirty immutable reviewed test passed; frozen source and restored clean worktree were verified. Narrow-default/custom-override and sibling-isolation fixtures remain separate evidence. Future protected-UID Git trust is outside this accepted primary scope; no wildcard trust or full-profile mount. [Evidence](HANDOFF.md#contained-managed-worktree-deployment-acceptance). |
 | Coarse module controls and composition | **40–60%** | 5–8 | Low | Design and check supported independent disable combinations at responsibility boundaries; document dependencies and native recovery. Add only missing useful controls, not a boolean per helper. Review-off must select human authentication, not automatic approval, and retain the controller, immutable binding and rollback. Current inventory follows below. |
 | File organization (optional extension) | Not estimated; no agreed refactor scope | 3–5 | Low | Optional: move cohesive ownership groups only when navigation/maintenance benefit exceeds migration and validation cost; preserve public imports and colocated fixtures/docs. Architecture table already explains ownership; no one-module-per-small-feature rule. |
 

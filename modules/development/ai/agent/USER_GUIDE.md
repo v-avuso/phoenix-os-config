@@ -28,6 +28,22 @@ sign-in or migration is required. See [HANDOFF.md](HANDOFF.md).
 If starting `codex-desktop-sandboxed` in a terminal, it intentionally stays in the
 foreground until the GUI exits. This waiting is not an unfinished deployment.
 
+## Existing managed worktrees
+
+Sandbox CLI work can use registered worktrees under the operator's managed root
+(`/home/v/.codex/worktrees` here); use its absolute path inside the container. Only
+that subtree joins the default project mounts. An explicit operator workspace
+list replaces those defaults. For an authorized temporary deployment, agents use:
+
+```sh
+phoenix-authorize --task TASK --reason "Concrete nonsecret purpose" -- phoenix-test --worktree /absolute/registered/worktree
+```
+
+This freezes Git-visible dirty content and uses independent host review before
+real temporary activation. The current-UID contained workflow is accepted;
+`test` leaves the boot profile unchanged. Keep Native available and do not repeat
+history migration or sign-in. See [acceptance evidence](HANDOFF.md#contained-managed-worktree-deployment-acceptance).
+
 Broader archive/pin/window observations and disabled experimental broker controls
 are separate from the accepted shared-chat workflow. First-time setup on another,
 uninitialized installation belongs in the

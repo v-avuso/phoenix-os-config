@@ -127,7 +127,9 @@
   native administrator sudo; shared-UID instructions are not identity enforcement.
 - OpenShell's explicit broker uses the sandbox deployment client and existing
   deployment socket. Sources must be in configured mounted workspaces; repository
-  defaults include the narrow `~/.codex/worktrees` root, not the full profile. Disabled
+  defaults include the narrow `~/.codex/worktrees` root, not the full profile.
+  Explicit operator workspace lists replace those defaults; verify the selected
+  list before assuming managed-root access. Disabled
   AI requires native host Polkit; sandbox clients reject with host guidance. Do not
   mount authentication or bypass containment to repair this. Identity/reservation
   live acceptance remains separate.
