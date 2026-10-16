@@ -174,7 +174,7 @@ let
       deploymentTransportPolicy = toString transportPolicy;
       modelReviewEnabled = cfg.securityReview.enable;
       operatorName = user.name;
-      disruptionScript = toString ./disruption.py;
+      disruptionScript = toString (pkgs.writeText "phoenix-disruption.py" (builtins.readFile ./disruption.py));
       disruptionState = "/var/lib/phoenix-deploy/disruption";
       disruptionInfo = "/run/phoenix-deploy";
       systemctl = "${pkgs.systemd}/bin/systemctl";
@@ -195,9 +195,9 @@ let
       baseline = "/etc/phoenix-agent/activated-source";
       controller = toString controllerScript;
       reviewScript = toString reviewScript;
-      securityReviewScript = toString ./security-review.py;
+      securityReviewScript = toString (pkgs.writeText "phoenix-security-review.py" (builtins.readFile ./security-review.py));
       securityReviewState = "/var/lib/phoenix-deploy/security-review";
-      routineUpdateScript = toString ./routine-update.py;
+      routineUpdateScript = toString (pkgs.writeText "phoenix-routine-update.py" (builtins.readFile ./routine-update.py));
       system = pkgs.stdenv.hostPlatform.system;
       python = "${pkgs.python3}/bin/python3";
       setpriv = "${pkgs.util-linux}/bin/setpriv";

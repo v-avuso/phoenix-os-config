@@ -296,6 +296,10 @@ client derivation closures retain the adapter. No whole-source dependency was ad
 The fixture recreates a consumed competitor envelope with the promoted capability;
 it never replaces the active helper's envelope or reuses revoked authority.
 
+A later disruption inspection extension adds independent cases to this same
+factory; its current full-gate status is described in [disruption evidence](disruption.md#partial-isolated-systemd-evidence).
+The reservation receipt above remains the passed checkpoint.
+
 Activation remains a recorder and provenance synthetic. The real immutable operator
 helper and root socket run, but `PKEXEC_UID` is explicitly doubled: native Polkit
 session authentication/dialogs are not proved. This is not real NixOS activation,

@@ -13,12 +13,50 @@ let
     deploymentTransportPolicy = toString transport;
     authorizationLibrary = toString authorization;
   };
+  disruption = pkgs.writeText "phoenix-disruption.py" (builtins.readFile ../disruption.py);
+  disruptionConfig = pkgs.writeText "disruption-fixture.json" (builtins.toJSON {
+    disruptionScript = toString disruption;
+    systemctl = "${pkgs.systemd}/bin/systemctl";
+    operatorName = "client";
+    operatorUid = 1000;
+    modelReviewEnabled = false;
+    disruptionGuard = { enable = true; systemUnits = [ "fixture-unused.service" ]; userUnits = [ "kando.service" ]; };
+  });
+  desktopText = ''
+    [Unit]
+    Description=Synthetic protected desktop stand-in
+    [Service]
+    ExecStart=${pkgs.coreutils}/bin/sleep infinity
+  '';
+  desktopUnit = pkgs.writeText "kando.service" desktopText;
+  changedUnit = pkgs.writeText "changed-kando.service" ''
+    [Unit]
+    Description=Synthetic protected desktop stand-in changed
+    [Service]
+    ExecStart=${pkgs.coreutils}/bin/sleep infinity
+  '';
+  hmSetup = pkgs.writeShellScript "hm-setup-env" "exit 0";
+  generation = unit: pkgs.runCommand "home-manager-generation" { } ''
+    mkdir -p $out/home-files/.config/systemd/user
+    ln -s ${unit} $out/home-files/.config/systemd/user/kando.service
+  '';
+  originalGeneration = generation desktopUnit;
+  candidate = unit: supported: pkgs.runCommand "nixos-system-disruption-fixture" { } ''
+    mkdir -p $out/bin $out/etc/phoenix-agent $out/etc/systemd/system
+    ln -s ${recorder} $out/bin/switch-to-configuration
+    ln -s ${source} $out/etc/phoenix-agent/activated-source
+    printf '[Service]\nExecStart=${hmSetup} ${generation unit}${pkgs.lib.optionalString (!supported) " unsupported"}\n' > $out/etc/systemd/system/home-manager-client.service
+  '';
+  unchanged = candidate desktopUnit true;
+  changed = candidate changedUnit true;
+  unsupported = candidate desktopUnit false;
   recorder = pkgs.writeScript "reservation-recorder" ''
     #!${pkgs.python3}/bin/python3
     import os
     from pathlib import Path
     import time
     root = Path('/var/lib/reservation-lifetime')
+    with (root / 'invocations').open('a') as stream: stream.write('x')
     child = os.fork()
     if child == 0:
         (root / 'ready').write_text(str(os.getpid()))
@@ -74,6 +112,33 @@ let
                 reservation=capability, reservationUid=1000)
             envelope = root / 'spool' / (nonce + '.json')
             envelope.write_text(json.dumps(binding)); envelope.chmod(0o600)
+    elif sys.argv[1].startswith('disruption-'):
+        kind = sys.argv[1].removeprefix('disruption-')
+        candidates = {'unchanged':'${unchanged}', 'changed':'${changed}',
+                      'unsupported':'${unsupported}'}
+        config.update(json.loads(Path('${disruptionConfig}').read_text()))
+        module = load('disruption', '${disruption}')
+        candidate = candidates[kind]
+        proof = module.probe(config, str(Path('/run/current-system').resolve()), candidate)
+        print(json.dumps(dict(disruptionCase=kind, active=proof['active'], findings=proof['findings'])), flush=True)
+        if kind == 'unchanged':
+            assert proof['active']['user'] == ['kando.service'] and not proof['findings']
+        elif kind == 'changed': assert 'user:kando.service:changed-or-removed' in proof['findings']
+        elif kind == 'unsupported': assert 'user:inspection-required' in proof['findings']
+        capability = json.loads(Path('/home/client/first.json').read_text())
+        nonce = {'unchanged':'c','changed':'d','unsupported':'e'}[kind] * 64
+        binding = dict(nonce=nonce, target='metal', action='test', closure=candidate, source='${source}',
+            base='${source}', profile=str(Path('/nix/var/nix/profiles/system').resolve()),
+            profileSource='${source}', reservation=capability, reservationUid=1000)
+        envelope = root / 'spool' / (nonce + '.json')
+        envelope.write_text(json.dumps(binding)); envelope.chmod(0o600)
+        before = (root / 'invocations').read_text()
+        try: deploy.activate_reserved(config, nonce)
+        except deploy.DeploymentFailure as error:
+            assert kind != 'unchanged' and str(error) == 'disruption: inspection-required', 'unexpected guard rejection'
+        else: assert kind == 'unchanged', 'uncertain or changed unit executed'
+        assert len((root / 'invocations').read_text()) == len(before) + (kind == 'unchanged')
+        print(json.dumps(dict(disruptionCase=kind, passed=True)))
     elif sys.argv[1] == 'recover':
         # Authentication deliberately doubled: actual immutable helper validation/socket run.
         settings = config['reservations']
@@ -114,7 +179,14 @@ let
   '';
   runtimeInputs = pkgs.runCommand "reservation-runtime-import-check" { nativeBuildInputs = [ pkgs.python3 ]; } ''
     python3 -I - <<'PYTHON'
-    import importlib.util
+    import importlib.util, json
+    from pathlib import Path
+    config = json.loads(Path('${disruptionConfig}').read_text())
+    required = {'disruptionScript', 'systemctl', 'operatorName', 'operatorUid', 'modelReviewEnabled', 'disruptionGuard'}
+    assert required <= config.keys()
+    assert {'enable', 'systemUnits', 'userUnits'} <= config['disruptionGuard'].keys()
+    assert Path(config['systemctl']).is_file() and Path(config['disruptionScript']).is_file()
+    compile(Path('${helper}').read_text(), 'fixture-helper', 'exec')
     for name, path in [('controller', '${controller}'), ('engine', '${engine}'), ('management', '${adapter}')]:
         spec = importlib.util.spec_from_file_location(name, path)
         module = importlib.util.module_from_spec(spec)
@@ -127,7 +199,7 @@ assert pkgs.lib.hasSuffix "-source" (toString source);
 assert pkgs.lib.hasSuffix "-nixos-system-reservation-fixture" (toString closure);
 pkgs.testers.runNixOSTest {
   name = "phoenix-reservation-lifetime";
-  globalTimeout = 180;
+  globalTimeout = 210;
   nodes.machine = { config, lib, phoenixReservationSettings, ... }: {
     imports = [ ../broker.nix ../reservations.nix ];
     options.phoenix.agent.identity = {
@@ -139,6 +211,12 @@ pkgs.testers.runNixOSTest {
     users.users.client = { isNormalUser = true; uid = 1000; };
     users.users.outsider = { isNormalUser = true; uid = 1001; extraGroups = [ "phoenix-authorization" ]; };
     phoenix.agent.reservations = { enable = true; leaseSeconds = 12; };
+    systemd.user.units."kando.service".text = desktopText;
+    # Strict parser's actual immutable argv layout; no Home Manager migration runs.
+    systemd.services.home-manager-client.serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${hmSetup} ${originalGeneration}";
+    };
     environment.etc."reservation-fixture-settings.json".text = builtins.toJSON phoenixReservationSettings;
     virtualisation = { cores = 2; memorySize = 2048; diskSize = 2048; };
     system.extraDependencies = [ runtimeInputs ];

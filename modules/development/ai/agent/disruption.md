@@ -63,8 +63,40 @@ optional AI review retains only its security remit. Unlisted applications and
 runtime effects outside concrete unit metadata are outside this protection.
 
 Run `python3 -B modules/development/ai/agent/tests/disruption.py` and the existing
-deployment/reservation fixtures. Disposable tests use explicit immutable ownership,
-active-manager and activation recorder stubs. Actual installed artifact inspection
+deployment/reservation fixtures. The Python fixtures use explicit immutable ownership, active-manager and
+activation recorder stubs. The partial VM evidence below exercises real ownership,
+manager queries and the actual reserved activation helper with a recorder. Actual installed artifact inspection
 is read-only; source/fixture checks do not establish live GUI, systemd or Polkit
 acceptance. Sandbox denial of the user bus must remain typed inspection failure,
 never a reason to broaden access merely for validation.
+
+## Partial isolated systemd evidence
+
+The existing reservation-lifetime VM now includes a real guest user manager and
+an active idle `kando.service` stand-in. Its generated systemd artifact and synthetic
+immutable HM generation use identical unit bytes; the fixed `hm-setup-env` plus
+one generation argument preserves the strict metadata schema. The actual
+`activate_reserved` helper, reservation operation and stable activation guard permit
+unchanged artifacts and reject changed unit bytes or unsupported HM metadata before
+any recorder invocation. Earlier reservation/client-death/expiry checks still ran.
+No real desktop application or Home Manager migration was exercised.
+
+The last executed full extended gate was **red**, derivation
+`/nix/store/6ihgxddh0fh7r7a08pmlyl6j6rgr6dwr-vm-test-run-phoenix-reservation-lifetime.drv`.
+Its unavailable-manager stimulus is invalid: stopping `user@1000` does not make the
+supported `systemctl --user --machine=client@.host` query unavailable. The guest log
+shows the stdio bridge/PAM starting a fresh manager; the query validly reports no
+active user units and no findings. The invalid scenario was removed from the normal fixture after that run; the
+final fixture was **not rerun**. No unavailable-query or final complete-cleanup
+pass is claimed. The observed stimulus was `systemctl stop user@1000.service`
+followed by `systemctl --user --machine=client@.host show --property=Id
+--property=ActiveState -- kando.service`. This observation is
+not evidence that an actual query error bypasses the guard. A bounded genuine
+unavailability stimulus still needs isolated proof; exact critical exception
+publication/consumption and native Polkit acceptance are also pending.
+
+Deployment's dynamically imported disruption, security-review and routine-update
+helpers are now individually packaged immutable files. Enabled and disabled
+configuration derivation closures retain all three; metal/VM evaluation passes.
+This establishes packaging, not model/updater/runtime acceptance. The guard remains
+OFF and cannot detect arbitrary disruptive activation shell effects.

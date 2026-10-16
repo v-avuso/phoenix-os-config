@@ -82,6 +82,13 @@ try:
     time.sleep(1)
     machine.succeed("test -f " + root + "/gate-free && test -f " + root + "/timeout-returned && test ! -f " + root + "/escaped")
     machine.succeed(python + " -I " + helper + " probe")
+    phase("disruption-real-manager")
+    management("renew", "first", seconds=60)
+    machine.succeed("systemctl start user@1000.service", timeout=15)
+    machine.succeed("systemctl --user --machine=client@.host start kando.service", timeout=10)
+    for case in ("unchanged", "changed", "unsupported"):
+        machine.succeed(python + " -I " + helper + " disruption-" + case, timeout=15)
+    machine.succeed("systemctl stop user@1000.service", timeout=15)
     management("release", "first")
     assert not management("status")["owners"]
     machine.succeed(python + " -I " + helper + " audit")
