@@ -28,6 +28,58 @@ protected identity is OFF. A controlled real reviewed deployment and clearly
 identified critical-dialog cancellation/fresh-auth observation remain live gates;
 optional identity/reservations/disruption/explanation are separate milestones.
 
+## Prepared controlled review window (not run)
+
+`tests/review-window.nix { flake; offClosure; onClosure; }` packages fixed,
+argument-free setup/recovery/dry-run commands. Explicit closure inputs must be
+canonical immutable store paths. For the already accepted pair, OFF is `nhqm...`
+and temporary ON is `3ys5...` (full paths in HANDOFF); packaging does not activate
+either. Build from an exact committed Git-flake source, excluding the root draft:
+
+```nix
+let f = builtins.getFlake "git+file:///PATH?rev=COMMIT";
+in import (f.outPath + "/modules/development/ai/agent/tests/review-window.nix") {
+  flake = f; offClosure = "/nix/store/FULL-OFF"; onClosure = "/nix/store/FULL-ON";
+}
+```
+
+Run the packaged `phoenix-review-window-dry-run` unprivileged first (host tool
+namespace, so immutable ownership is visible). Only the coordinator invokes the
+setup through native graphical authentication. Setup requires actual OFF runtime
+and boot profile, shared UID1000, absent owned units and idle existing production
+locks. It arms `phoenix-controlled-review-off.timer` before ON `test`; ON is ready
+only while its non-waking monotonic timer has at least150 seconds left. A queued
+or too-short timer causes OFF recovery after releasing setup locks, never a reset.
+Recovery signals only the exact ON controller, queues at five minutes, waits up
+to8100 seconds across deployment then activation locks, and restores exact OFF
+with `test`. This queues behind the bounded build/review/activation request; it
+does **not** promise OFF at five minutes. Guard FDs survive into the foreground
+activation child. It never changes the boot profile or existing lock permissions.
+After verified OFF it stops its owned timer; transient service collection follows
+exit. Check both owned units are gone/inactive and runtime/profile OFF afterward.
+On validation/lock/command failure, stop and inspect static stage/code journals;
+no model retry, operator override or force-kill of an in-flight deployment occurs.
+
+Prepare the canonical OFF request from a clean main checkout, never this dirty
+feature checkout. Freeze its Git-visible files/modes with the existing production
+source-freezing code and prebuild the resulting exact `path:/nix/store/...-source`
+metal target offline/no builders; stop on downloads or unexpected rebuilds. Bind
+and record this candidate closure/source before setup. The candidate may differ
+from the older accepted recovery OFF closure: a successful reviewed candidate is
+then temporary; fixed recovery deliberately returns to accepted OFF afterward.
+Do not cancel recovery merely because the reviewed candidate has review disabled.
+After explicit readiness for the single identifiable Cancel dialog, use the newly
+installed ON-policy native `ai-broker` (resolve `/etc/profiles/per-user/v/bin/ai-broker`
+after activation), `--task ... --reason ... -- phoenix-test --worktree /CLEAN/MAIN`.
+An old immutable OFF client fails policy preflight; do not bypass it. Verify real
+review/checkpoint/audit and candidate runtime, then final fixed OFF recovery.
+No concurrent deployment/update/human rebuild belongs in this coordinated window.
+
+The offline test checks ordering, real disposable flock contention/modes, failure
+recovery and timer readiness. Packaging/dry-run/live acceptance remain separate;
+this fixture introduces no production service, default enablement or general
+privileged-command reviewer.
+
 ## Adapter and bounds
 
 ```nix
