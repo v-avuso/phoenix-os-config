@@ -13,24 +13,32 @@ let
   operator = config.users.users.${user.name};
   state = "/var/lib/phoenix-agent";
   runtime = "/run/phoenix-agent";
+  userRuntime = "/run/user/${toString cfg.uid}";
+  excludedUserUnits = [ "gcr-ssh-agent" "pipewire" "pipewire-pulse" "speech-dispatcher" "podman" ];
+  excludeAgent = _: {
+    overrideStrategy = "asDropin";
+    unitConfig.ConditionUser = lib.mkAfter [ "!phoenix-agent" ];
+  };
   environment = {
     HOME = "${state}/home";
     XDG_CONFIG_HOME = "${state}/config";
     XDG_STATE_HOME = state;
     XDG_DATA_HOME = "${state}/data";
-    XDG_RUNTIME_DIR = "${runtime}/private";
+    XDG_RUNTIME_DIR = userRuntime;
     OPENSHELL_LOCAL_TLS_DIR = "${state}/tls";
     PATH =
       (lib.makeBinPath [
         pkgs.coreutils
         pkgs.openssh
         pkgs.podman
+        # Podman healthcheck timers invoke systemd-run --user by name.
+        pkgs.systemd
       ])
       + ":/run/wrappers/bin";
     TERM = "xterm-256color";
   };
   homeBinds =
-    config.phoenix.agent.workspaces
+    [ userRuntime ] ++ config.phoenix.agent.workspaces
     ++ map (name: "-${user.homeDirectory}/.codex/${name}") [
       "sessions"
       "archived_sessions"
@@ -191,7 +199,20 @@ in
       "d ${runtime} 0711 root root -"
       "d ${runtime}/private 0700 phoenix-agent phoenix-agent -"
     ];
+    # Podman healthchecks execute in this real user manager, so preserve the same
+    # namespace and storage environment for its children, not only the API service.
+    systemd.services."user@${toString cfg.uid}" = {
+      overrideStrategy = "asDropin";
+      environment = environment // { PATH = lib.mkForce environment.PATH; };
+      serviceConfig = { ProtectHome = "tmpfs"; BindPaths = homeBinds; };
+    };
+    # Global desktop/API units are not useful to the protected service account.
+    # Conditions append to upstream constraints and leave operator units usable.
+    systemd.user.services = lib.genAttrs excludedUserUnits excludeAgent;
+    systemd.user.sockets = lib.genAttrs excludedUserUnits excludeAgent;
     systemd.services.phoenix-agent-podman = {
+      requires = [ "user@${toString cfg.uid}.service" ];
+      after = [ "user@${toString cfg.uid}.service" ];
       serviceConfig = {
         ProtectHome = "tmpfs";
         BindPaths = homeBinds;

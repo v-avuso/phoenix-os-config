@@ -1,5 +1,5 @@
 # Default protected Podman gate; explicit gateway mode adds real OpenShell, never model/migration.
-{ pkgs, workload, mode ? "podman", runtime ? null, supervisor ? null }:
+{ pkgs, workload, mode ? "podman", runtime ? null, supervisor ? null, healthCheckInterval ? null }:
 let
   lib = pkgs.lib;
   packages = import ../packages.nix { inherit pkgs; };
@@ -18,6 +18,9 @@ let
         userns = "keep-id:uid=1000,gid=1000";
         allow_driver_config = true; enable_bind_mounts = true;
         resource_admission.enabled = false; sandbox_pids_limit = 512;
+      } // lib.optionalAttrs (healthCheckInterval != null) {
+        # Explicit opt-in reproducer; default gateway mode matches production.
+        health_check_interval_secs = healthCheckInterval;
       };
     };
   };
@@ -37,6 +40,7 @@ let
   }) [ "/home/operator/workspace" "/run/phoenix-admin" "/nix/store" ]; });
   setup = pkgs.writeText "identity-setup.py" (builtins.readFile ../identity-setup.py);
 in
+assert healthCheckInterval == null || (builtins.isInt healthCheckInterval && healthCheckInterval > 0);
 assert builtins.elem mode [ "podman" "gateway" ];
 assert mode != "gateway" || builtins.all (image:
   lib.hasPrefix "/nix/store/" (toString image.archive) && builtins.hashFile "sha256" image.archive == image.sha256
@@ -48,7 +52,7 @@ assert workload.id == "38d1a6283d8dc515251c132471b416da81a803035b41dc2316d418057
 assert builtins.hashFile "sha256" workload.archive == workload.sha256;
 pkgs.testers.runNixOSTest {
   name = "phoenix-identity-openshell-${mode}-gate";
-  globalTimeout = 300;
+  globalTimeout = 360;
   nodes.machine = { config, lib, ... }: {
     imports = [ ../identity.nix ] ++ lib.optional (mode == "gateway") ../broker.nix;
     options.phoenix.agent.workspaces = lib.mkOption {
@@ -78,10 +82,17 @@ pkgs.testers.runNixOSTest {
             environment = config.systemd.services.phoenix-agent-podman.environment;
           })}";
       };
+      # Representative desktop unit: real production exclusion must skip it.
+      systemd.user.services.speech-dispatcher = {
+        # Guest has no packaged desktop base unit; materialize this synthetic one.
+        overrideStrategy = lib.mkForce "asDropinIfExists";
+        wantedBy = [ "default.target" ];
+        serviceConfig.ExecStart = "${pkgs.coreutils}/bin/touch /tmp/unexpected-agent-desktop";
+      };
       environment.systemPackages = [ pkgs.python3 pkgs.util-linux ];
       environment.etc."identity-openshell.json".source = pkgs.writeText "identity-openshell.json" (builtins.toJSON {
         phase = if mode == "gateway" then "gateway-gate" else "podman-keepid-gate";
-        inherit policy mounts;
+        inherit policy mounts healthCheckInterval;
         images = lib.optionalAttrs (mode == "gateway") {
           runtime = runtime // { archive = toString runtime.archive; };
           supervisor = supervisor // { archive = toString supervisor.archive; };
@@ -101,6 +112,8 @@ pkgs.testers.runNixOSTest {
         podman = "${pkgs.podman}/bin/podman";
         setpriv = "${pkgs.util-linux}/bin/setpriv";
         setfacl = "${pkgs.acl}/bin/setfacl";
+        systemdRun = "${pkgs.systemd}/bin/systemd-run";
+        systemdAnalyze = "${pkgs.systemd}/bin/systemd-analyze";
         systemctl = "${pkgs.systemd}/bin/systemctl";
       });
       # No service overrides: actual identity.nix User/environment/ProtectHome,
@@ -111,7 +124,7 @@ pkgs.testers.runNixOSTest {
     machine.start()
     machine.wait_for_unit("multi-user.target")
     try:
-        machine.succeed("${pkgs.python3}/bin/python3 -I ${script} /etc/identity-openshell.json", timeout=240)
+        machine.succeed("${pkgs.python3}/bin/python3 -I ${script} /etc/identity-openshell.json", timeout=300)
     finally:
         machine.execute("journalctl -u phoenix-agent-podman.service -u phoenix-agent-gateway.service -t phoenix-admin --no-pager > /tmp/identity-openshell-journal", timeout=10)
         machine.copy_from_vm("/tmp/identity-openshell-journal", "evidence")

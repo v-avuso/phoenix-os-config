@@ -33,7 +33,8 @@
   their original configured client owner. Prove mapped launch paths before
   restricting broker callers. Use explicit pipes/DEVNULL for noninteractive
   guest probes and test PTY behavior separately, so inherited driver terminals do
-  not confound admission tests.
+  not confound admission tests. Emit bounded nonsecret synthetic failure state
+  before assertions in VM build logs; failed-build artifacts may be inaccessible.
 - Disruption guarding is default off and protects concrete immutable active unit
   artifacts only. Query/layout uncertainty requires a fresh exact operator exception;
   never describe it as proof against arbitrary activation shell effects. Read
@@ -42,7 +43,9 @@
 - Protected identity remains off until distinct-UID launcher → OpenShell → broker,
   retained model auth, GUI/TTY and workspace/history acceptance pass in isolation.
   Its first mode requires the existing active history handoff; never copy whole
-  profiles or adopt operator Podman storage to repair identity access.
+  profiles or adopt operator Podman storage to repair identity access. Re-audit
+  globally enabled user services/sockets when changing protected-manager composition;
+  its children must retain the same home masking and storage environment.
 - Retained gateway cutover requires an explicit offline/quiescent boundary;
   descriptor-relative relocation/chown cannot revoke open FDs or historical copies.
   Cross-filesystem cutover uses only the pinned DB/KEK layout through fixed cp,

@@ -40,6 +40,7 @@ def main(config):
         if agent:
             argv=[config['setpriv'],'--reuid='+str(config['uid']),'--regid='+str(config['gid']),'--init-groups',*argv]
         start=time.monotonic()
+        if label:print(json.dumps(dict(event='probe-start',stage=stage,label=label,timeout=timeout)),flush=True)
         try:
             result=subprocess.run(argv,env=config['environment'] if agent else None,stdin=subprocess.DEVNULL,
                 capture_output=True,timeout=timeout,cwd=cwd)
@@ -47,12 +48,16 @@ def main(config):
             if label:
                 (evidence/(label+'.stderr')).write_bytes((error.stderr or b'')[-8192:])
                 (evidence/(label+'.json')).write_text(json.dumps(dict(stage=stage,status='timeout',elapsed=time.monotonic()-start)))
-            raise ValueError(stage+'-timeout') from None
+            print(json.dumps(dict(event='probe-timeout',stage=stage,label=label,elapsed=time.monotonic()-start)),flush=True)
+            raise ValueError((label or stage)+'-timeout') from None
         if label:
+            print(json.dumps(dict(event='probe-complete',stage=stage,label=label,status=result.returncode,elapsed=time.monotonic()-start)),flush=True)
             (evidence/(label+'.stderr')).write_bytes(result.stderr[-8192:])
             (evidence/(label+'.stdout')).write_bytes(result.stdout[-16384:])
             (evidence/(label+'.json')).write_text(json.dumps(dict(stage=stage,status=result.returncode,elapsed=time.monotonic()-start)))
-        if check and result.returncode:raise ValueError(stage+'-failed')
+        if check and result.returncode:
+            print('SYNTHETIC_PROBE_DIAGNOSTIC '+str(label)+' '+result.stdout.decode(errors='replace')[-2048:]+' '+result.stderr.decode(errors='replace')[-2048:],flush=True)
+            raise ValueError(stage+'-failed')
         return result
     try:
         assert config['phase'] in ('podman-keepid-gate','gateway-gate') and config['uid']==980 and config['gid']==980
@@ -62,11 +67,23 @@ def main(config):
         setup.acl(acl,'/home/operator',writable=False);setup.acl(acl,str(workspace),recursive=True)
         assert not Path('/var/lib/phoenix-agent/data/containers/storage').exists(),'guest storage was not fresh'
         assert run([config['systemctl'],'is-active','--quiet','phoenix-agent-gateway.service'],check=False).returncode!=0
+        public=Path('/home/operator/public-unrelated');public.write_text('public guest canary');public.chmod(0o644)
         stage='protected-api-start'
         run([config['systemctl'],'start','phoenix-agent-podman.service'],timeout=20,label='api-start')
         properties=run([config['systemctl'],'show','phoenix-agent-podman.service','-p','User','-p','Group','-p','ProtectHome','-p','Delegate','-p','BindPaths'],label='actual-unit').stdout.decode()
         assert 'User=phoenix-agent' in properties and 'Group=phoenix-agent' in properties
         assert 'ProtectHome=tmpfs' in properties and 'Delegate=yes' in properties
+        stage='manager-boundary'
+        assert config['environment']['XDG_RUNTIME_DIR']=='/run/user/980'
+        assert Path('/run/user/980/systemd/private').exists()
+        managerProbe='import os;from pathlib import Path;assert os.getenv("XDG_DATA_HOME")=="/var/lib/phoenix-agent/data";assert os.getenv("HOME")=="/var/lib/phoenix-agent/home";assert not Path("/home/operator/public-unrelated").exists();assert Path("/home/operator/workspace").is_dir();print("manager-boundary-passed")'
+        run([config['systemdRun'],'--user','--wait','--pipe','--collect','--unit=identity-manager-probe',config['python'],'-c',managerProbe],agent=True,timeout=15,label='manager-probe')
+        run([config['systemctl'],'--user','start','speech-dispatcher.service'],agent=True,label='excluded-service-start')
+        skipped=run([config['systemctl'],'--user','show','speech-dispatcher.service','-p','ConditionResult'],agent=True,label='excluded-service-condition').stdout
+        assert b'ConditionResult=no' in skipped and not Path('/tmp/unexpected-agent-desktop').exists()
+        run([config['setpriv'],'--reuid=1000','--regid=users','--init-groups',config['systemdAnalyze'],'condition','ConditionUser=!phoenix-agent'],label='operator-condition')
+        ordering=run([config['systemctl'],'show','phoenix-agent-podman.service','-p','Requires','-p','After'],label='manager-ordering').stdout
+        assert b'user@980.service' in ordering
         stage='protected-api-info'
         run([*remote,'info','--format','json'],agent=True,label='api-info')
         stage='image-load'
@@ -94,6 +111,37 @@ def main(config):
                 if attached.poll() is not None:raise ValueError('sandbox-create-exited')
                 if time.monotonic()>deadline:raise ValueError('sandbox-create-timeout')
                 time.sleep(.5)
+            healthDiagnostic=config.get('healthCheckInterval') is not None
+            healthPassed=False;timerResults=[]
+            if healthDiagnostic:
+                stage='healthcheck-proof'
+                records=json.loads(run([*remote,'ps','-a','--filter','label=openshell.managed=true','--format','json'],agent=True,label='gateway-records').stdout)
+                healthResults=[];timerResults=[]
+                for record in records:
+                    identifier=record['Id']
+                    inspected=json.loads(run([*remote,'inspect',identifier],agent=True,label='healthcheck-config-'+identifier[:12]).stdout)[0]
+                    test=(inspected.get('Config',{}).get('Healthcheck') or {}).get('Test',[])
+                    configured=bool(test) and test != ['NONE']
+                    if configured:
+                        deadline=time.monotonic()+30
+                        while True:
+                            observed=json.loads(run([*remote,'inspect',identifier],agent=True,label='healthcheck-wait').stdout)[0]
+                            health=observed.get('State',{}).get('Health',{})
+                            successful=sum(entry.get('ExitCode')==0 for entry in health.get('Log',[]))
+                            if health.get('Status')=='healthy' and successful:
+                                timerResults.append(dict(id=identifier,healthy=True,successfulLogs=successful));break
+                            if time.monotonic()>deadline:raise ValueError('configured-healthcheck-readiness-timeout')
+                            time.sleep(.5)
+                    checked=run([*remote,'healthcheck','run',identifier],agent=True,timeout=10,label='healthcheck-'+identifier[:12],check=False)
+                    healthResults.append(dict(id=identifier,configured=configured,test=test,status=checked.returncode,diagnostic=checked.stderr.decode(errors='replace')[-1000:],result=checked.stdout.decode(errors='replace')[-1000:]))
+                (evidence/'healthcheck-results.json').write_text(json.dumps(healthResults))
+                print('SYNTHETIC_HEALTHCHECK_RESULTS '+json.dumps(healthResults),flush=True)
+                (evidence/'timer-healthcheck-results.json').write_text(json.dumps(timerResults))
+                print('SYNTHETIC_TIMER_HEALTHCHECK_RESULTS '+json.dumps(timerResults),flush=True)
+                healthPassed=any(result['configured'] and result['status']==0 for result in healthResults)
+
+                timers=run([config['systemctl'],'--user','list-timers','--all','--full','--no-pager'],agent=True,label='healthcheck-timers').stdout
+                assert any(record['Id'].encode() in timers for record in records), 'healthcheck timer missing'
             stage='operator-launcher'
             result=run([config['setpriv'],'--reuid=1000','--regid=users','--init-groups','/run/current-system/sw/bin/phoenix-agent-launch','probe'],timeout=35,label='operator-launcher',cwd=workspace)
             assert result.stdout.startswith(b'1000\n'), 'unexpected sandbox uid'
@@ -105,7 +153,9 @@ def main(config):
             audit=run(['journalctl','-t','phoenix-admin','--output=cat','--no-pager'],label='broker-audit').stdout.decode()
             for uid,outcome in ((980,'allowed'),(1000,'denied'),(1001,'denied')):
                 assert any('"uid": '+str(uid) in line and '"outcome": "'+outcome+'"' in line for line in audit.splitlines())
-            proof=dict(passed=True,phase=config['phase'],actualProtectedPodman=True,hostUid=980,containerUid=1000,gateway=True,actualBroker=True,operatorLauncher=True,testBridge=True,model=False,migration=False)
+            print('GATEWAY_LAUNCHER_BROKER_CHAIN_PASSED',flush=True)
+            if healthDiagnostic:assert healthPassed, 'no configured healthcheck succeeded'
+            proof=dict(passed=True,phase=config['phase'],actualProtectedPodman=True,hostUid=980,containerUid=1000,gateway=True,actualBroker=True,operatorLauncher=True,testBridge=True,regularHealthDiagnostic=healthDiagnostic,manualConfiguredHealthcheck=healthDiagnostic and healthPassed,timerDrivenHealthcheck=bool(timerResults),model=False,migration=False)
         else:
             stage='keepid-create';created=True
             run([*remote,'create','--pull=never','--network=none','--userns=keep-id:uid=1000,gid=1000',
@@ -137,22 +187,48 @@ def main(config):
         stage='cleanup'
         try:
             if gateway:
-                records=run([*remote,'ps','-aq','--filter','label=openshell.managed=true'],agent=True,label='gateway-containers',check=False).stdout.decode().split()
-                if records:run([*remote,'rm','--force',*records],agent=True,timeout=20,label='gateway-cleanup')
-                remaining=run([*remote,'ps','-aq','--filter','label=openshell.managed=true'],agent=True,label='gateway-cleanup-check').stdout
-                if remaining.strip():failure=failure or 'gateway-cleanup-incomplete'
+                deadline=time.monotonic()+180
+                def cleanup_run(argv,*,timeout=10,label,check=True):
+                    remaining=deadline-time.monotonic()
+                    if remaining<=0:raise ValueError('gateway-cleanup-deadline')
+                    return run(argv,agent=True,timeout=min(timeout,remaining),label=label,check=check)
+                records=cleanup_run([*remote,'ps','-aq','--no-trunc','--filter','label=openshell.managed=true'],label='gateway-container-ids').stdout.decode().split()
+                assert all(len(identifier)==64 and all(c in '0123456789abcdef' for c in identifier) for identifier in records), 'invalid-captured-container-id'
+                original=cleanup_run([config['cli'],'sandbox','list','--ids'],label='gateway-sandbox-ids').stdout.decode().split()
+                if attached:
+                    assert len(original)==1, 'expected one captured gateway sandbox'
+                    stage='cleanup-delete'
+                    # Let the owning gateway serialize/fence deletion, remove supervisor
+                    # first and retain its 45s per-container stop safety net.
+                    cleanup_run([config['cli'],'sandbox','delete','identity-gateway'],timeout=180,label='gateway-delete')
+                stage='cleanup-disappearance'
+                while True:
+                    remaining=cleanup_run([*remote,'ps','-aq','--no-trunc','--filter','label=openshell.managed=true'],label='gateway-cleanup-check').stdout.decode().split()
+                    listed=cleanup_run([config['cli'],'sandbox','list','--ids'],label='gateway-cleanup-records').stdout.decode().split()
+                    if not remaining and not set(original).intersection(listed):break
+                    if time.monotonic()+.5>=deadline:
+                        print(json.dumps(dict(event='disappearance-timeout',remainingContainerCount=len(remaining),capturedGatewayIdCount=len(set(original).intersection(listed)))),flush=True)
+                        raise ValueError('gateway-disappearance-timeout')
+                    time.sleep(.5)
+                timers=cleanup_run([config['systemctl'],'--user','list-units','--type=timer','--all','--full','--no-pager'],label='cleanup-timers').stdout
+                assert not any(identifier.encode() in timers for identifier in records), 'owned-healthcheck-timer-remains'
                 if attached:
                     try:attached.wait(timeout=5)
                     except subprocess.TimeoutExpired:attached.kill();attached.wait(timeout=3)
+                stage='cleanup-gateway-stop'
                 run([config['systemctl'],'stop','phoenix-agent-gateway.service'],timeout=10,label='gateway-stop')
             if created:
                 removed=run([*remote,'rm','--force',CONTAINER],agent=True,timeout=15,label='cleanup',check=False)
                 if removed.returncode:failure=failure or 'cleanup-failed'
                 listing=run([*remote,'ps','-aq','--filter','name=^'+CONTAINER+'$'],agent=True,timeout=5,label='cleanup-check',check=False)
                 if listing.returncode or listing.stdout.strip():failure=failure or 'cleanup-incomplete'
-        except Exception:failure=failure or 'cleanup-timeout'
+        except Exception as error:
+            cleanupFailure=(str(error) or type(error).__name__) if isinstance(error,(ValueError,AssertionError)) else type(error).__name__
+            print(json.dumps(dict(event='cleanup-failed',stage=stage,code=cleanupFailure)),flush=True)
+            failure=failure or cleanupFailure
         report=proof if failure is None else dict(passed=False,phase=config['phase'],failure=failure,gateway=False,model=False)
-        report['cleanupAttempted']=created
+        report['cleanupAttempted']=created or gateway
+        if gateway and failure is None:report.update(ownedContainersCleaned=True,ownedTimersCleaned=True,gatewayRecordRemoved=True)
         (evidence/'proof.json').write_text(json.dumps(report))
     if failure and gateway:
         detail=evidence/'sandbox-create.stderr'

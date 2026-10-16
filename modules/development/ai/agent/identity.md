@@ -180,20 +180,60 @@ the same direct generated immutable configuration path; the strict preflight is
 unchanged. The owning config is passed as `phoenixAgentGatewayConfig` to avoid a
 runtime copy or divergent configuration.
 
-The next run passed actual protected gateway preflight/readiness and fresh synthetic
-TLS registration, but sandbox creation failed: Podman could not add its healthcheck
-because `/run/phoenix-agent/private/systemd` does not exist. Final diagnostic evidence
-is the log for
-`/nix/store/4kqha237fq74075ay428nq1k07gh8ixg-vm-test-run-phoenix-identity-openshell-gateway-gate.drv`.
-This is a protected system-service/rootless user-manager integration gap, not a
-successful OpenShell → broker proof. No healthcheck, filesystem or cgroup restriction
-was relaxed. The fixture attempts forced removal of its managed guest containers
-and stops the guest gateway; failed create also rolled back containers. This does
-not establish shutdown grace/log durability or a passing full cleanup acceptance.
+Protected Podman now requires the standard UID980 user manager and uses canonical
+`/run/user/980`, retaining its private API socket and persistent HOME/config/data
+paths. The per-UID manager drop-in inherits the same `ProtectHome=tmpfs` and narrow
+binds (including only its own real runtime directory); its healthcheck children
+therefore keep the protected storage environment and home boundary. No linger or
+operator-manager change is introduced. Additive `ConditionUser=!phoenix-agent`
+drop-ins exclude global GCR, PipeWire/Pulse, speech-dispatcher and generic Podman
+services/sockets while preserving upstream/operator conditions and D-Bus/tmpfiles.
 
-The pending slice is one real gateway sandbox through the actual operator launcher
-and transport, with an explicit fixed exec bridge replacing Codex/history launcher
-semantics, then a workspace write and real broker UID audit. Only workspace/broker
-paths and read-only Nix dependencies are requested workload mounts; no private
-control credentials are mounted. Full launcher/history, retained authentication,
+The bounded VM passed actual manager environment/storage and unrelated-home masking,
+representative desktop-unit exclusion/operator condition, dependency ordering, real
+gateway readiness and synthetic TLS registration. The fixed PATH explicitly includes
+systemd because Podman invokes `systemd-run --user` by name. Operator → fixed launcher
+→ actual transport UID980 → real sandbox UID1000 → host-UID980 workspace write and
+real broker audit UID980 passed through a fixed test exec bridge. Direct operator
+and outsider socket access was denied with matching kernel-UID audit records.
+
+Primary gateway mode defaults `healthCheckInterval = null`, matching production's
+absent regular-health setting. The actual launcher/sandbox/workspace/broker chain
+passes. Cleanup uses authenticated `openshell sandbox delete identity-gateway`,
+keeping the gateway/attached stream alive, then independently checks captured
+container UUIDs, owned timers and gateway-record disappearance. Deletion/disappearance
+have one 180-second diagnostic budget, followed by separately bounded client
+reap/gateway stop and script/global caps of 300/360 seconds. This is diagnostic
+headroom, not acceptable ordinary-shutdown latency; the 45-second safety net is unchanged.
+
+The current gate is red at `cleanup-disappearance/gateway-disappearance-timeout`.
+Delete returned zero in 0.634 seconds; the journal recorded both captured containers
+removed before its response. No 45-second forced-stop fallback was observed. One
+independent disappearance predicate remained through the deadline; accessible logs
+do not identify which. Future timeout logs include only remaining-container and
+captured-gateway-ID counts to resolve that evidence gap without exposing state.
+The gateway list API includes retained terminal/Deleting objects until their store
+record is actually removed, so successful delete invocation alone does not establish
+lookup absence. The captured-ID absence assertion is retained. Current log:
+`/nix/store/if1jmlhci0769ld4cgi87x8v3gp2ljrf-vm-test-run-phoenix-identity-openshell-gateway-gate.drv`.
+Complete primary cleanup acceptance remains pending.
+
+The optional `healthCheckInterval = 10` reproducer configures supported supervisor
+regular healthchecks in this fixture only; it retains its strict timer/manual
+assertions. A timer-driven `Health.Log` recorded success/healthy before manual
+invocation, but the following remote manual check returned 1/unhealthy. That
+optional diagnostic remains red; neither timer nor manual regular-health acceptance
+is counted toward primary default acceptance. Its log is
+`/nix/store/rcxzvvv5l5kd7y79jxmqjyv6irypvh89-vm-test-run-phoenix-identity-openshell-gateway-gate.drv`.
+Production configuration and the default Podman-only fixture are unchanged by this
+optional input.
+
+No healthcheck, filesystem or cgroup restriction was relaxed. The fixture requests
+gateway-owned deletion, then requires disappearance before stopping the gateway;
+this red result does not establish full cleanup acceptance, shutdown grace or log
+durability. Only workspace/broker paths and read-only Nix dependencies are requested
+workload mounts; no private control credentials are mounted. The bridge replaces
+Codex/history launcher semantics; the small public image is not the full Codex image.
+Dependency declarations/order are queried; controlled manager-stop behavior was not
+exercised. Full launcher/history, retained authentication,
 GUI/PTY, migration and exact Native Codex admission remain separate and unproved.
