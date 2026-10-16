@@ -33,7 +33,7 @@ composition in isolation, not installed review-enabled operation, executable-spe
 identity, critical-action authentication or general privileged-command AI review.
 The installed shared client/operator UID remains the authority boundary while
 protected identity is OFF. A controlled real reviewed deployment passed below; critical-dialog
-cancellation remains unresolved;
+Cancel and warning readability are accepted below; valid-pending override remains separate;
 optional identity/reservations/disruption/explanation are separate milestones.
 
 ## Controlled review-window helper
@@ -96,7 +96,7 @@ recovery and timer readiness. Packaging/dry-run/live acceptance remain separate;
 this fixture introduces no production service, default enablement or general
 privileged-command reviewer.
 
-## Controlled real reviewed deployment (passed; cancellation unresolved)
+## Controlled real reviewed deployment (passed)
 
 The fixed helper `/nix/store/mv6m57y7pgisflg7v0jxpa8cqssxhy9c-phoenix-controlled-review-window`
 completed authenticated setup (`on-ready`, exit0). The exact native ON-policy
@@ -508,7 +508,8 @@ cross-branch reuse. The one CLI invocation used pinned Codex 0.159.0 with reques
 `gpt-6-luna`/`high`; internal API calls/tokens/billing were not measured. Protected
 retained authentication worked without sign-in/copy. Only activation was a guarded
 recording callback. Separate guest activation/rollback, socket-peer and controlled
-real reviewed deployment trials passed; precise critical cancellation remains unresolved.
+real reviewed deployment trials passed; exact installed critical Cancel/readability
+were subsequently accepted below. Valid-pending override remains separate.
 The fixture cleaned its private state/GC roots; separately retained prebuild roots
 above require their own cleanup. Earlier authentication-only expiries made no
 model calls, and the superseded caller-role failure is covered by the regression.
@@ -608,7 +609,7 @@ review-OFF closure. The controlled absent-nonce probe below is only negative pol
 cannot prove the pending workflow or fresh/cancelled authentication.
 
 
-## Controlled critical-policy trial (OFF restored; cancellation unvalidated)
+## Historical controlled critical-policy trial (OFF restored; cancellation unvalidated then)
 
 The operator authorized a five-minute live policy window. Candidate
 `/nix/store/3ys5za7ivy19kzdxpr9vyh9n7lfkzdnf-nixos-system-phoenix-26.05.20261004.0d9e9b8`
@@ -638,7 +639,24 @@ The exact OFF closure `nhqm2dwyycw5jvfr88106afig8afsynr` was restored successful
 runtime and system profile both resolve to it and the critical action is absent.
 The first owned timer-stop request expired (exit 124); the explicit operator-
 authorized retry succeeded. Independent checks found both owned timer and service
-not-found/inactive/dead, with service Result=success. Cleanup is complete; runtime
-and profile remain accepted OFF and the critical action is absent. No trial/probe is running; repeat cancellation only in a clearly identified
-operator-coordinated window. Optional
-controls remain OFF; fresh-auth/cancel acceptance remains open.
+not-found/inactive/dead, with service Result=success. Cleanup was complete at that historical OFF checkpoint. The current repository
+selects review ON; do not reuse those runtime/profile statements as current state.
+Exact installed-action Cancel/readability was subsequently accepted as follows;
+valid-pending override authentication/handling remains separate.
+
+## Installed critical-dialog Cancel and readability acceptance
+
+The operator confirmed prompt Cancel on the installed
+`org.phoenix.security-review.override` action, using immutable helper
+`/nix/store/xk5b1kd9iwyxfq0gqfj54mrgx8360cji-phoenix-security-review-override`
+and deliberately invalid nonce `cancel-only-invalid-nonce`. The first native
+request returned 127/`Not authorized` in 4.899 seconds; the operator confirmed
+Cancel worked promptly. A second request returned the same result in 23.954
+seconds including reading time; the operator confirmed the CRITICAL warning was
+clear and readable. Both produced no stdout/root-helper error output, model call
+or activation. No staged pending request or fresh sign-in was involved.
+
+This supersedes the earlier unresolved exact-dialog cancellation/readability
+status. It proves those UI outcomes only: successful authorization, valid-pending
+review override, recovery and other biometric/PIN/password cases remain separate.
+The generic-auth synthetic pending fixture is not proof of that production path.

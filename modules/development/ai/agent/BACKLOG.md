@@ -31,11 +31,11 @@ verification. Historical receipts do not identify today's running generation.
    disposable fixtures exist; actual contained caller acceptance is the remaining
    baseline check. Preserve accepted shared chats and Native recovery without
    migration or fresh sign-in. Future protected-UID Git trust is separate.
-3. **Medium value · complexity 1–2:** Coordinate one exact installed CRITICAL
-   security-override dialog and user Cancel; require prompt rejection and no
-   activation. This needs user readiness, not a new model call or rollout window.
-   Successful valid-pending override/recovery is a separate acceptance task; the
-   generic-auth synthetic pending fixture cannot establish that native workflow.
+3. **Medium-value acceptance complete:** Exact installed CRITICAL security-override
+   Cancel and warning readability are operator-confirmed; both requests returned
+   127 without activation/model calls. No remaining Cancel task. Successful
+   valid-pending override/recovery remains separate; generic-auth synthetic pending
+   fixtures do not establish that native workflow. See [acceptance](security-review.md#installed-critical-dialog-cancel-and-readability-acceptance).
 
 Optional identity, reservations, disruption, explanation, shutdown extensions and
 adaptive publication remain separate milestones; do not enable them to close the
@@ -47,7 +47,7 @@ baseline checklist or treat their aggregate percentages as baseline deficits.
 | --- | --- | --- | --- | --- |
 | Primary shared GUI/CLI workflow | **100% primary accepted** | **0 known implementation** | Low | Optional observation of archive/pin, broader history/UI behavior and relay sizes is not unfinished primary functionality; investigate only an actual regression. Preserve independent Native recovery. [Evidence](HANDOFF.md#evidence-limits-and-separate-unfinished-work). |
 | Bounded authorization interface and seven diagnostics | **100% installed bounded scope** | **0 known implementation** | Low | Revalidate mapped callers/denial paths only when identity or policy changes. Shared UID is a documented limit addressed by the distinct identity milestone, not a hypothetical diagnostic bug. [Contract](authorization/README.md). |
-| Immutable deployment and optional security review | **90–95% broader workflow** (primary reviewed test/switch accepted) | 3–5 | High | Finish exact critical-action override/cancel UX end to end and contained/alternate-worktree caller acceptance. Reviewed test/switch and recovery passed; socket-peer VM and guest activation/rollback are separate passed slices. [Evidence](security-review.md), [handoff](HANDOFF.md). |
+| Immutable deployment and optional security review | **90–95% broader workflow** (primary reviewed test/switch accepted) | 3–5 | High | Finish valid-pending critical override/recovery and contained/alternate-worktree caller acceptance. Exact installed-action Cancel and warning readability are accepted. Reviewed test/switch and recovery passed; socket-peer VM and guest activation/rollback are separate passed slices. [Evidence](security-review.md), [handoff](HANDOFF.md). |
 | Common agent authorization pipeline | **55–75% broader agreed scope** | 8–13 | Low | Existing fixed interface is complete for its closed mappings; independent new-command review, immutable adapters and protected adaptive publication remain. This aggregate is a judgment, not a weighted sum. |
 | OpenShell backend | **85–95% everyday scope** | 5–13 | Medium | Everyday contained backend works; full shutdown/status/log behavior remains a specific unresolved risk, tracked separately below. Keep native recovery and verify host/worktree boundaries when changed. |
 | General privileged-command review and typed execution | **60–80% bounded registry scope** (broader arbitrary-command goal remains partial) | 8–13 | Low | Default-off exact ELF registry and independent review/controller path are implemented with disposable root/socket/model-double proof. Controlled fixed-helper retained-model root-id/cache trial passed (one reviewer CLI call, not an API/token/cost meter). Finish native normal/critical command-client dialog acceptance and explicit caller-boundary approval; select a real operation before any live entry. Scripts/unbound mutable effects and universal root requests remain unsupported. [Registered commands](authorization/README.md#exact-registered-commands-experimental-off). |

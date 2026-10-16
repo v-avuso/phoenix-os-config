@@ -377,7 +377,9 @@ Independent checks found timer/service not-found/inactive/dead, Result=success;
 runtime/profile both exact accepted `nhqm...` OFF. No trial or auth request remains.
 
 Critical absent-nonce probe expired60s (124), with no helper output; operator
-reports Cancel twice had no effect. Cancellation remains unvalidated. Exact
+reported Cancel twice had no effect in that historical GNOME trial. The later
+installed-action Cancel/readability acceptance supersedes that status; see
+[security review](security-review.md#installed-critical-dialog-cancel-and-readability-acceptance). Exact
 unpatched GNOME0.105 source identifies a likely Cancel-response gap outside nested
 password-prompt loops during biometric wait. This is authentication-agent fallback
 UX, not a demonstrated deployment review failure. Maintained locked
@@ -434,8 +436,8 @@ Production review remains OFF; this does not establish general command AI review
   reviewer adapter/auth/schema, root integration/checkpoints and recorder-based
   systemd lifetime trials, real guest activation/rollback and generic-authenticated
   synthetic pending trial and isolated real-peer socket composition above passed.
-  A live reviewed deployment passed. Exact critical-action cancellation remains
-  unvalidated; its agent UX diagnosis is recorded above. The generic
+  A live reviewed deployment passed. Exact installed critical-action Cancel and
+  warning readability are accepted; valid-pending override/recovery remains separate. The generic
   authorization explanation remains experimental/off; critical exact-pending
   override handling is a separate flow.
 - On 2026-10-06 at 08:32, OpenShell 0.1.2 shutdown hit the 45-second supervisor
