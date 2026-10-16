@@ -3,9 +3,11 @@
 `services.phoenixDeployment.securityReview.enable` defaults OFF in the reusable
 module. The repository now explicitly selects ON in `modules/development/ai/default.nix`
 following the controlled real reviewed deployment/recovery acceptance. Persistent
-installation is verified: runtime and boot profile both resolve to
-`cq08hmp1izm7m9yr4arfl1xyxrig6csl`, from frozen clean-main source `n2w6...-source`
-(commit `efcd866`). The active controller/policy select review ON, `gpt-6-luna`/
+installation was verified at recorded checkpoint `efcd866`: runtime and boot
+profile both resolved to `cq08hmp1izm7m9yr4arfl1xyxrig6csl`, from frozen source
+`n2w6...-source`. These identities are receipts; current runtime/profile, activated
+source/provenance and root authorization journal are authoritative. The repository
+controller/policy select review ON, `gpt-6-luna`/
 `high`; other experimental controls remain OFF. Its legacy `modelReview.enable`
 option is an alias. Authentication, dirty-source
 freezing, exact closure binding, disruption checks, reservations and rollback

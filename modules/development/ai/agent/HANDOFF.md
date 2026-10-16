@@ -21,18 +21,25 @@ commands and limits remain in the [module README](README.md),
   stays in Native until **this existing chat** is present and resumable in Sandbox;
   do not ask them to start a fresh chat or abandon this context.
 
-## Recorded installed state and pending source
+## Recorded installation checkpoints
 
-- Persistent review enablement is installed and verified from clean main `efcd866`:
+Exact paths below are historical receipts, not a promise of the latest generation.
+For current bindings verify `/run/current-system`, resolved system profile,
+`/etc/phoenix-agent/activated-source` and active provenance, together with the root
+authorization journal. Final source synchronization is recorded there and in the
+operator handoff; do not create another tracked receipt change solely to update
+its own deployed source identity.
+
+- Persistent review enablement was installed and verified at clean main `efcd866`:
   source `/nix/store/n2w6qb9a0v38jjvqfy21g9dadfnamnjv-source`, closure
   `/nix/store/cq08hmp1izm7m9yr4arfl1xyxrig6csl-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
-  Actual `ai-broker` switch completed (exit0); runtime AND boot profile match.
-  `phoenix-deploy` is active with config `fq8zw6...`, review/policy ON, Luna/high,
+  That `ai-broker` switch completed (exit0); runtime AND boot profile matched.
+  At that checkpoint `phoenix-deploy` used config `fq8zw6...`, review/policy ON, Luna/high,
   client/operator UID1000. GUI sharing stays ON; identity/reservations/disruption/
   explanation/shutdown ordering stay OFF. Human Phoenix commands retain terminal
   sudo; routine updates remain zero-AI. General command review/policy maintenance
   remains intended, not implemented. Named NetworkManager diagnostic returned
-  active without authentication. Sole KDE6.6.6 agent PID1055506 is active; operator
+  active without authentication. The sole KDE6.6.6 agent was PID1055506; the operator
   confirmed Cancel and successful security-key fingerprint authentication.
   The operator reports a smaller dialog, password field initially visible and no
   fingerprint hint. PAM is byte-identical to accepted OFF; hint presentation is
@@ -44,8 +51,8 @@ commands and limits remain in the [module README](README.md),
   `/nix/store/l0f22687ny5zw4d9rsq2pfzqh51wwr4p-source` and closure
   `/nix/store/nhqm2dwyycw5jvfr88106afig8afsynr-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
   At that checkpoint both runtime and boot profile matched that closure; the
-  current installed closure is recorded above. Installed launcher script/config match the exact built launcher
-  used for acceptance. Sharing is ON; all six experimental controls remain OFF.
+  later review-enabled checkpoint is recorded above. Launcher script/config matched
+  the exact acceptance build. Sharing was ON; all six experimental controls were OFF.
   Clean-source GUI on/off evaluation passed. Published shared-history readiness
   remains authoritative; never restore originals. Sharing was first persistently
   installed in the earlier `v8jxcw` closure.
