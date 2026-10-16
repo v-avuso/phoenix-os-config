@@ -23,24 +23,28 @@ commands and limits remain in the [module README](README.md),
 
 ## Recorded installed state and pending source
 
-- Repository selection now prepares `securityReview.enable=true` after the real
-  reviewed deployment/recovery pass. This is not yet persistently installed:
-  current runtime/profile remain accepted OFF `nhqm...`. GUI sharing stays ON;
-  identity/reservations/disruption/explanation/shutdown ordering stay OFF. Human
-  Phoenix commands retain terminal sudo; routine updates remain zero-AI. General
-  command review/policy maintenance is intended, not implemented. KDE6.6.6 user-level
-  cutover and generic-request Cancel passed; persistent startup and successful
-  authentication await the ordinary installation approval. Cue readability was
-  unobserved, not failed.
+- Persistent review enablement is installed and verified from clean main `efcd866`:
+  source `/nix/store/n2w6qb9a0v38jjvqfy21g9dadfnamnjv-source`, closure
+  `/nix/store/cq08hmp1izm7m9yr4arfl1xyxrig6csl-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
+  Actual `ai-broker` switch completed (exit0); runtime AND boot profile match.
+  `phoenix-deploy` is active with config `fq8zw6...`, review/policy ON, Luna/high,
+  client/operator UID1000. GUI sharing stays ON; identity/reservations/disruption/
+  explanation/shutdown ordering stay OFF. Human Phoenix commands retain terminal
+  sudo; routine updates remain zero-AI. General command review/policy maintenance
+  remains intended, not implemented. Named NetworkManager diagnostic returned
+  active without authentication. Sole KDE6.6.6 agent PID1055506 is active; operator
+  confirmed Cancel and successful security-key fingerprint authentication.
+  The operator reports a smaller dialog, password field initially visible and no
+  fingerprint hint. PAM is byte-identical to accepted OFF; hint presentation is
+  a separate cosmetic observation, not a demonstrated authentication regression.
 
-
-- Lifecycle guard `33bcfce`, accepted repairs and approved sharing promotion are
-  integrated into main and persistently installed. Actual `ai-broker` switch
+- Historical lifecycle/sharing acceptance: `33bcfce`, accepted repairs and sharing
+  promotion were integrated and persistently installed. That `ai-broker` switch
   returned `ok=true`, action `switch`, source
   `/nix/store/l0f22687ny5zw4d9rsq2pfzqh51wwr4p-source` and closure
   `/nix/store/nhqm2dwyycw5jvfr88106afig8afsynr-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
-  Both `/run/current-system` and resolved `/nix/var/nix/profiles/system` match
-  that closure. Installed launcher script/config match the exact built launcher
+  At that checkpoint both runtime and boot profile matched that closure; the
+  current installed closure is recorded above. Installed launcher script/config match the exact built launcher
   used for acceptance. Sharing is ON; all six experimental controls remain OFF.
   Clean-source GUI on/off evaluation passed. Published shared-history readiness
   remains authoritative; never restore originals. Sharing was first persistently

@@ -162,7 +162,8 @@ selected backend's allowed mounts. See [cold handoff and proof](history-layout.m
   supported. See the operating guide for deployment and rollback.
 - **Optional security review:** the reusable `securityReview.enable` option defaults
   OFF; this repository explicitly selects ON after controlled live review/recovery
-  acceptance. Persistent installation is pending.
+  acceptance. Persistent installation is verified in both runtime and boot profile
+  (`cq08hmp...`).
   It reviews the frozen local diff and file/line index, with at most two controller
   CLI invocations and one explicit context round (eight ranges, 128 KiB). Input
   including policy/schema is capped at 1 MiB; output and execution are bounded.
