@@ -206,17 +206,25 @@ have one 180-second diagnostic budget, followed by separately bounded client
 reap/gateway stop and script/global caps of 300/360 seconds. This is diagnostic
 headroom, not acceptable ordinary-shutdown latency; the 45-second safety net is unchanged.
 
-The current gate is red at `cleanup-disappearance/gateway-disappearance-timeout`.
-Delete returned zero in 0.634 seconds; the journal recorded both captured containers
-removed before its response. No 45-second forced-stop fallback was observed. One
-independent disappearance predicate remained through the deadline; accessible logs
-do not identify which. Future timeout logs include only remaining-container and
-captured-gateway-ID counts to resolve that evidence gap without exposing state.
-The gateway list API includes retained terminal/Deleting objects until their store
-record is actually removed, so successful delete invocation alone does not establish
-lookup absence. The captured-ID absence assertion is retained. Current log:
-`/nix/store/if1jmlhci0769ld4cgi87x8v3gp2ljrf-vm-test-run-phoenix-identity-openshell-gateway-gate.drv`.
-Complete primary cleanup acceptance remains pending.
+The current gate remains red at `cleanup-disappearance/gateway-disappearance-timeout`.
+One diagnostic rerun from frozen source `9frgill8…` used primary gateway mode with
+`healthCheckInterval = null`. Delete returned 0 in 0.647s; after the unchanged
+180s cleanup budget, `remainingContainerCount = 0` and
+`capturedGatewayIdCount = 1`. The surviving predicate is the captured gateway
+record, not a captured container. The later owned-timer assertion was not reached.
+The chain and broker positive/negative checks ran before cleanup; no complete
+primary cleanup pass is claimed. Exact failed derivation:
+`/nix/store/2wkm7v829r6s5y9fcl45d1pbh8mjw0rc-vm-test-run-phoenix-identity-openshell-gateway-gate.drv`.
+
+Pinned CLI `run.rs::sandbox_list` prints IDs returned by ListSandboxes, so an ID
+remaining in that result is not proof of a live container. Delete acknowledgement
+and durable gateway-record disappearance are distinct. The record's terminal/
+Deleting phase and reason for retention were not captured; no upstream cause is
+established. Next inspect the captured record's bounded phase plus deletion/
+watcher error categories in a separately authorized isolated diagnostic. Keep the
+captured-ID absence assertion and 45s safety net unchanged. The tested fixture
+Nix/Python and `identity.nix` are byte-identical after advancing to merged main
+`8fbee57`; this does not claim whole combined-source VM acceptance.
 
 The optional `healthCheckInterval = 10` reproducer configures supported supervisor
 regular healthchecks in this fixture only; it retains its strict timer/manual
