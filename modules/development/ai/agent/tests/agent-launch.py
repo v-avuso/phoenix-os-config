@@ -63,6 +63,20 @@ class LauncherFixture(unittest.TestCase):
         self.assertFalse(any("stop" in c.args[0] or "load" in c.args[0] for c in run.call_args_list))
         self.assertEqual((self.root / "state/instance").read_text(), "phx-old")
 
+    def test_backend_artifact_revision_refuses_busy_instance_before_workload_mutation(self):
+        self.config["backendArtifacts"] = "/nix/store/new-fixed-backend-manifest"
+        (self.root / "state/instance").write_text("phx-old")
+        with open(self.root / "state/instance-use.lock", "a") as active:
+            fcntl.flock(active, fcntl.LOCK_SH)
+            with mock.patch.object(launch.subprocess, "run", side_effect=self.success) as run, \
+                 mock.patch.object(launch.Path, "is_socket", return_value=True):
+                with self.assertRaisesRegex(SystemExit, "replacement is busy"):
+                    launch.main(self.config, ["--phoenix-exec", "/bin/true"])
+        self.assertFalse(any("stop" in c.args[0] or "load" in c.args[0] or "create" in c.args[0] for c in run.call_args_list))
+        self.assertEqual((self.root / "state/instance").read_text(), "phx-old")
+        # systemctl start is mocked: immutable service imports may precede this
+        # guard; neither this guard nor importer protects HM unit replacement.
+
     def test_same_revision_joins_and_native_history_lock_is_independent(self):
         with mock.patch.object(launch.subprocess, "run", side_effect=self.success), \
              mock.patch.object(launch.Path, "is_socket", return_value=True), \

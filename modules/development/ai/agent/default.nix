@@ -32,7 +32,7 @@ let
   operatorState = "${user.homeDirectory}/.local/state/phoenix-openshell";
   protected = cfg.identity.enable;
   state = if protected then "/var/lib/phoenix-agent" else operatorState;
-  gatewayConfig = formats.generate "phoenix-openshell-gateway.toml" {
+  baseGatewayConfig = formats.generate "phoenix-openshell-gateway.toml" {
     openshell = {
       version = 2;
       gateway = {
@@ -50,8 +50,8 @@ let
         host_gateway_ip = "127.0.0.1";
         default_image = "localhost/phoenix-codex:0.1.2";
         image_pull_policy = "never";
-        sandbox_runtime_image = "ghcr.io/nvidia/openshell/sandbox@sha256:bf4797b6c511f2d8ba02955dbba4bf76c1f0dd6d83531420c5408d5f1fb9d72f";
-        supervisor_image = "ghcr.io/nvidia/openshell/supervisor@sha256:d7b5264bb6bc56f4796e6fa3617b8e4a8d785be0b7293542efd8cc250b0fb67a";
+        sandbox_runtime_image = if cfg.shutdownOrdering.enable then "@PHOENIX_RUNTIME_IMAGE@" else "ghcr.io/nvidia/openshell/sandbox@sha256:bf4797b6c511f2d8ba02955dbba4bf76c1f0dd6d83531420c5408d5f1fb9d72f";
+        supervisor_image = if cfg.shutdownOrdering.enable then "@PHOENIX_SUPERVISOR_IMAGE@" else "ghcr.io/nvidia/openshell/supervisor@sha256:d7b5264bb6bc56f4796e6fa3617b8e4a8d785be0b7293542efd8cc250b0fb67a";
         userns = "keep-id:uid=1000,gid=1000";
         allow_driver_config = true;
         enable_bind_mounts = true;
@@ -60,6 +60,12 @@ let
       };
     };
   };
+  gatewayConfig = if cfg.shutdownOrdering.enable then
+    pkgs.runCommand "phoenix-openshell-gateway.toml" { } ''
+      ${pkgs.python3}/bin/python3 -I ${./shutdown/backend.py} configure \
+        ${baseGatewayConfig} ${config.system.build.phoenixOpenShellShutdownManifest} "$out"
+    ''
+  else baseGatewayConfig;
   policyContents = {
     version = 1;
     filesystem_policy = {
@@ -282,7 +288,7 @@ let
     (toString (if protected then protectedHistoryConfig else historyConfig))
   ];
   launcherConfig = pkgs.writeText "phoenix-openshell-launcher.json" (
-    builtins.toJSON {
+    builtins.toJSON ({
       openshell = "${packages.cli}/bin/openshell";
       native = "${codexCliPackage}/bin/codex";
       podman = "${pkgs.podman}/bin/podman";
@@ -313,7 +319,9 @@ let
       ];
       default_workdir = user.repoDirectory;
       inherit state;
-    }
+    } // lib.optionalAttrs cfg.shutdownOrdering.enable {
+      backendArtifacts = toString config.system.build.phoenixOpenShellShutdownManifest;
+    })
   );
   identityClientConfig = pkgs.writeText "phoenix-agent-identity-client.json" (builtins.toJSON { socket = "/run/phoenix-agent/launch.sock"; });
   launchers = pkgs.writeShellScriptBin "codex" ''

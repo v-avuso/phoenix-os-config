@@ -216,4 +216,15 @@
 - Before expanding shutdown repairs, check the pinned contracts in
   `shutdown-acceptance.md`: administrative exit-report skipping prevents hangs,
   and the gateway log tail is memory-only. Validate supported delivery semantics
-  before treating a negative probe or post-restart absence as a new defect.
+  before treating a negative probe or post-restart absence as a new defect. Trace
+  parsed CLI defaults through the entrypoint into helpers: pinned 0.1.2 keeps
+  sandboxes by default; ephemeral cleanup requires `--no-keep`. Operational
+  lifecycle bindings must use the effective installed config after shared-history
+  policy/mount selection, not the raw base inputs, or restoration can reject its own instance.
+
+- Validate the generated NixOS test script under the selected options before a VM;
+  parsing Nix and Python sources separately misses interpolation/quoting failures.
+  Fault-injection assertions need an observer independent of the killed component.
+- For shutdown log markers, check each sink’s filter first: console WARN can omit
+  INFO accepted by push. Prove ordinary delivery with actual RPC acknowledgement
+  and a live gateway receipt, not console INFO, tail EOF or a post-restart memory tail.

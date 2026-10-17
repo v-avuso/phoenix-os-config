@@ -19,13 +19,40 @@ accepted primary behavior and optional expansion must remain distinct.
 Sources are current declarations and the linked evidence documents, not fresh host
 verification. Historical receipts do not identify today's running generation.
 
+## Active worktrees and milestone status
+
+- Current shutdown work: `codex/openshell-shutdown` at
+  `/home/v/.codex/worktrees/openshell-shutdown/phoenix-os-config`.
+  Continue here: repeatable source-built final images passed ordinary log-drain
+  (1.528s) and ordered manager teardown (1.489s), both exits 0, exact client
+  cancellation and actual RPC ACK. TERM-ignore passes 5.484s; gateway-loss local
+  cleanup/typed log failure passes 1.536s; expected bounded client recovery failure
+  is verified, without claiming successful reconnection.
+  Atomic module wiring remains OFF; actual cold units pass startup 6.136s and
+  active-workload manager teardown 1.503s. Peer observation now finishes with bounded typed recovery failure (exit 255);
+  A supervised host review-ON temporary test passed real CLI/model and exact
+  restoration (idle stop 0.906s); Native preserved, source/live flag restored OFF.
+  Next: repaired GUI and host manager-shutdown acceptance before persistent rollout.
+- GUI sharing: primary workflow is accepted and integrated into `main`.
+  `codex/gui-sharing-trial` at
+  `/home/v/.codex/worktrees/gui-sharing-trial/phoenix-os-config` is retained for
+  preservation, not an unfinished implementation to merge wholesale. Its four
+  branch-only commits have patch-equivalent counterparts in main (`git cherry`
+  reports four minus entries); its sole dirty change enables the sharing flag,
+  which main already enables. Inspect/preserve that checkout before cleanup or
+  relevant regression investigation; start fixes from current main/task source
+  because the old trial lacks later repairs. Do not reset or deploy the old trial.
+- Deployment/review: primary reviewed deployment is accepted; successful
+  valid-pending critical override/recovery remains a separate acceptance task.
+  Recent shutdown commits do not complete that task. Broad percentage ranges are
+  scope estimates, not a measure of recent effort; use these concrete milestones.
+
 ## Daily-baseline release checklist
 
-1. **High value · remaining complexity 3:** Combined-source build and native/contained
-   reviewed temporary activation passed, preserving Typst and excluding the root
-   draft. Integrate and persist the exact documented baseline through the existing
-   review-ON route; verify actual source, runtime and profile. Do not repeat the
-   historical OFF window.
+1. **Accepted daily baseline:** The `7d9a8d0` baseline was integrated and persisted
+   through review ON after native/contained acceptance, preserving Typst and the
+   unrelated root draft. Later work is separate: verify actual source/runtime/profile
+   before each controlled rollout; do not reopen the historical OFF window.
 2. **High-value primary acceptance complete:** Current-UID contained managed-worktree
    cwd/common-Git access, disposable edit/cleanup and dirty immutable deployment
    passed. README restoration/Git cleanliness and frozen-source content were verified.
@@ -49,14 +76,14 @@ baseline checklist or treat their aggregate percentages as baseline deficits.
 | Bounded authorization interface and seven diagnostics | **100% installed bounded scope** | **0 known implementation** | Low | Revalidate mapped callers/denial paths only when identity or policy changes. Shared UID is a documented limit addressed by the distinct identity milestone, not a hypothetical diagnostic bug. [Contract](authorization/README.md). |
 | Immutable deployment and optional security review | **90–95% broader workflow** (primary reviewed test/switch accepted) | 3–5 | High | Contained managed-worktree dirty-source deployment is accepted; finish valid-pending critical override/recovery separately. Exact installed-action Cancel and warning readability are accepted. Reviewed test/switch and recovery passed; socket-peer VM and guest activation/rollback are separate passed slices. [Evidence](security-review.md), [handoff](HANDOFF.md). |
 | Common agent authorization pipeline | **55–75% broader agreed scope** | 8–13 | Low | Existing fixed interface is complete for its closed mappings; independent new-command review, immutable adapters and protected adaptive publication remain. This aggregate is a judgment, not a weighted sum. |
-| OpenShell backend | **85–95% everyday scope** | 5–13 | Medium | Everyday contained backend works; full shutdown/status/log behavior remains a specific unresolved risk, tracked separately below. Keep native recovery and verify host/worktree boundaries when changed. |
+| OpenShell backend | **Everyday primary accepted; shutdown implemented/VM validated, live OFF** | 3–5, controlled rollout/acceptance | High | Repeatable matched images and actual-unit cold startup/manager shutdown pass, including negative workload/peer outcomes. Supervised host CLI/model temporary activation and exact baseline restoration now pass, including idle stop 0.906s; live remains OFF. Remaining: repaired real GUI and host manager-shutdown acceptance before persistent enablement; active-workload/log-ACK remain VM evidence. Preserve Native/auth/history. [Detailed scopes](shutdown-acceptance.md). |
 | General privileged-command review and typed execution | **60–80% bounded registry scope** (broader arbitrary-command goal remains partial) | 8–13 | Low | Default-off exact ELF registry and independent review/controller path are implemented with disposable root/socket/model-double proof. Controlled fixed-helper retained-model root-id/cache trial passed (one reviewer CLI call, not an API/token/cost meter). Finish native normal/critical command-client dialog acceptance and explicit caller-boundary approval; select a real operation before any live entry. Scripts/unbound mutable effects and universal root requests remain unsupported. [Registered commands](authorization/README.md#exact-registered-commands-experimental-off). |
 | Adaptive protected allowlist publication | **0%** | 8–13 | Low | Define narrow capabilities and rationale, reviewed version-tracked publication, revocation and rollback. Worker must never directly mutate live authority; root cache stores exact approvals, not a growing rule registry. Keep OFF until representative trial and explicit approval. |
 | Protected identity | **60–80%** | 8–13 | Medium | Isolated real gateway/UID/workspace/broker chain passes; complete disappearance/cleanup gate remains red. Full Codex image/launcher, retained auth, history/GUI/PTY, migration/recovery and exact Native+contained Codex-only admission remain. Dedicated identity currently covers OpenShell only; Native retains operator recovery. [Evidence and limits](identity.md#protected-podman-keep-id-gate). |
 | Testing reservations | **65–85%** | 5–8 | Medium | Complete two-agent acquire/renew/complete/release, expiry/crash and stale-owner/baseline cases, authenticated admin recovery, and reservation-mediated real activation/rollback. Packaged broker/kernel-UID FIFO, real lease expiry with held mutation guard, installed-helper recovery (authentication doubled), runtime lease and cleanup pass the recorder VM. Native Polkit, protected caller and real activation/rollback workflow remain pending. Expiry must not activate or roll back. [Evidence](reservations.md). |
 | Disruption guard | **55–75%** | 5–8 | Medium | Real guest manager/guarded-helper unchanged, changed-artifact, unsupported-metadata and genuine query-failure cases pass with a recorder. Runtime mask/stop yields actual query status 1, typed inspection-required and no recorder execution; unmask/restart restores the valid case and full reservation cleanup passes. Fresh exact operator exception remains pending. It cannot prove absence of arbitrary activation-shell disruption. [Boundary](disruption.md). |
 | Native authorization explanation | **70–90%** | 3–5 | Low | Verify native GUI presentation/cancel/auth flow and contained host guidance; weigh extra Continue click against useful context. It supplies no authority and is separate from critical security override. [Usage](authorization/README.md#native-explanation-experimental-default-off). |
-| Shutdown ordering, status, logs and cleanup | **40–65%** | 8–13 | Medium | Identify the exact stalled await before any Rust repair; finish ordinary-stop terminal/attached-transport cleanup and user-manager teardown. Ordered guest A/B mitigated the combined-stop delay, but is not full acceptance. Verify final supervisor-event delivery with gateway alive and compare independent persistent captures for combined stop; upstream's gateway tail is memory-only. Preserve administrative report-skip semantics and resource cgroups. [Contracts and evidence](shutdown-acceptance.md). |
+| Shutdown ordering, status, logs and cleanup | **Cooperative final-image VM scope passed; live OFF** | 5–8, controlled rollout | Medium | Fixed source/toolchain/vendor and final image imports/builds are repeatable. Final ordinary (1.528s) and ordered manager (1.489s) pass strict ACK/client/binary/resource gates; prior prototype transaction also passed. TERM-ignore passes 5.484s with forced workload status; gateway loss passes local cleanup/typed log failure 1.536s using independent markers, and a separate 75s observation ends with exit 255/exact 60s recovery-expiry diagnostic (local cleanup 1.507s). Actual module cold startup (6.136s with launch lock held) and strict manager teardown (1.503s) pass in a synthetic guest; bundle remains OFF. Host reviewed temporary CLI/model trial, idle stop 0.906s and exact restoration pass; live/source flag remain OFF. Remaining: repaired real GUI and host manager shutdown before persistent rollout. Active-workload/log-ACK remain VM-only. Detached denial-summary draining is a telemetry limit; restart durability is outside the upstream memory-tail contract. Preserve report-skip semantics, 45s fallback and resource cgroups. [Contracts and evidence](shutdown-acceptance.md). |
 | Reviewer cost visibility (optional extension) | Not estimated; no agreed additional feature scope | 3–5 | Low | Expose bounded nonsecret usage/limit outcomes and distinguish controller invocations from model-internal requests/tokens. Current input/output/time/invocation bounds exist; internal API requests and cumulative tokens lack hard caps. Establish any new recurring budget before widening review; routine updates stay zero AI. [Limits](security-review.md). |
 | Managed-worktree sandbox access | **100% bounded current-UID primary accepted** | **0 known primary implementation** | Low | Actual contained cwd/common-Git access, owned temporary-file cleanup and dirty immutable reviewed test passed; frozen source and restored clean worktree were verified. Narrow-default/custom-override and sibling-isolation fixtures remain separate evidence. Future protected-UID Git trust is outside this accepted primary scope; no wildcard trust or full-profile mount. [Evidence](HANDOFF.md#contained-managed-worktree-deployment-acceptance). |
 | Coarse module controls and composition | **40–60%** | 5–8 | Low | Design and check supported independent disable combinations at responsibility boundaries; document dependencies and native recovery. Add only missing useful controls, not a boolean per helper. Review-off must select human authentication, not automatic approval, and retain the controller, immutable binding and rollback. Current inventory follows below. |
@@ -84,7 +111,7 @@ independently toggleable. Removing an import can break required module arguments
 | Exact registered commands | `phoenix.authorization.commands.enable` | OFF / OFF, entries empty | Controlled fixed-helper model/cache trial passed; native normal/critical command-client dialogs and caller acceptance pending. |
 | Protected identity | `phoenix.agent.identity.enable` | OFF / OFF | Distinct-UID transport/broker and protected Podman keep-id gates passed; real gateway/full OpenShell workflow pending; Native Codex-only admission is unimplemented. |
 | Reservations | `phoenix.agent.reservations.enable` | OFF / OFF | Full workflow/recovery acceptance pending. |
-| Shutdown ordering | `phoenix.agent.shutdownOrdering.enable` | OFF / OFF | Shutdown/status/log acceptance incomplete. |
+| Shutdown ordering | `phoenix.agent.shutdownOrdering.enable` | OFF / OFF | Matched images + ordering; representative VM scopes pass, controlled rollout remains. |
 | Disruption guard | `services.phoenixDeployment.disruptionGuard.enable` | OFF / OFF | Actual desktop/helper/native exception trial pending. |
 | Explanation | `phoenix.authorization.explanation.enable` | OFF / OFF | Isolated native GUI acceptance pending. |
 

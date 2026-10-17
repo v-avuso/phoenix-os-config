@@ -1,0 +1,286 @@
+--- a/crates/openshell-sandbox/src/boundary_server.rs
++++ b/crates/openshell-sandbox/src/boundary_server.rs
+@@ -499,10 +499,8 @@
+         loop {
+             if BOUNDARY_TERMINATION_REQUESTED.load(Ordering::Acquire) {
+                 let signal = BOUNDARY_TERMINATION_SIGNAL.load(Ordering::Acquire);
+-                let before_supervisor_confirmation = !matches!(
+-                    *lock(&runtime.supervisor_connection),
+-                    SupervisorConnectionState::Connected(_)
+-                );
++                let before_supervisor_confirmation =
++                    !runtime.supervisor_confirmed_for_termination();
+                 runtime.shutdown();
+                 if before_supervisor_confirmation {
+                     return Err(format!(
+@@ -1511,8 +1509,57 @@
+         AwaitingConfirmation,
+         Connected(SandboxConnectionId),
+         Frozen { recovery_id: u64 },
+-        Terminating,
+-        Terminal,
++        Terminating(TerminationCause),
++        Terminal(TerminationCause),
++    }
++
++    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
++    enum TerminationCause {
++        SupervisorRequest,
++        RecoveryExpired,
++    }
++
++    impl SupervisorConnectionState {
++        fn confirmed_for_termination(self) -> bool {
++            matches!(
++                self,
++                Self::Connected(_) | Self::Terminal(TerminationCause::SupervisorRequest)
++            )
++        }
++
++        fn begin_recovery_termination(&mut self, recovery_id: u64) -> bool {
++            if *self != (Self::Frozen { recovery_id }) {
++                return false;
++            }
++            *self = Self::Terminating(TerminationCause::RecoveryExpired);
++            true
++        }
++
++        // Called under the connection lock after request authentication. Preserve
++        // idempotent explicit retries, but never replace recovery-loss ownership.
++        // true means termination already completed, regardless of its cause.
++        fn begin_supervisor_termination(&mut self) -> Result<bool, &'static str> {
++            match *self {
++                Self::Terminal(_) => Ok(true),
++                Self::Terminating(TerminationCause::RecoveryExpired) => {
++                    Err("boundary is terminating after supervisor recovery expired")
++                }
++                Self::AwaitingConfirmation => Err("boundary has no confirmed supervisor"),
++                Self::Connected(_)
++                | Self::Frozen { .. }
++                | Self::Terminating(TerminationCause::SupervisorRequest) => {
++                    *self = Self::Terminating(TerminationCause::SupervisorRequest);
++                    Ok(false)
++                }
++            }
++        }
++
++        fn complete_termination(&mut self, cause: TerminationCause) -> bool {
++            if *self == Self::Terminating(cause) {
++                *self = Self::Terminal(cause);
++            }
++            *self == Self::Terminal(cause)
++        }
+     }
+ 
+     #[derive(Clone)]
+@@ -1682,7 +1729,8 @@
+                 let mut connection = lock(&self.supervisor_connection);
+                 if matches!(
+                     *connection,
+-                    SupervisorConnectionState::Terminating | SupervisorConnectionState::Terminal
++                    SupervisorConnectionState::Terminating(_)
++                        | SupervisorConnectionState::Terminal(_)
+                 ) {
+                     self.connections.mark_terminal();
+                     return Err((
+@@ -1785,13 +1833,16 @@
+             });
+         }
+ 
++        fn supervisor_confirmed_for_termination(&self) -> bool {
++            lock(&self.supervisor_connection).confirmed_for_termination()
++        }
++
+         async fn expire_recovery(&self, recovery_id: u64) {
+             let process = {
+                 let mut connection = lock(&self.supervisor_connection);
+-                if *connection != (SupervisorConnectionState::Frozen { recovery_id }) {
++                if !connection.begin_recovery_termination(recovery_id) {
+                     return;
+                 }
+-                *connection = SupervisorConnectionState::Terminating;
+                 let state = lock(&self.state);
+                 match &*state {
+                     RuntimeState::Running(process) => Some(process.clone()),
+@@ -1824,16 +1875,20 @@
+                 tracing::error!(%error, "sandbox workload did not terminate after recovery loss");
+                 return;
+             }
+-            *lock(&self.supervisor_connection) = SupervisorConnectionState::Terminal;
++            // The cause is retained even if an authenticated request races this
++            // completion: recovery loss must never become administrative success.
++            lock(&self.supervisor_connection)
++                .complete_termination(TerminationCause::RecoveryExpired);
+         }
+ 
+         async fn terminate_boundary(&self) -> Response {
+             {
+                 let mut connection = lock(&self.supervisor_connection);
+-                if *connection == SupervisorConnectionState::Terminal {
+-                    return Response::BoundaryTerminated;
+-                }
+-                *connection = SupervisorConnectionState::Terminating;
++                match connection.begin_supervisor_termination() {
++                    Ok(true) => return Response::BoundaryTerminated,
++                    Ok(false) => {}
++                    Err(error) => return guest_error(BoundaryErrorKind::Terminated, error),
++                }
+             }
+             // Revocation happens before process shutdown so no concurrent or
+             // replacement connection can race the terminal transition.
+@@ -1852,7 +1907,14 @@
+             {
+                 return guest_error(BoundaryErrorKind::Process, error);
+             }
+-            *lock(&self.supervisor_connection) = SupervisorConnectionState::Terminal;
++            if !lock(&self.supervisor_connection)
++                .complete_termination(TerminationCause::SupervisorRequest)
++            {
++                return guest_error(
++                    BoundaryErrorKind::Terminated,
++                    "boundary termination ownership changed",
++                );
++            }
+             Response::BoundaryTerminated
+         }
+ 
+@@ -4175,8 +4237,17 @@
+             runtime.expire_recovery(recovery_id).await;
+             assert_eq!(
+                 *lock(&runtime.supervisor_connection),
+-                SupervisorConnectionState::Terminal
+-            );
++                SupervisorConnectionState::Terminal(TerminationCause::RecoveryExpired)
++            );
++            assert_eq!(
++                runtime.terminate_boundary().await,
++                Response::BoundaryTerminated
++            );
++            assert_eq!(
++                *lock(&runtime.supervisor_connection),
++                SupervisorConnectionState::Terminal(TerminationCause::RecoveryExpired)
++            );
++            assert!(!runtime.supervisor_confirmed_for_termination());
+             let replacement_id = SandboxConnectionId::new();
+             let replacement = runtime
+                 .authenticate_request(replacement_id, bearer_request((), &token).metadata())
+@@ -4186,6 +4257,96 @@
+                     .commit_attach(&replacement, supervisor_instance_id)
+                     .is_err()
+             );
++        }
++
++        #[test]
++        fn termination_signal_classification_preserves_cause() {
++            use SupervisorConnectionState as State;
++            use TerminationCause::{RecoveryExpired, SupervisorRequest};
++            for (state, confirmed) in [
++                (State::AwaitingConfirmation, false),
++                (State::Connected(SandboxConnectionId::new()), true),
++                (State::Frozen { recovery_id: 7 }, false),
++                (State::Terminating(SupervisorRequest), false),
++                (State::Terminating(RecoveryExpired), false),
++                (State::Terminal(SupervisorRequest), true),
++                (State::Terminal(RecoveryExpired), false),
++            ] {
++                assert_eq!(state.confirmed_for_termination(), confirmed, "{state:?}");
++            }
++        }
++
++        #[test]
++        fn termination_ownership_recovery_first_cannot_be_reclassified() {
++            use SupervisorConnectionState as State;
++            use TerminationCause::{RecoveryExpired, SupervisorRequest};
++            let mut state = State::Frozen { recovery_id: 7 };
++            // Exact transition used by expiry, paused before its process await.
++            assert!(state.begin_recovery_termination(7));
++            assert!(state.begin_supervisor_termination().is_err());
++            assert!(!state.complete_termination(SupervisorRequest));
++            assert_eq!(state, State::Terminating(RecoveryExpired));
++            assert!(state.complete_termination(RecoveryExpired));
++            assert_eq!(state.begin_supervisor_termination(), Ok(true));
++            assert_eq!(state, State::Terminal(RecoveryExpired));
++            assert!(!state.confirmed_for_termination());
++        }
++
++        #[test]
++        fn termination_ownership_explicit_first_preserves_in_progress_retries() {
++            use SupervisorConnectionState as State;
++            use TerminationCause::{RecoveryExpired, SupervisorRequest};
++            let mut state = State::Frozen { recovery_id: 7 };
++            // An already-authenticated request may win before expiry claims loss;
++            // new frozen-session requests still fail existing authorization.
++            assert_eq!(state.begin_supervisor_termination(), Ok(false));
++            assert!(!state.begin_recovery_termination(7));
++            assert_eq!(state.begin_supervisor_termination(), Ok(false));
++            assert!(!state.complete_termination(RecoveryExpired));
++            assert!(!state.confirmed_for_termination());
++            // Incomplete cleanup leaves the same retryable state, not success.
++            assert_eq!(state, State::Terminating(SupervisorRequest));
++            assert!(state.complete_termination(SupervisorRequest));
++            assert_eq!(state.begin_supervisor_termination(), Ok(true));
++            assert!(state.confirmed_for_termination());
++        }
++
++        #[tokio::test(flavor = "multi_thread")]
++        async fn termination_in_progress_retries_respect_actual_runtime_cause() {
++            let (runtime, _) = availability_test_runtime();
++            *lock(&runtime.supervisor_connection) =
++                SupervisorConnectionState::Terminating(TerminationCause::RecoveryExpired);
++            assert!(matches!(
++                runtime.terminate_boundary().await,
++                Response::Error {
++                    kind: BoundaryErrorKind::Terminated,
++                    ..
++                }
++            ));
++            assert_eq!(
++                *lock(&runtime.supervisor_connection),
++                SupervisorConnectionState::Terminating(TerminationCause::RecoveryExpired)
++            );
++            assert!(!runtime.supervisor_confirmed_for_termination());
++
++            // Model an incomplete prior explicit cleanup, without changing auth
++            // admission or requiring a real workload merely to control this phase.
++            *lock(&runtime.supervisor_connection) =
++                SupervisorConnectionState::Terminating(TerminationCause::SupervisorRequest);
++            assert!(!runtime.supervisor_confirmed_for_termination());
++            assert_eq!(
++                runtime.terminate_boundary().await,
++                Response::BoundaryTerminated
++            );
++            assert_eq!(
++                *lock(&runtime.supervisor_connection),
++                SupervisorConnectionState::Terminal(TerminationCause::SupervisorRequest)
++            );
++            assert_eq!(
++                runtime.terminate_boundary().await,
++                Response::BoundaryTerminated
++            );
++            assert!(runtime.supervisor_confirmed_for_termination());
+         }
+ 
+         #[tokio::test(flavor = "multi_thread")]
+@@ -4207,12 +4368,21 @@
+             );
+             assert_eq!(
+                 *lock(&runtime.supervisor_connection),
+-                SupervisorConnectionState::Terminal
++                SupervisorConnectionState::Terminal(TerminationCause::SupervisorRequest)
+             );
+             assert_eq!(
+                 runtime.connections.require_active(&principal),
+                 Err(SandboxAuthError::TerminalSession)
++            );
++            assert_eq!(
++                runtime.terminate_boundary().await,
++                Response::BoundaryTerminated,
++                "completed explicit retries must remain idempotent"
++            );
++            assert!(
++                runtime.supervisor_confirmed_for_termination(),
++                "completed authenticated termination must not become unconfirmed startup on SIGTERM"
+             );
+         }
+ 
+         #[tokio::test(flavor = "multi_thread")]

@@ -219,7 +219,7 @@ def launch(config, args, lifetime):
 
         # Serialize the revision decision with setup, then retain a separate
         # shared instance-use lock for the full client transport lifetime.
-        revision = hashlib.sha256((config["image"] + config["policy"] + config["mounts"] + ("protected-identity" if config.get("protectedIdentity") else "")).encode()).hexdigest()[:12]
+        revision = hashlib.sha256((config["image"] + config["policy"] + config["mounts"] + ("protected-identity" if config.get("protectedIdentity") else "") + config.get("backendArtifacts", "")).encode()).hexdigest()[:12]
         name = "phx-" + revision
         instance_marker = state / "instance"
         previous = instance_marker.read_text() if instance_marker.exists() else None

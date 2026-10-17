@@ -1,23 +1,66 @@
 # OpenShell shutdown ordering acceptance
 
-The ordering option stays disabled until actual OpenShell passes this procedure.
-Run only in a disposable NixOS VM with its own user, gateway state, Podman
-storage and persistent journal. Never stop the operator's shared services.
+Shutdown options remain disabled on the live host. Final repeatable source-built
+images now pass cooperative ordinary log-drain (1.528 seconds) and ordered
+user-manager teardown (1.489 seconds): TERM/FINAL, both container exits 0, explicit
+client cancellation 1, actual accepted-tail RPC acknowledgement and verified
+running ELF/image bindings. Ordinary proves a final live gateway event; manager
+is immediately inactive with resource/cgroup gates preserved and no PAM/restart.
+Actual module-generated synthetic-user units also pass empty-store startup
+(6.136s) while `launch.lock` is held, followed by strict active-workload manager
+teardown (1.503s). Exact IDs, running binaries, RPC ACK and resource/cgroup gates
+pass; see `cold-module-vm-receipt.json`. Earlier prototype transaction evidence
+remains scoped below. A supervised host temporary CLI/model trial and exact
+baseline restoration also passed; see [host acceptance](#supervised-host-temporary-trial).
+
+Live configuration remains OFF. Active-workload TERM/FINAL, accepted-tail log ACK
+and manager teardown are VM evidence; repaired real GUI and host manager-shutdown
+acceptance remain separate. The bounded peer observation finishes with exit 255
+and the exact pinned 60s recovery-expiry diagnostic; local cleanup is independent
+of client latency. TERM-ignore passes in 5.484s with truthful forced workload
+status; gateway loss passes local cleanup/typed log failure in 1.536s with
+independent markers, while a later bounded observation establishes failed transport recovery
+(exit 255, exact 60s recovery-expiry message within the 75s observation), not successful
+unavailable-gateway operation. Pinned `main.rs` keeps sandboxes by default, selecting supervised recovery;
+`--no-keep` would select ephemeral cleanup. No CLI patch is needed. Detached denial-summary draining is a telemetry
+limit, not a baseline blocker; restart durability is outside the upstream
+memory-tail contract. See [source packaging and exact final receipts](shutdown/README.md).
+
+## Supervised host temporary trial
+
+The parent executed review-ON temporary activation of frozen source
+`/nix/store/nqi2h28clnmjkbxvhb2yrlh75qpm04vn-source`, built as
+`/nix/store/pygs0a53ynsr1q8h01jg8rpcla0p4y2d-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
+The contained `/bin/pwd` returned the exact task directory with exit 0. One
+ephemeral `gpt-6-luna`/low CLI command returned 0 and `SHUTDOWN_PROBE_OK`; no
+model tool transcript was retained, so exact shell/tool-call count is unproved.
+Running runtime/supervisor ELF hashes matched the source-built candidate. Its
+idle pair stopped through the supported CLI in 0.906s with zero active containers.
+
+Reviewed restoration verified runtime and boot profile both exactly
+`/nix/store/4fav7l10h0vfmikl0msnwcac3avjs2gj-nixos-system-phoenix-26.05.20261004.0d9e9b8`
+and activated source `/nix/store/m0zqpnq0pf8i7pc2mkwn384p6jgrkx34-source`. Native
+remained open, original source bytes/cleanliness were restored and shutdown remains
+OFF. An initial private wrapper rejected restoration because it hashed base
+policy/mounts instead of effective shared-history inputs; corrected exact-pair
+restoration succeeded without a product change. Runtime outcomes were captured
+in the parent tool output; temporary scripts/prebuild data are not a retained
+runtime receipt. This owning section records that bounded evidence.
+
+Active-workload TERM/FINAL, final accepted-tail RPC ACK and manager shutdown remain
+VM evidence. Real repaired GUI and host manager-shutdown acceptance are deferred;
+this temporary CLI/model pass does not authorize persistent enablement.
 
 ## Prerequisites
 
-Use locked configuration, OpenShell 0.1.2 CLI/gateway and configured pinned
-supervisor/runtime images and locked packages (current host: Podman 5.8.7,
-systemd 260.4; the smoke test records actual guest versions). Provide cached
-`localhost/phoenix-codex:0.1.2`, valid sandbox policy and VM-local TLS; no personal
-credentials/providers. Enable `phoenix.agent.shutdownOrdering.enable` in the
-guest before boot. Record package/image identities, effective units and stop
-deadlines. Preserve the observed 45-second scope fallback; shortening it is not
-a fix. The default command sandbox hides `/dev/kvm`; supported host-level read-only
-inspection confirmed the host device exists. The host subsequently passed an explicit read/write KVM open and
-`KVM_GET_API_VERSION=12` probe without creating a VM. No realized cached QEMU
-package was found in the bounded store inspection. Actual OpenShell and VM-manager shutdown
-have **not** passed this procedure.
+Run only in a disposable NixOS VM with fresh user/home, isolated gateway/Podman
+state, local TLS, persistent journal and locked packages. Use OpenShell 0.1.2
+CLI/gateway, independently verified immutable runtime/supervisor archives and the
+small representative workload below; full Phoenix-image startup is a separate
+gap. No personal mounts, credentials or providers. Enable ordering only for its
+explicit A/B case, not as an ordinary-stop prerequisite. Record actual guest
+versions, image IDs, effective units and deadlines. Preserve the five-second TERM
+grace and observed 45-second fallback; shortening deadlines is not a repair.
 
 ## Active workload and captures
 
@@ -45,7 +88,7 @@ journal for gateway/Podman/exact scopes, and
 Workload stdout and supervisor `PushSandboxLogs` are separate channels. Generate
 repeatable policy-mediated activity using a fixture allowed by the guest policy;
 match its supervisor events between local supervisor logs and gateway logs.
-Retain the final shutdown supervisor events for durable comparison. A workload
+Retain the final shutdown supervisor events for live gateway receipt comparison. A workload
 final marker or tail disconnect alone does not establish gateway log flush.
 
 ## Stop transactions
@@ -66,12 +109,11 @@ exist; driver stops supervisor before workload teardown; dependent scope stop
 jobs do not deliver competing early TERM. Conmon remains in the Podman service
 cgroup; workload resource cgroups remain enabled.
 
-Collect stopped state, then restart only the disposable gateway. Query
-`openshell logs shutdown-acceptance --source sandbox`; compare final supervisor
-events with local logs to prove persistence across gateway exit. If legitimate
-reconciliation removes the sandbox, obtain its durable log evidence through a
-supported gateway interface before removal; otherwise report the missing
-inspection capability rather than claiming success.
+Collect stopped state and final-event receipt while the gateway is still alive.
+Its log tail is memory-only: restart is not a durable-log acceptance test. For
+combined teardown retain independent persistent journal/Podman captures; a later
+gateway restart must follow normal retained-intent behavior, without interpreting
+loss of the old in-memory tail as a new flush defect.
 
 Repeat with a fresh active fixture and the VM harness's orderly guest shutdown
 (or termination of this disposable user's manager). Use `--detach` for this
@@ -83,16 +125,18 @@ the three-unit transaction alone does not.
 
 Each cooperative case must satisfy:
 
-- TERM and final markers delivered, terminal status consistent with graceful
-  exit, and no surviving owned workload, supervisor or monitor;
-- final supervisor events persisted in gateway logs, without forced
-  `PushSandboxLogs` termination or unexplained missing events;
+- TERM/final markers, stopped owned workload/supervisor, and terminal semantics
+  appropriate to the case: administrative cancellation is explicit nonzero failure,
+  not a fabricated canonical command success;
+- accepted final supervisor events acknowledged by the completed push RPC and
+  observable in the live gateway tail; observer/tail exit alone proves neither
+  push completion nor persistence across gateway restart;
 - no supervisor SIGKILL/exit 137, boundary TERM-before-confirmation warning,
   or delay until the 45-second scope fallback;
 - stop completes within 10 seconds for this one-second trap fixture, evidenced
   by monotonic timestamps with fallback deadlines unchanged;
 - correct ordering, resource limits retained, and subsequent gateway start
-  succeeds without unintended sandbox resurrection.
+  matches documented retained-intent behavior.
 
 Also test disposable TERM-ignoring workload and unavailable control/log peer.
 Record which deadline terminates each phase; cleanup must finish within existing
@@ -232,8 +276,8 @@ Podman reported `Digest of source image manifest would not match destination
 reference` for the runtime OCI archive exported by registry digest. No gateway,
 sandbox or shutdown operation was reached; this is archive transport evidence,
 not a supervisor failure. Re-exporting the same verified IDs in supported Docker
-archive format resolved image loading. Ordinary-stop acceptance remains unpassed
-until subsequent stages succeed.
+archive format resolved image loading. This historical setup failure did not
+exercise shutdown; the current scoped prototype results are summarized above.
 The small-image ordinary run reached the workload and network probe, but the
 original localhost HTTP request only produced workload-local connection refusal,
 not a supervisor deny event. That was an invalid probe: exact 0.1.2
@@ -263,12 +307,10 @@ command exit zero or its delivery. Gateway log push ended gRPC 13 with relay/TLS
 EOF at supervisor exit; durable final-log flush remains unproved. Artifacts:
 `/nix/store/7dfjinf28r9wn1daldy3zks76dnyp5dm-vm-test-run-phoenix-shutdown-openshell/final/shutdown-evidence`.
 
-Next: add an independent combined gateway/exact-scope stop mode to this same
-fixture, capturing all cleanup, attachment, bootstrap and durable-log outcomes
-even on failure. Preserve the ordinary transport failure as failing evidence,
-10-second cooperative target, 45-second fallback and 50-second capture deadline.
-Stop at the first stall; its causal await remains unknown. No production Rust
-patch or relaxed ordinary pass assertion is proposed.
+The subsequent combined and ordered-manager cases below supplied separate
+lifetime-ordering evidence. The historical ordinary attachment/classification
+failures motivated the now-validated isolated prototypes; full acceptance remains
+strict and the original combined stall's exact awaited call remains unknown.
 
 ### Combined teardown reproduction
 
@@ -281,7 +323,7 @@ stop, immediate Sandbox Protocol loss/freeze, then Podman supervisor fallback an
 systemd workload-scope SIGKILL at the 45-second deadline. Gateway StopSandbox
 completed only afterwards. Artifacts:
 `/nix/store/pngnr2nxycqxfcj4jvjnl12r46v0mnv9-vm-test-run-phoenix-shutdown-openshell/final/shutdown-evidence`.
-No further experiments or production/Rust changes followed this reproduction.
+The subsequent ordering A/B below mitigated this reproduction; it did not identify the exact blocked await.
 
 The exact 0.1.2 mechanism is source-backed but the precise pending await remains
 unknown. `boundary_server.rs:1732–1785` freezes on authenticated transport loss and
@@ -299,19 +341,10 @@ a specific RPC deadlock or original host-identical workload freeze is not proved
 The original host observation described prompt workload exit; this fixture instead
 lost FINAL after freeze, so retain that distinction.
 
-Smallest next checks, after reporting this proposal:
-
-1. Run the same disposable transaction once with the existing module-generated
-   `shutdownOrdering` containers configuration (no-conmon plus scope-before-gateway
-   annotation), preserving pins, workload, capture and 45-second fallback. This is
-   the cheapest upstream-supported lifetime-ordering A/B candidate, not a proven fix.
-2. Verify actual scope `Before`, conmon cgroup placement and termination ordering,
-   then independently check TERM/FINAL, container status, bounded client termination
-   and policy-log persistence. Timing alone cannot pass full acceptance.
-3. Only if ordered teardown still stalls, add bounded phase-entry/completion
-   diagnostics around those existing supervisor calls in a disposable upstream
-   test build to identify the pending await; do not patch three subsystems based
-   on a guessed wait or shorten the safety net.
+The ordering A/B and manager-stop observations below completed the first proposed
+lifetime checks. If a future correctly ordered case stalls, instrument the exact
+pending supervisor phase before choosing another repair; do not infer its await
+from elapsed time or shorten the safety net.
 
 ### Ordered transaction and log-storage contract
 
@@ -336,17 +369,17 @@ flush it. New supervision is consistent with retained-intent reconciliation;
 the exact restart-generation transition was not needed to establish this buffer
 contract. No custom database export or restart suppression is proposed.
 
-Smallest valid checks separate delivery from persistence: with gateway kept alive,
-verify a uniquely identified final supervisor event reaches GetSandboxLogs after
-ordinary stop, then compare accepted event counts with the supported live stream.
-For combined gateway stop, retain the guest journal/Podman local log captures and
-compare the same identified events before/after gateway restart; those independent
-persistent outputs, rather than the gateway's memory tail, are the persistence
-baseline. Existing TERM/FINAL stdout proves workload cleanup only. A terminal
-supervisor event and finite push-completion protocol are still proposed, not yet
-implemented; no current capture proves final remote flush. Gateway restart must
-continue to exercise normal retained-intent behavior. Canonical transport and
-runtime-status failures remain explicit independent acceptance gaps.
+Delivery and persistence are separate: the matched ordinary prototype now proves
+one uniquely identified final supervisor event in GetSandboxLogs plus an actual
+accepted-tail RPC acknowledgement while the gateway remains alive. For combined
+gateway stop, the cooperative ordered gate requires the same successful local
+RPC acknowledgement. Explicit bounded incomplete delivery with an unavailable
+peer belongs to a separate negative case, not cooperative acceptance. Do not require
+GetSandboxLogs after stopping its process or restart the gateway merely to infer
+durability. Its memory tail is not a persistence contract; retained-intent restart
+behavior remains unchanged. TERM/FINAL proves workload cleanup, not all telemetry
+flush. Explicit administrative client cancellation is correct, not a fabricated
+successful workload exit.
 
 ### Ordered user-manager teardown
 
@@ -365,7 +398,7 @@ that invalid attempt is not shutdown evidence. The corrected run validates promp
 ordered manager teardown, not final-event delivery or successful canonical exit.
 No live ordering option, timeout, package pin or production Rust was changed.
 
-### Proposed ordinary-stop repair (not implemented)
+### Ordinary-stop repair: validated cancellation and classification prototypes
 
 Preserve upstream's deliberate administrative-stop availability contract.
 [PR #3036](https://github.com/NVIDIA/OpenShell/pull/3036), merged as
@@ -375,43 +408,62 @@ exit-report hangs: signal-driven shutdown intentionally skips durable canonical
 exit reporting. It predates pinned 0.1.2. Reintroducing that retrying RPC would
 undo a maintained fix; canonical exit zero is not promised on administrative stop.
 
-The smaller candidate is explicit cancellation of terminal delivery when
-administrative shutdown wins, retaining the report/finalize skip. Add a terminal
-outcome alongside the current success-only `terminal_reported` state in
-`main_session.rs:560–572`; the SSH task (`ssh.rs:721–724`) must select acknowledged
-Exit versus administrative cancellation. Cancellation closes owned channels with
-a clear infrastructure/admin-stop failure, never a fabricated successful command
-status. Join/cancel those owned delivery tasks within a single short absolute
-deadline (proposed one second), without polling the already-completed shutdown
-future. Preserve the normal durable-acknowledged completion path and existing
-remote-output drain bound. Verify the actual relay/CLI error representation before
-choosing its exact wire indication: local channel closure alone may not release
-a gateway-owned relay. Add regression cases for connected and unavailable gateway,
-active and never-attaching clients, and descendant-held stdout. Keep five-second
-TERM grace and 45-second driver fallback; measure the ten-second cooperative target.
+The validation-only [cancellation prototype](tests/shutdown-cancellation/README.md)
+retains that report/finalize skip and replaces the success-only terminal wait with
+an acknowledged/cancelled outcome. Atomic attachment admission registers owned
+writers before cancellation can drain them; a one-second absolute cleanup budget
+never waits for a future client or remote channel-close acknowledgement. Normal
+acknowledgement remains authoritative, and cancellation reports explicit failure
+rather than successful canonical completion. Focused regressions passed 28 tests,
+including a deterministic admission race and real in-process SSH status/close.
 
-In `openshell-sandbox/src/boundary_server.rs:493–519`, classify a SIGTERM observed
-in `Terminal` after acknowledged `terminate_boundary` as normal administrative
-shutdown, preserving the error for truly unconfirmed startup. Do not simply treat
-all non-Connected states as success: `Frozen` and `Terminating` may represent lost
-enforcement or incomplete termination. Add contrasting tests for AwaitingConfirmation,
-Connected, Terminal and recovery-loss transitions. This fixes the demonstrated
-misclassification; it does not establish the canonical command's exit status.
+The real gateway VM passed the explicit terminal-delivery scope from frozen source
+`g2k6w78…`, image `bcb8d358…`: ordinary stop took 1.491 seconds, TERM/FINAL arrived,
+and attached transport returned 1 with the exact administrative cancellation
+message. Supervisor exited 0 and runtime 1; both exact containers stopped without
+137. Active workload and nonempty live log stream were established before stop.
+Evidence is under `gkqj17q04…-vm-test-run-phoenix-shutdown-openshell`, with the exact
+path and structured outcome in the linked fixture README. Gateway relay EOF and
+absent captured stream-completion status remain independent limits: final remote
+flush and full graceful shutdown did not pass. The binary is version 0.0.0 and the
+overlay is not yet a reproducible source package; live shutdown options remain OFF.
+Five-second TERM grace, the 45-second fallback and strict full acceptance remain.
 
-Log flushing needs a separate explicit lifecycle, not merely awaiting the existing
-join handle. `main.rs:328–346` retains but never joins log push. In
-`log_push.rs:149–218`, the streaming RPC is separately spawned and channel closure
-only queues the final batch before returning; the subscriber may retain sender
-clones. A candidate is an owned shutdown handle that stops accepting new events,
-drains the existing queue, closes the request stream and awaits that RPC's result
-under a single finite budget (proposed one second within the completion budget),
-then records incomplete delivery locally on expiry without retrying shutdown.
-It must not log recursively into its closing queue. This can bound delivery of
-accepted events only: tracing already drops on a full queue, and gateway RPC
-success must be checked against its storage contract before claiming durability.
-The previous gateway-restart durability assertion was invalid for its in-memory
-log bus, as established above; final flush needs an identified terminal event and
-a live gateway receipt, with independent persistent local logs for restart comparison.
+The [runtime-classification prototype](tests/shutdown-cancellation/README.md)
+retains Explicit versus RecoveryExpired cause inside the existing Terminating and
+Terminal states. Recovery claims ownership before awaiting cleanup; explicit
+retries cannot replace it. Completed retries still acknowledge either terminal
+cause without reclassification. SIGTERM accepts Connected or completed explicit
+termination, while awaiting/frozen/incomplete/recovery-loss states retain failure.
+Nine focused regressions cover real runtime helpers, idempotency and deterministic
+opposite ownership orderings; no wire protocol or timeout was changed.
+
+The actual running static runtime ELF/image binding passed in the gateway VM from
+source `c10cjab2…`, runtime image `1f746b8f…`: ordinary stop took 1.478 seconds,
+TERM/FINAL arrived, both exact containers exited 0, the old confirmation warning
+was absent, and attached client cancellation remained explicit status 1. Exact
+patch/build identities and `6l8ar5bm…` structured evidence are in the linked README.
+This validates the ordinary administrative classification path only; final log
+flush, complete graceful shutdown, a reproducible full source package and live
+rollout remain outside the accepted prototype.
+
+The owned log-drain prototype is now implemented and validated with the matched
+supervisor image `86c69d84…` and runtime `1f746b8f…`. Frozen source `g85n9g0f…`,
+output `cpfb8pfd…`, stopped in 1.436 seconds with both containers exit 0 and
+explicit client cancellation 1. Local static outcome appeared exactly once:
+accepted-tail acknowledgement true, drops 0, prior-stream uncertainty false,
+incomplete None; the fresh live gateway contained the final event exactly once.
+The first run's local INFO-marker assertion was invalid because its console
+filter defaults to WARN while push independently accepts INFO; the failed receipt
+and corrected structured receipt remain preserved in the linked prototype docs.
+
+The handle closes receiver admission, drains batches of at most 50, closes the
+request stream and awaits the actual RPC under one absolute one-second budget.
+It reports prior loss and incomplete delivery separately. This proves accepted
+live-tail publication, not all historical events, restart durability, file-appender
+flush or detached SubmitPolicyAnalysis denial-summary aggregation. The latter
+emitted a separate failed-flush warning in the first run; it is not covered by the
+RPC outcome. Full graceful shutdown and live rollout remain unaccepted.
 
 A bounded official-source reuse check found latest stable
 [v0.1.4 (`5a7728c`)](https://github.com/NVIDIA/OpenShell/releases/tag/v0.1.4)
@@ -421,7 +473,8 @@ found for these paths; the search was not exhaustive. No newer CLI/runtime image
 combination was built or tested here, and upgrading would require matched package,
 image/protocol and containment compatibility checks rather than a blind pin bump.
 
-These are patch proposals for confirmed ordinary-stop gaps. Combined-scope teardown
+Cancellation and runtime classification have isolated prototype proof; owned final
+log-push drain remains a proposal. Combined-scope teardown
 may remove the gateway before acknowledgement; in that case the expected outcome
 is bounded explicit transport failure, not a fabricated durable success. The
 original 45-second stall remains unexplained; no production Rust edit, stronger
@@ -464,9 +517,13 @@ fixed probe-name snapshots. Attached create now fails promptly when its status
 file appears before readiness, rather than waiting the remaining 60-second poll.
 
 Combined gateway/exact-scope stop reproduced the stall as recorded above;
-manager-wide shutdown and durable final supervisor-event comparison remain pending; workload stdout
-or a closed tail alone never proves final log persistence. Do not patch Rust without an agreed source-backed repair proposal; ordinary
-shutdown now supplies failure evidence rather than complete acceptance.
+the matched ordered transaction and manager scopes now pass in 1.452 and 1.483
+seconds respectively. Manager inactivity was observed immediately before reads;
+no PAM, gateway restart or manager restart was introduced. Both modes preserve
+TERM/FINAL, both container exits 0, explicit cancellation 1 and one successful
+local RPC acknowledgement, with verified binaries/cgroup ordering/resources.
+Exact prototype receipts are linked above. Workload stdout or a closed tail alone never proves final log
+flush. Further Rust repairs require an agreed source-backed proposal.
 
 For the full regression, reuse the locked Nixpkgs `pkgs.testers.runNixOSTest` driver and its rootless
 Podman/lingering-user pattern in the existing module-local smoke; extend it only
@@ -484,14 +541,14 @@ HTTP event is present in supervisor and gateway logs before running both stop
 cases above. Account for intended gateway restart/resume semantics when checking
 post-stop state.
 
-Estimate: 2–4 hours implementation/integration, not a measured completion promise.
-Proposed preflight limit: 30 minutes, 8 GiB downloads and 25 GiB scratch; stop and
-reassess if exceeded or if Rust/QEMU must build from source. Cold closure sizes
-remain unknown. Verify KVM access and image archives/hashes before proceeding;
-allow at most five minutes for the ready guest's regression run. Preserve the
-10-second cooperative pass and 45-second safety net; stop at the first reproduced
-stall (50-second harness deadline) to identify the last acknowledged cleanup phase
-before choosing a Rust fix. The rootless smoke passed. The ordinary OpenShell
-slice reached policy denial and stopped quickly, but failed attachment/runtime
-status assertions as described above. Ordinary-stop acceptance remains incomplete. Combined gateway/scope stop reproduced the stall;
-full user-manager shutdown and durable final-log persistence remain pending.
+Use bounded increments: two build CPUs, 4 GiB guest RAM, 8 GiB dependency-cache
+and 25 GiB scratch caps; inspect missing inputs before provisioning. A ready guest
+has a five-minute global bound. Preserve the ten-second cooperative target and
+45-second safety net; diagnose the first material failure before any repeat.
+Current ordinary prototypes pass their named cancellation, classification and
+accepted-tail RPC and ordered transaction/manager scopes.
+Final repeatable source-built images pass ordinary and ordered-manager scopes
+and actual module cold composition as summarized above. Remaining:
+repaired real GUI and host manager-shutdown acceptance before persistent rollout;
+the host CLI/model trial above does not extend VM active-workload/log-ACK claims. Detached telemetry is a
+stated limit; restart durability is outside the upstream memory-tail contract.
