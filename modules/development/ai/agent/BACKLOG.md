@@ -21,18 +21,13 @@ verification. Historical receipts do not identify today's running generation.
 
 ## Active worktrees and milestone status
 
-- Current shutdown work: `codex/openshell-shutdown` at
-  `/home/v/.codex/worktrees/openshell-shutdown/phoenix-os-config`.
-  Continue here: repeatable source-built final images passed ordinary log-drain
-  (1.528s) and ordered manager teardown (1.489s), both exits 0, exact client
-  cancellation and actual RPC ACK. TERM-ignore passes 5.484s; gateway-loss local
-  cleanup/typed log failure passes 1.536s; expected bounded client recovery failure
-  is verified, without claiming successful reconnection.
-  Atomic module wiring remains OFF; actual cold units pass startup 6.136s and
-  active-workload manager teardown 1.503s. Peer observation now finishes with bounded typed recovery failure (exit 255);
-  A supervised host review-ON temporary test passed real CLI/model and exact
-  restoration (idle stop 0.906s); Native preserved, source/live flag restored OFF.
-  Next: repaired GUI and host manager-shutdown acceptance before persistent rollout.
+- Shutdown implementation and completed proof are merged into `main` at `8fbee57`.
+  The former `codex/openshell-shutdown` branch/worktree was archived and deleted;
+  continue future work from a fresh current-main checkout, not its old path.
+  Repeatable images, cooperative/negative VM scopes, actual-unit cold composition
+  and supervised host CLI/model temporary activation/restoration pass within their
+  stated limits. Shutdown remains OFF; repaired GUI and host manager-shutdown
+  acceptance precede persistent enablement. See [current evidence](shutdown-acceptance.md).
 - GUI sharing: primary workflow is accepted and integrated into `main`.
   `codex/gui-sharing-trial` at
   `/home/v/.codex/worktrees/gui-sharing-trial/phoenix-os-config` is retained for
@@ -79,7 +74,7 @@ baseline checklist or treat their aggregate percentages as baseline deficits.
 | OpenShell backend | **Everyday primary accepted; shutdown implemented/VM validated, live OFF** | 3–5, controlled rollout/acceptance | High | Repeatable matched images and actual-unit cold startup/manager shutdown pass, including negative workload/peer outcomes. Supervised host CLI/model temporary activation and exact baseline restoration now pass, including idle stop 0.906s; live remains OFF. Remaining: repaired real GUI and host manager-shutdown acceptance before persistent enablement; active-workload/log-ACK remain VM evidence. Preserve Native/auth/history. [Detailed scopes](shutdown-acceptance.md). |
 | General privileged-command review and typed execution | **60–80% bounded registry scope** (broader arbitrary-command goal remains partial) | 8–13 | Low | Default-off exact ELF registry and independent review/controller path are implemented with disposable root/socket/model-double proof. Controlled fixed-helper retained-model root-id/cache trial passed (one reviewer CLI call, not an API/token/cost meter). Finish native normal/critical command-client dialog acceptance and explicit caller-boundary approval; select a real operation before any live entry. Scripts/unbound mutable effects and universal root requests remain unsupported. [Registered commands](authorization/README.md#exact-registered-commands-experimental-off). |
 | Adaptive protected allowlist publication | **0%** | 8–13 | Low | Define narrow capabilities and rationale, reviewed version-tracked publication, revocation and rollback. Worker must never directly mutate live authority; root cache stores exact approvals, not a growing rule registry. Keep OFF until representative trial and explicit approval. |
-| Protected identity | **60–80%** | 8–13 | Medium | Isolated real gateway/UID/workspace/broker chain passes; complete disappearance/cleanup gate remains red. Full Codex image/launcher, retained auth, history/GUI/PTY, migration/recovery and exact Native+contained Codex-only admission remain. Dedicated identity currently covers OpenShell only; Native retains operator recovery. [Evidence and limits](identity.md#protected-podman-keep-id-gate). |
+| Protected identity | **60–80%** | 8–13 | Medium | Isolated real gateway/UID/workspace/broker chain passes; cleanup remains red: delete returns 0 in 0.647s and no captured containers remain, but one captured gateway ID is still listed at 180s. Record phase/retention cause is unknown; retain the absence assertion and diagnose bounded gateway state separately. Full Codex image/launcher, retained auth, history/GUI/PTY, migration/recovery and exact Native+contained Codex-only admission remain. Dedicated identity currently covers OpenShell only; Native retains operator recovery. [Evidence and limits](identity.md#protected-podman-keep-id-gate). |
 | Testing reservations | **65–85%** | 5–8 | Medium | Complete two-agent acquire/renew/complete/release, expiry/crash and stale-owner/baseline cases, authenticated admin recovery, and reservation-mediated real activation/rollback. Packaged broker/kernel-UID FIFO, real lease expiry with held mutation guard, installed-helper recovery (authentication doubled), runtime lease and cleanup pass the recorder VM. Native Polkit, protected caller and real activation/rollback workflow remain pending. Expiry must not activate or roll back. [Evidence](reservations.md). |
 | Disruption guard | **55–75%** | 5–8 | Medium | Real guest manager/guarded-helper unchanged, changed-artifact, unsupported-metadata and genuine query-failure cases pass with a recorder. Runtime mask/stop yields actual query status 1, typed inspection-required and no recorder execution; unmask/restart restores the valid case and full reservation cleanup passes. Fresh exact operator exception remains pending. It cannot prove absence of arbitrary activation-shell disruption. [Boundary](disruption.md). |
 | Native authorization explanation | **70–90%** | 3–5 | Low | Verify native GUI presentation/cancel/auth flow and contained host guidance; weigh extra Continue click against useful context. It supplies no authority and is separate from critical security override. [Usage](authorization/README.md#native-explanation-experimental-default-off). |
