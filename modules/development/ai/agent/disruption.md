@@ -64,13 +64,13 @@ runtime effects outside concrete unit metadata are outside this protection.
 
 Run `python3 -B modules/development/ai/agent/tests/disruption.py` and the existing
 deployment/reservation fixtures. The Python fixtures use explicit immutable ownership, active-manager and
-activation recorder stubs. The partial VM evidence below exercises real ownership,
+activation recorder stubs. The bounded VM evidence below exercises real ownership,
 manager queries and the actual reserved activation helper with a recorder. Actual installed artifact inspection
 is read-only; source/fixture checks do not establish live GUI, systemd or Polkit
 acceptance. Sandbox denial of the user bus must remain typed inspection failure,
 never a reason to broaden access merely for validation.
 
-## Partial isolated systemd evidence
+## Isolated systemd evidence
 
 The existing reservation-lifetime VM now includes a real guest user manager and
 an active idle `kando.service` stand-in. Its generated systemd artifact and synthetic
@@ -81,19 +81,25 @@ unchanged artifacts and reject changed unit bytes or unsupported HM metadata bef
 any recorder invocation. Earlier reservation/client-death/expiry checks still ran.
 No real desktop application or Home Manager migration was exercised.
 
-The last executed full extended gate was **red**, derivation
-`/nix/store/6ihgxddh0fh7r7a08pmlyl6j6rgr6dwr-vm-test-run-phoenix-reservation-lifetime.drv`.
-Its unavailable-manager stimulus is invalid: stopping `user@1000` does not make the
-supported `systemctl --user --machine=client@.host` query unavailable. The guest log
-shows the stdio bridge/PAM starting a fresh manager; the query validly reports no
-active user units and no findings. The invalid scenario was removed from the normal fixture after that run; the
-final fixture was **not rerun**. No unavailable-query or final complete-cleanup
-pass is claimed. The observed stimulus was `systemctl stop user@1000.service`
-followed by `systemctl --user --machine=client@.host show --property=Id
---property=ActiveState -- kando.service`. This observation is
-not evidence that an actual query error bypasses the guard. A bounded genuine
-unavailability stimulus still needs isolated proof; exact critical exception
-publication/consumption and native Polkit acceptance are also pending.
+The full extended reservation-lifetime gate now passes from frozen fixture source
+`/nix/store/gv87hi6aa3k6b4zvgwgrgc7jna6cnzb3-source`, output
+`/nix/store/lhbrki88lza1rg5s9wv0qrpx9bpjl431-vm-test-run-phoenix-reservation-lifetime`.
+The guest runtime-masks `user@1000.service` before stopping it, preventing the
+stdio bridge/PAM from simply restarting the manager. The exact supported query
+`systemctl --user --machine=client@.host show --property=Id --property=ActiveState
+-- kando.service` returns 1. Production inspection reports
+`active-unit-query-unavailable`; actual `activate_reserved` returns typed
+`disruption: inspection-required`, with no recorder invocation. Unmask/restart
+restores the active stand-in and unchanged-artifact pass. The full reservation,
+mutation-lifetime, recovery, release and capability-nondisclosure checks finish
+in 23.11s under the existing 210s guest bound.
+
+Stopping the manager alone is not a valid unavailability stimulus: the supported
+bridge can restart it and validly report inactive units. The prior red attempt used
+that invalid stimulus; the new pass proves the bounded query-failure gate, not a
+product repair. Exact operator exception publication/consumption and native Polkit
+acceptance remain pending. No live desktop, real activation or Home Manager
+migration is proved by the recorder.
 
 Deployment's dynamically imported disruption, security-review and routine-update
 helpers are now individually packaged immutable files. Enabled and disabled
