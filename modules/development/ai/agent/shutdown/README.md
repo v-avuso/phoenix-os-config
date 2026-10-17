@@ -94,9 +94,9 @@ killed gateway as its observer; that red receipt remains preserved.
 
 Exact negative receipts are `negative-runtime-vm-receipt.json` and
 `negative-peer-observer-vm-receipt.json` in scratch. Both retain the initial
-under 10s gate and45s fallback; no 50s stall was accepted. The atomic module bundle is implemented but remains OFF; cold service
-composition is unproved. Next are that proof, a pinned-contract-length peer-loss
-client observation and controlled rollout. No production flag or service was changed.
+under 10s gate and 45s fallback; no 50s stall was accepted. The atomic module bundle
+remains OFF. Next are pinned-contract-length peer-loss client observation and
+controlled rollout. No production flag or host service was changed.
 
 ## Opt-in module integration
 
@@ -124,9 +124,16 @@ stopping an old gateway: rollout requires explicit quiescence before unit
 activation. Native fallback, provider auth/history and recovery remain unchanged.
 Eleven offline helper tests, 21 launcher tests and generated ON/OFF composition
 checks pass, including exact ID substitution and the protected-identity rejection.
-OFF gateway bytes match committed baseline `6baccb901…`. Actual cold service
-composition remains unproved; no service activation or live enablement is claimed
-by these checks. Exact evidence is `backend-integration-focused-receipt.json` in
-the scratch receipt directory. The peer-loss
+OFF gateway bytes match committed baseline `6baccb901…`. A disposable guest using
+the actual synthetic-user Home Manager units passes cold empty-store startup in
+6.136s while `launch.lock` is held: the importer loads both exact IDs without
+deadlock. An active workload/logstream then passes manager teardown in 1.503s,
+with both exits 0, exact cancellation 1, one successful RPC receipt, verified
+running binaries and preserved resource/cgroup gates. The manager is immediately
+inactive; the 45s fallback is unchanged. Frozen fixture source `dik0yrgq…`, output
+`xc7027vd…`; exact evidence is `cold-module-vm-receipt.json` alongside
+`backend-integration-focused-receipt.json` in scratch. This uses synthetic guest
+registration and a small public workload, not full Phoenix GUI/model/auth
+acceptance or host activation. The peer-loss
 CLI's five-second observation is shorter than its pinned keepalive contract, so
 pending status is an observation limit, not an established CLI defect.

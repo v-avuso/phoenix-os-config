@@ -60,7 +60,7 @@ def capture(stage, containers):
     bounded("journalctl -b --no-pager -n 400 -u user@1000.service > /tmp/shutdown-evidence/user-manager.log")
     bounded(user("journalctl --user -b --no-pager -n 400 > /tmp/shutdown-evidence/user-units.log"))
     bounded("printf %s " + shlex.quote(json.dumps(probe_timings)) + " > /tmp/shutdown-evidence/probe-timing.json")
-    for name in ("shutdown-stream.log", "workload-stdout.log", "workload-status", "create-driver.log", "probe-baseline.log", "probe-keepid.log", "transaction-outcome.json", "transaction-units.log", "transaction-stop.log", "durable-sandbox.log", "shutdown-stream.status", "transaction-cgroups.json", "terminal-delivery-outcome.json", "runtime-classification-outcome.json", "log-drain-outcome.json", "post-stop-gateway-sandbox.log", "negative-outcome.json", "negative-stop.log", "peer-shutdown-markers"):
+    for name in ("shutdown-stream.log", "workload-stdout.log", "workload-status", "create-driver.log", "probe-baseline.log", "probe-keepid.log", "transaction-outcome.json", "transaction-units.log", "transaction-stop.log", "durable-sandbox.log", "shutdown-stream.status", "transaction-cgroups.json", "terminal-delivery-outcome.json", "runtime-classification-outcome.json", "log-drain-outcome.json", "post-stop-gateway-sandbox.log", "negative-outcome.json", "negative-stop.log", "peer-shutdown-markers", "cold-module-startup.json"):
         bounded("test ! -f /tmp/" + name + " || cp /tmp/" + name + " /tmp/shutdown-evidence/" + name)
     machine.copy_from_machine("/tmp/shutdown-evidence", stage)
 
@@ -88,7 +88,12 @@ try:
     machine.log(machine.succeed("systemctl --version").splitlines()[0])
     machine.log(run("podman --version").strip())
     stage = "image-load"
+    if cold_module_units:
+        assert run("podman images --quiet").strip() == "", "cold module fixture store is not empty"
+        assert machine.execute(user("systemctl --user is-active --quiet phoenix-openshell-gateway.service"), timeout=3)[0] != 0, "module gateway started before controlled cold start"
     for role, image in images.items():
+        if cold_module_units:
+            continue  # Importer, not the driver, must load the backend images.
         run("podman load --input " + shlex.quote(image["archive"]), timeout=60)
         loaded = run("podman image inspect --format '{{.Id}}' sha256:" + image["id"]).strip()
         assert loaded.removeprefix("sha256:") == image["id"], "loaded image ID mismatch: " + role
@@ -115,7 +120,25 @@ try:
     else:
         stage = "gateway-ready"
         run("mkdir -p ~/.local/state/phoenix-openshell")
-        run("systemctl --user start phoenix-openshell-gateway.service", timeout=35)
+        if cold_module_units:
+            stage = "cold-module-gateway-start"
+            started = time.monotonic()
+            status, _ = machine.execute(user("flock -n ~/.local/state/phoenix-openshell/launch.lock systemctl --user start phoenix-openshell-gateway.service"), timeout=55)
+            imported_ids: dict[str, Any] = {}
+            startup = dict(startStatus=status, startupSeconds=round(time.monotonic() - started, 3),
+                           launchLockHeldDuringStart=True, storeInitiallyEmpty=True, importedIDs=imported_ids)
+            for role in ("runtime", "supervisor"):
+                inspect_status, value = machine.execute(user("podman image inspect --format '{{.Id}}' sha256:" + images[role]["id"]), timeout=5)
+                imported_ids[role] = dict(status=inspect_status, id=value.strip())
+            machine.succeed("printf %s " + shlex.quote(json.dumps(startup)) + " > /tmp/cold-module-startup.json")
+            machine.log("COLD_MODULE_STARTUP " + json.dumps(startup, sort_keys=True))
+            assert status == 0, "actual module cold start failed; retain importer/unit journals"
+            for role, observed in imported_ids.items():
+                assert observed["status"] == 0 and observed["id"].removeprefix("sha256:") == images[role]["id"], "actual module importer image binding mismatch"
+            # Only the small workload is driver-loaded, after the module importer proof.
+            run("podman load --input " + shlex.quote(images["workload"]["archive"]), timeout=60)
+        else:
+            run("systemctl --user start phoenix-openshell-gateway.service", timeout=35)
         run("openshell gateway add --local --name openshell https://127.0.0.1:17670")
         run("openshell status")
         stage = "sandbox-create"

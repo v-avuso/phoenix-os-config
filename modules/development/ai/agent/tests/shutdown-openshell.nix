@@ -1,6 +1,6 @@
 # Explicit first slice: actual OpenShell ordinary stop, ordering OFF.
 # Image arguments are public immutable archives plus independently verified IDs/hash.
-{ pkgs, runtime, supervisor, workload, probeCreateOnly ? false, stopMode ? "ordinary", containersConfig ? null, acceptanceScope ? "full", negativeCase ? null }:
+{ pkgs, runtime, supervisor, workload, probeCreateOnly ? false, stopMode ? "ordinary", containersConfig ? null, acceptanceScope ? "full", negativeCase ? null, moduleUnits ? null }:
 let
   lib = pkgs.lib;
   packages = import ../packages.nix { inherit pkgs; };
@@ -57,6 +57,7 @@ assert acceptanceScope == "full"
 assert builtins.elem stopMode [ "ordinary" "transaction" "manager" ];
 assert builtins.elem negativeCase [ null "term-ignore" "gateway-unavailable" ];
 assert negativeCase == null || (stopMode == "ordinary" && !probeCreateOnly && containersConfig != null && runtime ? binarySha256 && supervisor ? binarySha256);
+assert moduleUnits == null || (negativeCase == null && stopMode == "manager" && acceptanceScope == "ordered-lifecycle" && containersConfig != null && !probeCreateOnly);
 assert builtins.all valid (builtins.attrValues images);
 pkgs.testers.runNixOSTest {
   name = "phoenix-shutdown-openshell";
@@ -71,7 +72,8 @@ pkgs.testers.runNixOSTest {
     users.users.fixture = { isNormalUser = true; uid = 1000; autoSubUidGidRange = true; };
     services.journald.extraConfig = "Storage=persistent";
     environment.systemPackages = [ packages.cli pkgs.procps pkgs.curl pkgs.util-linux pkgs.bash ];
-    systemd.user.services.phoenix-openshell-podman = {
+    systemd.user.services = lib.mkIf (moduleUnits == null) {
+    phoenix-openshell-podman = {
       description = "Disposable rootless OpenShell API";
       environment = lib.optionalAttrs (containersConfig != null) {
         CONTAINERS_CONF_OVERRIDE = toString containersConfig;
@@ -82,7 +84,7 @@ pkgs.testers.runNixOSTest {
         UMask = "0077";
       };
     };
-    systemd.user.services.phoenix-openshell-gateway = {
+    phoenix-openshell-gateway = {
       description = "Disposable OpenShell 0.1.2 gateway";
       unitConfig.ConditionUser = "fixture";
       requires = [ "phoenix-openshell-podman.service" ];
@@ -103,10 +105,18 @@ pkgs.testers.runNixOSTest {
         UMask = "0077";
       };
     };
+    };
+    # Actual generated module units, without enabling their WantedBy links.
+    # The guest explicitly starts them while holding the launcher lock.
+    systemd.user.units = lib.optionalAttrs (moduleUnits != null) {
+      "phoenix-openshell-podman.service".text = builtins.readFile moduleUnits.podman;
+      "phoenix-openshell-gateway.service".text = builtins.readFile moduleUnits.gateway;
+    };
   };
   testScript = ''
     import json
     images = json.loads("""${builtins.toJSON (builtins.mapAttrs (_: image: image // { archive = toString image.archive; }) images)}""")
+    cold_module_units = ${if moduleUnits != null then "True" else "False"}
     probe_create_only = ${if probeCreateOnly then "True" else "False"}
     ordering_configured = ${if containersConfig != null then "True" else "False"}
     stop_mode = "${stopMode}"
