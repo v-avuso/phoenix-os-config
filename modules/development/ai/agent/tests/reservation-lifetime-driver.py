@@ -88,6 +88,19 @@ try:
     machine.succeed("systemctl --user --machine=client@.host start kando.service", timeout=10)
     for case in ("unchanged", "changed", "unsupported"):
         machine.succeed(python + " -I " + helper + " disruption-" + case, timeout=15)
+    phase("disruption-query-unavailable")
+    # Stopping alone is invalid: the supported stdio bridge can restart the manager.
+    # Runtime-mask only this disposable guest instance to prevent that restart.
+    machine.succeed("systemctl mask --runtime user@1000.service && systemctl stop user@1000.service", timeout=15)
+    try:
+        query_status, _ = machine.execute("systemctl --user --machine=client@.host show --property=Id --property=ActiveState -- kando.service", timeout=12)
+        print("disruption-user-query-status=" + str(query_status), flush=True)
+        assert query_status != 0, "masked-manager stimulus did not fail the actual supported query"
+        machine.succeed(python + " -I " + helper + " disruption-unavailable", timeout=15)
+    finally:
+        machine.succeed("systemctl unmask --runtime user@1000.service && systemctl start user@1000.service", timeout=15)
+    machine.succeed("systemctl --user --machine=client@.host start kando.service", timeout=10)
+    machine.succeed(python + " -I " + helper + " disruption-unchanged", timeout=15)
     machine.succeed("systemctl stop user@1000.service", timeout=15)
     management("release", "first")
     assert not management("status")["owners"]

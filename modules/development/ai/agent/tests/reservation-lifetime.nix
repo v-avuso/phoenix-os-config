@@ -115,7 +115,7 @@ let
     elif sys.argv[1].startswith('disruption-'):
         kind = sys.argv[1].removeprefix('disruption-')
         candidates = {'unchanged':'${unchanged}', 'changed':'${changed}',
-                      'unsupported':'${unsupported}'}
+                      'unsupported':'${unsupported}', 'unavailable':'${unchanged}'}
         config.update(json.loads(Path('${disruptionConfig}').read_text()))
         module = load('disruption', '${disruption}')
         candidate = candidates[kind]
@@ -125,8 +125,9 @@ let
             assert proof['active']['user'] == ['kando.service'] and not proof['findings']
         elif kind == 'changed': assert 'user:kando.service:changed-or-removed' in proof['findings']
         elif kind == 'unsupported': assert 'user:inspection-required' in proof['findings']
+        elif kind == 'unavailable': assert proof['active'] is None and proof['findings'] == ['active-unit-query-unavailable']
         capability = json.loads(Path('/home/client/first.json').read_text())
-        nonce = {'unchanged':'c','changed':'d','unsupported':'e'}[kind] * 64
+        nonce = {'unchanged':'c','changed':'d','unsupported':'e','unavailable':'f'}[kind] * 64
         binding = dict(nonce=nonce, target='metal', action='test', closure=candidate, source='${source}',
             base='${source}', profile=str(Path('/nix/var/nix/profiles/system').resolve()),
             profileSource='${source}', reservation=capability, reservationUid=1000)
