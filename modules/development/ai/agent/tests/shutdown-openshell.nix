@@ -1,6 +1,6 @@
 # Explicit first slice: actual OpenShell ordinary stop, ordering OFF.
 # Image arguments are public immutable archives plus independently verified IDs/hash.
-{ pkgs, runtime, supervisor, workload, probeCreateOnly ? false, stopMode ? "ordinary", containersConfig ? null }:
+{ pkgs, runtime, supervisor, workload, probeCreateOnly ? false, stopMode ? "ordinary", containersConfig ? null, acceptanceScope ? "full" }:
 let
   lib = pkgs.lib;
   packages = import ../packages.nix { inherit pkgs; };
@@ -49,6 +49,8 @@ let
   });
 in
 assert containersConfig == null || (lib.hasPrefix "/nix/store/" (toString containersConfig) && builtins.pathExists containersConfig);
+assert builtins.elem acceptanceScope [ "full" "terminal-delivery" ];
+assert acceptanceScope != "terminal-delivery" || (stopMode == "ordinary" && !probeCreateOnly);
 assert builtins.elem stopMode [ "ordinary" "transaction" "manager" ];
 assert builtins.all valid (builtins.attrValues images);
 pkgs.testers.runNixOSTest {
@@ -103,6 +105,7 @@ pkgs.testers.runNixOSTest {
     probe_create_only = ${if probeCreateOnly then "True" else "False"}
     ordering_configured = ${if containersConfig != null then "True" else "False"}
     stop_mode = "${stopMode}"
+    acceptance_scope = "${acceptanceScope}"
     policy = "${policy}"
   '' + builtins.readFile ./shutdown-openshell.py;
 }

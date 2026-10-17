@@ -58,7 +58,7 @@ def capture(stage, containers):
     bounded("journalctl -b --no-pager -n 400 -u user@1000.service > /tmp/shutdown-evidence/user-manager.log")
     bounded(user("journalctl --user -b --no-pager -n 400 > /tmp/shutdown-evidence/user-units.log"))
     bounded("printf %s " + shlex.quote(json.dumps(probe_timings)) + " > /tmp/shutdown-evidence/probe-timing.json")
-    for name in ("shutdown-stream.log", "workload-stdout.log", "workload-status", "create-driver.log", "probe-baseline.log", "probe-keepid.log", "transaction-outcome.json", "transaction-units.log", "transaction-stop.log", "durable-sandbox.log", "shutdown-stream.status", "transaction-cgroups.json"):
+    for name in ("shutdown-stream.log", "workload-stdout.log", "workload-status", "create-driver.log", "probe-baseline.log", "probe-keepid.log", "transaction-outcome.json", "transaction-units.log", "transaction-stop.log", "durable-sandbox.log", "shutdown-stream.status", "transaction-cgroups.json", "terminal-delivery-outcome.json"):
         bounded("test ! -f /tmp/" + name + " || cp /tmp/" + name + " /tmp/shutdown-evidence/" + name)
     machine.copy_from_machine("/tmp/shutdown-evidence", stage)
 
@@ -252,14 +252,28 @@ try:
             stage = "ordinary-stop-assertions"
             machine.wait_until_succeeds(user("test -f /tmp/workload-status"), timeout=5)
             output = machine.succeed("cat /tmp/workload-stdout.log")
-            assert run("cat /tmp/workload-status").strip() == "0", "attached workload transport did not exit zero"
+            transport_status = run("cat /tmp/workload-status").strip()
+            states = {role: json.loads(run("podman inspect --format '{{json .State}}' " + identifier))
+                      for role, identifier in containers.items()}
+            if acceptance_scope == "terminal-delivery":
+                outcome = dict(scope=acceptance_scope, stopSeconds=round(elapsed, 3),
+                               transportStatus=transport_status,
+                               adminCancellationMessage="openshell: terminal delivery cancelled by administrative shutdown" in output,
+                               termMarker="ACCEPT_TERM" in output, finalMarker="ACCEPT_FINAL" in output,
+                               containers=states, fullGracefulShutdownProved=False, finalLogFlushProved=False)
+                machine.succeed("printf %s " + shlex.quote(json.dumps(outcome)) + " > /tmp/terminal-delivery-outcome.json")
+                machine.log("TERMINAL_DELIVERY " + json.dumps(outcome, sort_keys=True))
+                assert transport_status.isdecimal() and int(transport_status) not in {0, 124, 137}, "administrative transport did not finish with explicit bounded failure"
+                assert outcome["adminCancellationMessage"], "exact administrative cancellation message missing"
+                assert all(not state["Running"] and state["ExitCode"] != 137 for state in states.values()), "container survived or required SIGKILL"
+            else:
+                assert transport_status == "0", "attached workload transport did not exit zero"
+                for role, state in states.items():
+                    assert not state["Running"], "fixture container survived: " + role
+                    assert state["ExitCode"] == 0, "fixture forced/nonzero exit: " + role
             assert "ACCEPT_TERM" in output and "ACCEPT_FINAL" in output, "workload final markers missing"
-            for role, identifier in containers.items():
-                state = json.loads(run("podman inspect --format '{{json .State}}' " + identifier))
-                assert not state["Running"], "fixture container survived: " + role
-                assert state["ExitCode"] == 0, "fixture forced/nonzero exit: " + role
             assert elapsed < 10, "cooperative ordinary stop exceeded ten seconds; preserve 45s fallback"
-            machine.log("Ordinary stop markers and container exit passed; final supervisor drain is separate evidence")
+            machine.log("Ordinary stop scope " + acceptance_scope + " passed; full graceful shutdown and final log flush require their separate assertions")
 finally:
     capture(stage, containers)
     machine.execute(user("test ! -f /tmp/shutdown-stream.pid || kill $(cat /tmp/shutdown-stream.pid)"), timeout=5)

@@ -365,7 +365,7 @@ that invalid attempt is not shutdown evidence. The corrected run validates promp
 ordered manager teardown, not final-event delivery or successful canonical exit.
 No live ordering option, timeout, package pin or production Rust was changed.
 
-### Proposed ordinary-stop repair (not implemented)
+### Ordinary-stop repair: validated cancellation prototype
 
 Preserve upstream's deliberate administrative-stop availability contract.
 [PR #3036](https://github.com/NVIDIA/OpenShell/pull/3036), merged as
@@ -375,28 +375,36 @@ exit-report hangs: signal-driven shutdown intentionally skips durable canonical
 exit reporting. It predates pinned 0.1.2. Reintroducing that retrying RPC would
 undo a maintained fix; canonical exit zero is not promised on administrative stop.
 
-The smaller candidate is explicit cancellation of terminal delivery when
-administrative shutdown wins, retaining the report/finalize skip. Add a terminal
-outcome alongside the current success-only `terminal_reported` state in
-`main_session.rs:560–572`; the SSH task (`ssh.rs:721–724`) must select acknowledged
-Exit versus administrative cancellation. Cancellation closes owned channels with
-a clear infrastructure/admin-stop failure, never a fabricated successful command
-status. Join/cancel those owned delivery tasks within a single short absolute
-deadline (proposed one second), without polling the already-completed shutdown
-future. Preserve the normal durable-acknowledged completion path and existing
-remote-output drain bound. Verify the actual relay/CLI error representation before
-choosing its exact wire indication: local channel closure alone may not release
-a gateway-owned relay. Add regression cases for connected and unavailable gateway,
-active and never-attaching clients, and descendant-held stdout. Keep five-second
-TERM grace and 45-second driver fallback; measure the ten-second cooperative target.
+The validation-only [cancellation prototype](tests/shutdown-cancellation/README.md)
+retains that report/finalize skip and replaces the success-only terminal wait with
+an acknowledged/cancelled outcome. Atomic attachment admission registers owned
+writers before cancellation can drain them; a one-second absolute cleanup budget
+never waits for a future client or remote channel-close acknowledgement. Normal
+acknowledgement remains authoritative, and cancellation reports explicit failure
+rather than successful canonical completion. Focused regressions passed 28 tests,
+including a deterministic admission race and real in-process SSH status/close.
 
-In `openshell-sandbox/src/boundary_server.rs:493–519`, classify a SIGTERM observed
-in `Terminal` after acknowledged `terminate_boundary` as normal administrative
-shutdown, preserving the error for truly unconfirmed startup. Do not simply treat
-all non-Connected states as success: `Frozen` and `Terminating` may represent lost
-enforcement or incomplete termination. Add contrasting tests for AwaitingConfirmation,
-Connected, Terminal and recovery-loss transitions. This fixes the demonstrated
-misclassification; it does not establish the canonical command's exit status.
+The real gateway VM passed the explicit terminal-delivery scope from frozen source
+`g2k6w78…`, image `bcb8d358…`: ordinary stop took 1.491 seconds, TERM/FINAL arrived,
+and attached transport returned 1 with the exact administrative cancellation
+message. Supervisor exited 0 and runtime 1; both exact containers stopped without
+137. Active workload and nonempty live log stream were established before stop.
+Evidence is under `gkqj17q04…-vm-test-run-phoenix-shutdown-openshell`, with the exact
+path and structured outcome in the linked fixture README. Gateway relay EOF and
+absent captured stream-completion status remain independent limits: final remote
+flush and full graceful shutdown did not pass. The binary is version 0.0.0 and the
+overlay is not yet a reproducible source package; live shutdown options remain OFF.
+Five-second TERM grace, the 45-second fallback and strict full acceptance remain.
+
+Runtime classification is a separate proposed repair. In pinned
+`openshell-sandbox/src/boundary_server.rs:493–519`, SIGTERM after explicit boundary
+termination is misclassified because the connection is no longer Connected.
+However, Terminal is also set by recovery expiry (`:1788–1827`), so accepting all
+Terminal states would hide enforcement loss. A future repair must retain the
+termination cause in the existing lifecycle, classify only confirmed explicit
+termination as administrative success, and contrast it with awaiting confirmation,
+frozen, incomplete termination and expired recovery, including competing transitions.
+No runtime classification patch or new wire protocol is implemented here.
 
 Log flushing needs a separate explicit lifecycle, not merely awaiting the existing
 join handle. `main.rs:328–346` retains but never joins log push. In
@@ -421,7 +429,8 @@ found for these paths; the search was not exhaustive. No newer CLI/runtime image
 combination was built or tested here, and upgrading would require matched package,
 image/protocol and containment compatibility checks rather than a blind pin bump.
 
-These are patch proposals for confirmed ordinary-stop gaps. Combined-scope teardown
+Cancellation has isolated prototype proof; runtime classification and log flushing
+remain proposals for ordinary-stop gaps. Combined-scope teardown
 may remove the gateway before acknowledgement; in that case the expected outcome
 is bounded explicit transport failure, not a fabricated durable success. The
 original 45-second stall remains unexplained; no production Rust edit, stronger

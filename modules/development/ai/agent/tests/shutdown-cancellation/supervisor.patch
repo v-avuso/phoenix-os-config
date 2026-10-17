@@ -1,0 +1,465 @@
+--- a/crates/openshell-supervisor-process/src/main_session.rs
++++ b/crates/openshell-supervisor-process/src/main_session.rs
+@@ -21,7 +21,22 @@
+     BoundaryProcess, BoundarySignal, BoundaryTerminal, ProcessAttachment,
+ };
+ 
++/// Completion of durable reporting, or explicit administrative cancellation.
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub enum TerminalDelivery {
++    Reported,
++    Cancelled,
++}
++
+ const OUTPUT_BUFFER_BYTES: usize = 1024 * 1024;
++
++/// Tracks an owned SSH delivery task, independent of remote channel closure.
++pub struct TerminalDeliveryTask(watch::Sender<usize>);
++impl Drop for TerminalDeliveryTask {
++    fn drop(&mut self) {
++        self.0.send_modify(|count| *count -= 1);
++    }
++}
+ 
+ /// Canonical-process I/O retained by the supervisor session multiplexer.
+ pub enum ProcessIo {
+@@ -66,7 +81,7 @@
+ struct OutputLog {
+     state: Mutex<OutputLogState>,
+     version: watch::Sender<u64>,
+-    terminal_reported: std::sync::atomic::AtomicBool,
++    terminal_reported: std::sync::atomic::AtomicU8,
+     terminal_reported_notify: Notify,
+ }
+ 
+@@ -80,7 +95,7 @@
+                 next_sequence: 0,
+             }),
+             version,
+-            terminal_reported: std::sync::atomic::AtomicBool::new(false),
++            terminal_reported: std::sync::atomic::AtomicU8::new(0),
+             terminal_reported_notify: Notify::new(),
+         })
+     }
+@@ -126,6 +141,7 @@
+ struct TerminalAttachmentState {
+     active: usize,
+     process_finished: bool,
++    delivery_closed: bool,
+     expectation: AttachmentExpectation,
+ }
+ 
+@@ -205,6 +221,7 @@
+     finished: std::sync::atomic::AtomicBool,
+     terminal_attachments: Mutex<TerminalAttachmentState>,
+     terminal_attachments_done: Notify,
++    delivery_tasks: watch::Sender<usize>,
+ }
+ 
+ impl MainSession {
+@@ -233,9 +250,11 @@
+             terminal_attachments: Mutex::new(TerminalAttachmentState {
+                 active: 0,
+                 process_finished: false,
++                delivery_closed: false,
+                 expectation: AttachmentExpectation::None,
+             }),
+             terminal_attachments_done: Notify::new(),
++            delivery_tasks: watch::channel(0).0,
+         });
+         (session, input_rx)
+     }
+@@ -287,9 +306,11 @@
+             terminal_attachments: Mutex::new(TerminalAttachmentState {
+                 active: 0,
+                 process_finished: false,
++                delivery_closed: false,
+                 expectation: AttachmentExpectation::None,
+             }),
+             terminal_attachments_done: Notify::new(),
++            delivery_tasks: watch::channel(0).0,
+         });
+         Self::start_io(&session, io, input_rx);
+         session
+@@ -327,9 +348,11 @@
+             terminal_attachments: Mutex::new(TerminalAttachmentState {
+                 active: 0,
+                 process_finished: false,
++                delivery_closed: false,
+                 expectation: AttachmentExpectation::None,
+             }),
+             terminal_attachments_done: Notify::new(),
++            delivery_tasks: watch::channel(0).0,
+         });
+         let stdout_session = Arc::clone(&session);
+         tokio::spawn(async move {
+@@ -556,28 +579,71 @@
+         (first_sequence, state.next_sequence, first_sequence != 0)
+     }
+ 
+-    /// Wait until the gateway durably acknowledges the main-process result.
+-    pub async fn wait_for_terminal_reported(&self) {
++    /// Wait for durable acknowledgement or administrative cancellation.
++    pub async fn wait_for_terminal_reported(&self) -> TerminalDelivery {
++        // Register before observing state so concurrent completion cannot lose a wake.
+         let notified = self.output.terminal_reported_notify.notified();
+-        if self.output.terminal_reported.load(Ordering::Acquire) {
+-            return;
+-        }
+-        notified.await;
+-    }
+-
+-    /// Release attached clients to receive their SSH exit status after the
+-    /// durable sandbox phase and exit code have been recorded.
++        tokio::pin!(notified);
++        notified.as_mut().enable();
++        match self.output.terminal_reported.load(Ordering::Acquire) {
++            1 => TerminalDelivery::Reported,
++            2 => TerminalDelivery::Cancelled,
++            _ => {
++                notified.await;
++                if self.output.terminal_reported.load(Ordering::Acquire) == 1 {
++                    TerminalDelivery::Reported
++                } else {
++                    TerminalDelivery::Cancelled
++                }
++            }
++        }
++    }
++
++    fn finish_terminal_delivery(&self, outcome: u8) {
++        // First outcome wins: cancellation never retracts acknowledged persistence,
++        // and a late acknowledgement cannot disguise an administrative failure.
++        if self
++            .output
++            .terminal_reported
++            .compare_exchange(0, outcome, Ordering::AcqRel, Ordering::Acquire)
++            .is_ok()
++        {
++            self.output.terminal_reported_notify.notify_waiters();
++        }
++    }
++
+     pub fn mark_terminal_reported(&self) {
+-        self.output.terminal_reported.store(true, Ordering::Release);
+-        self.output.terminal_reported_notify.notify_waiters();
+-    }
+-
+-    /// Register a foreground main attachment while the process is live.
+-    pub fn begin_terminal_attachment(&self) -> Result<(), &'static str> {
++        self.finish_terminal_delivery(1);
++    }
++
++    /// Release owned delivery tasks without claiming durable persistence.
++    pub fn cancel_terminal_delivery(&self) {
+         let mut state = self
+             .terminal_attachments
+             .lock()
+             .expect("terminal attachment lock poisoned");
++        state.delivery_closed = true;
++        state.expectation = AttachmentExpectation::None;
++        self.finish_terminal_delivery(2);
++    }
++
++    pub async fn wait_for_terminal_delivery_tasks(&self) {
++        let mut tasks = self.delivery_tasks.subscribe();
++        tasks
++            .wait_for(|count| *count == 0)
++            .await
++            .expect("session owns sender");
++    }
++
++    /// Register a foreground main attachment while the process is live.
++    pub fn begin_terminal_attachment(&self) -> Result<TerminalDeliveryTask, &'static str> {
++        let mut state = self
++            .terminal_attachments
++            .lock()
++            .expect("terminal attachment lock poisoned");
++        if state.delivery_closed {
++            return Err("terminal delivery cancelled by administrative shutdown");
++        }
+         if state.process_finished && state.expectation != AttachmentExpectation::Pending {
+             return Err("canonical main process already finished");
+         }
+@@ -586,8 +652,11 @@
+             .checked_add(1)
+             .expect("terminal attachment count exhausted");
+         state.expectation = AttachmentExpectation::Satisfied;
++        // Admission and writer ownership share the cancellation lock. A handler
++        // paused before spawn is therefore still included in administrative drain.
++        self.delivery_tasks.send_modify(|count| *count += 1);
+         self.terminal_attachments_done.notify_waiters();
+-        Ok(())
++        Ok(TerminalDeliveryTask(self.delivery_tasks.clone()))
+     }
+ 
+     /// Release a foreground main attachment after its SSH channel closes.
+@@ -849,6 +918,97 @@
+         )
+         .await
+         .expect("durable report acknowledgement should wake waiter");
++    }
++
++    #[tokio::test]
++    async fn terminal_delivery_cancel_wakes_existing_and_future_waiters() {
++        let session = MainSession::inert();
++        let waiting = session.wait_for_terminal_reported();
++        tokio::pin!(waiting);
++        assert!(
++            tokio::time::timeout(std::time::Duration::from_millis(10), &mut waiting)
++                .await
++                .is_err()
++        );
++        session.cancel_terminal_delivery();
++        assert_eq!(
++            tokio::time::timeout(std::time::Duration::from_secs(1), &mut waiting)
++                .await
++                .expect("administrative cancellation must release existing waiter"),
++            TerminalDelivery::Cancelled
++        );
++        session.cancel_terminal_delivery();
++        assert_eq!(
++            tokio::time::timeout(
++                std::time::Duration::from_secs(1),
++                session.wait_for_terminal_reported()
++            )
++            .await
++            .expect("cancellation must release future waiters without attachments"),
++            TerminalDelivery::Cancelled
++        );
++    }
++
++    #[tokio::test]
++    async fn terminal_delivery_admission_registers_before_cancel_drain() {
++        let session = MainSession::inert();
++        // Pause the admitted handler before it can set up or spawn its writer.
++        let admitted = session.begin_terminal_attachment().expect("admit handler");
++        assert_eq!(
++            *session.delivery_tasks.borrow(),
++            1,
++            "admission must register its owned writer before returning"
++        );
++        session.cancel_terminal_delivery();
++        assert!(session.begin_terminal_attachment().is_err());
++        let drain = session.wait_for_terminal_delivery_tasks();
++        tokio::pin!(drain);
++        assert!(
++            tokio::time::timeout(std::time::Duration::from_millis(10), &mut drain)
++                .await
++                .is_err()
++        );
++        // Handler cancellation before spawn drops exactly the admitted ownership.
++        drop(admitted);
++        tokio::time::timeout(std::time::Duration::from_secs(1), drain)
++            .await
++            .unwrap();
++        session.end_terminal_attachment();
++    }
++
++    #[tokio::test]
++    async fn terminal_delivery_task_guard_releases_owned_wait() {
++        let session = MainSession::inert();
++        let task = session.begin_terminal_attachment().unwrap();
++        let waiting = session.wait_for_terminal_delivery_tasks();
++        tokio::pin!(waiting);
++        assert!(
++            tokio::time::timeout(std::time::Duration::from_millis(10), &mut waiting)
++                .await
++                .is_err()
++        );
++        drop(task);
++        tokio::time::timeout(std::time::Duration::from_secs(1), waiting)
++            .await
++            .expect("owned task completion must release drain");
++    }
++
++    #[tokio::test]
++    async fn terminal_delivery_first_outcome_is_stable() {
++        let acknowledged = MainSession::inert();
++        acknowledged.mark_terminal_reported();
++        acknowledged.cancel_terminal_delivery();
++        assert_eq!(
++            acknowledged.wait_for_terminal_reported().await,
++            TerminalDelivery::Reported
++        );
++        let cancelled = MainSession::inert();
++        cancelled.cancel_terminal_delivery();
++        cancelled.mark_terminal_reported();
++        assert_eq!(
++            cancelled.wait_for_terminal_reported().await,
++            TerminalDelivery::Cancelled
++        );
+     }
+ 
+     #[tokio::test]
+--- a/crates/openshell-supervisor-process/src/ssh.rs
++++ b/crates/openshell-supervisor-process/src/ssh.rs
+@@ -651,11 +651,11 @@
+                 .clone()
+                 .ok_or("no main session is available")
+                 .and_then(|main_session| {
+-                    main_session.begin_terminal_attachment()?;
+-                    Ok(main_session)
++                    let delivery_task = main_session.begin_terminal_attachment()?;
++                    Ok((main_session, delivery_task))
+                 });
+-            let main_session = match main_session {
+-                Ok(main_session) => main_session,
++            let (main_session, delivery_task) = match main_session {
++                Ok(admitted) => admitted,
+                 Err(error) => {
+                     // The subsystem is supported, but its terminal is unavailable.
+                     // A bare request failure hides this reason in OpenSSH clients.
+@@ -716,12 +716,23 @@
+                     .await;
+             }
+             let output_task = tokio::spawn(async move {
++                let _delivery_task = delivery_task;
+                 loop {
+                     match output.recv().await {
+                         Ok(MainOutput::Exit(code)) => {
+-                            terminal_delivery.wait_for_terminal_reported().await;
+-                            let _ =
+-                                send_main_output(&handle, channel, MainOutput::Exit(code)).await;
++                            match terminal_delivery.wait_for_terminal_reported().await {
++                                crate::main_session::TerminalDelivery::Reported => {
++                                    let _ =
++                                        send_main_output(&handle, channel, MainOutput::Exit(code))
++                                            .await;
++                                }
++                                crate::main_session::TerminalDelivery::Cancelled => {
++                                    let _ = handle.extended_data(channel, 1,
++                                        b"openshell: terminal delivery cancelled by administrative shutdown\n".to_vec()).await;
++                                    let _ = send_main_output(&handle, channel, MainOutput::Exit(1))
++                                        .await;
++                                }
++                            }
+                             break;
+                         }
+                         Ok(event) => {
+@@ -1628,6 +1639,39 @@
+     }
+ 
+     #[tokio::test]
++    async fn main_attachment_admin_cancel_reports_failure_not_success() {
++        let main_session = MainSession::inert();
++        let client = main_test_client(Some(main_session.clone())).await;
++        let mut channel = client.channel_open_session().await.unwrap();
++        channel
++            .request_subsystem(true, "openshell-main")
++            .await
++            .unwrap();
++        assert!(matches!(
++            next_main_event(&mut channel).await,
++            russh::ChannelMsg::Success
++        ));
++        main_session.finish(0, false).await;
++        main_session.cancel_terminal_delivery();
++        assert!(matches!(
++            next_main_event(&mut channel).await,
++            russh::ChannelMsg::ExtendedData { .. }
++        ));
++        assert!(matches!(
++            next_main_event(&mut channel).await,
++            russh::ChannelMsg::Eof
++        ));
++        assert!(matches!(
++            next_main_event(&mut channel).await,
++            russh::ChannelMsg::ExitStatus { exit_status: 1 }
++        ));
++        assert!(matches!(
++            next_main_event(&mut channel).await,
++            russh::ChannelMsg::Close
++        ));
++    }
++
++    #[tokio::test]
+     async fn main_attachment_accepts_declared_session_after_process_exit() {
+         let (main_session, mut slave) = MainSession::terminal_for_test();
+         let mut output = main_session.subscribe();
+--- a/crates/openshell-supervisor-process/src/delegated.rs
++++ b/crates/openshell-supervisor-process/src/delegated.rs
+@@ -49,6 +49,27 @@
+         let _ = main_session
+             .finish_remote(exit_code, attachment_expected)
+             .await;
++    }
++
++    /// Cancel delivery without fabricating gateway acknowledgement.
++    pub async fn cancel_main_terminal_delivery(&self) {
++        if let Some(main_session) = self.main_session.as_ref() {
++            main_session.cancel_terminal_delivery();
++            // Bound only the already-cancelled owned writers; never wait for
++            // a future attachment or remote channel-close acknowledgement.
++            // Accepted SSH connections are detached from the listener; this
++            // budget does not prove their termination. Process-runtime teardown
++            // remains the final fallback for a blocked connection/writer.
++            if tokio::time::timeout(
++                Duration::from_secs(1),
++                main_session.wait_for_terminal_delivery_tasks(),
++            )
++            .await
++            .is_err()
++            {
++                tracing::warn!("administrative terminal delivery cleanup budget exhausted");
++            }
++        }
+     }
+ 
+     /// Release terminal delivery after the gateway acknowledges the exit, then
+@@ -272,4 +293,44 @@
+             .expect("declared CLI attachment must remain valid after a fast remote main exits");
+         main_session.end_terminal_attachment();
+     }
+-}
++    #[tokio::test]
++    async fn admin_cancel_does_not_wait_for_declared_attachment() {
++        let main_session = crate::main_session::MainSession::inert();
++        let access = BoundaryAccess {
++            instance_id: "instance".to_string(),
++            terminating: Arc::new(AtomicBool::new(false)),
++            ssh_task: None,
++            session_task: None,
++            session_readiness: None,
++            main_session: Some(main_session.clone()),
++        };
++        access.publish_main_exit(0, true).await;
++        tokio::time::timeout(
++            Duration::from_secs(1),
++            access.cancel_main_terminal_delivery(),
++        )
++        .await
++        .expect("no client must not delay administrative cancellation");
++        assert!(main_session.begin_terminal_attachment().is_err());
++    }
++
++    #[tokio::test]
++    async fn admin_cancel_bounds_blocked_owned_delivery() {
++        let main_session = crate::main_session::MainSession::inert();
++        let _blocked = main_session.begin_terminal_attachment().unwrap();
++        let access = BoundaryAccess {
++            instance_id: "instance".to_string(),
++            terminating: Arc::new(AtomicBool::new(false)),
++            ssh_task: None,
++            session_task: None,
++            session_readiness: None,
++            main_session: Some(main_session),
++        };
++        tokio::time::timeout(
++            Duration::from_secs(2),
++            access.cancel_main_terminal_delivery(),
++        )
++        .await
++        .expect("blocked writer must not defeat administrative teardown");
++    }
++}
+--- a/crates/openshell-supervisor/src/lib.rs
++++ b/crates/openshell-supervisor/src/lib.rs
+@@ -1227,6 +1227,7 @@
+                 completion_phase_or_shutdown(finalize, shutdown_requested.as_mut()).await;
+         }
+         if completion_cancelled {
++            boundary_access.cancel_main_terminal_delivery().await;
+             retain_access = false;
+             control_readiness.take();
+         }
