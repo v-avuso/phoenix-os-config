@@ -1,0 +1,980 @@
+--- a/crates/openshell-supervisor-process/src/log_push.rs
++++ b/crates/openshell-supervisor-process/src/log_push.rs
+@@ -23,6 +23,7 @@
+     sandbox_id: String,
+     tx: mpsc::Sender<SandboxLogLine>,
+     max_level: tracing::Level,
++    stats: std::sync::Arc<PushStats>,
+ }
+ 
+ impl LogPushLayer {
+@@ -32,6 +33,7 @@
+             sandbox_id,
+             tx,
+             max_level,
++            stats: std::sync::Arc::new(PushStats::default()),
+         }
+     }
+ }
+@@ -88,163 +90,310 @@
+         };
+ 
+         // Best-effort: drop if the channel is full (don't block tracing).
+-        let _ = self.tx.try_send(log);
+-    }
+-}
+-
+-/// Spawn a background task that batches and pushes log lines to the server.
+-///
+-/// Returns the sender half of the channel (for the [`LogPushLayer`]) and the
+-/// task handle. The task runs until the sender is dropped or the gRPC stream
+-/// breaks.
+-pub fn spawn_log_push_task(
+-    endpoint: String,
+-    sandbox_id: String,
+-) -> (mpsc::Sender<SandboxLogLine>, tokio::task::JoinHandle<()>) {
+-    let (tx, rx) = mpsc::channel::<SandboxLogLine>(1024);
+-
+-    let handle = tokio::spawn(run_push_loop(endpoint, sandbox_id, rx));
+-
+-    (tx, handle)
+-}
+-
+-/// Maximum backoff delay between reconnection attempts.
++        if matches!(
++            self.tx.try_send(log),
++            Err(mpsc::error::TrySendError::Full(_))
++        ) {
++            self.stats
++                .dropped
++                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
++        }
++    }
++}
++
++/// Outcome describes the retained accepted tail, never all historical logs.
++#[derive(Debug)]
++pub struct LogPushOutcome {
++    pub accepted_tail_acknowledged: bool,
++    pub local_dropped_lines: u64,
++    pub prior_stream_delivery_uncertain: bool,
++    pub incomplete: Option<PushFailure>,
++}
++
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub enum PushFailure {
++    NotConnected,
++    RpcError,
++    Authentication,
++    Timeout,
++    WorkerEnded,
++}
++
++#[derive(Default)]
++struct PushStats {
++    dropped: std::sync::atomic::AtomicU64,
++    uncertain: std::sync::atomic::AtomicBool,
++}
++
++#[derive(Debug, PartialEq, Eq)]
++enum PushResult {
++    Acknowledged,
++    Incomplete(PushFailure),
++}
++
++/// The worker owns every streaming call; cancellation/drop aborts it as well.
++struct OwnedRpc(tokio::task::JoinHandle<Result<(), tonic::Code>>);
++impl Drop for OwnedRpc {
++    fn drop(&mut self) {
++        self.0.abort();
++    }
++}
++
++pub struct LogPushHandle {
++    stop: tokio::sync::watch::Sender<Option<tokio::time::Instant>>,
++    worker: tokio::task::JoinHandle<PushResult>,
++    stats: std::sync::Arc<PushStats>,
++}
++impl Drop for LogPushHandle {
++    fn drop(&mut self) {
++        self.worker.abort();
++    }
++}
++impl LogPushHandle {
++    pub async fn shutdown(mut self) -> LogPushOutcome {
++        use std::sync::atomic::Ordering;
++        let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(1);
++        self.stop.send_replace(Some(deadline));
++        let result = match tokio::time::timeout_at(deadline, &mut self.worker).await {
++            Ok(Ok(result)) => result,
++            Ok(Err(_)) => PushResult::Incomplete(PushFailure::WorkerEnded),
++            Err(_) => PushResult::Incomplete(PushFailure::Timeout),
++        };
++        LogPushOutcome {
++            accepted_tail_acknowledged: result == PushResult::Acknowledged,
++            local_dropped_lines: self.stats.dropped.load(Ordering::Relaxed),
++            prior_stream_delivery_uncertain: self.stats.uncertain.load(Ordering::Relaxed),
++            incomplete: match result {
++                PushResult::Acknowledged => None,
++                PushResult::Incomplete(reason) => Some(reason),
++            },
++        }
++    }
++}
++
++pub fn spawn_log_push_task(endpoint: String, sandbox_id: String) -> (LogPushLayer, LogPushHandle) {
++    let (tx, rx) = mpsc::channel(1024);
++    let stats = std::sync::Arc::new(PushStats::default());
++    let (stop, stopping) = tokio::sync::watch::channel(None);
++    let worker = tokio::spawn(run_push_loop(
++        endpoint,
++        sandbox_id.clone(),
++        rx,
++        stopping,
++        stats.clone(),
++    ));
++    let mut layer = LogPushLayer::new(sandbox_id, tx);
++    layer.stats = stats.clone();
++    (
++        layer,
++        LogPushHandle {
++            stop,
++            worker,
++            stats,
++        },
++    )
++}
++
+ const MAX_BACKOFF: tokio::time::Duration = tokio::time::Duration::from_secs(30);
+-/// Initial backoff delay after a connection failure.
+ const INITIAL_BACKOFF: tokio::time::Duration = tokio::time::Duration::from_secs(1);
++const BATCH_LINES: usize = 50;
++
++async fn send_batches(
++    sandbox_id: &str,
++    batch: &mut Vec<SandboxLogLine>,
++    tx: &mpsc::Sender<PushSandboxLogsRequest>,
++) -> Result<(), ()> {
++    // The server takes at most100 lines/request. Reconnect can retain200;
++    // chunk that buffer too instead of receiving a misleading partial ack.
++    while !batch.is_empty() {
++        let permit = tx.reserve().await.map_err(|_| ())?;
++        let count = batch.len().min(BATCH_LINES);
++        permit.send(PushSandboxLogsRequest {
++            sandbox_id: sandbox_id.to_string(),
++            logs: batch.drain(..count).collect(),
++        });
++    }
++    Ok(())
++}
++
++// true means shutdown interrupted a live send. Reserve before taking lines so
++// interruption preserves the accepted batch for the final bounded drain.
++async fn send_or_stop(
++    sandbox_id: &str,
++    batch: &mut Vec<SandboxLogLine>,
++    tx: &mpsc::Sender<PushSandboxLogsRequest>,
++    stopping: &mut tokio::sync::watch::Receiver<Option<tokio::time::Instant>>,
++) -> Result<bool, ()> {
++    tokio::select! {
++        biased;
++        _ = stopping.changed() => Ok(true),
++        result = send_batches(sandbox_id, batch, tx) => result.map(|()| false),
++    }
++}
++
++async fn finish_push(
++    sandbox_id: &str,
++    rx: &mut mpsc::Receiver<SandboxLogLine>,
++    batch: &mut Vec<SandboxLogLine>,
++    push_tx: mpsc::Sender<PushSandboxLogsRequest>,
++    mut rpc: OwnedRpc,
++    deadline: tokio::time::Instant,
++) -> PushResult {
++    // Receiver closure is authoritative even while the global subscriber keeps
++    // sender clones alive. It rejects new lines but preserves accepted queue data.
++    rx.close();
++    let finish = async {
++        while let Some(line) = rx.recv().await {
++            batch.push(line);
++            if batch.len() >= BATCH_LINES
++                && send_batches(sandbox_id, batch, &push_tx).await.is_err()
++            {
++                return PushResult::Incomplete(PushFailure::RpcError);
++            }
++        }
++        if send_batches(sandbox_id, batch, &push_tx).await.is_err() {
++            return PushResult::Incomplete(PushFailure::RpcError);
++        }
++        drop(push_tx); // EOF must precede the server's final unary response.
++        match (&mut rpc.0).await {
++            Ok(Ok(())) => PushResult::Acknowledged,
++            Ok(Err(tonic::Code::Unauthenticated)) => {
++                PushResult::Incomplete(PushFailure::Authentication)
++            }
++            _ => PushResult::Incomplete(PushFailure::RpcError),
++        }
++    };
++    tokio::time::timeout_at(deadline, finish)
++        .await
++        .unwrap_or(PushResult::Incomplete(PushFailure::Timeout))
++}
+ 
+ async fn run_push_loop(
+     endpoint: String,
+     sandbox_id: String,
+     mut rx: mpsc::Receiver<SandboxLogLine>,
+-) {
+-    let mut batch = Vec::with_capacity(50);
++    mut stopping: tokio::sync::watch::Receiver<Option<tokio::time::Instant>>,
++    stats: std::sync::Arc<PushStats>,
++) -> PushResult {
++    use std::sync::atomic::Ordering;
++    let mut batch = Vec::with_capacity(BATCH_LINES);
+     let mut backoff = INITIAL_BACKOFF;
+-    let mut attempt: u64 = 0;
+-
+-    // Outer reconnect loop — runs for the entire sandbox lifetime.
++    let mut attempt = 0;
+     loop {
++        if stopping.borrow().is_some() {
++            rx.close();
++            return PushResult::Incomplete(PushFailure::NotConnected);
++        }
+         attempt += 1;
+-
+-        // --- Connect ---
+-        let client = match CachedOpenShellClient::connect(&endpoint).await {
+-            Ok(c) => {
++        let connected = tokio::select! {
++            biased;
++            _ = stopping.changed() => { rx.close(); return PushResult::Incomplete(PushFailure::NotConnected); }
++            result = CachedOpenShellClient::connect(&endpoint) => result,
++        };
++        let client = match connected {
++            Ok(client) => {
+                 if attempt > 1 {
+                     eprintln!("openshell: log push reconnected (attempt {attempt})");
+                 }
+                 backoff = INITIAL_BACKOFF;
+-                c
+-            }
+-            Err(e) => {
+-                eprintln!("openshell: log push connect failed: {e}");
+-                // Drain the channel during backoff so the tracing layer doesn't
+-                // block, but discard lines we can't deliver.
+-                drain_during_backoff(&mut rx, &mut batch, backoff).await;
++                client
++            }
++            Err(error) => {
++                eprintln!("openshell: log push connect failed: {error}");
++                stats.uncertain.store(true, Ordering::Relaxed);
++                tokio::select! {
++                    biased;
++                    _ = stopping.changed() => { rx.close(); return PushResult::Incomplete(PushFailure::NotConnected); }
++                    _ = drain_during_backoff(&mut rx, &mut batch, backoff, &stats) => {}
++                }
+                 backoff = (backoff * 2).min(MAX_BACKOFF);
+                 continue;
+             }
+         };
+-
+-        // --- Open the client-streaming RPC ---
+-        let (push_tx, push_rx) = mpsc::channel::<PushSandboxLogsRequest>(32);
++        let (push_tx, push_rx) = mpsc::channel(32);
+         let stream = tokio_stream::wrappers::ReceiverStream::new(push_rx);
+-
+-        // Spawn the gRPC streaming call. When the call ends (success or error),
+-        // `rpc_done_tx` fires so the batch loop below knows whether to retry.
+-        let (rpc_done_tx, mut rpc_done_rx) = mpsc::channel::<bool>(1);
+-        tokio::spawn({
+-            let mut nav_client = client.raw_client();
+-            async move {
+-                let fatal_auth = match nav_client.push_sandbox_logs(stream).await {
+-                    Ok(_) => false,
+-                    Err(e) => {
+-                        let fatal_auth = e.code() == tonic::Code::Unauthenticated;
+-                        eprintln!("openshell: log push RPC failed: {e}");
+-                        fatal_auth
+-                    }
+-                };
+-                let _ = rpc_done_tx.send(fatal_auth).await;
+-            }
+-        });
+-
+-        // --- Flush any lines buffered during reconnect ---
+-        if !batch.is_empty() {
+-            let lines = std::mem::take(&mut batch);
+-            if push_tx
+-                .send(PushSandboxLogsRequest {
+-                    sandbox_id: sandbox_id.clone(),
+-                    logs: lines,
++        let rpc = OwnedRpc(tokio::spawn(async move {
++            client
++                .raw_client()
++                .push_sandbox_logs(stream)
++                .await
++                .map(|_| ())
++                .map_err(|error| {
++                    eprintln!("openshell: log push RPC failed: {error}");
++                    error.code()
+                 })
+-                .await
+-                .is_err()
+-            {
+-                // RPC died immediately — go back to reconnect.
+-                backoff = INITIAL_BACKOFF;
++        }));
++        // A failed initial send or any reconnect drops/aborts this owned RPC.
++        let mut rpc = rpc;
++        match send_or_stop(&sandbox_id, &mut batch, &push_tx, &mut stopping).await {
++            Ok(true) => {
++                let deadline = stopping.borrow().expect("shutdown deadline");
++                return finish_push(&sandbox_id, &mut rx, &mut batch, push_tx, rpc, deadline).await;
++            }
++            Ok(false) => {}
++            Err(()) => {
++                stats.uncertain.store(true, Ordering::Relaxed);
+                 continue;
+             }
+         }
+-
+-        // --- Batch and send loop (runs until stream breaks) ---
+-        let flush_interval = tokio::time::Duration::from_millis(500);
+-        let mut timer = tokio::time::interval(flush_interval);
++        let mut timer = tokio::time::interval(tokio::time::Duration::from_millis(500));
+         timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+-
+-        let mut fatal_auth = false;
+-        let stream_broken = loop {
++        loop {
+             tokio::select! {
++                biased;
++                _ = stopping.changed() => {
++                    let deadline = stopping.borrow().expect("shutdown deadline");
++                    return finish_push(&sandbox_id, &mut rx, &mut batch, push_tx, rpc, deadline).await;
++                }
+                 line = rx.recv() => {
+-                    let Some(line) = line else {
+-                        // Tracing layer dropped — sandbox is shutting down.
+-                        // Flush remaining and exit entirely.
+-                        if !batch.is_empty() {
+-                            let lines = std::mem::take(&mut batch);
+-                            let _ = push_tx.send(PushSandboxLogsRequest {
+-                                sandbox_id: sandbox_id.clone(),
+-                                logs: lines,
+-                            }).await;
++                    match line {
++                        Some(line) => {
++                            batch.push(line);
++                            if batch.len() >= BATCH_LINES {
++                                match send_or_stop(&sandbox_id, &mut batch, &push_tx, &mut stopping).await {
++                                    Ok(true) => {
++                                        let deadline = stopping.borrow().expect("shutdown deadline");
++                                        return finish_push(&sandbox_id, &mut rx, &mut batch, push_tx, rpc, deadline).await;
++                                    }
++                                    Ok(false) => {},
++                                    Err(()) => break,
++                                }
++                            }
+                         }
+-                        return;
+-                    };
+-                    batch.push(line);
+-                    if batch.len() >= 50 {
+-                        let lines = std::mem::take(&mut batch);
+-                        if push_tx.send(PushSandboxLogsRequest {
+-                            sandbox_id: sandbox_id.clone(),
+-                            logs: lines,
+-                        }).await.is_err() {
+-                            break true;
++                        None => {
++                            let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(1);
++                            return finish_push(&sandbox_id, &mut rx, &mut batch, push_tx, rpc, deadline).await;
+                         }
+                     }
+                 }
+                 _ = timer.tick() => {
+-                    if !batch.is_empty() {
+-                        let lines = std::mem::take(&mut batch);
+-                        if push_tx.send(PushSandboxLogsRequest {
+-                            sandbox_id: sandbox_id.clone(),
+-                            logs: lines,
+-                        }).await.is_err() {
+-                            break true;
++                    match send_or_stop(&sandbox_id, &mut batch, &push_tx, &mut stopping).await {
++                        Ok(true) => {
++                            let deadline = stopping.borrow().expect("shutdown deadline");
++                            return finish_push(&sandbox_id, &mut rx, &mut batch, push_tx, rpc, deadline).await;
+                         }
++                        Ok(false) => {},
++                        Err(()) => break,
+                     }
+                 }
+-                rpc_done = rpc_done_rx.recv() => {
+-                    // The gRPC streaming call ended (server closed / error).
+-                    fatal_auth = rpc_done.unwrap_or(false);
+-                    break true;
++                result = &mut rpc.0 => {
++                    if matches!(result, Ok(Err(tonic::Code::Unauthenticated))) {
++                        return PushResult::Incomplete(PushFailure::Authentication);
++                    }
++                    break;
+                 }
+             }
+-        };
+-
+-        if fatal_auth {
+-            eprintln!("openshell: log push disabled after authentication failure");
+-            return;
+-        }
+-
+-        if stream_broken {
+-            eprintln!("openshell: log push stream lost, reconnecting after backoff...");
+-            drain_during_backoff(&mut rx, &mut batch, backoff).await;
+-            backoff = (backoff * 2).min(MAX_BACKOFF);
+-        }
++        }
++        stats.uncertain.store(true, Ordering::Relaxed);
++        drop(rpc);
++        drop(push_tx);
++        eprintln!("openshell: log push stream lost, reconnecting after backoff...");
++        tokio::select! {
++            biased;
++            _ = stopping.changed() => { rx.close(); return PushResult::Incomplete(PushFailure::NotConnected); }
++            _ = drain_during_backoff(&mut rx, &mut batch, backoff, &stats) => {}
++        }
++        backoff = (backoff * 2).min(MAX_BACKOFF);
+     }
+ }
+ 
+@@ -255,6 +404,7 @@
+     rx: &mut mpsc::Receiver<SandboxLogLine>,
+     batch: &mut Vec<SandboxLogLine>,
+     delay: tokio::time::Duration,
++    stats: &PushStats,
+ ) {
+     // Keep at most 200 lines across reconnect attempts to bound memory.
+     const MAX_BUFFERED: usize = 200;
+@@ -269,7 +419,7 @@
+                         if batch.len() < MAX_BUFFERED {
+                             batch.push(l);
+                         }
+-                        // else: drop — we're over the reconnect buffer limit
++                        else { stats.dropped.fetch_add(1, std::sync::atomic::Ordering::Relaxed); }
+                     }
+                     None => return, // channel closed, sandbox shutting down
+                 }
+@@ -341,6 +491,7 @@
+             sandbox_id: "sb-test".to_string(),
+             tx,
+             max_level: tracing::Level::INFO,
++            stats: std::sync::Arc::new(PushStats::default()),
+         };
+         let subscriber = tracing_subscriber::registry().with(layer);
+         tracing::subscriber::with_default(subscriber, f);
+@@ -465,7 +616,13 @@
+         drop(tx);
+ 
+         let mut batch = Vec::new();
+-        drain_during_backoff(&mut rx, &mut batch, tokio::time::Duration::from_secs(30)).await;
++        drain_during_backoff(
++            &mut rx,
++            &mut batch,
++            tokio::time::Duration::from_secs(30),
++            &PushStats::default(),
++        )
++        .await;
+ 
+         assert_eq!(batch.len(), 200);
+         assert_eq!(batch[0].message, "line 0");
+@@ -479,7 +636,13 @@
+         drop(tx);
+ 
+         let mut batch = vec![test_line("buffered")];
+-        drain_during_backoff(&mut rx, &mut batch, tokio::time::Duration::from_secs(30)).await;
++        drain_during_backoff(
++            &mut rx,
++            &mut batch,
++            tokio::time::Duration::from_secs(30),
++            &PushStats::default(),
++        )
++        .await;
+ 
+         assert_eq!(batch.len(), 2);
+         assert_eq!(batch[0].message, "buffered");
+@@ -495,7 +658,12 @@
+         let mut batch = Vec::new();
+         tokio::time::timeout(
+             tokio::time::Duration::from_secs(5),
+-            drain_during_backoff(&mut rx, &mut batch, tokio::time::Duration::from_secs(30)),
++            drain_during_backoff(
++                &mut rx,
++                &mut batch,
++                tokio::time::Duration::from_secs(30),
++                &PushStats::default(),
++            ),
+         )
+         .await
+         .expect("closed channel should end the backoff drain");
+@@ -516,5 +684,259 @@
+         let (msg, fields) = LogVisitor::default().into_parts("fallback");
+         assert_eq!(msg, "fallback");
+         assert!(fields.is_empty());
+-    }
+-}
++    } // A controlled RPC future exercises the production drain/ownership code;
++    // actual tonic/server acknowledgement remains an isolated VM criterion.
++    fn controlled_rpc() -> (
++        mpsc::Sender<PushSandboxLogsRequest>,
++        OwnedRpc,
++        tokio::sync::oneshot::Receiver<Vec<Vec<String>>>,
++        tokio::sync::oneshot::Sender<Result<(), tonic::Code>>,
++        tokio::sync::oneshot::Receiver<()>,
++    ) {
++        let (tx, mut rx) = mpsc::channel::<PushSandboxLogsRequest>(2);
++        let (seen_tx, seen) = tokio::sync::oneshot::channel();
++        let (ack, ack_rx) = tokio::sync::oneshot::channel();
++        let (dropped, cleanup) = tokio::sync::oneshot::channel();
++        struct Cleanup(Option<tokio::sync::oneshot::Sender<()>>);
++        impl Drop for Cleanup {
++            fn drop(&mut self) {
++                if let Some(tx) = self.0.take() {
++                    let _ = tx.send(());
++                }
++            }
++        }
++        let guard = Cleanup(Some(dropped));
++        let rpc = OwnedRpc(tokio::spawn(async move {
++            let _guard = guard;
++            let mut batches = Vec::new();
++            while let Some(request) = rx.recv().await {
++                batches.push(request.logs.into_iter().map(|line| line.message).collect());
++            }
++            let _ = seen_tx.send(batches); // EOF observed, response still withheld.
++            ack_rx.await.unwrap_or(Err(tonic::Code::Cancelled))
++        }));
++        (tx, rpc, seen, ack, cleanup)
++    }
++
++    #[tokio::test]
++    async fn final_flush_waits_for_rpc_acknowledgement() {
++        let (tx, mut rx) = mpsc::channel(4);
++        tx.try_send(test_line("accepted-final")).unwrap();
++        let retained_sender = tx.clone();
++        let (push_tx, rpc, seen, ack, cleanup) = controlled_rpc();
++        let finish = tokio::spawn(async move {
++            finish_push(
++                "sb-test",
++                &mut rx,
++                &mut Vec::new(),
++                push_tx,
++                rpc,
++                tokio::time::Instant::now() + tokio::time::Duration::from_secs(1),
++            )
++            .await
++        });
++        assert_eq!(
++            seen.await.unwrap(),
++            vec![vec!["accepted-final".to_string()]]
++        );
++        assert!(
++            !finish.is_finished(),
++            "EOF alone is not server acknowledgement"
++        );
++        assert!(retained_sender.try_send(test_line("too-late")).is_err());
++        ack.send(Ok(())).unwrap();
++        assert_eq!(finish.await.unwrap(), PushResult::Acknowledged);
++        cleanup.await.unwrap();
++    }
++
++    #[tokio::test]
++    async fn final_flush_chunks_reconnect_and_queue_without_server_truncation() {
++        let (tx, mut rx) = mpsc::channel(32);
++        for i in 200..225 {
++            tx.try_send(test_line(&format!("line-{i}"))).unwrap();
++        }
++        let mut batch = (0..200).map(|i| test_line(&format!("line-{i}"))).collect();
++        let (push_tx, rpc, seen, ack, _) = controlled_rpc();
++        let finish = tokio::spawn(async move {
++            finish_push(
++                "sb-test",
++                &mut rx,
++                &mut batch,
++                push_tx,
++                rpc,
++                tokio::time::Instant::now() + tokio::time::Duration::from_secs(1),
++            )
++            .await
++        });
++        let batches = seen.await.unwrap();
++        assert!(batches.iter().all(|batch| batch.len() <= 50));
++        let lines: std::collections::HashSet<_> = batches.into_iter().flatten().collect();
++        assert_eq!(lines.len(), 225);
++        ack.send(Ok(())).unwrap();
++        assert_eq!(finish.await.unwrap(), PushResult::Acknowledged);
++    }
++
++    #[tokio::test]
++    async fn final_flush_missing_ack_uses_one_deadline_and_aborts_rpc() {
++        let (_tx, mut rx) = mpsc::channel(4);
++        let (push_tx, rpc, seen, _ack, cleanup) = controlled_rpc();
++        let result = finish_push(
++            "sb-test",
++            &mut rx,
++            &mut Vec::new(),
++            push_tx,
++            rpc,
++            tokio::time::Instant::now() + tokio::time::Duration::from_millis(30),
++        )
++        .await;
++        assert_eq!(result, PushResult::Incomplete(PushFailure::Timeout));
++        assert!(seen.await.is_ok(), "request EOF must precede response wait");
++        tokio::time::timeout(tokio::time::Duration::from_secs(1), cleanup)
++            .await
++            .unwrap()
++            .unwrap();
++    }
++
++    #[tokio::test]
++    async fn final_flush_distinguishes_auth_and_rpc_errors() {
++        for (code, expected) in [
++            (tonic::Code::Unauthenticated, PushFailure::Authentication),
++            (tonic::Code::Internal, PushFailure::RpcError),
++        ] {
++            let (_tx, mut rx) = mpsc::channel(1);
++            let (push_tx, rpc, seen, ack, cleanup) = controlled_rpc();
++            let task = tokio::spawn(async move {
++                finish_push(
++                    "sb-test",
++                    &mut rx,
++                    &mut Vec::new(),
++                    push_tx,
++                    rpc,
++                    tokio::time::Instant::now() + tokio::time::Duration::from_secs(1),
++                )
++                .await
++            });
++            seen.await.unwrap();
++            ack.send(Err(code)).unwrap();
++            assert_eq!(task.await.unwrap(), PushResult::Incomplete(expected));
++            cleanup.await.unwrap();
++        }
++    }
++
++    #[tokio::test]
++    async fn final_flush_backpressure_cannot_reset_deadline() {
++        let (_tx, mut rx) = mpsc::channel(1);
++        let (push_tx, _unread) = mpsc::channel(1);
++        let (_other_tx, rpc, _seen, _ack, cleanup) = controlled_rpc();
++        let mut batch = (0..200).map(|_| test_line("pending")).collect();
++        assert_eq!(
++            finish_push(
++                "sb-test",
++                &mut rx,
++                &mut batch,
++                push_tx,
++                rpc,
++                tokio::time::Instant::now() + tokio::time::Duration::from_millis(30)
++            )
++            .await,
++            PushResult::Incomplete(PushFailure::Timeout)
++        );
++        tokio::time::timeout(tokio::time::Duration::from_secs(1), cleanup)
++            .await
++            .unwrap()
++            .unwrap();
++    }
++
++    #[tokio::test]
++    async fn owned_shutdown_interrupts_connect_backoff_with_retained_layer() {
++        use std::sync::atomic::Ordering;
++        let (layer, handle) =
++            spawn_log_push_task("not-a-valid-endpoint".to_string(), "sb-test".to_string());
++        tokio::time::timeout(tokio::time::Duration::from_secs(1), async {
++            while !handle.stats.uncertain.load(Ordering::Relaxed) {
++                tokio::task::yield_now().await;
++            }
++        })
++        .await
++        .expect("connect failure must enter ordinary backoff");
++        let retained_layer = layer.clone();
++        let outcome = handle.shutdown().await;
++        assert!(!outcome.accepted_tail_acknowledged);
++        assert_eq!(outcome.incomplete, Some(PushFailure::NotConnected));
++        assert!(outcome.prior_stream_delivery_uncertain);
++        assert!(retained_layer.tx.is_closed());
++    }
++
++    #[tokio::test]
++    async fn dropping_owner_aborts_worker_and_pending_rpc() {
++        let (_push_tx, rpc, _seen, _ack, cleanup) = controlled_rpc();
++        let (ready_tx, ready) = tokio::sync::oneshot::channel();
++        let worker = tokio::spawn(async move {
++            let _rpc = rpc;
++            let _ = ready_tx.send(());
++            std::future::pending::<PushResult>().await
++        });
++        let (stop, _stopping) = tokio::sync::watch::channel(None);
++        let owner = LogPushHandle {
++            stop,
++            worker,
++            stats: std::sync::Arc::new(PushStats::default()),
++        };
++        ready.await.unwrap();
++        drop(owner);
++        tokio::time::timeout(tokio::time::Duration::from_secs(1), cleanup)
++            .await
++            .unwrap()
++            .unwrap();
++    }
++
++    #[tokio::test]
++    async fn accepted_tail_ack_is_separate_from_prior_loss() {
++        use std::sync::atomic::Ordering;
++        let (tx, _rx) = mpsc::channel(1);
++        let layer = LogPushLayer::new("sb-test".to_string(), tx);
++        let stats = layer.stats.clone();
++        tracing::subscriber::with_default(tracing_subscriber::registry().with(layer), || {
++            tracing::info!("accepted");
++            tracing::info!("dropped-full");
++        });
++        assert_eq!(stats.dropped.load(Ordering::Relaxed), 1);
++        stats.uncertain.store(true, Ordering::Relaxed);
++        let (stop, _stopping) = tokio::sync::watch::channel(None);
++        let owner = LogPushHandle {
++            stop,
++            worker: tokio::spawn(async { PushResult::Acknowledged }),
++            stats,
++        };
++        let outcome = owner.shutdown().await;
++        assert!(outcome.accepted_tail_acknowledged);
++        assert_eq!(outcome.local_dropped_lines, 1);
++        assert!(outcome.prior_stream_delivery_uncertain);
++    }
++    #[tokio::test]
++    async fn shutdown_interrupts_blocked_live_send_without_losing_batch() {
++        let (tx, _unread) = mpsc::channel(1);
++        tx.send(PushSandboxLogsRequest {
++            sandbox_id: "sb-test".to_string(),
++            logs: vec![],
++        })
++        .await
++        .unwrap();
++        let (stop, mut stopping) = tokio::sync::watch::channel(None);
++        let mut batch = vec![test_line("accepted"); 100];
++        {
++            let send = send_or_stop("sb-test", &mut batch, &tx, &mut stopping);
++            tokio::pin!(send);
++            assert!(
++                tokio::time::timeout(tokio::time::Duration::from_millis(10), &mut send)
++                    .await
++                    .is_err()
++            );
++            stop.send_replace(Some(
++                tokio::time::Instant::now() + tokio::time::Duration::from_secs(1),
++            ));
++            assert_eq!(send.await, Ok(true));
++        }
++        assert_eq!(batch.len(), 100);
++    }
++}
+--- a/crates/openshell-supervisor/src/main.rs
++++ b/crates/openshell-supervisor/src/main.rs
+@@ -328,18 +328,16 @@
+         let log_push_state = if args.role == SupervisorRole::IsolationBackend
+             && let (Some(sandbox_id), Some(endpoint)) = (&args.sandbox_id, &args.openshell_endpoint)
+         {
+-            let (tx, handle) = openshell_supervisor_process::log_push::spawn_log_push_task(
++            let (layer, handle) = openshell_supervisor_process::log_push::spawn_log_push_task(
+                 endpoint.clone(),
+                 sandbox_id.clone(),
+             );
+-            let layer =
+-                openshell_supervisor_process::log_push::LogPushLayer::new(sandbox_id.clone(), tx);
+             Some((layer, handle))
+         } else {
+             None
+         };
+         let push_layer = log_push_state.as_ref().map(|(layer, _)| layer.clone());
+-        let _log_push_handle = log_push_state.map(|(_, handle)| handle);
++        let log_push_handle = log_push_state.map(|(_, handle)| handle);
+         let ocsf_enabled = Arc::new(AtomicBool::new(false));
+         let ocsf_schema_version = Arc::new(std::sync::Mutex::new(String::new()));
+ 
+@@ -388,85 +386,99 @@
+             (None, None)
+         };
+ 
+-        let workdir = args.workdir.clone();
+-        let (command, interactive, await_main_process_attachment) = if !args.command.is_empty() {
+-            (args.command, args.interactive, false)
+-        } else if let Ok(json) = std::env::var(openshell_core::sandbox_env::MAIN_PROCESS_SPEC) {
+-            let config = openshell_core::sandbox_env::MainProcessConfig::decode(&json)
+-                .map_err(|error| miette::miette!("{error}"))?;
+-            (
+-                config.command,
+-                config.tty,
+-                config.await_main_process_attachment,
+-            )
+-        } else {
+-            let config = openshell_core::sandbox_env::MainProcessConfig::scratch();
+-            (
+-                config.command,
+-                config.tty,
+-                config.await_main_process_attachment,
+-            )
+-        };
+-        let upstream_proxy_args = openshell_supervisor_network::upstream_proxy::UpstreamProxyArgs {
+-            https_proxy: args.upstream_proxy,
+-            proxy_dial_ip: args.upstream_proxy_dial_ip,
+-            no_proxy: args.upstream_no_proxy,
+-            proxy_auth_file: args.upstream_proxy_auth_file,
+-            proxy_auth_allow_insecure: args.upstream_proxy_auth_allow_insecure,
+-            proxy_connect_by_hostname: args.upstream_proxy_connect_by_hostname,
+-            proxy_ca_bundle: args.upstream_proxy_ca_bundle,
+-        };
+-        match args.role {
+-            SupervisorRole::IsolationBackend => {
+-                info!(command = ?command, "Starting sandbox supervision");
+-                let Some((backend_descriptor, auth_bundle)) = isolation_inputs else {
+-                    return Err(miette::miette!(
+-                        "isolation-backend role started without validated runtime inputs"
+-                    ));
++        // Expected role errors must pass through owned log shutdown too.
++        let role_result = async {
++            let workdir = args.workdir.clone();
++            let (command, interactive, await_main_process_attachment) = if !args.command.is_empty()
++            {
++                (args.command, args.interactive, false)
++            } else if let Ok(json) = std::env::var(openshell_core::sandbox_env::MAIN_PROCESS_SPEC) {
++                let config = openshell_core::sandbox_env::MainProcessConfig::decode(&json)
++                    .map_err(|error| miette::miette!("{error}"))?;
++                (
++                    config.command,
++                    config.tty,
++                    config.await_main_process_attachment,
++                )
++            } else {
++                let config = openshell_core::sandbox_env::MainProcessConfig::scratch();
++                (
++                    config.command,
++                    config.tty,
++                    config.await_main_process_attachment,
++                )
++            };
++            let upstream_proxy_args =
++                openshell_supervisor_network::upstream_proxy::UpstreamProxyArgs {
++                    https_proxy: args.upstream_proxy,
++                    proxy_dial_ip: args.upstream_proxy_dial_ip,
++                    no_proxy: args.upstream_no_proxy,
++                    proxy_auth_file: args.upstream_proxy_auth_file,
++                    proxy_auth_allow_insecure: args.upstream_proxy_auth_allow_insecure,
++                    proxy_connect_by_hostname: args.upstream_proxy_connect_by_hostname,
++                    proxy_ca_bundle: args.upstream_proxy_ca_bundle,
+                 };
+-                let admitted_isolation_backend =
+-                    std::env::var(openshell_core::sandbox_env::ADMITTED_ISOLATION_BACKEND).ok();
+-                Box::pin(openshell_supervisor::run_sandbox(
+-                    command,
+-                    workdir,
+-                    args.timeout,
+-                    interactive,
+-                    await_main_process_attachment,
+-                    args.sandbox_id,
+-                    args.sandbox,
+-                    args.openshell_endpoint,
+-                    args.policy_rules,
+-                    args.policy_data,
+-                    args.ssh_socket_path,
+-                    args.health_socket_path,
+-                    ocsf_enabled,
+-                    ocsf_schema_version,
+-                    upstream_proxy_args,
+-                    backend_descriptor,
+-                    auth_bundle,
+-                    admitted_isolation_backend,
+-                    args.main_exit_marker,
+-                ))
+-                .await
+-            }
+-            SupervisorRole::NetworkProxy => {
+-                let listen = args.listen.unwrap_or_else(|| ([127, 0, 0, 1], 3128).into());
+-                let (Some(policy_rules), Some(policy_data)) = (args.policy_rules, args.policy_data)
+-                else {
+-                    return Err(miette::miette!(
+-                        "network-proxy role started without validated policy files"
+-                    ));
+-                };
+-                openshell_supervisor::run_network_proxy(
+-                    listen,
+-                    policy_rules,
+-                    policy_data,
+-                    args.tls_dir,
+-                    upstream_proxy_args,
+-                )
+-                .await
++            match args.role {
++                SupervisorRole::IsolationBackend => {
++                    info!(command = ?command, "Starting sandbox supervision");
++                    let Some((backend_descriptor, auth_bundle)) = isolation_inputs else {
++                        return Err(miette::miette!(
++                            "isolation-backend role started without validated runtime inputs"
++                        ));
++                    };
++                    let admitted_isolation_backend =
++                        std::env::var(openshell_core::sandbox_env::ADMITTED_ISOLATION_BACKEND).ok();
++                    Box::pin(openshell_supervisor::run_sandbox(
++                        command,
++                        workdir,
++                        args.timeout,
++                        interactive,
++                        await_main_process_attachment,
++                        args.sandbox_id,
++                        args.sandbox,
++                        args.openshell_endpoint,
++                        args.policy_rules,
++                        args.policy_data,
++                        args.ssh_socket_path,
++                        args.health_socket_path,
++                        ocsf_enabled,
++                        ocsf_schema_version,
++                        upstream_proxy_args,
++                        backend_descriptor,
++                        auth_bundle,
++                        admitted_isolation_backend,
++                        args.main_exit_marker,
++                    ))
++                    .await
++                }
++                SupervisorRole::NetworkProxy => {
++                    let listen = args.listen.unwrap_or_else(|| ([127, 0, 0, 1], 3128).into());
++                    let (Some(policy_rules), Some(policy_data)) =
++                        (args.policy_rules, args.policy_data)
++                    else {
++                        return Err(miette::miette!(
++                            "network-proxy role started without validated policy files"
++                        ));
++                    };
++                    openshell_supervisor::run_network_proxy(
++                        listen,
++                        policy_rules,
++                        policy_data,
++                        args.tls_dir,
++                        upstream_proxy_args,
++                    )
++                    .await
++                }
+             }
+         }
++        .await;
++        if let Some(handle) = log_push_handle {
++            info!("Supervisor lifecycle completed; closing log push");
++            let outcome = handle.shutdown().await;
++            // Never trace into the receiver we have just closed.
++            eprintln!("openshell: log push shutdown {outcome:?}");
++        }
++        role_result
+     })?;
+ 
+     std::process::exit(exit_code);

@@ -78,3 +78,36 @@ the selected runtime image ID. Local container logs and structured state remain
 captured. Full default acceptance stays strict; final log flush and complete
 graceful shutdown are independent, unproved requirements. No live enablement or
 reproducible full source package is implied by these validation artifacts.
+
+## Owned log-drain scratch proof (not in the images above)
+
+[log-drain.patch](log-drain.patch), SHA256
+`2f4981993d4e73de6d817771bce83266a645902f138d3054eea27c2a77eb7318`,
+applies separately to the same pristine pinned source (fuzz 0, byte-identical to
+tested scratch files). Only `openshell-supervisor-process/src/log_push.rs` and
+`openshell-supervisor/src/main.rs` change. The existing validated binaries/images
+above predate this patch; no new release binary, image or VM was built for it.
+
+RED demonstrated the old production final-send branch returning before server
+acknowledgement. GREEN passed 19 focused tests, including retained sender clones,
+EOF before withheld acknowledgement, missing/error/auth acknowledgement,
+backpressure/deadline, <=50-line batches above the server's 100-line cap, owned
+RPC cancellation/drop, and prior loss reported separately from retained-tail ack.
+The caller's post-layer expected-error paths now reach shutdown; main was
+cargo-checked, not integration-executed. Tests use controlled RPC futures, not
+real tonic/server acknowledgement. Normal best-effort overflow/backoff and
+administrative canonical-report skipping remain; one absolute second bounds
+shutdown queue drain plus EOF/RPC response, with static local incomplete output.
+
+Resume commands with the existing isolated cache, CPU affinity two and caps:
+`/nix/store/0r6k8xa2kgqyp3r4v2w7yrb80ma2iawm-python3-3.13.12/bin/python3 /tmp/phoenix-shutdown-cost-s3_rohmh/test-log-green.py`
+and `.../python3 /tmp/phoenix-shutdown-cost-s3_rohmh/check-log-main.py`.
+The runners execute `cargo test --offline --locked -j2 -p
+openshell-supervisor-process --lib log_push::tests -- --test-threads=2` and
+`cargo check --offline --locked -j2 -p openshell-supervisor --bin openshell-supervisor`.
+Exact environment/results and hashes remain in scratch `log-*-receipt.json` and
+`log-drain-manifest.json`; all inputs are scratch/public Nix store paths.
+Next: parent review, then an explicitly budgeted matched-supervisor build and one
+live-gateway VM proving a unique final supervisor event plus actual RPC response.
+Tail observer exit and gateway restart are not acknowledgement/durability proof;
+full graceful shutdown and live rollout remain unaccepted.
