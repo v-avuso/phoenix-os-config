@@ -19,6 +19,29 @@ accepted primary behavior and optional expansion must remain distinct.
 Sources are current declarations and the linked evidence documents, not fresh host
 verification. Historical receipts do not identify today's running generation.
 
+## Active worktrees and milestone status
+
+- Current shutdown work: `codex/openshell-shutdown` at
+  `/home/v/.codex/worktrees/openshell-shutdown/phoenix-os-config`.
+  Continue here: cancellation and runtime classification passed a real gateway VM
+  (1.478s, both containers exit 0, explicit attached-client cancellation).
+  Final-log drain has focused test/typecheck proof only. Remaining: matched binary/image,
+  actual gateway acknowledgement, combined transaction/manager shutdown acceptance,
+  reproducible packaging and controlled rollout. No live shutdown change yet.
+- GUI sharing: primary workflow is accepted and integrated into `main`.
+  `codex/gui-sharing-trial` at
+  `/home/v/.codex/worktrees/gui-sharing-trial/phoenix-os-config` is retained for
+  preservation, not an unfinished implementation to merge wholesale. Its four
+  branch-only commits have patch-equivalent counterparts in main (`git cherry`
+  reports four minus entries); its sole dirty change enables the sharing flag,
+  which main already enables. Inspect/preserve that checkout before cleanup or
+  relevant regression investigation; start fixes from current main/task source
+  because the old trial lacks later repairs. Do not reset or deploy the old trial.
+- Deployment/review: primary reviewed deployment is accepted; successful
+  valid-pending critical override/recovery remains a separate acceptance task.
+  Recent shutdown commits do not complete that task. Broad percentage ranges are
+  scope estimates, not a measure of recent effort; use these concrete milestones.
+
 ## Daily-baseline release checklist
 
 1. **High value · remaining complexity 3:** Combined-source build and native/contained
