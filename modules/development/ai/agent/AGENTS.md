@@ -218,7 +218,9 @@
   and the gateway log tail is memory-only. Validate supported delivery semantics
   before treating a negative probe or post-restart absence as a new defect. Trace
   parsed CLI defaults through the entrypoint into helpers: pinned 0.1.2 keeps
-  sandboxes by default; ephemeral cleanup requires `--no-keep`.
+  sandboxes by default; ephemeral cleanup requires `--no-keep`. Operational
+  lifecycle bindings must use the effective installed config after shared-history
+  policy/mount selection, not the raw base inputs, or restoration can reject its own instance.
 
 - Validate the generated NixOS test script under the selected options before a VM;
   parsing Nix and Python sources separately misses interpolation/quoting failures.

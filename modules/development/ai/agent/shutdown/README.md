@@ -153,4 +153,9 @@ Repository defaults and the live host remain OFF; this closure was not activated
 The whole-flake offline no-build check passed metal/VM/default before the final
 fixture/docs commits; production implementation was unchanged. This docs-only
 checkpoint records the tested source and requires no self-rebuild. Controlled
-quiescent rollout and real Phoenix GUI/model acceptance remain separate.
+quiescent host CLI/model trial subsequently passed, as summarized below.
+
+A supervised review-ON host temporary CLI/model trial, candidate binary checks,
+idle backend stop and exact baseline restoration passed; Native was preserved.
+See [host evidence and limits](../shutdown-acceptance.md#supervised-host-temporary-trial).
+Live remains OFF; repaired GUI and host manager-shutdown acceptance remain separate.

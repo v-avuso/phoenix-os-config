@@ -332,8 +332,11 @@ The current shutdown procedure/evidence is in
 [shutdown-acceptance.md](shutdown-acceptance.md#on-demand-smoke-and-pending-regression).
 Disposable guests, the rootless smoke and small workload have been built/run;
 the corrected ordinary-stop VM supplied the fast-stop/status-delivery failure
-evidence above. No shutdown fix or production stop
-has occurred.
+evidence above is historical. Matched source-built cancellation, runtime status
+and log-drain repairs now pass the named VM scopes; see current shutdown evidence.
+A supervised host review-ON temporary CLI/model trial and exact baseline restoration
+passed with Native preserved; see [host evidence and limits](shutdown-acceptance.md#supervised-host-temporary-trial).
+Live shutdown remains OFF; repaired GUI and host manager-shutdown acceptance remain separate.
 
 ## Root review integration and reservation lifetime acceptance
 
@@ -462,8 +465,8 @@ Production review remains OFF; this does not establish general command AI review
   authorization explanation remains experimental/off; critical exact-pending
   override handling is a separate flow.
 - On 2026-10-06 at 08:32, OpenShell 0.1.2 shutdown hit the 45-second supervisor
-  timeout and SIGKILL. The exact stall is unknown. Only read-only investigation/
-  proposal work exists; no fix is established and timeout shortening is not a fix.
+  timeout and SIGKILL. That original report is historical; the scoped repairs and
+  current VM/host trial limits are in shutdown acceptance. The 45s fallback remains.
 - Music, Kando and other side tasks are delegated elsewhere and outside this scope.
   The [2026-10-04 acceptance report](../../../../docs/AGENT_SANDBOX_ACCEPTANCE.md)
   preserves historical evidence; its claims are not current acceptance of this trial.

@@ -10,10 +10,14 @@ Actual module-generated synthetic-user units also pass empty-store startup
 (6.136s) while `launch.lock` is held, followed by strict active-workload manager
 teardown (1.503s). Exact IDs, running binaries, RPC ACK and resource/cgroup gates
 pass; see `cold-module-vm-receipt.json`. Earlier prototype transaction evidence
-remains scoped below. Next is controlled quiescent rollout. A separate 75s peer observation finishes
-with CLI exit 255 and the exact pinned 60s recovery-expiry diagnostic; local
-cleanup remains 1.507s, independently of client latency. Atomic module wiring remains OFF on the host; full Phoenix
-GUI/model/auth acceptance is outside this small synthetic guest proof. TERM-ignore passes in 5.484s with truthful forced workload
+remains scoped below. A supervised host temporary CLI/model trial and exact
+baseline restoration also passed; see [host acceptance](#supervised-host-temporary-trial).
+
+Live configuration remains OFF. Active-workload TERM/FINAL, accepted-tail log ACK
+and manager teardown are VM evidence; repaired real GUI and host manager-shutdown
+acceptance remain separate. The bounded peer observation finishes with exit 255
+and the exact pinned 60s recovery-expiry diagnostic; local cleanup is independent
+of client latency. TERM-ignore passes in 5.484s with truthful forced workload
 status; gateway loss passes local cleanup/typed log failure in 1.536s with
 independent markers, while a later bounded observation establishes failed transport recovery
 (exit 255, exact 60s recovery-expiry message within the 75s observation), not successful
@@ -21,6 +25,31 @@ unavailable-gateway operation. Pinned `main.rs` keeps sandboxes by default, sele
 `--no-keep` would select ephemeral cleanup. No CLI patch is needed. Detached denial-summary draining is a telemetry
 limit, not a baseline blocker; restart durability is outside the upstream
 memory-tail contract. See [source packaging and exact final receipts](shutdown/README.md).
+
+## Supervised host temporary trial
+
+The parent executed review-ON temporary activation of frozen source
+`/nix/store/nqi2h28clnmjkbxvhb2yrlh75qpm04vn-source`, built as
+`/nix/store/pygs0a53ynsr1q8h01jg8rpcla0p4y2d-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
+The contained `/bin/pwd` returned the exact task directory with exit 0. One
+ephemeral `gpt-6-luna`/low CLI command returned 0 and `SHUTDOWN_PROBE_OK`; no
+model tool transcript was retained, so exact shell/tool-call count is unproved.
+Running runtime/supervisor ELF hashes matched the source-built candidate. Its
+idle pair stopped through the supported CLI in 0.906s with zero active containers.
+
+Reviewed restoration verified runtime and boot profile both exactly
+`/nix/store/4fav7l10h0vfmikl0msnwcac3avjs2gj-nixos-system-phoenix-26.05.20261004.0d9e9b8`
+and activated source `/nix/store/m0zqpnq0pf8i7pc2mkwn384p6jgrkx34-source`. Native
+remained open, original source bytes/cleanliness were restored and shutdown remains
+OFF. An initial private wrapper rejected restoration because it hashed base
+policy/mounts instead of effective shared-history inputs; corrected exact-pair
+restoration succeeded without a product change. Runtime outcomes were captured
+in the parent tool output; temporary scripts/prebuild data are not a retained
+runtime receipt. This owning section records that bounded evidence.
+
+Active-workload TERM/FINAL, final accepted-tail RPC ACK and manager shutdown remain
+VM evidence. Real repaired GUI and host manager-shutdown acceptance are deferred;
+this temporary CLI/model pass does not authorize persistent enablement.
 
 ## Prerequisites
 
@@ -520,6 +549,6 @@ Current ordinary prototypes pass their named cancellation, classification and
 accepted-tail RPC and ordered transaction/manager scopes.
 Final repeatable source-built images pass ordinary and ordered-manager scopes
 and actual module cold composition as summarized above. Remaining:
-controlled quiescent rollout; full Phoenix workload startup
-remains outside the small representative workload proof. Detached telemetry is a
+repaired real GUI and host manager-shutdown acceptance before persistent rollout;
+the host CLI/model trial above does not extend VM active-workload/log-ACK claims. Detached telemetry is a
 stated limit; restart durability is outside the upstream memory-tail contract.
