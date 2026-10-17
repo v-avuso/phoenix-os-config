@@ -57,9 +57,18 @@ let
         expectedBaseConfigID = spec.configID;
       };
     });
+  builtImages = {
+    supervisor = build "supervisor" specs.supervisor;
+    runtime = build "runtime" specs.runtime;
+  };
 in
 {
   inherit bases candidates;
-  supervisor = build "supervisor" specs.supervisor;
-  runtime = build "runtime" specs.runtime;
+  inherit (builtImages) supervisor runtime;
+  # Derive exact archive/config/binary bindings at build time, not evaluation.
+  manifest = pkgs.runCommand "phoenix-openshell-shutdown-images.json" { } ''
+    ${pkgs.python3}/bin/python3 -I ${./backend.py} metadata \
+      ${builtImages.runtime} ${builtImages.supervisor} \
+      ${builtImages.runtime.binary} ${builtImages.supervisor.binary} "$out"
+  '';
 }

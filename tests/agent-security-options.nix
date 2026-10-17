@@ -18,6 +18,12 @@ let
     (flake.nixosConfigurations.metal.extendModules {
       modules = [ { phoenix.agent.shutdownOrdering.enable = true; } ];
     }).config;
+  protectedOrdering = (flake.nixosConfigurations.metal.extendModules {
+    modules = [ { phoenix.agent.shutdownOrdering.enable = true; phoenix.agent.identity.enable = true; } ];
+  }).config;
+  # Assertions inspect IDs only; runtime config retains the immutable manifest dependency.
+  manifest = builtins.fromJSON (builtins.unsafeDiscardStringContext (builtins.readFile ordering.system.build.phoenixOpenShellShutdownManifest));
+  gatewayText = builtins.readFile ordering.environment.etc."phoenix-openshell/gateway.toml".source;
   user = import ../config/user.nix { inherit lib; };
   env =
     c:
@@ -37,6 +43,7 @@ assert !repository.phoenix.agent.shutdownOrdering.enable;
 assert !repository.services.phoenixDeployment.disruptionGuard.enable;
 assert !repository.phoenix.authorization.explanation.enable;
 assert !off.phoenix.agent.shutdownOrdering.enable;
+assert !(off.system.build ? phoenixOpenShellShutdownManifest);
 assert !(off.environment.etc ? ${policy});
 assert on.services.phoenixDeployment.securityReview.enable;
 assert alias.services.phoenixDeployment.securityReview.enable;
@@ -46,4 +53,10 @@ assert !(lib.hasInfix "auth_admin_keep" on.environment.etc.${policy}.text);
 assert env off == [ ];
 assert builtins.length (env ordering) == 1;
 assert lib.hasPrefix "CONTAINERS_CONF_OVERRIDE=" (builtins.head (env ordering));
+assert lib.hasInfix ("sha256:" + manifest.runtime.id) gatewayText;
+assert lib.hasInfix ("sha256:" + manifest.supervisor.id) gatewayText;
+assert !(lib.hasInfix "@PHOENIX_" gatewayText);
+assert ordering.home-manager.users.${user.name}.systemd.user.services.phoenix-openshell-gateway.Service.TimeoutStartSec == "50s";
+assert lib.hasInfix " import " (builtins.head ordering.home-manager.users.${user.name}.systemd.user.services.phoenix-openshell-gateway.Service.ExecStartPre);
+assert lib.any (a: !a.assertion && lib.hasInfix "shutdownOrdering currently supports operator identity only" a.message) protectedOrdering.assertions;
 true

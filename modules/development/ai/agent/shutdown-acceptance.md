@@ -7,10 +7,12 @@ client cancellation 1, actual accepted-tail RPC acknowledgement and verified
 running ELF/image bindings. Ordinary proves a final live gateway event; manager
 is immediately inactive with resource/cgroup gates preserved and no PAM/restart.
 Earlier prototype transaction evidence remains scoped below. Next required work
-is off-by-default module wiring, explicit peer-loss client recovery acceptance
-and controlled rollout. TERM-ignore passes in5.484s with truthful forced workload
-status; gateway loss passes local cleanup/typed log failure in1.536s with
-independent markers, while its attached CLI remains pending after5s. Detached denial-summary draining is a telemetry
+is actual cold service composition, a pinned-contract-length peer-loss client
+observation and controlled rollout. Atomic module wiring is implemented/OFF with
+focused helper/launcher and generated ON/OFF checks; no service activation is
+claimed. TERM-ignore passes in 5.484s with truthful forced workload
+status; gateway loss passes local cleanup/typed log failure in 1.536s with
+independent markers, while its attached CLI remains pending after 5s. Detached denial-summary draining is a telemetry
 limit, not a baseline blocker; restart durability is outside the upstream
 memory-tail contract. See [source packaging and exact final receipts](shutdown/README.md).
 
@@ -511,7 +513,7 @@ has a five-minute global bound. Preserve the ten-second cooperative target and
 Current ordinary prototypes pass their named cancellation, classification and
 accepted-tail RPC and ordered transaction/manager scopes.
 Final repeatable source-built images pass ordinary and ordered-manager scopes
-as summarized above. Remaining: off-by-default module wiring, peer-loss attached-client recovery
-acceptance and controlled rollout; full Phoenix workload startup
+as summarized above. Remaining: actual cold service composition of the implemented/OFF bundle,
+pinned-contract peer-loss client observation and controlled rollout; full Phoenix workload startup
 remains outside the small representative workload proof. Detached telemetry is a
 stated limit; restart durability is outside the upstream memory-tail contract.

@@ -81,19 +81,52 @@ are recorded below.
 
 Representative negative fixture scopes now pass with the same final images and
 ordering/resource/binary gates. TERM-ignore (`gz6cd040…`, output `ppa5zrh0…`)
-stopped in 5.484s: ignored TERM/no FINAL, reported workload status137, runtime0,
-explicit client cancellation1 and actual ACK; status137 alone does not prove
+stopped in 5.484s: ignored TERM/no FINAL, reported workload status 137, runtime 0,
+explicit client cancellation 1 and actual ACK; status 137 alone does not prove
 container PID1 SIGKILL. Gateway-loss (`dhzdmn7w…`, output `80wqx5i5…`) stopped
-locally in 1.536s: gateway inactive/restart disabled, both exits0/no OOM, scopes
+locally in 1.536s: gateway inactive/restart disabled, both exits 0/no OOM, scopes
 inactive, independent TERM/FINAL file copied from the exact stopped container,
 and actual log outcome false/0/true/Some(NotConnected). No fabricated ACK/all-logs
-claim is made. Attached CLI remained pending after5s, so client recovery is
+claim is made. Attached CLI remained pending after 5s, so client recovery is
 explicitly unproved; this peer case proves local cleanup and typed log failure,
 not that an unavailable gateway CLI works. The original peer assertion used the
 killed gateway as its observer; that red receipt remains preserved.
 
 Exact negative receipts are `negative-runtime-vm-receipt.json` and
 `negative-peer-observer-vm-receipt.json` in scratch. Both retain the initial
-under10s gate and45s fallback; no50s stall was accepted. Remaining work is minimal
-off-by-default module wiring, explicit peer-loss client recovery acceptance and
-controlled rollout. No production flag or service was changed.
+under 10s gate and45s fallback; no 50s stall was accepted. The atomic module bundle is implemented but remains OFF; cold service
+composition is unproved. Next are that proof, a pinned-contract-length peer-loss
+client observation and controlled rollout. No production flag or service was changed.
+
+## Opt-in module integration
+
+`phoenix.agent.shutdownOrdering.enable` now selects the matched source images and
+no-conmon/Before-gateway ordering atomically; it still defaults OFF. OFF retains
+the official image pins, gateway configuration and launcher revision behavior.
+Initial ON support is operator identity only: protected identity is rejected until
+its distinct service composition has separate acceptance.
+
+The build-time manifest derives exact archive/config/binary bindings from the
+closed images. The generated immutable gateway config uses those content IDs.
+A fixed pre-start helper addresses only the existing private rootless Podman API:
+wait within the shared deadline for the exact Unix socket (retrying only missing/
+refused), verify present IDs, or hash/load a missing fixed archive and verify its ID. It
+never pulls, reads credentials, or takes `launch.lock` (the launcher already holds
+that lock during `systemctl start`). Static failures exclude Podman output. One
+20s import budget extends the existing 30s startup bound to 50s only when ON;
+the 45s shutdown fallback is unchanged. Present IDs skip archive scans/imports.
+
+The manifest path participates in launcher revision selection; existing shared
+instance-use locks reject busy instance replacement before stop/create. Image
+addition during service startup is separate from instance replacement and can
+precede that guard. Neither importer nor launcher guard protects Home Manager
+stopping an old gateway: rollout requires explicit quiescence before unit
+activation. Native fallback, provider auth/history and recovery remain unchanged.
+Eleven offline helper tests, 21 launcher tests and generated ON/OFF composition
+checks pass, including exact ID substitution and the protected-identity rejection.
+OFF gateway bytes match committed baseline `6baccb901…`. Actual cold service
+composition remains unproved; no service activation or live enablement is claimed
+by these checks. Exact evidence is `backend-integration-focused-receipt.json` in
+the scratch receipt directory. The peer-loss
+CLI's five-second observation is shorter than its pinned keepalive contract, so
+pending status is an observation limit, not an established CLI defect.
