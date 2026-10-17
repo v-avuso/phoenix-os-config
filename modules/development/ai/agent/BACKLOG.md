@@ -47,11 +47,10 @@ verification. Historical receipts do not identify today's running generation.
 
 ## Daily-baseline release checklist
 
-1. **High value · remaining complexity 3:** Combined-source build and native/contained
-   reviewed temporary activation passed, preserving Typst and excluding the root
-   draft. Integrate and persist the exact documented baseline through the existing
-   review-ON route; verify actual source, runtime and profile. Do not repeat the
-   historical OFF window.
+1. **Accepted daily baseline:** The `7d9a8d0` baseline was integrated and persisted
+   through review ON after native/contained acceptance, preserving Typst and the
+   unrelated root draft. Later work is separate: verify actual source/runtime/profile
+   before each controlled rollout; do not reopen the historical OFF window.
 2. **High-value primary acceptance complete:** Current-UID contained managed-worktree
    cwd/common-Git access, disposable edit/cleanup and dirty immutable deployment
    passed. README restoration/Git cleanliness and frozen-source content were verified.
@@ -75,7 +74,7 @@ baseline checklist or treat their aggregate percentages as baseline deficits.
 | Bounded authorization interface and seven diagnostics | **100% installed bounded scope** | **0 known implementation** | Low | Revalidate mapped callers/denial paths only when identity or policy changes. Shared UID is a documented limit addressed by the distinct identity milestone, not a hypothetical diagnostic bug. [Contract](authorization/README.md). |
 | Immutable deployment and optional security review | **90–95% broader workflow** (primary reviewed test/switch accepted) | 3–5 | High | Contained managed-worktree dirty-source deployment is accepted; finish valid-pending critical override/recovery separately. Exact installed-action Cancel and warning readability are accepted. Reviewed test/switch and recovery passed; socket-peer VM and guest activation/rollback are separate passed slices. [Evidence](security-review.md), [handoff](HANDOFF.md). |
 | Common agent authorization pipeline | **55–75% broader agreed scope** | 8–13 | Low | Existing fixed interface is complete for its closed mappings; independent new-command review, immutable adapters and protected adaptive publication remain. This aggregate is a judgment, not a weighted sum. |
-| OpenShell backend | **85–95% everyday scope** | 5–13 | Medium | Primary everyday contained backend is accepted. Matched shutdown images, integration and actual-unit VM now pass; the opt-in bundle remains live OFF pending controlled rollout, detailed below. Keep native recovery and verify host/worktree boundaries when changed. |
+| OpenShell backend | **Everyday primary accepted; shutdown implemented/VM validated, live OFF** | 3–5, controlled rollout/acceptance | High | Repeatable matched images and actual-unit cold startup/manager shutdown pass, including negative workload/peer outcomes. Remaining work is a quiescent temporary live trial with real contained GUI/CLI/model lifetimes, recovery and exact-source restoration before any persistent enablement; integration uncertainty remains, rather than a percentage of unknown backend behavior. Preserve Native/auth/history. [Detailed scopes](shutdown-acceptance.md). |
 | General privileged-command review and typed execution | **60–80% bounded registry scope** (broader arbitrary-command goal remains partial) | 8–13 | Low | Default-off exact ELF registry and independent review/controller path are implemented with disposable root/socket/model-double proof. Controlled fixed-helper retained-model root-id/cache trial passed (one reviewer CLI call, not an API/token/cost meter). Finish native normal/critical command-client dialog acceptance and explicit caller-boundary approval; select a real operation before any live entry. Scripts/unbound mutable effects and universal root requests remain unsupported. [Registered commands](authorization/README.md#exact-registered-commands-experimental-off). |
 | Adaptive protected allowlist publication | **0%** | 8–13 | Low | Define narrow capabilities and rationale, reviewed version-tracked publication, revocation and rollback. Worker must never directly mutate live authority; root cache stores exact approvals, not a growing rule registry. Keep OFF until representative trial and explicit approval. |
 | Protected identity | **60–80%** | 8–13 | Medium | Isolated real gateway/UID/workspace/broker chain passes; complete disappearance/cleanup gate remains red. Full Codex image/launcher, retained auth, history/GUI/PTY, migration/recovery and exact Native+contained Codex-only admission remain. Dedicated identity currently covers OpenShell only; Native retains operator recovery. [Evidence and limits](identity.md#protected-podman-keep-id-gate). |
