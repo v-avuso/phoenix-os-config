@@ -58,7 +58,7 @@ def capture(stage, containers):
     bounded("journalctl -b --no-pager -n 400 -u user@1000.service > /tmp/shutdown-evidence/user-manager.log")
     bounded(user("journalctl --user -b --no-pager -n 400 > /tmp/shutdown-evidence/user-units.log"))
     bounded("printf %s " + shlex.quote(json.dumps(probe_timings)) + " > /tmp/shutdown-evidence/probe-timing.json")
-    for name in ("shutdown-stream.log", "workload-stdout.log", "workload-status", "create-driver.log", "probe-baseline.log", "probe-keepid.log", "transaction-outcome.json", "transaction-units.log", "transaction-stop.log", "durable-sandbox.log", "shutdown-stream.status", "transaction-cgroups.json", "terminal-delivery-outcome.json"):
+    for name in ("shutdown-stream.log", "workload-stdout.log", "workload-status", "create-driver.log", "probe-baseline.log", "probe-keepid.log", "transaction-outcome.json", "transaction-units.log", "transaction-stop.log", "durable-sandbox.log", "shutdown-stream.status", "transaction-cgroups.json", "terminal-delivery-outcome.json", "runtime-classification-outcome.json"):
         bounded("test ! -f /tmp/" + name + " || cp /tmp/" + name + " /tmp/shutdown-evidence/" + name)
     machine.copy_from_machine("/tmp/shutdown-evidence", stage)
 
@@ -134,6 +134,17 @@ try:
         assert set(containers) == {"sandbox", "supervisor"}, "expected one workload and supervisor"
         for identifier in containers.values():
             assert re.fullmatch("[a-f0-9]{64}", identifier)
+        runtime_binding = None
+        if acceptance_scope == "runtime-classification":
+            actual = json.loads(run("podman inspect " + containers["sandbox"]))[0]
+            source = actual["Config"]["Labels"]["openshell.ai/runtime-binary-source"]
+            expected = "/home/fixture/.local/share/openshell/podman-sandbox/" + images["runtime"]["id"] + "/openshell-sandbox"
+            assert source == expected, "runtime binary source does not bind selected image ID"
+            pid = actual["State"]["Pid"]
+            assert isinstance(pid, int) and pid > 1
+            executable_hash = machine.succeed("sha256sum /proc/" + str(pid) + "/exe").split()[0]
+            assert executable_hash == "745245e8f79e6a5050a78570a79b24ac3488c50dd3636ec5c8409755ec418d94", "running runtime ELF differs from fixed validation artifact"
+            runtime_binding = dict(imageID=images["runtime"]["id"], binarySource=source, executableSha256=executable_hash)
         stage = "supervisor-policy-event"
         # Exact 0.1.2 network_broker.rs:824 keeps loopback local. Nonloopback
         # TCP enters staged mediation; supervisor-network/proxy.rs:700 emits
@@ -255,14 +266,21 @@ try:
             transport_status = run("cat /tmp/workload-status").strip()
             states = {role: json.loads(run("podman inspect --format '{{json .State}}' " + identifier))
                       for role, identifier in containers.items()}
-            if acceptance_scope == "terminal-delivery":
+            if acceptance_scope in {"terminal-delivery", "runtime-classification"}:
+                runtime_log = run("podman logs --tail 200 " + containers["sandbox"] + " 2>&1")
                 outcome = dict(scope=acceptance_scope, stopSeconds=round(elapsed, 3),
                                transportStatus=transport_status,
                                adminCancellationMessage="openshell: terminal delivery cancelled by administrative shutdown" in output,
                                termMarker="ACCEPT_TERM" in output, finalMarker="ACCEPT_FINAL" in output,
-                               containers=states, fullGracefulShutdownProved=False, finalLogFlushProved=False)
+                               containers=states, runtimeBinding=runtime_binding,
+                               runtimeConfirmationWarningPresent="before supervisor confirmation" in runtime_log,
+                               fullGracefulShutdownProved=False, finalLogFlushProved=False)
                 machine.succeed("printf %s " + shlex.quote(json.dumps(outcome)) + " > /tmp/terminal-delivery-outcome.json")
                 machine.log("TERMINAL_DELIVERY " + json.dumps(outcome, sort_keys=True))
+                if acceptance_scope == "runtime-classification":
+                    machine.succeed("printf %s " + shlex.quote(json.dumps(outcome)) + " > /tmp/runtime-classification-outcome.json")
+                    assert all(state["ExitCode"] == 0 for state in states.values()), "runtime classification scope requires both container exits zero"
+                    assert not outcome["runtimeConfirmationWarningPresent"], "runtime still reports unconfirmed supervisor termination"
                 assert transport_status.isdecimal() and int(transport_status) not in {0, 124, 137}, "administrative transport did not finish with explicit bounded failure"
                 assert outcome["adminCancellationMessage"], "exact administrative cancellation message missing"
                 assert all(not state["Running"] and state["ExitCode"] != 137 for state in states.values()), "container survived or required SIGKILL"

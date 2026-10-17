@@ -40,3 +40,41 @@ Structured evidence:
 `/nix/store/gkqj17q04ndn401bamqj9b2y98rcrfr8-vm-test-run-phoenix-shutdown-openshell/final/shutdown-evidence/terminal-delivery-outcome.json`.
 This remains a validation prototype: no reproducible full source package or live
 option enablement follows from the trial.
+
+## Runtime classification prototype
+
+[runtime-classification.patch](runtime-classification.patch), SHA256
+`494c38d9a1a28d3224e52e7919d16329ff9753281caa2e83018c72f7ccfd034e`,
+keeps explicit versus expired-recovery cause inside the existing lifecycle state.
+Completed retries acknowledge either cause without reclassifying recovery loss;
+in-progress explicit retries remain possible. Nine focused native tests passed,
+including the failing-before-repair signal classification and opposite ownership
+orderings. The isolated runtime-classification VM also passed from frozen source
+`c10cjab2kch0kg3d5hhvkyazs7jlvhbh-source`, using runtime image ID
+`1f746b8f2ba00577f710fd1d0e78b00e47c930c620b85e4f0e0285523eabf680`
+and the validated supervisor above. Stop took 1.478 seconds; both containers
+exited 0 with TERM/FINAL, while the client correctly returned cancellation 1.
+The guest verified the running `/proc/PID/exe` hash and image-bound extracted
+binary path before stopping; the old confirmation warning was absent.
+Structured evidence:
+`/nix/store/6l8ar5bmny4sd3vckg09mf4hs7q65ab8-vm-test-run-phoenix-shutdown-openshell/final/shutdown-evidence/runtime-classification-outcome.json`.
+The log reader had no captured completion status before its owned stop; gateway
+relay EOF remains independent. Final push acknowledgement, final log flush and
+full graceful shutdown are not proved. No live rollout was performed.
+
+The scratch `build-runtime.py` runner builds only `openshell-sandbox` with
+`cargo zigbuild --offline --locked --release --target x86_64-unknown-linux-musl
+-j2 -p openshell-sandbox --bin openshell-sandbox`, plus target-only `--sysroot`
+pointing at isolated official Rust 1.95 musl std (same compiler commit). Binary
+SHA256 `745245e8f79e6a5050a78570a79b24ac3488c50dd3636ec5c8409755ec418d94`
+is fully static ELF64 x86-64, no interpreter/NEEDED/RPATH, version 0.0.0.
+Use `image.nix` with `role = "runtime"`; it preserves the scratch-image config,
+base layers and mode 0555, replacing only `/openshell-sandbox`.
+
+Explicit ordinary-only `acceptanceScope = "runtime-classification"` inherits
+terminal-delivery checks and additionally requires both container exits zero,
+absence of the old confirmation warning, and running runtime ELF hash bound to
+the selected runtime image ID. Local container logs and structured state remain
+captured. Full default acceptance stays strict; final log flush and complete
+graceful shutdown are independent, unproved requirements. No live enablement or
+reproducible full source package is implied by these validation artifacts.
