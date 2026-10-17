@@ -1,12 +1,14 @@
 # OpenShell shutdown ordering acceptance
 
-Shutdown options remain disabled on the live host. Isolated ordinary-stop
-prototypes now prove bounded explicit client cancellation and correct runtime
-administrative classification: 1.478 seconds, TERM/FINAL, both container exits 0,
-and client cancellation 1. Ordered transaction and user-manager teardown also
-have prompt partial evidence below. Final supervisor push acknowledgement/log
-flush and full graceful shutdown remain unproved; none of these trials is a live
-rollout or a reproducible full source package. See the
+Shutdown options remain disabled on the live host. Matched isolated ordinary-stop
+prototypes now prove explicit client cancellation 1, TERM/FINAL, both container
+exits 0 and acknowledged accepted-tail delivery to the live gateway in 1.436
+seconds. Running ELF/image bindings are verified. Ordered transaction and
+user-manager teardown now pass the matched ordered scope in 1.452 and 1.483
+seconds respectively, with the same strict ACK/status/binding/resource gates. Full graceful shutdown remains unproved. Detached
+denial-summary draining is a telemetry limit, not a baseline blocker; restart
+durability is outside the upstream memory-tail contract. These are validation-only
+artifacts, not live rollout or a reproducible full source package. See the
 [prototype contracts and exact receipts](tests/shutdown-cancellation/README.md).
 
 ## Prerequisites
@@ -327,17 +329,17 @@ flush it. New supervision is consistent with retained-intent reconciliation;
 the exact restart-generation transition was not needed to establish this buffer
 contract. No custom database export or restart suppression is proposed.
 
-Smallest valid checks separate delivery from persistence: with gateway kept alive,
-verify a uniquely identified final supervisor event reaches GetSandboxLogs after
-ordinary stop, then compare accepted event counts with the supported live stream.
-For combined gateway stop, retain the guest journal/Podman local log captures and
-compare the same identified events before/after gateway restart; those independent
-persistent outputs, rather than the gateway's memory tail, are the persistence
-baseline. Existing TERM/FINAL stdout proves workload cleanup only. A terminal
-supervisor event and finite push-completion protocol are still proposed, not yet
-implemented; no current capture proves final remote flush. Gateway restart must
-continue to exercise normal retained-intent behavior. Canonical transport and
-runtime-status failures remain explicit independent acceptance gaps.
+Delivery and persistence are separate: the matched ordinary prototype now proves
+one uniquely identified final supervisor event in GetSandboxLogs plus an actual
+accepted-tail RPC acknowledgement while the gateway remains alive. For combined
+gateway stop, the cooperative ordered gate requires the same successful local
+RPC acknowledgement. Explicit bounded incomplete delivery with an unavailable
+peer belongs to a separate negative case, not cooperative acceptance. Do not require
+GetSandboxLogs after stopping its process or restart the gateway merely to infer
+durability. Its memory tail is not a persistence contract; retained-intent restart
+behavior remains unchanged. TERM/FINAL proves workload cleanup, not all telemetry
+flush. Explicit administrative client cancellation is correct, not a fabricated
+successful workload exit.
 
 ### Ordered user-manager teardown
 
@@ -405,23 +407,23 @@ This validates the ordinary administrative classification path only; final log
 flush, complete graceful shutdown, a reproducible full source package and live
 rollout remain outside the accepted prototype.
 
-Log flushing needs a separate explicit lifecycle, not merely awaiting the existing
-join handle. `main.rs:328–346` retains but never joins log push. In
-`log_push.rs:149–218`, the streaming RPC is separately spawned and channel closure
-only queues the final batch before returning; the subscriber may retain sender
-clones. A candidate is an owned shutdown handle that stops accepting new events,
-drains the existing queue, closes the request stream and awaits that RPC's result
-under a single finite budget (proposed one second within the completion budget),
-then records incomplete delivery locally on expiry without retrying shutdown.
-It must not log recursively into its closing queue. Keep each request at most
-50 lines: the current reconnect buffer can retain 200, while the server accepts
-only the first 100 per request. A completed RPC can acknowledge a retained live
-tail, not recover lines already dropped by tracing/backoff or a broken stream;
-report prior loss separately from drain completion. The acknowledgement proves
-publication into the live memory tail, not restart durability.
-The previous gateway-restart durability assertion was invalid for its in-memory
-log bus, as established above; final flush needs an identified terminal event and
-a live gateway receipt, with independent persistent local logs for restart comparison.
+The owned log-drain prototype is now implemented and validated with the matched
+supervisor image `86c69d84…` and runtime `1f746b8f…`. Frozen source `g85n9g0f…`,
+output `cpfb8pfd…`, stopped in 1.436 seconds with both containers exit 0 and
+explicit client cancellation 1. Local static outcome appeared exactly once:
+accepted-tail acknowledgement true, drops 0, prior-stream uncertainty false,
+incomplete None; the fresh live gateway contained the final event exactly once.
+The first run's local INFO-marker assertion was invalid because its console
+filter defaults to WARN while push independently accepts INFO; the failed receipt
+and corrected structured receipt remain preserved in the linked prototype docs.
+
+The handle closes receiver admission, drains batches of at most 50, closes the
+request stream and awaits the actual RPC under one absolute one-second budget.
+It reports prior loss and incomplete delivery separately. This proves accepted
+live-tail publication, not all historical events, restart durability, file-appender
+flush or detached SubmitPolicyAnalysis denial-summary aggregation. The latter
+emitted a separate failed-flush warning in the first run; it is not covered by the
+RPC outcome. Full graceful shutdown and live rollout remain unaccepted.
 
 A bounded official-source reuse check found latest stable
 [v0.1.4 (`5a7728c`)](https://github.com/NVIDIA/OpenShell/releases/tag/v0.1.4)
@@ -475,9 +477,12 @@ fixed probe-name snapshots. Attached create now fails promptly when its status
 file appears before readiness, rather than waiting the remaining 60-second poll.
 
 Combined gateway/exact-scope stop reproduced the stall as recorded above;
-ordered user-manager teardown has prompt partial proof (1.518 seconds) above,
-while full manager-wide graceful shutdown and acknowledged final push delivery
-remain pending. Workload stdout or a closed tail alone never proves final log
+the matched ordered transaction and manager scopes now pass in 1.452 and 1.483
+seconds respectively. Manager inactivity was observed immediately before reads;
+no PAM, gateway restart or manager restart was introduced. Both modes preserve
+TERM/FINAL, both container exits 0, explicit cancellation 1 and one successful
+local RPC acknowledgement, with verified binaries/cgroup ordering/resources.
+Exact prototype receipts are linked above. Workload stdout or a closed tail alone never proves final log
 flush. Further Rust repairs require an agreed source-backed proposal.
 
 For the full regression, reuse the locked Nixpkgs `pkgs.testers.runNixOSTest` driver and its rootless
@@ -500,6 +505,8 @@ Use bounded increments: two build CPUs, 4 GiB guest RAM, 8 GiB dependency-cache
 and 25 GiB scratch caps; inspect missing inputs before provisioning. A ready guest
 has a five-minute global bound. Preserve the ten-second cooperative target and
 45-second safety net; diagnose the first material failure before any repeat.
-Current ordinary prototypes pass only their named cancellation/classification
-scopes, and ordered manager teardown is partial proof. Full Phoenix-image startup,
-final push acknowledgement and full graceful shutdown remain separate gaps.
+Current ordinary prototypes pass their named cancellation, classification and
+accepted-tail RPC and ordered transaction/manager scopes.
+Full Phoenix-image startup, reproducible source packaging and full graceful
+shutdown remain separate gaps. Detached telemetry is a stated limit; restart
+durability is outside the upstream memory-tail contract.

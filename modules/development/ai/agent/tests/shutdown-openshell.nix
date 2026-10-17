@@ -49,8 +49,10 @@ let
   });
 in
 assert containersConfig == null || (lib.hasPrefix "/nix/store/" (toString containersConfig) && builtins.pathExists containersConfig);
-assert builtins.elem acceptanceScope [ "full" "terminal-delivery" "runtime-classification" ];
-assert acceptanceScope == "full" || (stopMode == "ordinary" && !probeCreateOnly);
+assert builtins.elem acceptanceScope [ "full" "terminal-delivery" "runtime-classification" "log-drain" "ordered-lifecycle" ];
+assert acceptanceScope == "full"
+  || (acceptanceScope == "ordered-lifecycle" && builtins.elem stopMode [ "transaction" "manager" ] && containersConfig != null && !probeCreateOnly)
+  || (acceptanceScope != "ordered-lifecycle" && stopMode == "ordinary" && !probeCreateOnly);
 assert builtins.elem stopMode [ "ordinary" "transaction" "manager" ];
 assert builtins.all valid (builtins.attrValues images);
 pkgs.testers.runNixOSTest {

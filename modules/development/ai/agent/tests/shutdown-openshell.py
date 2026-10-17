@@ -58,7 +58,7 @@ def capture(stage, containers):
     bounded("journalctl -b --no-pager -n 400 -u user@1000.service > /tmp/shutdown-evidence/user-manager.log")
     bounded(user("journalctl --user -b --no-pager -n 400 > /tmp/shutdown-evidence/user-units.log"))
     bounded("printf %s " + shlex.quote(json.dumps(probe_timings)) + " > /tmp/shutdown-evidence/probe-timing.json")
-    for name in ("shutdown-stream.log", "workload-stdout.log", "workload-status", "create-driver.log", "probe-baseline.log", "probe-keepid.log", "transaction-outcome.json", "transaction-units.log", "transaction-stop.log", "durable-sandbox.log", "shutdown-stream.status", "transaction-cgroups.json", "terminal-delivery-outcome.json", "runtime-classification-outcome.json"):
+    for name in ("shutdown-stream.log", "workload-stdout.log", "workload-status", "create-driver.log", "probe-baseline.log", "probe-keepid.log", "transaction-outcome.json", "transaction-units.log", "transaction-stop.log", "durable-sandbox.log", "shutdown-stream.status", "transaction-cgroups.json", "terminal-delivery-outcome.json", "runtime-classification-outcome.json", "log-drain-outcome.json", "post-stop-gateway-sandbox.log"):
         bounded("test ! -f /tmp/" + name + " || cp /tmp/" + name + " /tmp/shutdown-evidence/" + name)
     machine.copy_from_machine("/tmp/shutdown-evidence", stage)
 
@@ -135,7 +135,8 @@ try:
         for identifier in containers.values():
             assert re.fullmatch("[a-f0-9]{64}", identifier)
         runtime_binding = None
-        if acceptance_scope == "runtime-classification":
+        supervisor_binding = None
+        if acceptance_scope in {"runtime-classification", "log-drain", "ordered-lifecycle"}:
             actual = json.loads(run("podman inspect " + containers["sandbox"]))[0]
             source = actual["Config"]["Labels"]["openshell.ai/runtime-binary-source"]
             expected = "/home/fixture/.local/share/openshell/podman-sandbox/" + images["runtime"]["id"] + "/openshell-sandbox"
@@ -145,6 +146,16 @@ try:
             executable_hash = machine.succeed("sha256sum /proc/" + str(pid) + "/exe").split()[0]
             assert executable_hash == "745245e8f79e6a5050a78570a79b24ac3488c50dd3636ec5c8409755ec418d94", "running runtime ELF differs from fixed validation artifact"
             runtime_binding = dict(imageID=images["runtime"]["id"], binarySource=source, executableSha256=executable_hash)
+        if acceptance_scope in {"log-drain", "ordered-lifecycle"}:
+            supervisor_actual = json.loads(run("podman inspect " + containers["supervisor"]))[0]
+            assert supervisor_actual["Image"].removeprefix("sha256:") == images["supervisor"]["id"], "running supervisor image differs from selected artifact"
+            assert supervisor_actual["Config"]["Labels"]["openshell.ai/sandbox-id"] == actual["Config"]["Labels"]["openshell.ai/sandbox-id"]
+            pid = supervisor_actual["State"]["Pid"]
+            assert isinstance(pid, int) and pid > 1
+            executable_hash = machine.succeed("sha256sum /proc/" + str(pid) + "/exe").split()[0]
+            assert executable_hash == "14c412633c65c57a2c20fc2f3c093c6a181238f25628a854ffe95abd43f88f8c", "running supervisor ELF differs from matched log-drain artifact"
+            supervisor_binding = dict(imageID=images["supervisor"]["id"], executableSha256=executable_hash,
+                                      sandboxID=supervisor_actual["Config"]["Labels"]["openshell.ai/sandbox-id"])
         stage = "supervisor-policy-event"
         # Exact 0.1.2 network_broker.rs:824 keeps loopback local. Nonloopback
         # TCP enters staged mediation; supervisor-network/proxy.rs:700 emits
@@ -201,6 +212,12 @@ try:
                     scope_path = placement["controlGroup"].rstrip("/")
                     assert not any(path == scope_path or path.startswith(scope_path + "/") for path in conmon_paths), "conmon remains inside container scope"
                     assert any(path == scope_path or path.startswith(scope_path + "/") for path in workload_paths), "workload missing container resource cgroup"
+            if acceptance_scope == "ordered-lifecycle":
+                scope_path = placements["sandbox"]["controlGroup"].rstrip("/")
+                limits = {name: machine.succeed("cat /sys/fs/cgroup" + scope_path + "/" + name).strip()
+                          for name in ("memory.max", "pids.max")}
+                machine.log("ORDERED_RESOURCE_LIMITS " + json.dumps(limits, sort_keys=True))
+                assert limits == {"memory.max": "536870912", "pids.max": "512"}, "requested workload resource limits missing"
             run("kill -0 $(cat /tmp/shutdown-stream.pid)")
             stage = stop_mode + "-stop"
             machine.log("PHASE " + stage + " entered")
@@ -237,7 +254,7 @@ try:
             capture("after-transaction", containers)
             # A first stall ends the experiment after evidence, without restart.
             assert status == 0 and elapsed < 10, "combined stop failed or stalled; retain 45s fallback and captured phase"
-            if stop_mode == "transaction":
+            if stop_mode == "transaction" and acceptance_scope != "ordered-lifecycle":
                 stage = "transaction-restart-observation"
                 run("systemctl --user start phoenix-openshell-gateway.service", timeout=35)
                 observed = run("openshell logs shutdown-acceptance -n 200 --source sandbox", timeout=10)
@@ -246,12 +263,31 @@ try:
                 outcome["logStorageContract"] = "gateway process-memory tail; restart query is not durability proof"
                 machine.succeed("printf %s " + shlex.quote(json.dumps(outcome)) + " > /tmp/transaction-outcome.json")
                 capture("after-gateway-restart", containers)
-            else:
+            elif stop_mode == "manager":
                 assert outcome["managerActiveStatus"] != 0, "guest user manager survived stop"
             assert len(outcome["containers"]) == 2, "post-stop local Podman inspection unavailable; see inspectStatus, no restart attempted"
             assert outcome["termMarker"] and outcome["finalMarker"], "transaction workload final markers missing"
             assert all(not state["Running"] for state in outcome["containers"].values()), "transaction container survived"
-            assert outcome["transportStatus"] == "0", "transaction attached transport incomplete/nonzero; timing alone is not full acceptance"
+            if acceptance_scope == "ordered-lifecycle":
+                # No gateway restart/GetLogs: capture the actual local RPC receipt.
+                supervisor_log = run("podman logs --tail 200 " + containers["supervisor"] + " 2>&1")
+                runtime_log = run("podman logs --tail 200 " + containers["sandbox"] + " 2>&1")
+                pattern = re.compile(r"openshell: log push shutdown LogPushOutcome \{ accepted_tail_acknowledged: (true|false), local_dropped_lines: ([0-9]+), prior_stream_delivery_uncertain: (true|false), incomplete: ([A-Za-z()]+) \}")
+                receipts = [match.groups() for line in supervisor_log.splitlines() if (match := pattern.fullmatch(line))]
+                outcome.update(scope=acceptance_scope, runtimeBinding=runtime_binding, supervisorBinding=supervisor_binding,
+                               adminCancellationMessage="openshell: terminal delivery cancelled by administrative shutdown" in output,
+                               rpcReceiptCount=len(receipts), rpcReceipt=receipts[0] if len(receipts) == 1 else None,
+                               runtimeConfirmationWarningPresent="before supervisor confirmation" in runtime_log,
+                               fullGracefulShutdownProved=False, gatewayRestartDurabilityProved=False)
+                machine.succeed("printf %s " + shlex.quote(json.dumps(outcome)) + " > /tmp/transaction-outcome.json")
+                machine.log("ORDERED_LIFECYCLE " + json.dumps(outcome, sort_keys=True))
+                assert outcome["transportStatus"].isdecimal() and int(outcome["transportStatus"]) not in {0, 124, 137}, "ordered client did not finish with bounded explicit failure"
+                assert outcome["adminCancellationMessage"], "ordered client cancellation missing; unknown disconnect requires diagnosis"
+                assert len(receipts) == 1 and receipts[0] == ("true", "0", "false", "None"), "cooperative ordered accepted-tail RPC acknowledgement incomplete"
+                assert not outcome["runtimeConfirmationWarningPresent"], "ordered runtime confirmation missing"
+                assert all(not state["OOMKilled"] and state["ExitCode"] != 137 for state in outcome["containers"].values()), "ordered container OOM/SIGKILL"
+            else:
+                assert outcome["transportStatus"] == "0", "transaction attached transport incomplete/nonzero; timing alone is not full acceptance"
             assert all(state["ExitCode"] == 0 for state in outcome["containers"].values()), "transaction bootstrap/container nonzero exit"
         else:
             stage = "ordinary-stop"
@@ -266,21 +302,41 @@ try:
             transport_status = run("cat /tmp/workload-status").strip()
             states = {role: json.loads(run("podman inspect --format '{{json .State}}' " + identifier))
                       for role, identifier in containers.items()}
-            if acceptance_scope in {"terminal-delivery", "runtime-classification"}:
+            if acceptance_scope in {"terminal-delivery", "runtime-classification", "log-drain"}:
                 runtime_log = run("podman logs --tail 200 " + containers["sandbox"] + " 2>&1")
                 outcome = dict(scope=acceptance_scope, stopSeconds=round(elapsed, 3),
                                transportStatus=transport_status,
                                adminCancellationMessage="openshell: terminal delivery cancelled by administrative shutdown" in output,
                                termMarker="ACCEPT_TERM" in output, finalMarker="ACCEPT_FINAL" in output,
-                               containers=states, runtimeBinding=runtime_binding,
+                               containers=states, runtimeBinding=runtime_binding, supervisorBinding=supervisor_binding,
                                runtimeConfirmationWarningPresent="before supervisor confirmation" in runtime_log,
                                fullGracefulShutdownProved=False, finalLogFlushProved=False)
                 machine.succeed("printf %s " + shlex.quote(json.dumps(outcome)) + " > /tmp/terminal-delivery-outcome.json")
                 machine.log("TERMINAL_DELIVERY " + json.dumps(outcome, sort_keys=True))
-                if acceptance_scope == "runtime-classification":
+                if acceptance_scope in {"runtime-classification", "log-drain"}:
                     machine.succeed("printf %s " + shlex.quote(json.dumps(outcome)) + " > /tmp/runtime-classification-outcome.json")
                     assert all(state["ExitCode"] == 0 for state in states.values()), "runtime classification scope requires both container exits zero"
                     assert not outcome["runtimeConfirmationWarningPresent"], "runtime still reports unconfirmed supervisor termination"
+                if acceptance_scope == "log-drain":
+                    stage = "final-log-drain-receipt"
+                    supervisor_log = run("podman logs --tail 200 " + containers["supervisor"] + " 2>&1")
+                    final_marker = "Supervisor lifecycle completed; closing log push"
+                    pattern = re.compile(r"openshell: log push shutdown LogPushOutcome \{ accepted_tail_acknowledged: (true|false), local_dropped_lines: ([0-9]+), prior_stream_delivery_uncertain: (true|false), incomplete: ([A-Za-z()]+) \}")
+                    receipts = [match.groups() for line in supervisor_log.splitlines() if (match := pattern.fullmatch(line))]
+                    gateway_logs = run("openshell logs shutdown-acceptance -n 200 --source sandbox", timeout=5)
+                    machine.succeed("printf %s " + shlex.quote(gateway_logs) + " > /tmp/post-stop-gateway-sandbox.log")
+                    outcome.update(localFinalMarkerCount=sum(final_marker in line for line in supervisor_log.splitlines()),
+                                   liveGatewayFinalMarkerCount=sum(final_marker in line for line in gateway_logs.splitlines()),
+                                   rpcReceiptCount=len(receipts), rpcReceipt=receipts[0] if len(receipts) == 1 else None,
+                                   acceptedTailRpcProved=False, gatewayRestartDurabilityProved=False)
+                    machine.succeed("printf %s " + shlex.quote(json.dumps(outcome)) + " > /tmp/log-drain-outcome.json")
+                    machine.log("LOG_DRAIN " + json.dumps(outcome, sort_keys=True))
+                    # Pinned console logging defaults to WARN; the independent push layer
+                    # accepts INFO. Local INFO-marker count is diagnostic, not a drain gate.
+                    assert outcome["liveGatewayFinalMarkerCount"] == 1, "unique final marker absent from fresh sandbox live gateway tail"
+                    assert len(receipts) == 1 and receipts[0] == ("true", "0", "false", "None"), "accepted-tail RPC acknowledgement incomplete or prior loss observed"
+                    outcome["acceptedTailRpcProved"] = True
+                    machine.succeed("printf %s " + shlex.quote(json.dumps(outcome)) + " > /tmp/log-drain-outcome.json")
                 assert transport_status.isdecimal() and int(transport_status) not in {0, 124, 137}, "administrative transport did not finish with explicit bounded failure"
                 assert outcome["adminCancellationMessage"], "exact administrative cancellation message missing"
                 assert all(not state["Running"] and state["ExitCode"] != 137 for state in states.values()), "container survived or required SIGKILL"

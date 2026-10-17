@@ -217,3 +217,7 @@
   `shutdown-acceptance.md`: administrative exit-report skipping prevents hangs,
   and the gateway log tail is memory-only. Validate supported delivery semantics
   before treating a negative probe or post-restart absence as a new defect.
+
+- For shutdown log markers, check each sink’s filter first: console WARN can omit
+  INFO accepted by push. Prove ordinary delivery with actual RPC acknowledgement
+  and a live gateway receipt, not console INFO, tail EOF or a post-restart memory tail.

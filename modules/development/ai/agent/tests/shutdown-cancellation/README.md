@@ -79,14 +79,19 @@ captured. Full default acceptance stays strict; final log flush and complete
 graceful shutdown are independent, unproved requirements. No live enablement or
 reproducible full source package is implied by these validation artifacts.
 
-## Owned log-drain scratch proof (not in the images above)
+## Owned log-drain proof and matched validation build
 
 [log-drain.patch](log-drain.patch), SHA256
 `2f4981993d4e73de6d817771bce83266a645902f138d3054eea27c2a77eb7318`,
 applies separately to the same pristine pinned source (fuzz 0, byte-identical to
 tested scratch files). Only `openshell-supervisor-process/src/log_push.rs` and
-`openshell-supervisor/src/main.rs` change. The existing validated binaries/images
-above predate this patch; no new release binary, image or VM was built for it.
+`openshell-supervisor/src/main.rs` change. The earlier cancellation-only supervisor above predates this patch. A matched
+GNU 2.28 supervisor was built offline in 99.77 seconds, binary SHA256
+`14c412633c65c57a2c20fc2f3c093c6a181238f25628a854ffe95abd43f88f8c`.
+It retains the standard loader/library set, max GLIBC 2.28, no RPATH/RUNPATH and
+prototype version 0.0.0. `image.nix` now binds that supervisor while the static
+runtime remains unchanged; the prior binary/receipts are preserved in scratch
+`artifacts/cancellation-supervisor/`. The matched ordinary log-drain VM passed as below.
 
 RED demonstrated the old production final-send branch returning before server
 acknowledgement. GREEN passed 19 focused tests, including retained sender clones,
@@ -107,7 +112,42 @@ openshell-supervisor-process --lib log_push::tests -- --test-threads=2` and
 `cargo check --offline --locked -j2 -p openshell-supervisor --bin openshell-supervisor`.
 Exact environment/results and hashes remain in scratch `log-*-receipt.json` and
 `log-drain-manifest.json`; all inputs are scratch/public Nix store paths.
-Next: parent review, then an explicitly budgeted matched-supervisor build and one
-live-gateway VM proving a unique final supervisor event plus actual RPC response.
+Explicit ordinary-only `acceptanceScope = "log-drain"` verifies both running ELF
+hashes/image bindings and inherits cancellation/runtime checks. It requires one
+final marker in the fresh sandbox's live gateway tail plus exactly one local
+actual RPC outcome: accepted-tail acknowledgement true, drops 0, prior-stream
+uncertainty false, incomplete None. Local INFO-marker count is diagnostic only:
+the pinned console defaults to WARN while the independent push layer accepts INFO.
+Query output and structured state are captured.
+The corrected VM passed with source `g85n9g0f…`, output `cpfb8pfd…`: stop
+1.436 seconds, TERM/FINAL, explicit cancellation 1, both containers exit 0,
+verified running ELF/image bindings, exactly one acknowledged RPC outcome and
+one final event in the fresh live gateway. The first run failed only an invalid
+local INFO-marker assertion: captured console defaults to WARN, independently
+of the INFO push layer; its failed receipt remains preserved. Exact structured
+evidence is `log-vm-corrected-receipt.json` in the scratch receipt directory.
+This proves the accepted live tail. Detached denial-summary draining is a
+telemetry limit, not a baseline blocker; restart durability is outside the
+upstream memory-tail contract.
 Tail observer exit and gateway restart are not acknowledgement/durability proof;
 full graceful shutdown and live rollout remain unaccepted.
+
+`acceptanceScope = "ordered-lifecycle"` is the transaction/manager
+fixture extension requiring module-generated ordering, the same running binary
+bindings, cgroup placement/resource limits, TERM/FINAL, both exits 0, stop under
+ten seconds, exact administrative cancellation and the same successful local
+RPC outcome. It does not restart the gateway or require a tail-observer exit.
+Unknown disconnects or incomplete cooperative RPC outcomes fail for diagnosis;
+unavailable-peer negatives are separate. Full/default gates remain unchanged.
+
+The matched ordered scope passed both modes with frozen source `cahkkvcv…`:
+transaction 1.452 seconds (`hfr9wyxc…`) and manager 1.483 seconds (`5izgjazi…`).
+Both prove TERM/FINAL, both containers stopped/exit 0 without OOM/SIGKILL, exact
+client cancellation 1, one actual RPC ACK true/0/false/None, running binary/image
+bindings and no-conmon/Before-gateway placement with 512MiB/512-pid limits.
+Manager status was inactive (3) immediately before post-stop reads; no PAM or
+gateway/manager restart was introduced. Tail-reader exit 1 is independent.
+Exact receipts are `ordered-lifecycle-vm-receipt.json` and
+`manager-lifecycle-vm-receipt.json` in the scratch receipt directory. These remain
+validation-only overlays; reproducible source packaging and controlled rollout
+are next, not a claim that every background telemetry task drains.

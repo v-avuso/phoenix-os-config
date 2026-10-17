@@ -5,7 +5,7 @@ let
     supervisor = {
       archive = "/nix/store/zalazb059fm32a2ng1b8pngw2qylapwf-phoenix-openshell-supervisor.docker.tar";
       archiveSha256 = "b77c8746e6228799e00bddb5b751f9155244c7e7f0b8f28f8eefaf936609e2c2";
-      binarySha256 = "112a50bafdc5b94998cf4d3c403efad3f96b3f0cf637f7cd096c301ec7c88654";
+      binarySha256 = "14c412633c65c57a2c20fc2f3c093c6a181238f25628a854ffe95abd43f88f8c";
       executable = "openshell-supervisor";
       mode = "0755";
     };
