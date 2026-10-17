@@ -1,15 +1,16 @@
 # OpenShell shutdown ordering acceptance
 
-Shutdown options remain disabled on the live host. Matched isolated ordinary-stop
-prototypes now prove explicit client cancellation 1, TERM/FINAL, both container
-exits 0 and acknowledged accepted-tail delivery to the live gateway in 1.436
-seconds. Running ELF/image bindings are verified. Ordered transaction and
-user-manager teardown now pass the matched ordered scope in 1.452 and 1.483
-seconds respectively, with the same strict ACK/status/binding/resource gates. Full graceful shutdown remains unproved. Detached
-denial-summary draining is a telemetry limit, not a baseline blocker; restart
-durability is outside the upstream memory-tail contract. These are validation-only
-artifacts, not live rollout or a reproducible full source package. See the
-[prototype contracts and exact receipts](tests/shutdown-cancellation/README.md).
+Shutdown options remain disabled on the live host. Final repeatable source-built
+images now pass cooperative ordinary log-drain (1.528 seconds) and ordered
+user-manager teardown (1.489 seconds): TERM/FINAL, both container exits 0, explicit
+client cancellation 1, actual accepted-tail RPC acknowledgement and verified
+running ELF/image bindings. Ordinary proves a final live gateway event; manager
+is immediately inactive with resource/cgroup gates preserved and no PAM/restart.
+Earlier prototype transaction evidence remains scoped below. Next required work
+is representative TERM-ignoring/unavailable-peer negative coverage, then module
+wiring and controlled rollout. Detached denial-summary draining is a telemetry
+limit, not a baseline blocker; restart durability is outside the upstream
+memory-tail contract. See [source packaging and exact final receipts](shutdown/README.md).
 
 ## Prerequisites
 
@@ -507,6 +508,8 @@ has a five-minute global bound. Preserve the ten-second cooperative target and
 45-second safety net; diagnose the first material failure before any repeat.
 Current ordinary prototypes pass their named cancellation, classification and
 accepted-tail RPC and ordered transaction/manager scopes.
-Full Phoenix-image startup, reproducible source packaging and full graceful
-shutdown remain separate gaps. Detached telemetry is a stated limit; restart
-durability is outside the upstream memory-tail contract.
+Final repeatable source-built images pass ordinary and ordered-manager scopes
+as summarized above. Remaining: representative TERM-ignoring/unavailable-peer
+negatives, module wiring and controlled rollout; full Phoenix workload startup
+remains outside the small representative workload proof. Detached telemetry is a
+stated limit; restart durability is outside the upstream memory-tail contract.

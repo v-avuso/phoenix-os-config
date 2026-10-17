@@ -43,5 +43,38 @@ and runtime `jrg2nw33…` (SHA256
 `ff8b34afce2744c1f3ff81305077ce9daddc40ee65254212a643a14655c44c21`).
 Exact build/ELF receipts and logs are `source-{supervisor,runtime}-build-receipt.json`
 and `source-*-nix.log` under the existing scratch receipt directory. Image integration,
-config/layer checks and representative final-candidate VM proof remain next.
+config/layer checks passed, followed by final-candidate VM proof below.
 Live options remain OFF; activation is a separate reviewed step.
+
+`images.nix` defines only the two candidate images from these fixed packages and
+`dockerTools.pullImage` official 0.1.2 Linux/amd64 digest pins. Base config IDs
+are checked before copying the full config (without duplicating inherited Env);
+one layer replaces only the executable at its fixed mode. Both base transport
+hashes were discovered once and exact imports passed; independently verified base
+config IDs match the existing release receipts. Both final images then built
+offline without Rust rebuilds. The fixture
+accepts an independently verified `binarySha256` in each image record and still
+hashes the actual running `/proc/PID/exe`. Historical records retain their fixed
+prototype hashes. Verify full config, old-layer identity, sole added executable
+and its package hash before running the final image path in the guest.
+
+Final image recipe source `8s7yir1q…` produced supervisor image `7ddc3780…`
+(archive `y778p23q…`, SHA256
+`2f6da0f314b68f53e465dfa796397e5e86275dabc03e26ef74aa46485ed423c6`)
+and runtime image `510b992e…` (archive `n6dbxll7…`, SHA256
+`cc90da13f9cdae9279f0978710fcddee897ae08e9f58dd335edfa9dff8184cec`).
+Full config equality, byte-identical old layers and a sole root-owned executable
+with exact source-package hash/mode passed for each. No added libraries, symlinks
+or Nix filesystem paths are present. Exact artifacts and the verifier are in
+`final-images-receipt.json` and `verify-final-images.py` in the scratch receipt
+directory. Final source-built images passed ordinary log-drain (1.528s) and ordered manager
+teardown (1.489s) with frozen fixture source `2s0vryrn…`: both container exits 0,
+TERM/FINAL, exact administrative client cancellation 1, one successful actual
+RPC acknowledgement, and running ELF/image bindings. Ordinary also proved one
+final live gateway event; manager was inactive immediately before reads and
+preserved resource/cgroup gates without PAM or restart. Outputs are `a50gbi6x…`
+and `rhp7fhnk…`; exact evidence and continuation commands are
+`final-candidate-vm-receipt.json` and `CONTINUE-SOURCE-IMAGES.md` in scratch.
+Source imports, toolchain/vendor inputs and image builds are now fixed/repeatable.
+No live host rollout occurred. Next: representative TERM-ignoring/unavailable-peer
+negative coverage, then module wiring and controlled rollout of these same images.

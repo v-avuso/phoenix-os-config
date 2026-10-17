@@ -8,7 +8,8 @@ let
   valid = image:
     lib.hasPrefix "/nix/store/" (toString image.archive)
     && builtins.match "[a-f0-9]{64}" image.id != null
-    && builtins.hashFile "sha256" image.archive == image.sha256;
+    && builtins.hashFile "sha256" image.archive == image.sha256
+    && (!(image ? binarySha256) || builtins.match "[a-f0-9]{64}" image.binarySha256 != null);
   state = "/home/fixture/.local/state/phoenix-openshell";
   gateway = (pkgs.formats.toml { }).generate "shutdown-gateway.toml" {
     openshell = {

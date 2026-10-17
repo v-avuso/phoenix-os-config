@@ -144,7 +144,7 @@ try:
             pid = actual["State"]["Pid"]
             assert isinstance(pid, int) and pid > 1
             executable_hash = machine.succeed("sha256sum /proc/" + str(pid) + "/exe").split()[0]
-            assert executable_hash == "745245e8f79e6a5050a78570a79b24ac3488c50dd3636ec5c8409755ec418d94", "running runtime ELF differs from fixed validation artifact"
+            assert executable_hash == images["runtime"].get("binarySha256", "745245e8f79e6a5050a78570a79b24ac3488c50dd3636ec5c8409755ec418d94"), "running runtime ELF differs from independently verified image record"
             runtime_binding = dict(imageID=images["runtime"]["id"], binarySource=source, executableSha256=executable_hash)
         if acceptance_scope in {"log-drain", "ordered-lifecycle"}:
             supervisor_actual = json.loads(run("podman inspect " + containers["supervisor"]))[0]
@@ -153,7 +153,7 @@ try:
             pid = supervisor_actual["State"]["Pid"]
             assert isinstance(pid, int) and pid > 1
             executable_hash = machine.succeed("sha256sum /proc/" + str(pid) + "/exe").split()[0]
-            assert executable_hash == "14c412633c65c57a2c20fc2f3c093c6a181238f25628a854ffe95abd43f88f8c", "running supervisor ELF differs from matched log-drain artifact"
+            assert executable_hash == images["supervisor"].get("binarySha256", "14c412633c65c57a2c20fc2f3c093c6a181238f25628a854ffe95abd43f88f8c"), "running supervisor ELF differs from independently verified image record"
             supervisor_binding = dict(imageID=images["supervisor"]["id"], executableSha256=executable_hash,
                                       sandboxID=supervisor_actual["Config"]["Labels"]["openshell.ai/sandbox-id"])
         stage = "supervisor-policy-event"
