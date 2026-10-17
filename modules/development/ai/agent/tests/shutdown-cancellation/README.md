@@ -6,7 +6,7 @@ all verified upstream supervisor image layers/config and replaces only
 It is not installed configuration or a reproducible full source package yet.
 
 Source: upstream commit `6648bd0c290efbc41ba131ee9831ee45cd431f94`;
-[supervisor.patch](supervisor.patch) SHA256
+[supervisor.patch](../../shutdown/supervisor.patch) SHA256
 `5af656da20035f021b4a2a268dd17e33ecc38faad09b5130117e77dd3b401a40`.
 The isolated scratch runner `/tmp/phoenix-shutdown-cost-s3_rohmh/build-supervisor.py`
 uses upstream GNU wrapper setup and `cargo zigbuild --offline --locked --release
@@ -43,7 +43,7 @@ option enablement follows from the trial.
 
 ## Runtime classification prototype
 
-[runtime-classification.patch](runtime-classification.patch), SHA256
+[runtime-classification.patch](../../shutdown/runtime-classification.patch), SHA256
 `494c38d9a1a28d3224e52e7919d16329ff9753281caa2e83018c72f7ccfd034e`,
 keeps explicit versus expired-recovery cause inside the existing lifecycle state.
 Completed retries acknowledge either cause without reclassifying recovery loss;
@@ -81,7 +81,7 @@ reproducible full source package is implied by these validation artifacts.
 
 ## Owned log-drain proof and matched validation build
 
-[log-drain.patch](log-drain.patch), SHA256
+[log-drain.patch](../../shutdown/log-drain.patch), SHA256
 `2f4981993d4e73de6d817771bce83266a645902f138d3054eea27c2a77eb7318`,
 applies separately to the same pristine pinned source (fuzz 0, byte-identical to
 tested scratch files). Only `openshell-supervisor-process/src/log_push.rs` and
