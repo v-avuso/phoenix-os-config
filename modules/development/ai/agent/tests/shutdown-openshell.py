@@ -266,7 +266,8 @@ try:
                 command = "openshell sandbox stop shutdown-acceptance"
             stop_status, _ = machine.execute(user("timeout 50 bash -c " + shlex.quote(command) + " > /tmp/negative-stop.log 2>&1"), timeout=55)
             elapsed = time.monotonic() - started
-            deadline = time.monotonic() + 5
+            observation_started = time.monotonic()
+            deadline = observation_started + (peer_client_observation_seconds if negative_case == "gateway-unavailable" else 5)
             while machine.execute("test -f /tmp/workload-status", timeout=2)[0] != 0 and time.monotonic() < deadline:
                 time.sleep(0.1)
             transport_status = machine.succeed("cat /tmp/workload-status 2>/dev/null || echo pending").strip()
@@ -282,8 +283,16 @@ try:
                 if marker_copy_status == 0:
                     local_markers = machine.succeed("head -c 256 /tmp/peer-shutdown-markers")
             cancel = "openshell: terminal delivery cancelled by administrative shutdown" in output
+            # main.rs keeps sandboxes by default: the supervised route reports its
+            # fixed recovery expiry. Ephemeral cleanup errors are distinct; arbitrary
+            # nonzero status is not typed proof.
+            peer_cleanup_failure = "ephemeral cleanup failed:" in output or "Failed to delete sandbox shutdown-acceptance:" in output
+            peer_recovery_timeout = "Unable to restore the sandbox connection within 60 seconds." in output
+            peer_client_proved = (transport_status == "255" and peer_recovery_timeout) or (transport_status.isdecimal() and int(transport_status) not in {0, 124, 137} and peer_cleanup_failure)
             outcome = dict(scope="negative-shutdown", negativeCase=negative_case, stopSeconds=round(elapsed, 3), stopStatus=stop_status,
                            fallbackCommandBoundSeconds=50, initialTimingTargetSeconds=10, transportStatus=transport_status,
+                           clientObservationBudgetSeconds=peer_client_observation_seconds, clientObservationSeconds=round(time.monotonic() - observation_started, 3),
+                           peerCleanupDiagnosticMatched=peer_cleanup_failure, peerRecoveryTimeoutDiagnosticMatched=peer_recovery_timeout, peerClientFailureProved=peer_client_proved,
                            adminCancellationMessage=cancel, clientFailureProved=cancel and transport_status == "1",
                            clientDiagnostic="".join(c for c in output[-1000:] if c in "\n\t" or 32 <= ord(c) < 127),
                            markerCopyStatus=marker_copy_status, localMarkers=local_markers,
@@ -312,9 +321,11 @@ try:
                 assert marker_copy_status == 0 and outcome["localTermMarker"] and outcome["localFinalMarker"], "peer-loss independent TERM/FINAL evidence missing"
                 assert all(state["ExitCode"] == 0 for state in states.values()), "peer-loss cooperative local cleanup incomplete"
                 assert receipts[0][0] == "false" and receipts[0][3] in {"Some(NotConnected)", "Some(RpcError)", "Some(Timeout)"}, "peer-loss log outcome falsely acknowledges or lacks typed cause"
+                if peer_client_observation_seconds == 75:
+                    assert outcome["peerClientFailureProved"], "peer client did not complete with a recognized pinned failure within the observation bound"
                 # Unknown/pending CLI errors prove no client success or typed cause.
                 # This case's acceptance is local cleanup plus explicit log failure.
-                if not outcome["clientFailureProved"]:
+                if not outcome["peerClientFailureProved"]:
                     machine.log("PEER_LOSS_CLIENT_CLAIM_UNPROVED: see bounded clientDiagnostic")
         elif stop_mode in {"transaction", "manager"}:
             stage = stop_mode + "-stop"

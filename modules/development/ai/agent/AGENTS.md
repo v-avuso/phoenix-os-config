@@ -216,7 +216,9 @@
 - Before expanding shutdown repairs, check the pinned contracts in
   `shutdown-acceptance.md`: administrative exit-report skipping prevents hangs,
   and the gateway log tail is memory-only. Validate supported delivery semantics
-  before treating a negative probe or post-restart absence as a new defect.
+  before treating a negative probe or post-restart absence as a new defect. Trace
+  parsed CLI defaults through the entrypoint into helpers: pinned 0.1.2 keeps
+  sandboxes by default; ephemeral cleanup requires `--no-keep`.
 
 - Validate the generated NixOS test script under the selected options before a VM;
   parsing Nix and Python sources separately misses interpolation/quoting failures.

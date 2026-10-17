@@ -1,6 +1,6 @@
 # Explicit first slice: actual OpenShell ordinary stop, ordering OFF.
 # Image arguments are public immutable archives plus independently verified IDs/hash.
-{ pkgs, runtime, supervisor, workload, probeCreateOnly ? false, stopMode ? "ordinary", containersConfig ? null, acceptanceScope ? "full", negativeCase ? null, moduleUnits ? null }:
+{ pkgs, runtime, supervisor, workload, probeCreateOnly ? false, stopMode ? "ordinary", containersConfig ? null, acceptanceScope ? "full", negativeCase ? null, moduleUnits ? null, peerClientObservationSeconds ? 5 }:
 let
   lib = pkgs.lib;
   packages = import ../packages.nix { inherit pkgs; };
@@ -55,6 +55,8 @@ assert acceptanceScope == "full"
   || (acceptanceScope == "ordered-lifecycle" && builtins.elem stopMode [ "transaction" "manager" ] && containersConfig != null && !probeCreateOnly)
   || (acceptanceScope != "ordered-lifecycle" && stopMode == "ordinary" && !probeCreateOnly);
 assert builtins.elem stopMode [ "ordinary" "transaction" "manager" ];
+assert builtins.elem peerClientObservationSeconds [ 5 75 ];
+assert peerClientObservationSeconds == 5 || negativeCase == "gateway-unavailable";
 assert builtins.elem negativeCase [ null "term-ignore" "gateway-unavailable" ];
 assert negativeCase == null || (stopMode == "ordinary" && !probeCreateOnly && containersConfig != null && runtime ? binarySha256 && supervisor ? binarySha256);
 assert moduleUnits == null || (negativeCase == null && stopMode == "manager" && acceptanceScope == "ordered-lifecycle" && containersConfig != null && !probeCreateOnly);
@@ -120,6 +122,7 @@ pkgs.testers.runNixOSTest {
     probe_create_only = ${if probeCreateOnly then "True" else "False"}
     ordering_configured = ${if containersConfig != null then "True" else "False"}
     stop_mode = "${stopMode}"
+    peer_client_observation_seconds = ${toString peerClientObservationSeconds}
     negative_case = ${if negativeCase == null then "None" else builtins.toJSON negativeCase}
     acceptance_scope = "${acceptanceScope}"
     policy = "${policy}"

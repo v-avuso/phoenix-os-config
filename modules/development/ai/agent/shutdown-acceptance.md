@@ -10,11 +10,15 @@ Actual module-generated synthetic-user units also pass empty-store startup
 (6.136s) while `launch.lock` is held, followed by strict active-workload manager
 teardown (1.503s). Exact IDs, running binaries, RPC ACK and resource/cgroup gates
 pass; see `cold-module-vm-receipt.json`. Earlier prototype transaction evidence
-remains scoped below. Next are pinned-contract-length peer-loss client observation
-and controlled rollout. Atomic module wiring remains OFF on the host; full Phoenix
+remains scoped below. Next is controlled quiescent rollout. A separate 75s peer observation finishes
+with CLI exit 255 and the exact pinned 60s recovery-expiry diagnostic; local
+cleanup remains 1.507s, independently of client latency. Atomic module wiring remains OFF on the host; full Phoenix
 GUI/model/auth acceptance is outside this small synthetic guest proof. TERM-ignore passes in 5.484s with truthful forced workload
 status; gateway loss passes local cleanup/typed log failure in 1.536s with
-independent markers, while its attached CLI remains pending after 5s. Detached denial-summary draining is a telemetry
+independent markers, while a later bounded observation establishes failed transport recovery
+(exit 255, exact 60s recovery-expiry message within the 75s observation), not successful
+unavailable-gateway operation. Pinned `main.rs` keeps sandboxes by default, selecting supervised recovery;
+`--no-keep` would select ephemeral cleanup. No CLI patch is needed. Detached denial-summary draining is a telemetry
 limit, not a baseline blocker; restart durability is outside the upstream
 memory-tail contract. See [source packaging and exact final receipts](shutdown/README.md).
 
@@ -516,6 +520,6 @@ Current ordinary prototypes pass their named cancellation, classification and
 accepted-tail RPC and ordered transaction/manager scopes.
 Final repeatable source-built images pass ordinary and ordered-manager scopes
 and actual module cold composition as summarized above. Remaining:
-pinned-contract peer-loss client observation and controlled rollout; full Phoenix workload startup
+controlled quiescent rollout; full Phoenix workload startup
 remains outside the small representative workload proof. Detached telemetry is a
 stated limit; restart durability is outside the upstream memory-tail contract.

@@ -87,16 +87,23 @@ container PID1 SIGKILL. Gateway-loss (`dhzdmn7w…`, output `80wqx5i5…`) stopp
 locally in 1.536s: gateway inactive/restart disabled, both exits 0/no OOM, scopes
 inactive, independent TERM/FINAL file copied from the exact stopped container,
 and actual log outcome false/0/true/Some(NotConnected). No fabricated ACK/all-logs
-claim is made. Attached CLI remained pending after 5s, so client recovery is
-explicitly unproved; this peer case proves local cleanup and typed log failure,
-not that an unavailable gateway CLI works. The original peer assertion used the
+claim is made. A separate 75s observation (`iiavl8nf…`, output `fsgqw67c…`)
+retains local cleanup at 1.507s and observes CLI exit 255 with the exact pinned
+`Unable to restore the sandbox connection within 60 seconds.` diagnostic
+(completion within the 75s observation; 73.381s includes post-read captures,
+not exact recovery duration). This is bounded failed transport recovery, not
+administrative cancellation or successful unavailable-gateway operation. The
+original receipt cleanup-only classifier remains false and is preserved. The
+corrected classifier separately recognizes exit 255 plus the exact recovery
+message. Pinned `main.rs` keeps sandboxes by default unless `--no-keep` is used,
+so supervised recovery is expected; no ephemeral-delete error was observed. The original peer assertion used the
 killed gateway as its observer; that red receipt remains preserved.
 
 Exact negative receipts are `negative-runtime-vm-receipt.json` and
 `negative-peer-observer-vm-receipt.json` in scratch. Both retain the initial
 under 10s gate and 45s fallback; no 50s stall was accepted. The atomic module bundle
-remains OFF. Next are pinned-contract-length peer-loss client observation and
-controlled rollout. No production flag or host service was changed.
+remains OFF. Next is controlled quiescent rollout; the peer transport failure
+receipt is separate from local cleanup. No production flag or host service was changed.
 
 ## Opt-in module integration
 
