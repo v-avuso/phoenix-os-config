@@ -76,5 +76,24 @@ preserved resource/cgroup gates without PAM or restart. Outputs are `a50gbi6x…
 and `rhp7fhnk…`; exact evidence and continuation commands are
 `final-candidate-vm-receipt.json` and `CONTINUE-SOURCE-IMAGES.md` in scratch.
 Source imports, toolchain/vendor inputs and image builds are now fixed/repeatable.
-No live host rollout occurred. Next: representative TERM-ignoring/unavailable-peer
-negative coverage, then module wiring and controlled rollout of these same images.
+No live host rollout occurred. Negative results and remaining integration limits
+are recorded below.
+
+Representative negative fixture scopes now pass with the same final images and
+ordering/resource/binary gates. TERM-ignore (`gz6cd040…`, output `ppa5zrh0…`)
+stopped in 5.484s: ignored TERM/no FINAL, reported workload status137, runtime0,
+explicit client cancellation1 and actual ACK; status137 alone does not prove
+container PID1 SIGKILL. Gateway-loss (`dhzdmn7w…`, output `80wqx5i5…`) stopped
+locally in 1.536s: gateway inactive/restart disabled, both exits0/no OOM, scopes
+inactive, independent TERM/FINAL file copied from the exact stopped container,
+and actual log outcome false/0/true/Some(NotConnected). No fabricated ACK/all-logs
+claim is made. Attached CLI remained pending after5s, so client recovery is
+explicitly unproved; this peer case proves local cleanup and typed log failure,
+not that an unavailable gateway CLI works. The original peer assertion used the
+killed gateway as its observer; that red receipt remains preserved.
+
+Exact negative receipts are `negative-runtime-vm-receipt.json` and
+`negative-peer-observer-vm-receipt.json` in scratch. Both retain the initial
+under10s gate and45s fallback; no50s stall was accepted. Remaining work is minimal
+off-by-default module wiring, explicit peer-loss client recovery acceptance and
+controlled rollout. No production flag or service was changed.

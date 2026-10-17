@@ -5,6 +5,8 @@ import shlex
 import time
 from typing import Any
 
+peer_unavailable = False
+
 
 def user(command):
     # Root driver drops identity directly: PAM sessions could restart the user
@@ -53,12 +55,12 @@ def capture(stage, containers):
             continue
         bounded(user("podman logs --tail 200 --timestamps " + identifier + " > /tmp/shutdown-evidence/" + role + ".log 2>&1"))
         bounded(user("podman inspect " + identifier + " > /tmp/shutdown-evidence/" + role + ".json"))
-    if not probe_create_only:
+    if not probe_create_only and not peer_unavailable:
         bounded(user("openshell logs shutdown-acceptance -n 200 --source sandbox > /tmp/shutdown-evidence/gateway-sandbox.log 2>&1"))
     bounded("journalctl -b --no-pager -n 400 -u user@1000.service > /tmp/shutdown-evidence/user-manager.log")
     bounded(user("journalctl --user -b --no-pager -n 400 > /tmp/shutdown-evidence/user-units.log"))
     bounded("printf %s " + shlex.quote(json.dumps(probe_timings)) + " > /tmp/shutdown-evidence/probe-timing.json")
-    for name in ("shutdown-stream.log", "workload-stdout.log", "workload-status", "create-driver.log", "probe-baseline.log", "probe-keepid.log", "transaction-outcome.json", "transaction-units.log", "transaction-stop.log", "durable-sandbox.log", "shutdown-stream.status", "transaction-cgroups.json", "terminal-delivery-outcome.json", "runtime-classification-outcome.json", "log-drain-outcome.json", "post-stop-gateway-sandbox.log"):
+    for name in ("shutdown-stream.log", "workload-stdout.log", "workload-status", "create-driver.log", "probe-baseline.log", "probe-keepid.log", "transaction-outcome.json", "transaction-units.log", "transaction-stop.log", "durable-sandbox.log", "shutdown-stream.status", "transaction-cgroups.json", "terminal-delivery-outcome.json", "runtime-classification-outcome.json", "log-drain-outcome.json", "post-stop-gateway-sandbox.log", "negative-outcome.json", "negative-stop.log", "peer-shutdown-markers"):
         bounded("test ! -f /tmp/" + name + " || cp /tmp/" + name + " /tmp/shutdown-evidence/" + name)
     machine.copy_from_machine("/tmp/shutdown-evidence", stage)
 
@@ -118,6 +120,11 @@ try:
         run("openshell status")
         stage = "sandbox-create"
         workload = "trap 'printf \"ACCEPT_TERM\\n\"; sleep 1; printf \"ACCEPT_FINAL\\n\"; exit 0' TERM; echo ACCEPT_READY; while :; do echo ACCEPT_TICK; sleep 1; done"
+        if negative_case == "term-ignore":
+            workload = "trap 'echo ACCEPT_TERM_IGNORED' TERM; echo ACCEPT_READY; while :; do echo ACCEPT_TICK; sleep 1; done"
+        elif negative_case == "gateway-unavailable":
+            # Finish independent evidence before touching the failed relay's stdout.
+            workload = "trap 'printf \"ACCEPT_TERM\\n\" >> /sandbox/shutdown-markers; sleep 1; printf \"ACCEPT_FINAL\\n\" >> /sandbox/shutdown-markers; printf \"ACCEPT_TERM\\nACCEPT_FINAL\\n\"; exit 0' TERM; : > /sandbox/shutdown-markers; echo ACCEPT_READY; while :; do echo ACCEPT_TICK; sleep 1; done"
         create = ("openshell sandbox create --name shutdown-acceptance --no-auto-providers --no-tty --from sha256:"
                   + images["workload"]["id"] + " --policy " + shlex.quote(policy)
                   + " --cpu 2 --memory 512Mi -- /bin/bash -c " + shlex.quote(workload))
@@ -136,7 +143,7 @@ try:
             assert re.fullmatch("[a-f0-9]{64}", identifier)
         runtime_binding = None
         supervisor_binding = None
-        if acceptance_scope in {"runtime-classification", "log-drain", "ordered-lifecycle"}:
+        if negative_case is not None or acceptance_scope in {"runtime-classification", "log-drain", "ordered-lifecycle"}:
             actual = json.loads(run("podman inspect " + containers["sandbox"]))[0]
             source = actual["Config"]["Labels"]["openshell.ai/runtime-binary-source"]
             expected = "/home/fixture/.local/share/openshell/podman-sandbox/" + images["runtime"]["id"] + "/openshell-sandbox"
@@ -146,7 +153,7 @@ try:
             executable_hash = machine.succeed("sha256sum /proc/" + str(pid) + "/exe").split()[0]
             assert executable_hash == images["runtime"].get("binarySha256", "745245e8f79e6a5050a78570a79b24ac3488c50dd3636ec5c8409755ec418d94"), "running runtime ELF differs from independently verified image record"
             runtime_binding = dict(imageID=images["runtime"]["id"], binarySource=source, executableSha256=executable_hash)
-        if acceptance_scope in {"log-drain", "ordered-lifecycle"}:
+        if negative_case is not None or acceptance_scope in {"log-drain", "ordered-lifecycle"}:
             supervisor_actual = json.loads(run("podman inspect " + containers["supervisor"]))[0]
             assert supervisor_actual["Image"].removeprefix("sha256:") == images["supervisor"]["id"], "running supervisor image differs from selected artifact"
             assert supervisor_actual["Config"]["Labels"]["openshell.ai/sandbox-id"] == actual["Config"]["Labels"]["openshell.ai/sandbox-id"]
@@ -176,7 +183,7 @@ try:
         machine.wait_until_succeeds(user("test -s /tmp/shutdown-stream.log && kill -0 $(cat /tmp/shutdown-stream.pid)"), timeout=10)
         capture("before-stop", containers)
         run("kill -0 $(cat /tmp/shutdown-stream.pid)")
-        if stop_mode in {"transaction", "manager"}:
+        if stop_mode in {"transaction", "manager"} or negative_case is not None:
             # Exact recorded scopes only; never enumerate or stop unrelated units.
             scopes = ["libpod-" + containers[role] + ".scope" for role in ("sandbox", "supervisor")]
             for scope in scopes:
@@ -212,13 +219,81 @@ try:
                     scope_path = placement["controlGroup"].rstrip("/")
                     assert not any(path == scope_path or path.startswith(scope_path + "/") for path in conmon_paths), "conmon remains inside container scope"
                     assert any(path == scope_path or path.startswith(scope_path + "/") for path in workload_paths), "workload missing container resource cgroup"
-            if acceptance_scope == "ordered-lifecycle":
+            if acceptance_scope == "ordered-lifecycle" or negative_case is not None:
                 scope_path = placements["sandbox"]["controlGroup"].rstrip("/")
                 limits = {name: machine.succeed("cat /sys/fs/cgroup" + scope_path + "/" + name).strip()
                           for name in ("memory.max", "pids.max")}
                 machine.log("ORDERED_RESOURCE_LIMITS " + json.dumps(limits, sort_keys=True))
                 assert limits == {"memory.max": "536870912", "pids.max": "512"}, "requested workload resource limits missing"
             run("kill -0 $(cat /tmp/shutdown-stream.pid)")
+        if negative_case is not None:
+            stage = "negative-" + negative_case
+            machine.log("PHASE " + stage + " entered")
+            restart = run("systemctl --user show -p Restart --value phoenix-openshell-gateway.service").strip()
+            assert restart == "no", "peer injection requires gateway restart disabled"
+            started = time.monotonic()
+            if negative_case == "gateway-unavailable":
+                run("systemctl --user kill --kill-whom=main --signal=SIGKILL phoenix-openshell-gateway.service")
+                machine.wait_until_fails(user("systemctl --user is-active --quiet phoenix-openshell-gateway.service"), timeout=3)
+                peer_unavailable = True
+                # Mirror the pinned driver's exact supervisor-then-runtime stop order.
+                # The unavailable gateway CLI is deliberately not the stop transport.
+                command = "podman stop --time 45 " + containers["supervisor"] + " && podman stop --time 45 " + containers["sandbox"]
+            else:
+                command = "openshell sandbox stop shutdown-acceptance"
+            stop_status, _ = machine.execute(user("timeout 50 bash -c " + shlex.quote(command) + " > /tmp/negative-stop.log 2>&1"), timeout=55)
+            elapsed = time.monotonic() - started
+            deadline = time.monotonic() + 5
+            while machine.execute("test -f /tmp/workload-status", timeout=2)[0] != 0 and time.monotonic() < deadline:
+                time.sleep(0.1)
+            transport_status = machine.succeed("cat /tmp/workload-status 2>/dev/null || echo pending").strip()
+            output = machine.succeed("cat /tmp/workload-stdout.log")
+            states = {role: json.loads(run("podman inspect --format '{{json .State}}' " + identifier)) for role, identifier in containers.items()}
+            supervisor_log = run("podman logs --tail 200 " + containers["supervisor"] + " 2>&1")
+            pattern = re.compile(r"openshell: log push shutdown LogPushOutcome \{ accepted_tail_acknowledged: (true|false), local_dropped_lines: ([0-9]+), prior_stream_delivery_uncertain: (true|false), incomplete: ([A-Za-z()]+) \}")
+            receipts = [match.groups() for line in supervisor_log.splitlines() if (match := pattern.fullmatch(line))]
+            scope_active = {role: machine.execute(user("systemctl --user is-active --quiet libpod-" + identifier + ".scope"), timeout=3)[0] for role, identifier in containers.items()}
+            marker_copy_status, local_markers = None, ""
+            if negative_case == "gateway-unavailable":
+                marker_copy_status, _ = machine.execute(user("timeout 5 podman cp " + containers["sandbox"] + ":/sandbox/shutdown-markers /tmp/peer-shutdown-markers"), timeout=6)
+                if marker_copy_status == 0:
+                    local_markers = machine.succeed("head -c 256 /tmp/peer-shutdown-markers")
+            cancel = "openshell: terminal delivery cancelled by administrative shutdown" in output
+            outcome = dict(scope="negative-shutdown", negativeCase=negative_case, stopSeconds=round(elapsed, 3), stopStatus=stop_status,
+                           fallbackCommandBoundSeconds=50, initialTimingTargetSeconds=10, transportStatus=transport_status,
+                           adminCancellationMessage=cancel, clientFailureProved=cancel and transport_status == "1",
+                           clientDiagnostic="".join(c for c in output[-1000:] if c in "\n\t" or 32 <= ord(c) < 127),
+                           markerCopyStatus=marker_copy_status, localMarkers=local_markers,
+                           localTermMarker="ACCEPT_TERM" in local_markers, localFinalMarker="ACCEPT_FINAL" in local_markers,
+                           ignoredTermMarker="ACCEPT_TERM_IGNORED" in output, termMarker="ACCEPT_TERM" in output,
+                           finalMarker="ACCEPT_FINAL" in output, priorGatewayEventProved=denied, containers=states,
+                           runtimeBinding=runtime_binding, supervisorBinding=supervisor_binding, scopeActiveStatus=scope_active,
+                           gatewayRestart=restart, gatewayActiveStatus=machine.execute(user("systemctl --user is-active --quiet phoenix-openshell-gateway.service"), timeout=3)[0],
+                           rpcReceiptCount=len(receipts), rpcReceipt=receipts[0] if len(receipts) == 1 else None,
+                           pid1SigkillProved=False, allLogsProved=False)
+            machine.succeed("printf %s " + shlex.quote(json.dumps(outcome)) + " > /tmp/negative-outcome.json")
+            machine.log("NEGATIVE_SHUTDOWN " + json.dumps(outcome, sort_keys=True))
+            assert stop_status == 0 and elapsed < 10, "negative stop exceeded initial ten-second gate; preserve captured fifty-second fallback result"
+            assert all(not state["Running"] and not state["OOMKilled"] for state in states.values()), "negative workload survived or OOM"
+            assert all(status != 0 for status in scope_active.values()), "negative container scope remains active"
+            assert len(receipts) == 1, "negative stop lacks one actual log outcome"
+            if negative_case == "term-ignore":
+                # lib.rs waits five seconds then Boundary Terminate maps to Kill;
+                # 137 is reported workload status, not evidence PID1 was SIGKILLed.
+                assert outcome["ignoredTermMarker"] and not outcome["finalMarker"], "TERM-ignore stimulus or missing-final evidence invalid"
+                assert states["supervisor"]["ExitCode"] == 137 and states["sandbox"]["ExitCode"] == 0, "forced workload status differs from pinned termination contract"
+                assert outcome["clientFailureProved"], "TERM-ignore client cancellation not explicit"
+                assert receipts[0] == ("true", "0", "false", "None"), "TERM-ignore accepted-tail acknowledgement incomplete"
+            else:
+                assert outcome["gatewayActiveStatus"] != 0, "failed gateway restarted"
+                assert marker_copy_status == 0 and outcome["localTermMarker"] and outcome["localFinalMarker"], "peer-loss independent TERM/FINAL evidence missing"
+                assert all(state["ExitCode"] == 0 for state in states.values()), "peer-loss cooperative local cleanup incomplete"
+                assert receipts[0][0] == "false" and receipts[0][3] in {"Some(NotConnected)", "Some(RpcError)", "Some(Timeout)"}, "peer-loss log outcome falsely acknowledges or lacks typed cause"
+                # Unknown/pending CLI errors prove no client success or typed cause.
+                # This case's acceptance is local cleanup plus explicit log failure.
+                if not outcome["clientFailureProved"]:
+                    machine.log("PEER_LOSS_CLIENT_CLAIM_UNPROVED: see bounded clientDiagnostic")
+        elif stop_mode in {"transaction", "manager"}:
             stage = stop_mode + "-stop"
             machine.log("PHASE " + stage + " entered")
             started = time.monotonic()
