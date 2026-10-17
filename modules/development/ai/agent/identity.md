@@ -218,7 +218,11 @@ primary cleanup pass is claimed. Exact failed derivation:
 
 Pinned CLI `run.rs::sandbox_list` prints IDs returned by ListSandboxes, so an ID
 remaining in that result is not proof of a live container. Delete acknowledgement
-and durable gateway-record disappearance are distinct. The record's terminal/
+and durable gateway-record disappearance are distinct. Pinned `run.rs` accepts
+both Completed and Accepted (cleanup pending) as successful deletion;
+`compute/mod.rs` leaves final store removal to the Podman removal-event watcher
+when the record still exists. This explains why exit 0 alone is insufficient; it
+does not establish why this captured record survived the deadline. The record's terminal/
 Deleting phase and reason for retention were not captured; no upstream cause is
 established. Next inspect the captured record's bounded phase plus deletion/
 watcher error categories in a separately authorized isolated diagnostic. Keep the
