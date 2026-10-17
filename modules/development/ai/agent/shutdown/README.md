@@ -141,6 +141,16 @@ inactive; the 45s fallback is unchanged. Frozen fixture source `dik0yrgq…`, ou
 `xc7027vd…`; exact evidence is `cold-module-vm-receipt.json` alongside
 `backend-integration-focused-receipt.json` in scratch. This uses synthetic guest
 registration and a small public workload, not full Phoenix GUI/model/auth
-acceptance or host activation. The peer-loss
-CLI's five-second observation is shorter than its pinned keepalive contract, so
-pending status is an observation limit, not an established CLI defect.
+acceptance or host activation. The later peer-loss observation verifies expected
+bounded recovery failure (exit 255 and the exact 60s expiry diagnostic), not
+successful reconnection.
+
+The full metal system from source `501bdbb`, with
+`shutdownOrdering.enable = true` through `extendModules`, built offline successfully:
+`/nix/store/b218x0ch3j4na8566cvm5kbrlv5yz05d-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
+Exact evidence is `/tmp/phoenix-shutdown-cost-s3_rohmh/enabled-system-build-receipt.json`.
+Repository defaults and the live host remain OFF; this closure was not activated.
+The whole-flake offline no-build check passed metal/VM/default before the final
+fixture/docs commits; production implementation was unchanged. This docs-only
+checkpoint records the tested source and requires no self-rebuild. Controlled
+quiescent rollout and real Phoenix GUI/model acceptance remain separate.

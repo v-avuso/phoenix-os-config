@@ -26,10 +26,11 @@ verification. Historical receipts do not identify today's running generation.
   Continue here: repeatable source-built final images passed ordinary log-drain
   (1.528s) and ordered manager teardown (1.489s), both exits 0, exact client
   cancellation and actual RPC ACK. TERM-ignore passes 5.484s; gateway-loss local
-  cleanup/typed log failure passes1.536s, with attached-client recovery unproved.
+  cleanup/typed log failure passes 1.536s; expected bounded client recovery failure
+  is verified, without claiming successful reconnection.
   Atomic module wiring remains OFF; actual cold units pass startup 6.136s and
   active-workload manager teardown 1.503s. Peer observation now finishes with bounded typed recovery failure (exit 255);
-  next: controlled quiescent rollout.
+  next: controlled quiescent rollout and real Phoenix GUI/model acceptance.
 - GUI sharing: primary workflow is accepted and integrated into `main`.
   `codex/gui-sharing-trial` at
   `/home/v/.codex/worktrees/gui-sharing-trial/phoenix-os-config` is retained for
