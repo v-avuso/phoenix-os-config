@@ -9,7 +9,7 @@ the [test index](../../tests/README.md).
 `blank` activates the black-screen idle action; `blank off` restores it. Both
 use `caelestia shell idle ...`: the CLI itself adds the `ipc call` prefix.
 
-Manual activation blanks after 100 ms of inactivity. A positive timeout is
+Manual activation blanks after one second of inactivity. A positive timeout is
 required for the pinned Hyprland compositor to emit resume on mouse/keyboard
 input; a zero timeout never resumes. Outputs retain their signal throughout.
 If needed, run `blank off` to restore explicitly.

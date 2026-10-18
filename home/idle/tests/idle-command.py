@@ -110,7 +110,7 @@ packaged_qml = (shell_package / "share/caelestia-shell/modules/IdleMonitors.qml"
 assert 'target: "idle"' in packaged_qml
 assert "function activate(index: int)" in packaged_qml
 assert "function restore(): void" in packaged_qml
-assert "timeout: 0.1" in packaged_qml
+assert "timeout: 1.0" in packaged_qml
 assert "respectInhibitors: false" in packaged_qml
 assert "root.manualIdleEntry.idleAction" in packaged_qml
 assert "Component.onDestruction: finishManualIdle()" in packaged_qml
@@ -120,7 +120,7 @@ for fragment in (
     'target: "idle"',
     "function activate(index: int)",
     "function restore(): void",
-    "timeout: 0.1",
+    "timeout: 1.0",
     "respectInhibitors: false",
     "root.manualIdleEntry.idleAction",
     "root.finishManualIdle();",
