@@ -1,0 +1,15 @@
+{
+    "file_format_version": "1.0.0",
+    "layer": {
+        "name": "VK_LAYER_NMS_fix",
+        "type": "GLOBAL",
+        "library_path": "@NMS_FIX_LIBRARY@",
+        "api_version": "1.3.0",
+        "implementation_version": "1",
+        "description": "Work around Streamline DLSS-G binary semaphore double waits",
+        "functions": {
+            "vkGetInstanceProcAddr": "nms_fix_GetInstanceProcAddr",
+            "vkGetDeviceProcAddr": "nms_fix_GetDeviceProcAddr"
+        }
+    }
+}
