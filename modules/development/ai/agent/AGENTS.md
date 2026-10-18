@@ -224,7 +224,11 @@
 
 - Validate the generated NixOS test script under the selected options before a VM;
   parsing Nix and Python sources separately misses interpolation/quoting failures.
-  Fault-injection assertions need an observer independent of the killed component.
+  Before temporary host activation, validate exact CLI input limits and selective
+  metadata queries read-only against the installed interface; container/image
+  template fields can differ. Harness input/query failures are not product defects
+  and must not drive live configuration changes. Fault-injection assertions need
+  an observer independent of the killed component.
 - For shutdown log markers, check each sink’s filter first: console WARN can omit
   INFO accepted by push. Prove ordinary delivery with actual RPC acknowledgement
   and a live gateway receipt, not console INFO, tail EOF or a post-restart memory tail.

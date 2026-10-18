@@ -11,11 +11,13 @@ Actual module-generated synthetic-user units also pass empty-store startup
 teardown (1.503s). Exact IDs, running binaries, RPC ACK and resource/cgroup gates
 pass; see `cold-module-vm-receipt.json`. Earlier prototype transaction evidence
 remains scoped below. A supervised host temporary CLI/model trial and exact
-baseline restoration also passed; see [host acceptance](#supervised-host-temporary-trial).
+baseline restoration also passed; the subsequent scoped active-workload transaction
+passes below. See [host acceptance](#supervised-host-temporary-trial).
 
-Live configuration remains OFF. Active-workload TERM/FINAL, accepted-tail log ACK
-and manager teardown are VM evidence; repaired real GUI and host manager-shutdown
-acceptance remain separate. The bounded peer observation finishes with exit 255
+Live configuration remains OFF. Active-workload TERM/FINAL and accepted-tail log
+ACK also pass the scoped host transaction below. Whole-manager teardown remains
+VM evidence; repaired real GUI and host manager-shutdown acceptance remain separate.
+The bounded peer observation finishes with exit 255
 and the exact pinned 60s recovery-expiry diagnostic; local cleanup is independent
 of client latency. TERM-ignore passes in 5.484s with truthful forced workload
 status; gateway loss passes local cleanup/typed log failure in 1.536s with
@@ -47,9 +49,37 @@ restoration succeeded without a product change. Runtime outcomes were captured
 in the parent tool output; temporary scripts/prebuild data are not a retained
 runtime receipt. This owning section records that bounded evidence.
 
-Active-workload TERM/FINAL, final accepted-tail RPC ACK and manager shutdown remain
-VM evidence. Real repaired GUI and host manager-shutdown acceptance are deferred;
-this temporary CLI/model pass does not authorize persistent enablement.
+This CLI/model trial alone did not establish active-workload cleanup or log ACK;
+the subsequent transaction below supplies that separate host evidence. Repaired
+GUI and host manager-shutdown acceptance still precede persistent enablement.
+
+## Supervised host owned transaction
+
+Frozen source `/nix/store/9k2pypzcmznqlrfqh39mpjk2rdsgzfyp-source` built offline
+with one job/two cores as
+`/nix/store/bp3ya2zbsmsdbxzwgf717fv4fr7r31nq-nixos-system-phoenix-26.05.20261004.0d9e9b8`.
+One uniquely named synthetic fixture, without personal mounts or providers,
+reached READY/TICK and a policy-mediated event with an attached live log stream.
+Its one transaction stopped only the gateway and both exact owned libpod scopes
+in 1.202s (status 0). TERM/FINAL arrived; the attached client returned 1 with the
+explicit administrative-cancellation message. Both containers exited 0 without
+OOM, the runtime confirmation warning was absent, and exactly one local log-push
+receipt reported `(true, 0, false, None)`. Actual runtime/supervisor ELF and image
+bindings, scope ordering, resource cgroups/limits and the 45s fallback passed.
+
+Reviewed recovery deleted only the owned fixture and restored the exact
+`4fav7l10…` runtime/boot and `m0zqpnq0…` source above; Native and the retained
+instance marker were preserved, with no owned cleanup failure. The parent
+restored SHA-checked OFF source bytes. Earlier attempts stopped before the
+transaction on invalid name length and container-template casing; those harness
+errors prompted read-only contract checks, not production changes.
+
+This accepts the scoped host active-workload transaction and accepted-tail RPC
+ACK, not whole-user-manager teardown, repaired GUI, reboot or restart durability.
+The latter remains outside the gateway's process-memory-tail contract. Public
+fixture binding/outcome were captured in the parent trial output; the
+[bounded host receipt](shutdown/host-transaction-receipt.json) preserves public
+bindings and outcomes without retaining raw logs or the private live harness.
 
 ## Prerequisites
 
@@ -550,5 +580,6 @@ accepted-tail RPC and ordered transaction/manager scopes.
 Final repeatable source-built images pass ordinary and ordered-manager scopes
 and actual module cold composition as summarized above. Remaining:
 repaired real GUI and host manager-shutdown acceptance before persistent rollout;
-the host CLI/model trial above does not extend VM active-workload/log-ACK claims. Detached telemetry is a
+the scoped host transaction above accepts active-workload/log ACK but not
+whole-manager shutdown. Detached telemetry is a
 stated limit; restart durability is outside the upstream memory-tail contract.

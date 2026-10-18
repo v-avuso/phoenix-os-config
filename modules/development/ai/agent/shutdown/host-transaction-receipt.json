@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "scope": "supervised-host-owned-transaction",
+  "source": "/nix/store/9k2pypzcmznqlrfqh39mpjk2rdsgzfyp-source",
+  "closure": "/nix/store/bp3ya2zbsmsdbxzwgf717fv4fr7r31nq-nixos-system-phoenix-26.05.20261004.0d9e9b8",
+  "offlineBuild": {
+    "passed": true,
+    "maxJobs": 1,
+    "cores": 2
+  },
+  "fixture": {
+    "name": "shut-bb468b5106b0",
+    "sandboxID": "e6e5f11e-3f1f-468b-8b07-35d834b49708",
+    "workloadImageID": "38d1a6283d8dc515251c132471b416da81a803035b41dc2316d41805729323cd"
+  },
+  "outcome": {
+    "scope": "host-owned-transaction-only",
+    "name": "shut-bb468b5106b0",
+    "stopStatus": 0,
+    "stopSeconds": 1.202,
+    "termMarker": true,
+    "finalMarker": true,
+    "transportStatus": 1,
+    "adminCancellationMessage": true,
+    "containers": {
+      "sandbox": {
+        "Running": false,
+        "ExitCode": 0,
+        "OOMKilled": false
+      },
+      "supervisor": {
+        "Running": false,
+        "ExitCode": 0,
+        "OOMKilled": false
+      }
+    },
+    "rpcReceipts": [
+      [
+        "true",
+        "0",
+        "false",
+        "None"
+      ]
+    ],
+    "runtimeConfirmationWarningPresent": false,
+    "guiAcceptance": false,
+    "wholeManagerAcceptance": false
+  },
+  "binaries": {
+    "sandbox": {
+      "runtimeHelperImageID": "510b992ed62df3ae8b02f44f90de8a09ecd04d3439d17d6cfd9eb447d3a0e571",
+      "elfSha256": "ff8b34afce2744c1f3ff81305077ce9daddc40ee65254212a643a14655c44c21"
+    },
+    "supervisor": {
+      "imageID": "7ddc3780f98f8fb532afa2798dad5528aa7a42b4eaa55c1beebe78f7987cf54c",
+      "elfSha256": "6ac814d42de4a92aa62c0d0dde95be839538e2021265f09ed044c08730e2fce9"
+    }
+  },
+  "assertions": {
+    "scopeBeforeGateway": true,
+    "conmonOutsideContainerScope": true,
+    "workloadInResourceCgroup": true,
+    "memoryMaxBytes": 536870912,
+    "pidsMax": 512,
+    "scopeFallbackSeconds": 45,
+    "verification": "supervised script completed successfully"
+  },
+  "recovery": {
+    "runtime": "/nix/store/4fav7l10h0vfmikl0msnwcac3avjs2gj-nixos-system-phoenix-26.05.20261004.0d9e9b8",
+    "boot": "/nix/store/4fav7l10h0vfmikl0msnwcac3avjs2gj-nixos-system-phoenix-26.05.20261004.0d9e9b8",
+    "source": "/nix/store/m0zqpnq0pf8i7pc2mkwn384p6jgrkx34-source",
+    "nativePreserved": true,
+    "retainedInstancePreserved": true,
+    "ownedCleanupFailure": null,
+    "trackedOffBytesRestored": true,
+    "offSha256": "71a197015d83cbf1b5dfbed51a2e9d3abee013b8229689da79be905ba3227998"
+  },
+  "limits": [
+    "whole-user-manager shutdown untested on host",
+    "repaired GUI untested",
+    "reboot untested",
+    "restart durability outside gateway memory-tail contract",
+    "RPC receipt covers accepted tail, not all historical or detached telemetry"
+  ]
+}
