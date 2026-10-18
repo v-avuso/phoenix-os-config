@@ -13,7 +13,15 @@ let links = [], focused = 0, windows = 0, quits = 0, choice = 0, resolveDialog, 
 const app = new EventEmitter();
 app.whenReady = async () => {};
 app.on('activate', () => { focused++; });
-app.on('phoenix-shared-open-link', uri => links.push(uri));
+const secondInstance = (event, argv, cwd, additionalData) => {
+  assert.deepEqual(event, {});
+  assert.deepEqual(additionalData, {});
+  assert.equal(cwd, process.cwd());
+  assert.equal(argv[0], process.execPath);
+  assert.equal(argv.length, 2);
+  links.push(argv[1]);
+};
+app.on('second-instance', secondInstance);
 app.quit = () => { quits++; }; // no forced process exit; upstream cancellation modeled below
 const electron = {app, BrowserWindow:{getFocusedWindow:()=>null},
   Menu:{getApplicationMenu:()=>({getMenuItemById:id=>id==='phoenix-shared-new-window' ? {enabled:true,click:async()=>{windows++;}} : null})},
@@ -48,6 +56,9 @@ const request=body=>new Promise((resolve,reject)=>{
     assert.deepEqual(await request(JSON.stringify({...msg('open-link'), uri})+'\n'),{status:'handled'});
   }
   assert.equal(links.length,2);
+  app.removeListener('second-instance', secondInstance);
+  assert.deepEqual(await control.handle({...msg('open-link'),uri:'codex://thread/fixture'}),{status:'unavailable'});
+  app.on('second-instance', secondInstance);
   for (const uri of ['https://example.com', 'file:///tmp/file', 'codex://thread/ bad', 'codex://[', 'codex://'+'a'.repeat(4097), 'codex://user:pass@thread/fixture', 7]) {
     assert.deepEqual(await control.handle({...msg('open-link'),uri}),{status:'denied'});
   }

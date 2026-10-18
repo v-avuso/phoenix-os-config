@@ -1,7 +1,8 @@
-"""Exact-source patch seam checks; pass --source for pinned extracted ASAR."""
+"""Exact-source patch seam checks; pass --source for extracted ASAR build files."""
 import argparse
 import importlib.util
 from pathlib import Path
+import re
 import tempfile
 
 parser = argparse.ArgumentParser()
@@ -12,21 +13,26 @@ patcher = importlib.util.module_from_spec(spec); spec.loader.exec_module(patcher
 files = list(args.source.glob('main-*.js'))
 assert len(files) == 1
 original = files[0].read_text()
+menu = re.search(r'\{\.\.\.([A-Za-z_$][A-Za-z0-9_$]*)\(`newWindow`\),click:async', original)
+assert menu is not None
 with tempfile.TemporaryDirectory() as directory:
     target = Path(directory) / files[0].name
-    target.write_text(original)
-    patcher.patch(directory)
-    actual = target.read_text()
-    link = 'w(e=>{let t=Rd(e),n=f.r(t);if(We.deepLinks.queueProcessArgs(e)){n&&Je();return}if(n){Je();return}Je({channel:`shortcut`,source:`shortcut`})})'
-    expected = original.replace(link, 'w((e=>{g.app.on(`phoenix-shared-open-link`,t=>e([process.execPath,t]));return e;})(' + link[2:-1] + '))')
-    expected = expected.replace('{...j(`newWindow`),click:async', '{...j(`newWindow`),id:`phoenix-shared-new-window`,click:async')
-    assert actual == expected
+    # Both inspected layouts and independent generated symbol renames must work.
+    for symbol in (menu[1], 'renamedTranslation', '$generated_42'):
+        source = original[:menu.start(1)] + symbol + original[menu.end(1):]
+        descriptor = menu[0].replace(menu[1] + '(', symbol + '(')
+        target.write_text(source)
+        patcher.patch(directory)
+        actual = target.read_text()
+        expected = source.replace(descriptor, descriptor.replace(',click:', ',id:`phoenix-shared-new-window`,click:'))
+        # Exact equality proves quit, activation and deep-link callback bodies
+        # remain byte-for-byte upstream, including new Windows activation routing.
+        assert actual == expected
     for invalid in [actual, original.replace('canQuitWithoutPrompt()', 'changed()'),
-                    original.replace('{...j(`newWindow`),click:async','changed'),
-                    original.replace(link, 'changed'), original + link,
-                    original + '{...j(`newWindow`),click:async']:
+                    original.replace(menu[0], 'changed'), original + menu[0],
+                    original.replace('desktop.quitConfirmation.cancel', 'changed')]:
         target.write_text(invalid)
         try: patcher.patch(directory)
         except ValueError: pass
-        else: raise AssertionError('Changed/duplicate pinned source seam accepted')
-print('agent-gui-control-patch: exact source retains menu/callback bodies; incompatible seams rejected')
+        else: raise AssertionError('Changed/duplicate upstream source seam accepted')
+print('agent-gui-control-patch: exact source changes only menu ID; renamed symbols accepted, incompatible seams rejected')

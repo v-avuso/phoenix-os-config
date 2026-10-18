@@ -101,7 +101,7 @@ in
       "d /var/lib/phoenix-updates 0700 ${user.name} users -";
     environment.systemPackages = lib.optional cfg.enable
       (pkgs.writeShellScriptBin "phoenix-update" ''
-        exec ${pkgs.python3}/bin/python3 -I ${runner} ${runnerConfig}
+        exec ${pkgs.python3}/bin/python3 -I ${runner} ${runnerConfig} "$@"
       '');
 
     systemd.services.phoenix-updates = mkIf cfg.enable {
@@ -140,7 +140,10 @@ in
         ExecStart = notifyFailure;
         NoNewPrivileges = true;
         ProtectSystem = "strict";
-        ProtectHome = true;
+        # ProtectHome=true also hides /run/user, including the session bus.
+        # Expose only its socket through the otherwise empty home namespace.
+        ProtectHome = "tmpfs";
+        BindReadOnlyPaths = [ "-/run/user/${toString userUid}/bus" ];
       };
     };
 

@@ -14,10 +14,15 @@ let
   selectedPackage = if fix == null then base else base.overrideAttrs (old: {
     patches = (old.patches or []) ++ map (path: ../../../. + "/${path}") fix.patchFiles;
   });
-  # OpenShell identifies /proc/exe after the Nixpkgs binary wrapper execs.
+  # Nixpkgs 0.160.0 wrapped the launcher; the inspected 0.162.1 recipe
+  # installs the ELF directly for Codex daemon executable validation. Keep
+  # older holds compatible and verify the exact identity below: version is a
+  # layout prediction, never permission to admit a different executable.
+  networkExecutableName = if pkgs.lib.versionAtLeast selectedPackage.version "0.162.1"
+    then "codex" else ".codex-wrapped";
   package = selectedPackage.overrideAttrs (old: {
     passthru = (old.passthru or {}) // {
-      phoenixNetworkExecutable = "${package}/bin/.codex-wrapped";
+      phoenixNetworkExecutable = "${package}/bin/${networkExecutableName}";
       phoenixNetworkExecutableCheck = pkgs.runCommand "codex-network-executable-check" {
         nativeBuildInputs = [ pkgs.python3 ];
       } ''

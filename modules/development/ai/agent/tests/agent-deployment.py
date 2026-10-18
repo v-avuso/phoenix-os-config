@@ -8,6 +8,7 @@ import contextlib
 import io
 import os
 import shutil
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -578,7 +579,7 @@ class DeploymentTests(unittest.TestCase):
             (source / 'upstream-linux-packages.json').write_text(json.dumps(payload))
             self.assertEqual(routine.validate_community_payload(directory), '1.2.3')
 
-    def non_model_deployment(self, action='update', operator=False, updater_socket=False, malicious=False):
+    def non_model_deployment(self, action='update', operator=False, updater_socket=False, malicious=False, progress=False, build_failure=False, stalled_reader=False):
         before, _modes, candidate, modes = self.routine_sources()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -607,8 +608,11 @@ class DeploymentTests(unittest.TestCase):
                 if path == Path('/run/current-system'):
                     return old_runtime
                 return original_resolve(path, *args, **kwargs)
+            native_review = deploy.load_review({'reviewScript': str(Path(__file__).resolve().parents[5] / 'modules/development/ai/agent/deploy-review.py')})
             class Review:
                 run = mock.Mock(return_value=b'')
+                run_build = staticmethod(native_review.run_build)
+                BuildError = native_review.BuildError
                 @staticmethod
                 def baseline_files(path):
                     return {item.relative_to(path).as_posix(): item.read_text()
@@ -625,6 +629,10 @@ class DeploymentTests(unittest.TestCase):
                     shutil.copytree(argv[3], frozen)
                     return str(frozen).encode()
                 if argv[:2] == ['nix', 'build']:
+                    if progress:
+                        script = ('import sys; print("package failure",file=sys.stderr); sys.exit(7)' if build_failure else
+                                  'import sys; print("building package",file=sys.stderr); print(' + repr(str(closure)) + ')')
+                        return _run([sys.executable, '-c', script], **kwargs)
                     return str(closure).encode()
                 if argv[:3] == ['nix', 'flake', 'metadata']:
                     locked = json.loads(candidate['flake.lock'])['nodes']['stable']['locked']
@@ -639,6 +647,8 @@ class DeploymentTests(unittest.TestCase):
                            reason='Stage deterministic stable package updates',
                            expectedBase=str(baseline), expectedProfile=str(profile))
             request['action'] = action
+            if progress:
+                request['progress'] = True
             if action not in {'boot', 'update'}:
                 del request['expectedBase'], request['expectedProfile']
             if updater_socket:
@@ -653,6 +663,11 @@ class DeploymentTests(unittest.TestCase):
                 connection = mock.Mock()
                 connection.getsockopt.return_value = deploy.struct.pack('3i', 42, 1000, 1000)
                 connection.recv.return_value = json.dumps(request).encode() + b'\n'
+                if stalled_reader:
+                    def send(data):
+                        if json.loads(data).get('event') == 'progress':
+                            raise deploy.socket.timeout()
+                    connection.sendall.side_effect = send
                 listener = mock.Mock()
                 calls = iter([0, 1])
                 def accept():
@@ -662,6 +677,15 @@ class DeploymentTests(unittest.TestCase):
                 listener.accept.side_effect = accept
                 with mock.patch.object(deploy.os, 'getuid', return_value=0), mock.patch.object(deploy.socket, 'socket', return_value=listener), mock.patch.object(deploy.signal, 'signal', side_effect=lambda sig, fn: handlers.update({sig: fn})):
                     deploy.serve(config)
+                messages = [json.loads(call.args[0]) for call in connection.sendall.call_args_list]
+                if stalled_reader:
+                    self.assertEqual(sum(message.get('event') == 'progress' for message in messages), 1)
+                    connection.shutdown.assert_called_once_with(deploy.socket.SHUT_WR)
+                elif progress:
+                    self.assertTrue(any(message.get('event') == 'progress' for message in messages[:-1]))
+                    self.assertIn('package failure' if build_failure else 'building package', ''.join(message.get('text', '') for message in messages))
+                else:
+                    self.assertEqual(len(messages), 1)
                 return json.loads(connection.sendall.call_args.args[0])
             with contextlib.redirect_stdout(io.StringIO()), mock.patch.object(Path, 'resolve', resolve), \
                  mock.patch.object(deploy, 'load_review', return_value=Review), \
@@ -671,6 +695,12 @@ class DeploymentTests(unittest.TestCase):
                  mock.patch.object(deploy, 'request_valid', wraps=deploy.request_valid), \
                  mock.patch.object(deploy.os, 'geteuid', return_value=0 if operator else os.getuid()):
                 result = socket_workflow() if updater_socket else deploy.process(config, request, os.getuid(), 42, operator=operator)
+            if build_failure:
+                self.assertFalse(result['ok'])
+                self.assertEqual((result['stage'], result['code']), ('build', 'build-failed'))
+                self.assertIn('package failure', result['diagnostics'])
+                self.assertFalse(any(call.args[0][0] == 'systemd-run' for call in Review.run.call_args_list))
+                return
             if updater_socket and action != 'update':
                 self.assertFalse(result['ok'])
                 self.assertEqual(result['stage'], 'protocol')
@@ -698,6 +728,11 @@ class DeploymentTests(unittest.TestCase):
         self.non_model_deployment(updater_socket=True, malicious=True)
         for action in ('test', 'switch', 'boot'):
             self.non_model_deployment(action=action, updater_socket=True)
+
+    def test_routine_update_progress_socket_retains_build_failure_and_success(self):
+        self.non_model_deployment(updater_socket=True, progress=True)
+        self.non_model_deployment(updater_socket=True, progress=True, build_failure=True)
+        self.non_model_deployment(updater_socket=True, progress=True, stalled_reader=True)
 
     def test_routine_update_reaches_boot_without_invoking_reviewer(self):
         self.non_model_deployment()

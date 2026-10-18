@@ -54,6 +54,10 @@ def request_valid(request, target, reservations=False):
     if not isinstance(request, dict):
         raise ValueError('unsupported request fields')
     expected = FIELDS | ({'preflightId'} if 'preflightId' in request else set()) | ({'task'} if 'task' in request else set()) | ({'reservation'} if reservations and request.get('action') != 'update' else set()) | ({'branch'} if 'branch' in request else set()) | ({'expectedBase', 'expectedProfile'} if request.get('action') in {'boot', 'update'} else set())
+    if 'progress' in request:
+        if request.get('action') != 'update' or request['progress'] is not True:
+            raise ValueError('unsupported progress request')
+        expected |= {'progress'}
     if set(request) != expected:
         raise ValueError('unsupported request fields')
     if request['action'] not in {'test', 'switch', 'boot', 'update'} or request['target'] != target:
@@ -322,6 +326,9 @@ def process(config, request, uid, pid, operator=False):
 def process_inner(config, request, uid, pid, state):
     request_valid(request, config['target'], bool(config.get('reservations')))
     review_required = request['action'] != 'update' and config.get('modelReviewEnabled', True)
+    progress = config.get('_updateProgress', lambda _text: None)
+    if request['action'] == 'update':
+        progress('Phoenix update: Validating immutable source and publisher policy\n')
     state['stage'] = 'freeze'
     review = load_review(config)
     reason_hash = hashlib.sha256(request['reason'].strip().encode()).hexdigest()
@@ -446,10 +453,20 @@ def process_inner(config, request, uid, pid, state):
                                    verify_current_source)
         state['stage'] = 'build'
         print(json.dumps(dict(event='building', uid=uid, pid=pid, source=source_store)), flush=True)
+        build_runner = review.run
+        if request['action'] == 'update':
+            progress('Phoenix update: Building updated system\n')
+            def build_runner(argv, **kwargs):
+                try:
+                    return review.run_build(argv, progress=progress, **kwargs)
+                except review.BuildError as error:
+                    failure = DeploymentFailure('build', error.code)
+                    failure.diagnostics = error.diagnostics
+                    raise failure from None
         closure = as_user(config, config['builderUser'], [config['nix'], 'build', '--no-link', '--print-out-paths',
                           '--no-write-lock-file', '--option', 'accept-flake-config', 'false',
                           'path:' + source_store + '#nixosConfigurations.' + request['target'] + '.config.system.build.toplevel'],
-                          review.run, env=env, timeout=3600).decode().strip()
+                          build_runner, env=env, timeout=3600).decode().strip()
         state['stage'] = 'closure-binding'
         store_path(closure, 'closure')
         activation_executable(closure)
@@ -659,6 +676,8 @@ def activate_bound(config, binding, temporary, review, state, uid, pid):
     baseline, profile, profile_source, source_store, closure = (binding[key] for key in
         ('base', 'profile', 'profileSource', 'source', 'closure'))
     state['stage'] = 'baseline-recheck'
+    if binding['action'] == 'update':
+        config.get('_updateProgress', lambda _text: None)('Phoenix update: Rechecking baseline and staging next boot\n')
     recheck_bound(config, binding)
     disruption_check(config, binding, review, uid, pending=True)
     print(json.dumps(dict(event='approved', uid=uid, pid=pid, source=source_store,
@@ -958,7 +977,26 @@ def serve(config):
                 operation = 'deployment.' + request.get('action', '') if isinstance(request, dict) and isinstance(request.get('action'), str) else None
                 if not authorization.execution_caller(operation, authorization.policy(config), uid):
                     raise ValueError('caller may not execute this socket operation')
-                result = process(config, request, uid, pid)
+                progress_available = True
+                def update_progress(text):
+                    nonlocal progress_available
+                    if not progress_available:
+                        return
+                    try:
+                        connection.settimeout(.2)
+                        connection.sendall(json.dumps(dict(event='progress', text=text)).encode() + b'\n')
+                    except OSError:
+                        # Do not repeatedly block the builder behind a stopped
+                        # reader. A partially sent frame cannot safely be reused.
+                        progress_available = False
+                        try:
+                            connection.shutdown(socket.SHUT_WR)
+                        except OSError:
+                            pass
+                    finally:
+                        connection.settimeout(10)
+                options = dict(config, _updateProgress=update_progress) if request.get('action') == 'update' and request.get('progress') is True else config
+                result = process(options, request, uid, pid)
             if command_request:
                 print(json.dumps(dict(event='registered-command',uid=uid,pid=pid,ok=result.get('ok',False),code=result.get('code','command-error'))),flush=True)
             else:
@@ -970,6 +1008,8 @@ def serve(config):
             authorization.audit('rejected', secrets.token_hex(16), uid, pid, category='invalid-or-denied')
             print(json.dumps(dict(event='failed', uid=uid, pid=pid, stage=stage, code=code)), flush=True)
             result = dict(ok=False, stage=stage, code=code, error='Deployment failed at ' + stage + ' (' + code + ').')
+            if isinstance(error, DeploymentFailure) and stage == 'build' and getattr(error, 'diagnostics', None):
+                result['diagnostics'] = error.diagnostics[-16384:]
             if getattr(error, 'pending_nonce', None):
                 result['pendingNonce'] = error.pending_nonce
                 result.update(getattr(error, 'pending_metadata', {}))

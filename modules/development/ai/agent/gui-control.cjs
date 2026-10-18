@@ -31,8 +31,11 @@ function createControl(electron, {directory, token, variant}) {
     if (message.action !== 'switch') {
       if (message.target !== variant) return {status:'denied'};
       if (message.action === 'open-link') {
-        if (!electron.app.listenerCount('phoenix-shared-open-link')) return {status:'unavailable'};
-        electron.app.emit('phoenix-shared-open-link', message.uri);
+        if (!electron.app.listenerCount('second-instance')) return {status:'unavailable'};
+        // Use the upstream Electron event and its argument queue. Both inspected
+        // desktop versions register this listener before interactive startup;
+        // no minified deep-link callback needs a source patch.
+        electron.app.emit('second-instance', {}, [process.execPath, message.uri], process.cwd(), {});
       } else if (message.action === 'activate') {
         electron.app.emit('activate'); // pinned handler shows/restores primary; no maximize
       } else {

@@ -4,6 +4,7 @@
 Nix/Git own lock construction and integration. No advisory classification or
 caller-written deployment verdict. An affected dirty file always defers updates.
 """
+import argparse
 import fcntl
 import hashlib
 import importlib.util
@@ -17,6 +18,28 @@ import tempfile
 import time
 import urllib.request
 import uuid
+
+RUN_LOG = None
+LOG_LIMIT = 4 * 1024 * 1024
+LOG_SLACK = 1024 * 1024
+
+
+def emit_progress(text):
+    sys.stderr.write(text)
+    sys.stderr.flush()
+    if RUN_LOG is not None:
+        with RUN_LOG.open('ab') as output:
+            output.write(text.encode('utf-8', errors='replace'))
+        if RUN_LOG.stat().st_size > LOG_LIMIT + LOG_SLACK:
+            with RUN_LOG.open('rb') as source:
+                source.seek(-LOG_LIMIT, os.SEEK_END)
+                tail = source.read()
+            RUN_LOG.write_bytes(tail)
+
+
+def progress(text):
+    emit_progress('Phoenix update: ' + str(text) + '\n')
+
 
 POLICY = 'config/updates.json'
 ALLOWED = {'flake.lock', POLICY}
@@ -95,7 +118,7 @@ def compare_version(config, c, version, threshold):
     if not NUMERIC.fullmatch(version) or not NUMERIC.fullmatch(threshold):
         return False
     expression = 'builtins.compareVersions %s %s' % (json.dumps(version), json.dumps(threshold))
-    return int(c._run([config['nix'], 'eval', '--json', '--expr', expression], env=nix_env(config))) >= 0
+    return int(c._run([config['nix'], 'eval', '--json', '--expr', expression], env=nix_env(config), progress=emit_progress)) >= 0
 
 
 def nix_env(config):
@@ -203,6 +226,9 @@ def cleanup_branches(config, c, home, keep=()):
     if not config.get('cleanupBranches', True):
         return
     repo = config['repo']
+    retained = Path(config.get('state', '/nonexistent')) / 'failed-candidate.json'
+    if retained.exists():
+        keep = (*keep, json.loads(retained.read_text()).get('branch'))
     checked_out = {line[7:] for line in c.git(config['git'], repo, home, 'worktree', 'list', '--porcelain').decode().splitlines()
                    if line.startswith('branch ')}
     branches = c.git(config['git'], repo, home, 'for-each-ref', '--format=%(refname:short)', 'refs/heads/codex/updates/').decode().splitlines()
@@ -219,7 +245,11 @@ def cleanup_branches(config, c, home, keep=()):
 
 class UpdateDenied(ValueError):
     def __init__(self, result):
-        super().__init__('deterministic boot staging failed: ' + str(result.get('summary', result.get('code', 'protocol')))[:1000])
+        self.stage = result.get('stage', 'deployment')
+        self.code = result.get('code', 'rejected-or-failed')
+        self.result = result
+        self.diagnostics = str(result.get('diagnostics', ''))[-16384:]
+        super().__init__(self.stage + ': ' + str(result.get('summary', self.code))[:1000])
         self.nodes = result.get('affectedInputNodes', [])
 
 
@@ -242,7 +272,7 @@ def controller(config, c, home, tree, commit, base, profile):
         if not preflight.get('ok') or preflight.get('decision') != 'automatic':
             raise ValueError('routine update preflight denied')
     files, modes = c._manifest(config['git'], tree, home, commit)
-    request = dict(files=files, modes=modes, commit=commit, target=config['target'], action='update',
+    request = dict(files=files, modes=modes, commit=commit, target=config['target'], action='update', progress=True,
                    expectedBase=base, expectedProfile=profile, task='phoenix-updater',
                    reason='Automatically update supported stable system and selected fresh applications; respect explicit holds and preserve runtime state')
     if preflight is not None: request['preflightId'] = preflight['id']
@@ -254,12 +284,25 @@ def controller(config, c, home, tree, commit, base, profile):
         connection.connect(config['controllerSocket'])
         connection.sendall(body)
         response = bytearray()
-        while not response.endswith(b'\n'):
+        result = None
+        while result is None:
             block = connection.recv(65536)
-            if not block or len(response) + len(block) > 65536:
-                raise ValueError('controller response lost or oversized')
+            if not block:
+                raise ValueError('controller response lost')
             response.extend(block)
-    result = json.loads(response)
+            while b'\n' in response:
+                line, _, remainder = response.partition(b'\n')
+                response = bytearray(remainder)
+                if len(line) > 65536:
+                    raise ValueError('controller response oversized')
+                message = json.loads(line)
+                if message.get('event') == 'progress':
+                    emit_progress(str(message.get('text', ''))[:8192])
+                else:
+                    result = message
+                    break
+            if len(response) > 65536:
+                raise ValueError('controller response oversized')
     if result.get('ok') is not True or result.get('action') != 'update':
         raise UpdateDenied(result)
     return result
@@ -276,6 +319,7 @@ def atomic_json(path, value):
 
 
 def run(config, c):
+    progress('Checking source baseline and local edits')
     repo = Path(config['repo']).resolve(strict=True)
     state = Path(config['state'])
     home = state / 'command-home'
@@ -321,6 +365,7 @@ def run(config, c):
         raise ValueError('stable source must explicitly follow a reviewed NixOS release branch')
     if lock_node(before, 'nixpkgs-unstable')['original'].get('ref') != 'nixos-unstable':
         raise ValueError('fresh source must explicitly follow the tested unstable channel')
+    progress('Checking published package sources and holds')
     selected = {alias: revision(alias, stable_branch if alias == 'nixpkgs' else None)
                 for alias in SOURCES if alias != 'codex-desktop-sandbox'}
     selected['codex-desktop-sandbox'] = selected['codex-desktop-linux']
@@ -343,7 +388,7 @@ def run(config, c):
             continue
         alias = policy['packageSources'][app] if app in {'firefox', 'codex-cli'} else hold.get('source', 'nixpkgs')
         ref = 'github:NixOS/nixpkgs/' + selected.get(alias, lock_node(before, alias)['locked']['rev']) + '#legacyPackages.x86_64-linux.' + ('codex' if app == 'codex-cli' else app) + '.version'
-        versions[app] = c._run([config['nix'], 'eval', '--raw', '--no-write-lock-file', ref], env=nix_env(config), timeout=900).decode().strip()
+        versions[app] = c._run([config['nix'], 'eval', '--raw', '--no-write-lock-file', ref], env=nix_env(config), timeout=900, progress=emit_progress).decode().strip()
     for app, hold in holds.items():
         version = versions.get(app)
         if version and hold.get('resumeAtVersion') and compare_version(config, c, version, hold['resumeAtVersion']):
@@ -393,11 +438,12 @@ def run(config, c):
     c.git(config['git'], repo, home, 'worktree', 'add', '-b', branch, str(tree), head)
     commit = None
     try:
+        progress('Preparing isolated dependency update')
         for alias, rev in selected.items():
             owner, source_repo, _ = SOURCES[alias]
             c._run([config['nix'], 'flake', 'lock', '--override-input', alias,
                     'github:%s/%s/%s' % (owner, source_repo, rev), '--output-lock-file', 'flake.lock'],
-                   cwd=tree, env=nix_env(config), timeout=1800)
+                   cwd=tree, env=nix_env(config), timeout=1800, progress=emit_progress)
         validate_lock(c, before, c._read_lock(tree / 'flake.lock'), selected)
         for app in releasing:
             del policy['holds'][app]
@@ -418,9 +464,11 @@ def run(config, c):
         # Recheck policy/HEAD immediately before asking the protected controller.
         if c.git(config['git'], repo, home, 'rev-parse', 'HEAD').decode().strip() != head or c._status_paths(config['git'], repo, home) & paths:
             return dict(status='deferred', reason='checkout changed', candidate=commit, branch=branch)
+        progress('Submitting candidate for automatic authorization and build')
         result = controller(config, c, home, tree, commit, base, profile)
 
         try:
+            progress('Publishing staged update to the source branch')
             integrate(config, c, home, head, commit, paths)
         except Exception:
             # Explicitly report the narrow late race: boot staging succeeded,
@@ -431,7 +479,16 @@ def run(config, c):
             (state / 'pending.json').write_text(json.dumps(pending))
             return pending
         attempt.unlink(missing_ok=True)
+        (state / 'failed-candidate.json').unlink(missing_ok=True)
         return dict(status='staged', candidate=commit, source=result['source'], notes=notes)
+    except Exception as error:
+        if commit is not None:
+            atomic_json(state / 'failed-candidate.json', dict(candidate=commit, branch=branch,
+                base=head, time=time.time(), stage=getattr(error, 'stage', 'preparation'),
+                code=getattr(error, 'code', 'command-failed'), reason=str(error)[:1000],
+                diagnostics=getattr(error, 'diagnostics', '')[-16384:],
+                log=str(RUN_LOG) if RUN_LOG is not None else None))
+        raise
     finally:
         c.git(config['git'], repo, home, 'worktree', 'remove', '--force', str(tree))
         if commit is None:
@@ -440,8 +497,46 @@ def run(config, c):
             cleanup_branches(config, c, home, keep=(branch,) if pending_path.exists() else ())
 
 
+def format_result(result):
+    status = result['status']
+    labels = {'staged': 'Update built, staged for next boot, and committed.',
+              'unchanged': 'Already up to date.', 'deferred': 'Update deferred',
+              'failed': 'Update failed', 'staged-pending-integration': 'Update staged; source integration pending'}
+    text = labels.get(status, status)
+    if result.get('reason'):
+        text += ': ' + result['reason']
+    if result.get('stage'):
+        text += ' [stage: ' + str(result['stage']) + '; code: ' + str(result.get('code', 'unknown')) + ']'
+    if result.get('attentionRequired'):
+        text += '\nAttention required: updates have been deferred for at least 24 hours.'
+    if result.get('log'):
+        text += '\nLog: ' + result['log']
+    return text + ''.join('\n' + str(note) for note in result.get('notes', []))
+
+
+def track_deferral(state, result, now=None):
+    """Escalate persistent deferrals while allowing temporary contention."""
+    path = state / 'deferral.json'
+    if result['status'] != 'deferred':
+        path.unlink(missing_ok=True)
+        return
+    now = time.time() if now is None else now
+    reason = result.get('reason', '')
+    previous = json.loads(path.read_text()) if path.exists() else {}
+    first_seen = previous.get('firstSeen', now) if previous.get('reason') == reason else now
+    atomic_json(path, dict(reason=reason, firstSeen=first_seen, lastSeen=now))
+    if now - first_seen >= 86400:
+        result['attentionRequired'] = True
+
+
 def main():
-    config = json.loads(Path(sys.argv[1]).read_text())
+    global RUN_LOG
+    parser = argparse.ArgumentParser(prog='phoenix-update', usage='%(prog)s [--json]',
+        description='Refresh supported packages and stage the updated system for next boot.')
+    parser.add_argument('config', help=argparse.SUPPRESS)
+    parser.add_argument('--json', action='store_true', help='Print the final result as JSON; progress stays on stderr.')
+    args = parser.parse_args()
+    config = json.loads(Path(args.config).read_text())
     spec = importlib.util.spec_from_file_location('candidate', config['candidateScript'])
     c = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(c)
@@ -449,20 +544,34 @@ def main():
     state.mkdir(parents=True, exist_ok=True, mode=0o700)
     with (state / 'runner.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        logs = state / 'logs'
+        logs.mkdir(exist_ok=True, mode=0o700)
+        RUN_LOG = logs / (time.strftime('%Y%m%d-%H%M%S') + '-' + uuid.uuid4().hex[:8] + '.log')
+        RUN_LOG.touch(mode=0o600)
+        for old in sorted(logs.glob('*.log'), key=lambda path: path.stat().st_mtime, reverse=True)[5:]:
+            old.unlink()
         try:
             result = run(config, c)
-        except c.SourceTransportError as error:
+        except (c.SourceTransportError, UpdateDenied) as error:
             result = dict(status='failed', stage=error.stage, code=error.code, reason=str(error))
+            if isinstance(error, UpdateDenied):
+                result['diagnostics'] = str(error.result.get('diagnostics', ''))[-16384:]
         except Exception as error:
-            result = dict(status='failed', reason=str(error)[:1000])
+            result = dict(status='failed', reason=str(error)[:1000],
+                          diagnostics=getattr(error, 'diagnostics', '')[-16384:])
+        track_deferral(state, result)
+        result['log'] = str(RUN_LOG)
         destination = state / 'last-result.json'
         fd, name = tempfile.mkstemp(dir=state, prefix='.result-')
         with os.fdopen(fd, 'w') as output:
             json.dump(result, output)
             output.write('\n')
         os.replace(name, destination)
-        print(json.dumps(result))
-        return 1 if result['status'] in {'failed', 'staged-pending-integration'} else 0
+        if args.json:
+            print(json.dumps(result))
+        else:
+            print(format_result(result))
+        return 1 if result['status'] in {'failed', 'staged-pending-integration'} or result.get('attentionRequired') else 0
 
 
 if __name__ == '__main__':

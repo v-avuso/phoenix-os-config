@@ -36,12 +36,13 @@ def inspect(source, build):
     importer = re.compile(rf"\b({ID})\s*=\s*require\(([\"'])\./(bootstrap-[A-Za-z0-9_-]+\.js)\2\)")
     imported = require_match(importer, source, "bootstrap import")
     module, _, bootstrap_name = imported.groups()
-    reference = re.compile(rf"\b{re.escape(module)}\.u\(\s*{re.escape(name)}\s*\)")
-    require_match(reference, source, "bootstrap keepalive registration")
+    reference = re.compile(rf"\b{re.escape(module)}\.({ID})\(\s*{re.escape(name)}\s*\)")
+    registration = require_match(reference, source, "bootstrap keepalive registration")
+    export_name = registration.group(1)
     bootstrap_path = build / bootstrap_name
     bootstrap = bootstrap_path.read_text()
-    export = require_match(re.compile(rf"exports\.u\s*=\s*({ID})\b"), bootstrap,
-                           "bootstrap u export")
+    export = require_match(re.compile(rf"exports\.{re.escape(export_name)}\s*=\s*({ID})\b"), bootstrap,
+                           "bootstrap keepalive export")
     setter = export.group(1)
     set_state = require_match(re.compile(
         rf"function\s+{re.escape(setter)}\(({ID})\)\{{({ID})=\1\}}"),
@@ -66,14 +67,19 @@ def inspect(source, build):
         rf"registerWindow\(({ID}),({ID}),({ID}),({ID}),({ID})\)\{{(.*?)\}}trackPrimaryWindow\(", re.S),
         source, "registerWindow cleanup method")
     primary_window, _, primary_flag, _, _, method = register.groups()
+    flag, win = re.escape(primary_flag), re.escape(primary_window)
     tracked = require_match(re.compile(
-        rf"{re.escape(primary_flag)}&&this\.trackPrimaryWindow\({re.escape(primary_window)}\)"),
+        rf"{flag}&&(?:this\.trackPrimaryWindow\({win}\)|"
+        rf"\(this\.pageWindowOwners\.has\({win}\)&&!{win}\.isVisible\(\)\?"
+        rf"{win}\.once\(`show`,\(\)=>this\.trackPrimaryWindow\({win}\)\):"
+        rf"this\.trackPrimaryWindow\({win}\)\))"),
         method, "primary-window registration before close")
     listener = require_match(re.compile(
         rf"{re.escape(primary_window)}\.on\(([\"'`])closed\1,\(\)=>\{{(?P<body>[^{{}}]*)\}}\)"),
                              method, "closed cleanup listener")
     cleanup = require_match(re.compile(
         rf"{re.escape(primary_flag)}&&\(this\.primaryWindows\.delete\({re.escape(primary_window)}\),"
+        rf"(?:this\.appBadgeWindow==={win}&&\(this\.appBadgeWindow=null\),this\.refreshAppBadgeCount\(\),)?"
         rf"this\.lastActivePrimaryWindow==={re.escape(primary_window)}&&\(this\.lastActivePrimaryWindow=null\),"
         rf"this\.emitPrimaryWindowChangeIfNeeded\(\)\)"),
         method, "tracked-primary closed cleanup")

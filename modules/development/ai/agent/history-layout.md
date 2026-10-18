@@ -195,9 +195,14 @@ session-restoration and desktop/new-window entry points use the same wrapped
 package. Sandboxed entry points use the same guard before their private-profile
 launcher. Direct old/unwrapped executables remain outside this guarantee.
 The prepared owner adapter restores same-variant windows, uses the existing
-new-window callback, and forwards one bounded Codex link to the exact pinned
-second-instance callback. Cross-variant switching offers Keep current or ordinary
+new-window callback, and forwards one bounded Codex link through the existing
+Electron second-instance event and upstream argument queue. The menu adapter tags
+the unique semantic action without pinning generated variable names or rewriting
+callback bodies. Cross-variant switching offers Keep current or ordinary
 Close and switch; upstream active-work cancellation remains authoritative.
+Permission preference adapters discover semantic owners independently of generated
+asset hashes, while accepting only reviewed resolver/reconciliation logic. Unknown
+logic stops packaging rather than weakening restricted chat policies.
 Installed/live GUI acceptance remains pending; see [limits and usage](README.md#shared-desktop-state-opt-in-gui-acceptance-pending).
 
 `tests/agent-gui-state.py` checks readiness, exclusion, lock retention despite

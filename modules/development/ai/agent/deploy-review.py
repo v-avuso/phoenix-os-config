@@ -5,6 +5,7 @@ Reports never authorize anything; protected controller checkpoints bind exact so
 Run on the trusted host, whose authentication is not mounted into worker sandboxes.
 """
 import argparse
+import codecs
 import difflib
 from datetime import datetime, timezone
 import errno
@@ -15,6 +16,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import selectors
 import socket
 import signal
 import stat
@@ -22,6 +24,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import unicodedata
 
 # Resource bounds, not token estimates or a larger model context claim.
 # Nix substitutes an immutable policy path; repository fixtures use the source file.
@@ -86,6 +89,69 @@ def run(argv, *, cwd=None, env=None, data=None, timeout=60, fail_on_compaction=F
             if process.poll() is None:
                 os.killpg(process.pid, signal.SIGKILL)
                 process.wait()
+
+
+class BuildError(ValueError):
+    def __init__(self, code, diagnostics):
+        self.code, self.diagnostics = code, diagnostics
+        super().__init__(code)
+
+
+def run_build(argv, *, env=None, timeout=3600, progress=None):
+    """Stream routine Nix build stderr; bound retained data, not build verbosity.
+
+    Separate from the reviewer runner: compiler/download output is not model
+    output and must not terminate an otherwise healthy build at the AI limit.
+    Raw diagnostics go only to the requesting updater, never the authority audit.
+    """
+    tail = ''
+    decoder = codecs.getincrementaldecoder('utf-8')(errors='replace')
+    def emit(data, final=False):
+        nonlocal tail
+        text = decoder.decode(data, final=final)
+        text = ''.join(char for char in text if char in '\n\t' or not unicodedata.category(char).startswith('C'))
+        # Final JSON also fits the legacy 64KiB response cap when escaped.
+        tail = (tail + text)[-8192:]
+        if text and progress:
+            progress(text)
+    with tempfile.TemporaryFile() as output, selectors.DefaultSelector() as selector:
+        process = subprocess.Popen(argv, env=env, stdin=subprocess.DEVNULL,
+                                   stdout=output, stderr=subprocess.PIPE, start_new_session=True)
+        selector.register(process.stderr, selectors.EVENT_READ)
+        deadline = time.monotonic() + timeout
+        next_heartbeat = time.monotonic() + 30
+        try:
+            while selector.get_map():
+                if time.monotonic() > deadline:
+                    raise BuildError('build-timeout', tail)
+                if os.fstat(output.fileno()).st_size > 65536:
+                    raise BuildError('build-output-limit', tail)
+                if progress and time.monotonic() >= next_heartbeat:
+                    progress('Phoenix update: Build still running\n')
+                    next_heartbeat = time.monotonic() + 30
+                for key, _ in selector.select(.1):
+                    data = os.read(key.fileobj.fileno(), 4096)
+                    if data:
+                        emit(data)
+                    else:
+                        selector.unregister(key.fileobj)
+            emit(b'', final=True)
+            remaining = max(.01, deadline - time.monotonic())
+            try:
+                status = process.wait(timeout=remaining)
+            except subprocess.TimeoutExpired:
+                raise BuildError('build-timeout', tail) from None
+            if status:
+                raise BuildError('build-failed', tail)
+            if os.fstat(output.fileno()).st_size > 65536:
+                raise BuildError('build-output-limit', tail)
+            output.seek(0)
+            return output.read()
+        finally:
+            if process.poll() is None:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.wait()
+            process.stderr.close()
 
 
 def git(config, *args):

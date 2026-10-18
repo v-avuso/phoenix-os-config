@@ -13,6 +13,137 @@ args = parser.parse_args()
 spec = importlib.util.spec_from_file_location("patcher", Path(__file__).resolve().parents[1] / "gui-permissions.py")
 patcher = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(patcher)
+owners, initial = patcher.layout(args.source)
+# An unsupported interpolated selection writer must not hide behind exact-key counts.
+for unknown_owner, expression in [(False, "`permission-selection-by-host-id:${renamed}`"),
+                                  (True, "`permission-selection-by-host-id:${renamed}`"),
+                                  (False, '"permission-selection-by-host-id:"+renamed'),
+                                  (True, '"permission-selection-by-host-id:"+renamed')]:
+    with tempfile.TemporaryDirectory() as invalid_directory:
+        invalid_root = Path(invalid_directory)
+        for name in owners:
+            target = invalid_root / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text((args.source / name).read_text())
+        target = invalid_root / ('webview/assets/unreviewed-writer.js' if unknown_owner else initial)
+        with target.open('a') as output:
+            output.write(';const extraWriter=' + expression + ';')
+        before = {path: path.read_bytes() for path in invalid_root.rglob('*.js')}
+        try:
+            patcher.patch(invalid_root)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError('Unsupported interpolated preference writer accepted')
+        assert before == {path: path.read_bytes() for path in invalid_root.rglob('*.js')}
+
+# Generated asset hashes and resolver identifiers are not semantic contracts.
+with tempfile.TemporaryDirectory() as renamed_directory:
+    renamed_root = Path(renamed_directory)
+    for name in owners:
+        source = (args.source / name).read_text()
+        target = renamed_root / (name.rsplit('-', 1)[0] + '-renamed.js')
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if name == initial:
+            lookup, _, call, _ = patcher.resolver(source)
+            symbol = lookup.split('(', 1)[0].removeprefix('function ')
+            source = source.replace('function ' + symbol + '(', 'function renamedResolver(').replace(
+                call, call.replace(symbol + '(', 'renamedResolver('))
+        target.write_text(source)
+    patcher.patch(renamed_root)
+    actual = (renamed_root / (initial.rsplit('-', 1)[0] + '-renamed.js')).read_text()
+    assert 'function renamedResolver(' in actual and 'mode,profile)' in actual
+    assert 'return`custom`}' in actual
+    for path in renamed_root.rglob('*.js'):
+        assert not any(key in path.read_text() for key in patcher.KEYS)
+
+if patcher.resolver((args.source / initial).read_text())[3]:
+    originals = {name: (args.source / name).read_text() for name in owners}
+    def extract(source, name):
+        start = source.index('function ' + name + '(')
+        end = source.find('function ', start + 9)
+        return source[start:end].split('}var ',1)[0] + ('}' if '}var ' in source[start:end] else '')
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        for name, source in originals.items():
+            target = root / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(source)
+        patcher.patch(root)
+        changed = (root / initial).read_text()
+        assert 'be=rSo(i,L,R,pe,o,se,oe)' in changed
+        for seam in patcher.NEW_SEAMS:
+            assert seam in changed
+        script = "const assert=require('node:assert/strict');"
+        script += extract(changed, 'rSo')
+        script += extract(originals[initial], 'rSo').replace('function rSo(', 'function Native(')
+        shared = originals['webview/assets/app-shared-61271c39e3c5.js']
+        for name in ['EJ','e4e','t4e','s4e','c4e','DJ','OJ','h4e','g4e','kJ','_4e','n4e','AJ','b4e','a4e']:
+            script += extract(shared, name)
+        script += "const jJ={default:(a,b)=>JSON.stringify(a)===JSON.stringify(b)},MJ={granular:{}},D4e={type:'readOnly',networkAccess:false},S4e='guardian_approval';"
+        script += """
+const modes=['read-only','auto','custom','full-access','guardian-approvals','granular'];
+assert.equal(rSo('local',{}, {},false,null,null,null),'custom');
+// Matching config-derived entries are not deliberate choices, per upstream.
+assert.equal(Native('local',{local:'auto'},{local:'auto'},false,null),undefined);
+assert.equal(rSo('local',{local:'auto'},{local:'auto'},false,null,'auto',':workspace'),'custom');
+assert.equal(rSo('local',{durable:'guardian-approvals'},{},true,'durable','auto',':workspace'),'guardian-approvals');
+assert.equal(rSo('local',{durable:'guardian-approvals'},{durable:'guardian-approvals'},true,'durable','auto',':workspace'),'custom');
+for(const saved of modes){
+ const preferences={local:saved};
+ assert.equal(rSo('local',preferences,{},false,null,'read-only',':read-only'),'read-only');
+ for(const profile of ['named-restricted',':unknown',':danger-full-access']){
+  assert.equal(rSo('local',preferences,{},false,null,'auto',profile),undefined);
+ }
+ for(const mode of ['custom','granular','full-access','read-only']){
+  assert.equal(rSo('local',preferences,{},false,null,mode,null),mode);
+ }
+ assert.equal(rSo('local',preferences,{},false,null,'unknown',null),undefined);
+ assert.equal(rSo('local',preferences,{},false,null,'auto',':workspace'),saved);
+}
+const reconcile=(be,se,oe)=>{
+ const n='chat',N=modes,Te=be,b=false,we=false,qe=false,F=false,I=false,ne=null,ce={type:'workspaceWrite'};
+ const je=JE_EXPRESSION;
+ return {reconcile:je,profile:PROFILE_EXPRESSION,send:SEND_EXPRESSION};
+};
+assert.deepEqual(reconcile('custom','guardian-approvals',':workspace'),{reconcile:true,profile:null,send:true});
+assert.deepEqual(reconcile('read-only','read-only',':read-only'),{reconcile:false,profile:':read-only',send:false});
+for(const profile of ['named-restricted',':unknown',':danger-full-access']){
+ assert.equal(reconcile(undefined,'auto',profile).reconcile,false);
+}
+const ordinary={approvalPolicy:'on-request',approvalsReviewer:'auto_review',sandboxPolicy:{type:'workspaceWrite',writableRoots:['/workspace'],networkAccess:false,excludeSlashTmp:false,excludeTmpdirEnvVar:false}};
+assert.equal(t4e(ordinary),'guardian-approvals');
+const selected=rSo('local',{}, {},false,null,t4e(ordinary),':workspace');
+assert.equal(selected,'custom');
+const effective=kJ(selected,['/workspace'],{sandbox_mode:'danger-full-access',approval_policy:'on-request',approvals_reviewer:'auto_review'});
+assert.equal(effective.approvalsReviewer,'auto_review');
+assert.deepEqual(a4e(effective),{sandboxPolicy:{type:'dangerFullAccess'}});
+assert.equal(t4e({...ordinary,sandboxPolicy:{type:'readOnly',networkAccess:false}}),'read-only');
+"""
+        script = script.replace('JE_EXPRESSION',patcher.NEW_SEAMS[0].split('=',1)[1]).replace('PROFILE_EXPRESSION',patcher.NEW_SEAMS[1].split('=',1)[1]).replace('SEND_EXPRESSION',patcher.NEW_SEAMS[2].split('=',1)[1])
+        subprocess.run([shutil.which('node'),'-e',script],check=True,capture_output=True,text=True)
+        for name, source in originals.items():
+            actual = (root/name).read_text()
+            assert not any(key in actual for key in patcher.KEYS)
+            for key in patcher.KEYS:
+                assert actual.count(key.replace('`','`phoenix-sandbox.',1)) == source.count(key)
+        for invalid in [changed, originals[initial].replace(patcher.NEW_LOOKUP,'changed'),
+                        originals[initial]+patcher.NEW_LOOKUP,
+                        originals[initial].replace(patcher.NEW_SEAMS[3],'changed')]:
+            for name, source in originals.items():
+                (root/name).write_text(source)
+            (root/initial).write_text(invalid)
+            before={name:(root/name).read_bytes() for name in originals}
+            try:
+                patcher.patch(root)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError('Incompatible updated bundle accepted')
+            assert before=={name:(root/name).read_bytes() for name in originals}
+    print('agent-gui-permissions: updated defaults, config-derived preferences, restrictive resume and isolated writers passed')
+    raise SystemExit(0)
+
 originals = {name: (args.source / name).read_text() for name in patcher.OWNERS}
 initial = "webview/assets/app-initial-b7dae1c6de39.js"
 

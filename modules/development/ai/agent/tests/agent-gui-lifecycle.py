@@ -57,6 +57,39 @@ def fixture(root, names=None):
 
 
 class LifecyclePatch(unittest.TestCase):
+    def test_deferred_page_owner_tracking_and_badge_cleanup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            main, bootstrap = fixture(root)
+            original = main.read_text().replace('m.u(Z9)', 'm.E(Z9)').replace(
+                'primary&&this.trackPrimaryWindow(w)',
+                'primary&&(this.pageWindowOwners.has(w)&&!w.isVisible()?'
+                'w.once(`show`,()=>this.trackPrimaryWindow(w)):this.trackPrimaryWindow(w))'
+            ).replace('this.primaryWindows.delete(w),',
+                      'this.primaryWindows.delete(w),this.appBadgeWindow===w&&'
+                      '(this.appBadgeWindow=null),this.refreshAppBadgeCount(),')
+            main.write_text(original)
+            bootstrap.write_text(bootstrap.read_text().replace('exports.u=', 'exports.E='))
+            patcher.patch(root)
+            changed = main.read_text()
+            self.assertIn('this.pageWindowOwners.has(w)&&!w.isVisible()', changed)
+            self.assertIn('this.refreshAppBadgeCount()', changed)
+            self.assertEqual(changed.count('p.app.quit()'), original.count('p.app.quit()') + 1)
+            if shutil.which('node'):
+                branch = re_patched_cleanup(changed, 'p')
+                script = ("const assert=require('node:assert/strict');let quits=0,badges=0;"
+                          "const process={platform:'linux'},p={app:{quit(){quits++;return true}}};"
+                          f"const run=function(primary,w){{return {branch}}};"
+                          "for(const remaining of [false,true]){const w={},ctx={isAppQuitting:false,"
+                          "primaryWindows:new Set([w]),appBadgeWindow:w,lastActivePrimaryWindow:w,"
+                          "refreshAppBadgeCount(){badges++;},emitPrimaryWindowChangeIfNeeded(){},"
+                          "getPrimaryWindows(){return remaining?[{}]:[]}};"
+                          "run.call(ctx,true,w);assert.equal(ctx.appBadgeWindow,null);"
+                          "assert.equal(ctx.lastActivePrimaryWindow,null);}"
+                          "assert.equal(quits,1);assert.equal(badges,2);")
+                subprocess.run([shutil.which('node'), '-e', script], check=True,
+                               capture_output=True, text=True)
+
     def test_original_and_renamed_minified_identifiers(self):
         variants = [
             None,

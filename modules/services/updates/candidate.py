@@ -34,7 +34,9 @@ class SourceTransportError(CandidateError):
         self.stage, self.code = "source-transport", code
         super().__init__(self.stage + ": " + code)
 
-def _run(argv, cwd=None, env=None, timeout=60, output_limit=2 * 1024 * 1024):
+def _run(argv, cwd=None, env=None, timeout=60, output_limit=2 * 1024 * 1024, progress=None):
+    if progress is not None:
+        return _run_progress(argv, cwd, env, timeout, output_limit, progress)
     with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
         process = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
                                    stdout=out, stderr=err, start_new_session=True)
@@ -55,6 +57,63 @@ def _run(argv, cwd=None, env=None, timeout=60, output_limit=2 * 1024 * 1024):
                 import signal
                 os.killpg(process.pid, signal.SIGKILL)
                 process.wait()
+
+def _run_progress(argv, cwd, env, timeout, output_limit, progress):
+    """Stream Nix diagnostics without limiting total stderr or retaining it all."""
+    import codecs
+    import signal
+    tail = bytearray()
+    decoder = codecs.getincrementaldecoder('utf-8')(errors='replace')
+    with tempfile.TemporaryFile() as output:
+        process = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
+            stdout=output, stderr=subprocess.PIPE, start_new_session=True)
+        os.set_blocking(process.stderr.fileno(), False)
+        start = last_feedback = time.monotonic()
+        def drain():
+            nonlocal last_feedback
+            # Bound each drain so a noisy process cannot postpone timeout checks.
+            for _ in range(64):
+                try:
+                    chunk = os.read(process.stderr.fileno(), 8192)
+                except BlockingIOError:
+                    break
+                if not chunk:
+                    break
+                tail.extend(chunk)
+                del tail[:-16384]
+                progress(decoder.decode(chunk))
+                last_feedback = time.monotonic()
+        try:
+            while True:
+                drain()
+                if process.poll() is not None:
+                    drain()
+                    break
+                now = time.monotonic()
+                if now - start > timeout:
+                    raise CandidateError('command timed out: ' + Path(argv[0]).name)
+                if os.fstat(output.fileno()).st_size > output_limit:
+                    raise CandidateError('command stdout exceeded bound: ' + Path(argv[0]).name)
+                if now - last_feedback >= 30:
+                    progress('Phoenix update: Still running ' + Path(argv[0]).name + '\n')
+                    last_feedback = now
+                time.sleep(.03)
+            progress(decoder.decode(b'', final=True))
+            if process.returncode:
+                raise CandidateError('command failed: %s exit %s' % (Path(argv[0]).name, process.returncode))
+            if os.fstat(output.fileno()).st_size > output_limit:
+                raise CandidateError('command stdout exceeded bound: ' + Path(argv[0]).name)
+            output.seek(0)
+            return output.read()
+        except CandidateError as error:
+            error.diagnostics = bytes(tail).decode('utf-8', errors='replace')
+            raise
+        finally:
+            if process.poll() is None:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.wait()
+            process.stderr.close()
+
 
 def git_metadata(repo, home):
     """Separate command-bearing config/attributes from shared objects and refs.

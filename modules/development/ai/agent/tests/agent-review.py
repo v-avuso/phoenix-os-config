@@ -350,6 +350,30 @@ class ReviewTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             review.run([sys.executable, "-c", "print('x' * 3000000)"])
 
+    def test_update_build_streams_before_exit_and_retains_failure_tail(self):
+        events = []
+        with tempfile.TemporaryDirectory() as directory:
+            receipt = Path(directory) / 'observed'
+            script = ("import sys,time,pathlib; print('building package',file=sys.stderr,flush=True); "
+                      "time.sleep(.2); assert pathlib.Path(sys.argv[1]).exists(); "
+                      "print('specific build failure',file=sys.stderr); sys.exit(7)")
+            def progress(text):
+                events.append(text)
+                receipt.touch()
+            with self.assertRaises(review.BuildError) as failure:
+                review.run_build([sys.executable, '-c', script, str(receipt)], progress=progress)
+        self.assertEqual(failure.exception.code, 'build-failed')
+        self.assertIn('specific build failure', failure.exception.diagnostics)
+        self.assertIn('building package', ''.join(events))
+
+    def test_update_build_verbose_stderr_does_not_abort_build(self):
+        result = review.run_build([sys.executable, '-c',
+            "import sys; sys.stderr.write('x'*3000000); print('/closure')"])
+        self.assertEqual(result, b'/closure\n')
+        with self.assertRaises(review.BuildError) as failure:
+            review.run_build([sys.executable, '-c', 'import time; time.sleep(2)'], timeout=.05)
+        self.assertEqual(failure.exception.code, 'build-timeout')
+
     def test_bounded_process_rejects_compaction_marker(self):
         for marker in ["context compacted\n", "log\ncontext compacted\nnext\n"]:
             with self.subTest(marker=marker), self.assertRaises(review.ReviewVerdictError) as rejected:

@@ -17,6 +17,16 @@ import candidate
 
 
 class RunnerTests(unittest.TestCase):
+    def test_help_and_unknown_options_cannot_start_update(self):
+        import contextlib
+        import io
+        for option, status in [('--help', 0), ('--unknown', 2)]:
+            with patch.object(sys, 'argv', ['phoenix-update', '/not-read', option]), \
+                 contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()), \
+                 self.assertRaises(SystemExit) as result:
+                runner.main()
+            self.assertEqual(result.exception.code, status)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -310,16 +320,115 @@ else:
         self.assertEqual(self.git('branch','--list','codex/updates/'+'a'*32).strip(),'')
         self.assertTrue(self.git('branch','--list','codex/updates/user-work').strip())
 
+    def test_controller_streams_progress_and_preserves_failure_details(self):
+        connection = MagicMock()
+        connection.__enter__.return_value = connection
+        connection.recv.side_effect = [b'{"event":"progress","text":"Building candidate"}\n',
+            b'{"ok":false,"stage":"build","code":"build-failed","summary":"Nix exited 1"}\n']
+        with patch.object(runner.socket, 'socket', return_value=connection), \
+             patch.object(candidate, '_manifest', return_value=({}, {})), \
+             patch.object(runner, 'emit_progress') as output:
+            with self.assertRaises(runner.UpdateDenied) as failure:
+                runner.controller(dict(self.config, target='metal', controllerSocket='/fixture'), candidate,
+                                  self.home, self.repo, self.head, '/base', '/profile')
+        self.assertEqual(failure.exception.stage, 'build')
+        self.assertEqual(failure.exception.code, 'build-failed')
+        output.assert_called_with('Building candidate')
+        self.assertTrue(json.loads(connection.sendall.call_args.args[0])['progress'])
+
+    def test_precommit_failure_preserves_previous_failed_candidate_details(self):
+        self.setup_pipeline()
+        retained = Path(self.config['state']) / 'failed-candidate.json'
+        prior = dict(candidate='prior', branch='codex/updates/prior',
+                     diagnostics='original error', log='/original.log')
+        retained.write_text(json.dumps(prior))
+        with patch.object(runner, 'revision', return_value='2'*40), \
+             patch.object(runner, 'community', return_value='26.930.31730'), \
+             patch.object(runner, 'fetch', side_effect=self.public_fetch), \
+             patch.object(runner, 'validate_lock', side_effect=ValueError('precommit failure')):
+            with self.assertRaisesRegex(ValueError, 'precommit failure'):
+                runner.run(self.config, candidate)
+        self.assertEqual(json.loads(retained.read_text()), prior)
+
+    def test_progress_compacts_only_after_slack_is_exhausted(self):
+        import io
+        log = self.root / 'run.log'
+        with patch.object(runner, 'RUN_LOG', log), patch.object(runner, 'LOG_LIMIT', 12), \
+             patch.object(runner, 'LOG_SLACK', 4), patch.object(runner.sys, 'stderr', new_callable=io.StringIO):
+            runner.emit_progress('a'*12)
+            runner.emit_progress('bbb')
+            self.assertEqual(log.stat().st_size, 15)
+            runner.emit_progress('cc')
+            self.assertEqual(log.read_bytes(), b'a'*7 + b'bbbcc')
+
+    def test_human_result_is_readable(self):
+        self.assertEqual(runner.format_result({'status': 'unchanged'}), 'Already up to date.')
+        text = runner.format_result(dict(status='failed', reason='Nix exited 1', stage='build', code='build-failed'))
+        self.assertIn('Update failed: Nix exited 1', text)
+        self.assertIn('stage: build', text)
+
+    def test_persistent_deferral_escalates_after_day_and_resets(self):
+        initial = dict(status='deferred', reason='baseline differs')
+        runner.track_deferral(self.root, initial, now=100)
+        self.assertNotIn('attentionRequired', initial)
+        repeated = dict(initial)
+        runner.track_deferral(self.root, repeated, now=100+86400)
+        self.assertTrue(repeated['attentionRequired'])
+        self.assertIn('Attention required', runner.format_result(repeated))
+        changed = dict(status='deferred', reason='checkout busy')
+        runner.track_deferral(self.root, changed, now=100+86401)
+        self.assertNotIn('attentionRequired', changed)
+        self.assertEqual(json.loads((self.root/'deferral.json').read_text())['firstSeen'], 86501)
+        runner.track_deferral(self.root, dict(status='unchanged'), now=90000)
+        self.assertFalse((self.root/'deferral.json').exists())
+
+    def test_progress_preserves_chunks_and_bounds_log_tail(self):
+        import io
+        log = self.root / 'run.log'
+        with patch.object(runner, 'RUN_LOG', log), patch.object(runner, 'LOG_LIMIT', 12), patch.object(runner, 'LOG_SLACK', 0), \
+             patch.object(runner.sys, 'stderr', new_callable=io.StringIO) as output:
+            runner.emit_progress('first line\n')
+            runner.emit_progress('second line\n')
+        self.assertEqual(output.getvalue(), 'first line\nsecond line\n')
+        self.assertEqual(log.read_bytes(), b'second line\n')
+
+    def test_preparation_streams_before_exit_and_keeps_bounded_failure_tail(self):
+        marker = self.root / 'feedback-seen'
+        script = ("import pathlib,sys,time\n"
+                  "sys.stderr.write('preparing\\n');sys.stderr.flush()\n"
+                  "time.sleep(.3)\n"
+                  "assert pathlib.Path(sys.argv[1]).exists()\n"
+                  "sys.stderr.write('x'*20000+'final failure\\n');sys.stderr.flush()\n"
+                  "sys.exit(7)\n")
+        messages = []
+        def feedback(text):
+            messages.append(text)
+            marker.touch()
+        with self.assertRaises(candidate.CandidateError) as failure:
+            candidate._run([sys.executable, '-c', script, str(marker)],
+                           output_limit=100, progress=feedback)
+        self.assertIn('exit 7', str(failure.exception))
+        self.assertTrue(''.join(messages).startswith('preparing\n'))
+        self.assertTrue(failure.exception.diagnostics.endswith('final failure\n'))
+        self.assertLessEqual(len(failure.exception.diagnostics), 16384)
+
     def test_failed_staging_keeps_hold_and_current_pins(self):
         self.setup_pipeline(hold=True)
         original=(self.repo/'flake.lock').read_bytes()
         with patch.object(runner,'revision',return_value='2'*40), patch.object(runner,'community',return_value='26.930.31730'), \
-             patch.object(runner,'fetch',side_effect=self.public_fetch),patch.object(runner,'controller',side_effect=ValueError('denied')):
+             patch.object(runner,'fetch',side_effect=self.public_fetch),patch.object(runner,'controller',side_effect=runner.UpdateDenied(dict(stage='build', code='build-failed', summary='denied', diagnostics='actual Nix failure'))):
             with self.assertRaisesRegex(ValueError,'denied'):
                 runner.run(self.config,candidate)
         self.assertEqual(self.git('rev-parse','HEAD').strip(),self.head)
         self.assertEqual((self.repo/'flake.lock').read_bytes(),original)
         self.assertIn('codex-cli',json.loads((self.repo/runner.POLICY).read_text())['holds'])
+        retained = json.loads((Path(self.config['state'])/'failed-candidate.json').read_text())
+        self.assertEqual(retained['diagnostics'], 'actual Nix failure')
+        self.assertEqual(retained['stage'], 'build')
+        self.assertEqual(self.git('rev-parse', retained['branch']).strip(), retained['candidate'])
+        runner.cleanup_branches(self.config, candidate, self.home)
+        self.assertTrue(self.git('branch', '--list', retained['branch']).strip())
+        self.assertFalse(list((Path(self.config['state'])/'worktrees').iterdir()))
 
     def test_unapproved_main_and_affected_local_edits_defer_before_network(self):
         self.setup_pipeline()

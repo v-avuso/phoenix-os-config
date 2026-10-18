@@ -168,6 +168,14 @@
 - Keep source/JSON transport capacity in `transport.json` separate from AI context
   and cost budgets. Package its immutable path explicitly for standalone Python
   entry points; verify updater, client and controller agree before deployment.
+- For routine builds, bound retained diagnostics rather than total compiler/download
+  stderr. Stream output separately from authority audit records, retain the actual
+  failure stage/tail, and test a real failing subprocess through the socket path;
+  static generic errors otherwise erase the evidence needed to repair updates.
+- For bundled GUI adapters, prefer upstream semantic events and unique action keys
+  over generated minifier names. Check old and updated bundles and preserve handler
+  bodies to avoid unnecessary failures from harmless build-symbol changes. Keep
+  unrecognized permission/reconciliation logic fail-closed rather than guessing.
 
 - When service and contained client identities differ, derive narrowly named
   operation roles and the service user from one declarative account owner; do not
