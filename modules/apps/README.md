@@ -1,5 +1,9 @@
 # Desktop apps
 
+## Gaming
+
+`games.nix` enables the system Steam program and permits its unfree package.
+
 ## Typst document publishing
 
 The [documents module](documents/typst/README.md) installs Typst and makes
