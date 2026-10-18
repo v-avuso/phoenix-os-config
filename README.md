@@ -60,6 +60,7 @@ an administrator's direct sudo route.
 | --- | --- |
 | `phoenix-dry-build` | Evaluate the build plan without building or activating |
 | `phoenix-build` | Build the system without activation |
+| `phoenix-gc` | Keep the 10 newest system generations, then collect unreachable Nix store paths |
 | `phoenix-test` | Build and activate now; leave the next-boot generation unchanged |
 | `phoenix-switch` | Build, activate now, and select the generation for next boot |
 | `phoenix-boot` | Build and select the generation for next boot; leave the running system unchanged |
@@ -72,6 +73,10 @@ an administrator's direct sudo route.
 PHOENIX_TARGET=metal phoenix-build
 phoenix-rebuild --print switch
 ```
+
+Run `phoenix-gc` manually when you want to reclaim Nix store space. It uses
+interactive `sudo`, removes older system generations beyond the newest 10, and
+then runs the Nix store garbage collector. No scheduled service is configured.
 
 `test` changes the live system; it is not an evaluation check. Activation needs
 authorization and interactive authentication where required. Agent workflow and

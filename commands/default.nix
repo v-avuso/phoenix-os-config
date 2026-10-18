@@ -36,6 +36,12 @@ let
     '' + builtins.readFile ./phoenix-rebuild;
   };
 
+  phoenixGc = pkgs.writeShellApplication {
+    name = "phoenix-gc";
+    runtimeInputs = [ pkgs.nix pkgs.sudo ];
+    text = builtins.readFile ./phoenix-gc;
+  };
+
   rebuildAction =
     name: action:
     pkgs.writeShellApplication {
@@ -67,6 +73,7 @@ pkgs.symlinkJoin {
   paths = [
     phoenixTarget
     phoenixRebuild
+    phoenixGc
     (rebuildAction "phoenix-switch" "switch")
     (rebuildAction "phoenix-test" "test")
     (rebuildAction "phoenix-boot" "boot")

@@ -44,7 +44,7 @@
 ## Commands and validation
 
 - User PATH provides `phoenix-target --info`, `phoenix-dry-build`,
-  `phoenix-build`, `phoenix-test`, `phoenix-switch`, and `phoenix-boot`.
+  `phoenix-build`, `phoenix-gc`, `phoenix-test`, `phoenix-switch`, and `phoenix-boot`.
   `phoenix-rebuild --print <action>` previews the dispatcher command.
 - `config/user.nix` owns `repoDirectory`; `PHOENIX_REPO_ROOT` overrides the
   checkout and `PHOENIX_TARGET=metal|vm` overrides target detection.
