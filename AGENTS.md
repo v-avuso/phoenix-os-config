@@ -10,9 +10,10 @@
   `docs/` and `tests/` for repository-wide and genuinely cross-module concerns;
   root README may briefly describe and link to modules.
 - Prefer reusable modules enabled by an import and minimal configuration. Keep
-  one or two related files flat; normally group three or more (including tests)
-  in a named feature directory with concise filenames. Cohesive modules may keep
-  tests at module level; avoid disproportionate abstraction. See docs/ARCHITECTURE.md.
+  single-file modules flat; place a feature with multiple owned files (including
+  implementation, docs, and tests) in a named directory with `default.nix`.
+  Cohesive modules may keep tests at module level; avoid disproportionate
+  abstraction. See docs/ARCHITECTURE.md.
 - Keep agent policy and adapters under `modules/development/ai/agent`.
 - For media pipeline work, explicitly read `modules/apps/media/AGENTS.md`;
   root-started sessions must not assume subtree guidance was loaded.

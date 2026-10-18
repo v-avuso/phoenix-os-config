@@ -2,47 +2,8 @@
 
 ## Gaming
 
-`games.nix` enables the system Steam program and permits its unfree package.
-
-### No Man's Sky DLSS Frame Generation
-
-`games.nix` builds and installs the single-file Vulkan-layer workaround from
-[Proton issue #438, comment 5902067647](https://github.com/ValveSoftware/Proton/issues/438#issuecomment-5902067647).
-The report traces the DLSS-G hang to NVIDIA Streamline submitting two waits on
-the same binary semaphore across queues. The layer shadows affected semaphores
-with a private timeline semaphore when `NMS_FIX_SHADOW=1`. The associated
-[Streamline issue #127](https://github.com/NVIDIA-RTX/Streamline/issues/127)
-tracks the upstream bug. Phoenix packages the upstream C source and its layer
-manifest, replacing the manifest's developer-local library path with the Nix
-store path at build time. It does not modify Proton.
-
-To scope the workaround to No Man's Sky only, set this in that game's Steam
-Properties → General → Launch Options (App ID **275850**):
-
-```text
-VK_ADD_LAYER_PATH=/run/current-system/sw/share/vulkan/explicit_layer.d VK_INSTANCE_LAYERS=VK_LAYER_NMS_fix NMS_FIX_SHADOW=1 DXVK_NVAPI_VKREFLEX=1 WINE_DISABLE_HARDWARE_SCHEDULING=0 %command%
-```
-
-Enable regular **2× DLSS Frame Generation** in the game. The launch options are
-stored by Steam for that game; do not put these variables in the global session
-environment. The layer is installed system-wide but remains unloaded unless a
-process explicitly requests it. `VK_ADD_LAYER_PATH` adds the package's manifest
-directory without replacing the Vulkan loader's normal search paths.
-
-Remove the package and per-game launch options only after a shipped No Man's Sky
-update or Proton/Streamline update fixes the semaphore issue and the fix is
-verified by loading a save and playing through the former loading-screen hang
-with regular DLSS Frame Generation enabled, without this layer. Track that
-condition against [Proton #438](https://github.com/ValveSoftware/Proton/issues/438)
-and [Streamline #127](https://github.com/NVIDIA-RTX/Streamline/issues/127).
-
-Hyprland uses the shared `1.6` desktop scale in
-[`config/desktop-scale.nix`](../../config/desktop-scale.nix). Steam currently
-owns its UI scale in mutable client settings, so Phoenix does not write or
-replace Steam's configuration. To match the desktop scale, set Steam's native
-**Settings → Accessibility → UI Scaling** slider to **160%**. Steam does not
-expose a supported declarative setting for this slider; avoid the obsolete
-`STEAM_FORCE_DESKTOPUI_SCALING` override.
+The [games module](games/README.md) enables Steam and owns game-specific
+compatibility configuration.
 
 ## Typst document publishing
 

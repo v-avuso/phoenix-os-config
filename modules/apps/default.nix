@@ -3,7 +3,7 @@
     ./ausweisapp.nix
     ./codex-desktop-linux.nix
     ./documents
-    ./games.nix
+    ./games
     ./media
     ./media-viewers.nix
     ./obsidian.nix
