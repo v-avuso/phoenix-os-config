@@ -2,55 +2,135 @@
 
 ## Intentions
 
-Provide a low-maintenance local Markdown-to-PDF route from Obsidian while keeping
-the compiler, templates, and adapter customizations declarative in Phoenix.
-Private notes and PDFs stay in the user's vault or chosen output directory.
+Keep local Markdown-to-PDF publishing reproducible and easy to maintain. Phoenix
+owns compiler, reusable designs and adapters; vaults retain private notes, identity
+fields, plugin installation and unrelated settings. Preserve upstream letter design.
 
-Phoenix installs `typst` in the system profile so Obsidian's child process can
-find it on `PATH`. It installs the template files under
-`~/.local/share/phoenix/typst/templates`. The four `.typ` files are thin
-Omd2Typst wrappers around versioned Typst Universe packages; they are editable
-in Phoenix and do not copy upstream designs into this repository.
+## Architecture and dependencies
 
-Omd2Typst is a per-vault Obsidian community plugin and is deliberately not
-installed or configured by Nix. Its template picker only registers `.typ` files
-inside the active vault, and its selected/default template settings are stored
-in that vault. After installing Omd2Typst manually:
+- `templates/phoenix-letter/`: reusable `@local/phoenix-letter:0.1.0` package,
+  independent of Obsidian. Wraps `@preview/letter-pro:3.0.0` without modifying it.
+- `template-adapters/omd2typst/`: thin YAML/content adapter exposing Omd2Typst's
+  `template`, `callout` and language-discovery dictionary.
+- The original four flat files in `templates/` remain unchanged Omd2Typst
+  adapters, including `letter-pro.typ`. They are not standalone letter designs.
 
-1. Copy the four files from `~/.local/share/phoenix/typst/templates/` into a
-   folder such as `Templates/Typst/` inside the vault.
-2. In **Settings → Omd2Typst → Typst templates**, add all four `.typ` files.
-3. Select **Metropole Report** as the default general document template. Set
-   the default language to English or German as appropriate; a note's
-   `language: en` or `language: de` frontmatter overrides that default.
-4. Leave the output format as PDF. Use **Export as PDF** from the command
-   palette or note context menu.
+Letter Pro provides A4 DIN 5008-B geometry, address window, sender header/return
+address, fold/hole marks and right-aligned multipage footers. Phoenix keeps Source
+Sans Pro, adds German body hyphenation **inside** the upstream body (upstream sets
+`hyphenate: false`), justified paragraphs and sticky headings. Page totals read
+“Seite X von Y”. There is no cover or TOC. Greeting, closing and signature belong
+in the body. Sender address is a single line separated with `, `; upstream splits
+it into header lines. Keep it short enough for the return-address window.
 
-The vault copy is necessary because Omd2Typst resolves registered templates
-through Obsidian's vault API. Re-copy the files after changing their Phoenix
-sources. The first PDF export of each template may need network access so Typst
-can fetch its pinned `@preview` package; later builds use Typst's package cache.
+Home Manager installs the wrapper as a local package link to the configured
+`user.repoDirectory`: saved design changes are immediately visible to Typst. This
+is deliberately a live source link, not an immutable design snapshot. It requires
+that checkout to remain available. The original template distribution remains at
+`~/.local/share/phoenix/typst/templates`.
 
-## Frontmatter and language
+The existing pinned import/cache was offline-capable only after a successful
+network download. Phoenix now fetches the official Letter Pro 3.0.0 archive with
+a fixed SHA-256 and installs it in the Typst **data** package directory, which
+precedes the cache. No vendored upstream copy or additional package framework is
+needed. Nix's first build needs network/cache access; subsequent letter compilation
+needs neither. Other original adapters retain their cache/download behavior.
+Typst and fonts come from locked nixpkgs. See [Typst package documentation](https://github.com/typst/packages#local-packages)
+and [Letter Pro source](https://github.com/Sematre/typst-letter-pro).
 
-The adapters read only the presentation fields each upstream design supports
-(`title`, `subtitle`, `author`, `date`, `subject`, and `language`) and expose
-English and German to Omd2Typst's language selector. Other YAML keys such as
-`source_chat` are ignored by the adapters and do not become PDF text. Omd2Typst
-handles Markdown conversion, headings, tables, lists, callouts, cover/TOC
-metadata, and pagination; Typst's
-paragraph language setting provides language-aware hyphenation. Formal,
-Briefs, and Letter Pro retain their upstream layout functions. The minimal
-`callout` adapter emits the converted callout title and body without imposing a
-new style on the upstream designs.
+## Installation and Obsidian
 
-Letter Pro and Briefs are letter layouts. Their adapters map `subject` (falling
-back to `title`) to the letter subject; they leave sender and recipient address
-fields at upstream defaults, so they are selectable but need a small adapter
-edit before they can produce fully addressed business letters. Briefs uses its
-upstream default date when none is supplied. Metropole Report is the
-recommended general-purpose default and uses the upstream title, subtitle, and
-author presentation.
+Activate the Phoenix configuration using the normal reviewed deployment flow.
+Install Omd2Typst separately in the vault. Then, with Obsidian closed (or the
+plugin disabled), register the vault once:
+
+```sh
+phoenix-typst-vault --register /absolute/path/to/vault
+```
+
+This copies the **whole adapter directory** into
+`3-misc/phoenix-typst/omd2typst/`, registers `phoenix-letter`, and sets PDF output
+to `same-folder`. Existing templates, default template and unrelated plugin settings
+are preserved. Enable/reload Omd2Typst after registration so it reads the settings.
+Choose **Export as PDF with template… → phoenix-letter** for letters; the existing
+general-document default remains unchanged. A note `folder/Name.md` exports to
+`folder/Name.pdf` (replacing an existing PDF).
+
+A user timer checks registered vaults every 30 seconds and copies only changed
+adapter files. No plugin settings are rewritten by the timer. It starts at login;
+run `phoenix-typst-vault` for immediate refresh. Registered absolute vault paths
+live privately in `$XDG_STATE_HOME/phoenix-typst/vaults.json` (normally
+`~/.local/state/phoenix-typst/vaults.json`). Remove a path there to stop its refresh.
+No personal vault path is committed.
+
+Directory symlinks were considered: Omd2Typst requires a vault-indexed `TFile`, so
+filesystem readability alone cannot establish discovery or watcher behavior.
+Live Electron symlink discovery was unavailable for verification; regular-file
+copying is the conservative fallback. The adapter is imported anew at every export,
+so subsequent content changes require no plugin reload. The installed 0.9.0
+converter/export test verifies this; live Obsidian indexing remains a user check.
+Do not edit generated vault adapters: edit Phoenix sources. Unexpected symlinks
+are refused, and unrelated vault templates are never deleted or rewritten.
+
+## Letter frontmatter
+
+Use these exact **flat** YAML keys. Omd2Typst 0.9.0 flattens nested YAML mappings,
+so `sender: {name: ...}` is not supported. Replace all placeholders privately:
+
+```yaml
+---
+subject: "Stellungnahme im Verfahren …"
+date: "19. Oktober 2026"
+reference: "S … …/…"
+language: de
+sender_name: "Vorname Nachname"
+sender_address: "Straße Hausnummer, PLZ Ort"
+sender_extra: "Optionale Telefonnummer oder E-Mail"
+recipient: |
+  Sozialgericht Ort
+  Straße Hausnummer
+  PLZ Ort
+---
+```
+
+`sender_extra`, `reference` and `date` may be omitted; no date is invented.
+All sender fields default to empty, with no public personal defaults. `recipient`
+uses YAML literal multiline syntax. `subject` also supplies the PDF title and
+`sender_name` supplies the author, as in upstream. Only these listed keys reach
+the wrapper. Unrelated metadata such as `chatgpt_chat` stays out of rendered text
+and PDF metadata, though the plugin can include it in intermediate `.typ` source.
+`title`, cover and TOC metadata are deliberately unused by this letter adapter.
+Language defaults to German (`de`); `en` is accepted for English body hyphenation,
+while the requested footer/reference labels remain German.
+
+## Standalone CLI and checks
+
+After installation:
+
+```sh
+typst compile modules/apps/documents/typst/tests/standalone.typ /tmp/letter.pdf
+```
+
+Import `@local/phoenix-letter:0.1.0` and apply
+`#show: phoenix-letter.with(sender: (name: "…", address: "…"), recipient: […],
+subject: "…", date: "…", reference: "…", language: "de")`.
+No Obsidian or Markdown converter is needed. The source package also supports
+relative imports for repository-local use; upstream must still be available.
+
+Focused checks (Node, Typst and Poppler `pdftotext`/`pdfinfo` on PATH):
+
+```sh
+python3 modules/apps/documents/typst/tests/deployment.py
+# Use a disposable vault with the plugin data.json and deployed adapter directory:
+node modules/apps/documents/typst/tests/omd2typst.cjs /path/to/omd-to-typst/main.js /tmp/test-vault
+```
+
+The latter executes the installed plugin's actual WASM converter and PDF export
+path with filesystem-backed Obsidian test doubles. It checks a representative
+three-page German letter, automatic hyphenation, sender/recipient, page totals,
+metadata exclusion, same-folder output and rereading adapter edits. It does not
+prove live Electron template discovery. Inspect PDFs visually as well; source
+fixtures use fictional identity data. Compilation alone cannot establish layout.
 
 ## Upstream templates
 
@@ -63,7 +143,8 @@ author presentation.
 
 Typst Universe pages are the source for versions and licensing; this README
 records the versions selected for Phoenix. To update a design, check its
-upstream API and license, change the pinned import in the corresponding adapter,
-compile representative English and German documents, and update this table.
+upstream API and license, change the pinned import (for Phoenix letters also update the fixed archive
+URL/hash in `default.nix`), compile representative English and German documents,
+and update this table.
 Nixpkgs supplies the compiler version; it is intentionally not pinned through a
 separate package framework.
