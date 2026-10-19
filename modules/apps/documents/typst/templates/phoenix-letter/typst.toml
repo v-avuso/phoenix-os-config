@@ -1,0 +1,6 @@
+[package]
+name = "phoenix-letter"
+version = "0.1.0"
+entrypoint = "lib.typ"
+authors = ["Phoenix"]
+description = "Reusable German DIN 5008-B letters based on Letter Pro 3.0.0"
