@@ -379,6 +379,9 @@ class ReviewTests(unittest.TestCase):
             self.assertEqual(run.call_args.kwargs['timeout'],2)
             self.assertIn('estimated from characters / 4',output.getvalue())
             self.assertIn('does not limit deployment',output.getvalue())
+            self.assertIn('before controller checkpoint selection', output.getvalue())
+            self.assertIn('not model token usage', output.getvalue())
+            self.assertIn('repeated warnings do not imply repeated reviews', output.getvalue())
         for notification in [None,'relative-command',['sh','-c']]:
             with mock.patch.object(review,'run') as run,contextlib.redirect_stderr(io.StringIO()):
                 review.warn_large_diff({'notifySend':notification},large)

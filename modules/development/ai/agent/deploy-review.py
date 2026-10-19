@@ -503,7 +503,8 @@ def warn_large_diff(config, diff):
     if estimate < LARGE_DIFF_WARNING_TOKENS:
         return estimate
     message = ("Large deployment diff: approximately " + str(estimate) +
-               " tokens estimated from characters / 4. The approved checkpoint may change the reviewed diff. "
+               " tokens estimated from characters / 4 against the local baseline, before controller checkpoint selection. "
+               "This is not model token usage; repeated warnings do not imply repeated reviews. "
                "This warning does not limit deployment.")
     print(message, file=sys.stderr)
     executable = config.get('notifySend')

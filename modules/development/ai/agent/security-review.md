@@ -219,6 +219,23 @@ state: the remaining diff needs review; approvals are never blindly combined.
 An explicit fresh human override advances only its protected exact pending
 source/closure/action binding, even if activation later fails.
 
+## Diff estimates and review scope
+
+Large-diff notifications estimate characters divided by four against the client's
+local baseline, before the controller chooses an approved checkpoint. They are
+neither measured model tokens nor evidence that a model invocation occurred.
+Repeated notifications may accompany exact checkpoint reuse with no new review.
+The controller's `reviewing` journal event records actual selected `diffBytes`;
+even that event precedes the worker's serialized 1 MiB input gate, which may refuse
+before invoking the model. Unified diffs include changed lines and nearby context;
+new/deleted files contribute their full contents. The request transports source
+files separately, but the initial model prompt contains the diff and file index,
+not the entire source tree. Additional context is bounded and explicitly requested.
+
+Markdown remains reviewed: policy prompts and documents consumed by automation
+can affect security. A future documentation optimization must classify consumers
+and preserve prompt/policy changes rather than exempt every `.md` file.
+
 ## Failures and evidence
 
 A `review/model-denied` response displays the reviewer's advisory explanation
