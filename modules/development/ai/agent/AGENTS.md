@@ -245,3 +245,5 @@
   summary to the requesting client before override guidance. Keep arbitrary native
   stderr and other failure payloads private; test denial through the socket client
   as well as the formatter so transport does not silently erase the explanation.
+  Retained-explanation reads must remain caller-bound, advisory and mutation-free;
+  never journal their summaries or require a deployment replay to inspect a denial.

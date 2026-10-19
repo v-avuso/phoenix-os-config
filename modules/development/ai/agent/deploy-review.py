@@ -537,6 +537,15 @@ FAILURE_STAGES = frozenset("request freeze baseline routine-policy build closure
 FAILURE_CODES = frozenset("source-capacity-exceeded wire-capacity-exceeded review-adapter-unsupported review-cli-incompatible-suspected review-model-unavailable-suspected review-rate-limit-suspected review-transport-failed-suspected invalid-or-denied rejected-or-failed timeout invalid-json io-failed operator-authentication-required rollback-incomplete unsafe-execution-guard mutation-still-running missing-binding baseline-changed profile-changed source-mismatch spool-recovery-required invalid-capability routine-resource-busy model-denied reviewer-invocation-failed review-invocation-failed review-authentication-failed review-authentication-missing review-startup-failed review-timeout review-output-limit review-context-oversized context-compacted context-request-invalid context-request-oversized schema-invalid binding-mismatch worker-envelope-invalid security-policy-changed security-approval-required approval-state-changed inspection-required pending-capacity pending-binding-invalid pending-caller-invalid pending-state-changed".split())
 
 
+def reviewer_explanation(summary):
+    """Untrusted advisory text, bounded independently of terminal rendering."""
+    if isinstance(summary, str):
+        summary = ''.join(c for c in summary[:1000] if not unicodedata.category(c).startswith('C'))
+    if not isinstance(summary, str) or not summary:
+        summary = "No reviewer explanation was provided."
+    print("Reviewer explanation (advisory): " + summary, file=sys.stderr)
+
+
 def deployment_failure(result, config=None):
     """Display only bounded protocol diagnostics, shared by socket and operator."""
     stage, code = result.get("stage"), result.get("code")
@@ -565,12 +574,7 @@ def deployment_failure(result, config=None):
         display["findings"] = findings
     if stage == "review" and code == "model-denied":
         # Model text is advisory, never protocol metadata or authorization.
-        summary = result.get("summary")
-        if isinstance(summary, str):
-            summary = ''.join(c for c in summary[:1000] if not unicodedata.category(c).startswith('C'))
-        if not isinstance(summary, str) or not summary:
-            summary = "No reviewer explanation was provided."
-        print("Reviewer explanation (advisory): " + summary, file=sys.stderr)
+        reviewer_explanation(result.get("summary"))
         executable = (config or {}).get('notifySend')
         if isinstance(executable, str) and Path(executable).is_absolute():
             try:
@@ -604,7 +608,45 @@ def main():
     parser.add_argument("--action", choices=(["test", "switch", "boot"] if config.get("clientOnly") else ["review", "build", "test", "switch", "boot"]), default=("test" if config.get("clientOnly") else "review"))
     parser.add_argument("--security-override", metavar="PENDING_NONCE", help="authenticate an explicit exact-state review override")
     parser.add_argument("--disruption-override", metavar="PENDING_NONCE", help="authenticate one exact protected unit exception")
+    parser.add_argument("--review-explanation", nargs='?', const='latest', metavar='PENDING_NONCE',
+                        help="read a retained denial explanation without deploying (default: latest)")
     args = parser.parse_args()
+    if args.review_explanation is not None:
+        if (args.security_override or args.disruption_override or args.authorization_context
+                or args.reservation_file or args.branch or args.worktree or args.base or args.reason
+                or args.target or args.task != 'phoenix-deployment'):
+            parser.error('review explanation cannot be combined with deployment options')
+        selector = args.review_explanation
+        if selector != 'latest' and not re.fullmatch('[a-f0-9]{64}', selector):
+            parser.error('invalid pending nonce')
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+            connection.settimeout(15)
+            connection.connect(config['deploymentSocket'])
+            connection.sendall(json.dumps({'reviewExplanation': selector}).encode() + b'\n')
+            with connection.makefile('rb') as stream:
+                response = stream.readline(16385)
+            if len(response) > 16384 or not response.endswith(b'\n'):
+                raise ValueError('invalid explanation response')
+        result = json.loads(response)
+        if result.get('ok') is not True or not isinstance(result.get('reviewExplanation'), dict):
+            raise ValueError('pending explanation unavailable; installed controller support and a retained request are required')
+        explanation = result['reviewExplanation']
+        code = explanation.get('code')
+        code = code if isinstance(code, str) and code in FAILURE_CODES else 'invalid-or-denied'
+        print('Retained review failure: ' + code + ' (advisory only; no deployment requested).', file=sys.stderr)
+        identity = {}
+        for key, pattern in {'pendingNonce': r'[a-f0-9]{64}',
+                             'pendingAction': r'test|switch|boot',
+                             'pendingTarget': r'metal|vm'}.items():
+            value = explanation.get(key)
+            if isinstance(value, str) and re.fullmatch(pattern, value):
+                identity[key] = value
+        print('Pending request: ' + json.dumps(identity, ensure_ascii=True), file=sys.stderr)
+        reviewer_explanation(explanation.get('summary'))
+        if explanation.get('policyCurrent') is not True:
+            print('The installed review policy has changed since this request.', file=sys.stderr)
+        return
+
     if args.authorization_context and (args.action not in {'test', 'switch', 'boot'} or args.security_override or args.disruption_override):
         parser.error('authorization context is supported only for ordinary activation')
     reservation = None

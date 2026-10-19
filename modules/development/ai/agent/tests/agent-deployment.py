@@ -184,6 +184,54 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual((response['stage'], response['code']), ('source-transport', 'wire-capacity-exceeded'))
         process.assert_not_called()
 
+    def test_pending_explanation_is_caller_bound_read_only_and_handles_stale_policy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = dict(work=directory, clientUid=2000, operatorUid=1000, target='metal',
+                          modelReviewEnabled=True, securityReviewState='fixture')
+            record = dict(uid=2000, target='metal', action='test', nonce='a' * 64,
+                          code='model-denied', summary='PRIVATE concern', timestamp=1, policy='old')
+            security = mock.Mock()
+            security.records.return_value = [(None, record), (None, dict(record, uid=3000, timestamp=10))]
+            security.policy_digest.return_value = 'current'
+            review = deploy.load_review({'reviewScript': str(Path(__file__).parents[1] / 'deploy-review.py')})
+            with mock.patch.object(deploy, 'load_security', return_value=security), \
+                 mock.patch.object(deploy, 'load_review', return_value=review), \
+                 mock.patch.object(deploy, 'process') as process, \
+                 mock.patch.object(deploy, 'activate_bound') as activate:
+                for uid in (1000, 2000):
+                    result = deploy.review_explanation(config, 'latest', uid)['reviewExplanation']
+                    self.assertEqual(result['summary'], 'PRIVATE concern')
+                    self.assertFalse(result['policyCurrent'])
+                    self.assertEqual(result['pendingNonce'], 'a' * 64)
+                for uid, selector in [(3000, 'latest'), (1000, {}), (1000, '../x'), (1000, 'b' * 64)]:
+                    with self.assertRaises(ValueError):
+                        deploy.review_explanation(config, selector, uid)
+                with self.assertRaises(ValueError):
+                    deploy.review_explanation(dict(config, modelReviewEnabled=False), 'latest', 1000)
+                process.assert_not_called()
+                activate.assert_not_called()
+                security.approve.assert_not_called()
+                security.consume_pending.assert_not_called()
+
+    def test_pending_explanation_socket_response_is_not_journaled(self):
+        handlers = {}; connection = mock.Mock(); listener = mock.Mock()
+        listener.accept.return_value = (connection, None)
+        connection.getsockopt.return_value = deploy.struct.pack('3i', 22, 1000, 1000)
+        connection.recv.return_value = b'{"reviewExplanation":"latest"}\n'
+        def explain(*args):
+            handlers[deploy.signal.SIGUSR1](deploy.signal.SIGUSR1, None)
+            return dict(ok=True, reviewExplanation=dict(summary='PRIVATE concern', code='model-denied'))
+        with mock.patch.object(deploy.os, 'getuid', return_value=0), \
+             mock.patch.object(deploy.socket, 'socket', return_value=listener), \
+             mock.patch.object(deploy.signal, 'signal', side_effect=lambda sig, handler: handlers.update({sig: handler})), \
+             mock.patch.object(deploy, 'review_explanation', side_effect=explain), \
+             mock.patch.object(deploy, 'process') as process, contextlib.redirect_stdout(io.StringIO()) as journal:
+            deploy.serve({'clientUid': 1000})
+        self.assertIn('PRIVATE concern', json.loads(connection.sendall.call_args.args[0])['reviewExplanation']['summary'])
+        self.assertNotIn('PRIVATE', journal.getvalue())
+        self.assertNotIn('activated', journal.getvalue())
+        process.assert_not_called()
+
     def test_pending_rejection_response_displays_identity_without_journaling_private_text(self):
         handlers={};connection=mock.Mock();listener=mock.Mock();listener.accept.return_value=(connection,None)
         connection.getsockopt.return_value=deploy.struct.pack('3i',22,1000,1000)

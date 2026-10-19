@@ -77,6 +77,49 @@ class ReviewTests(unittest.TestCase):
                     for key, value in pending.pending_metadata.items():
                         self.assertEqual(display[key], value)
 
+    def test_retained_explanation_client_requests_only_read_and_filters_text(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / 'client.json'
+            config.write_text(json.dumps(dict(deploymentSocket='/fixture/socket', clientOnly=True,
+                                             reservationAdapter='must-not-load')))
+            response = dict(ok=True, reviewExplanation=dict(code='model-denied', summary='Concern\x1b\n\u202e',
+                                                           policyCurrent=False))
+            connection = mock.MagicMock()
+            connection.__enter__.return_value = connection
+            connection.makefile.return_value.__enter__.return_value.readline.return_value = json.dumps(response).encode() + b'\n'
+            stderr = io.StringIO()
+            with mock.patch.object(sys, 'argv', ['client', str(config), '--review-explanation']), \
+                 mock.patch.object(review.socket, 'socket', return_value=connection), \
+                 mock.patch.object(review, 'run') as run, \
+                 mock.patch.object(review, 'snapshot') as snapshot, contextlib.redirect_stderr(stderr):
+                review.main()
+            self.assertEqual(json.loads(connection.sendall.call_args.args[0]), {'reviewExplanation': 'latest'})
+            self.assertIn('Reviewer explanation (advisory): Concern', stderr.getvalue())
+            self.assertIn('policy has changed', stderr.getvalue())
+            self.assertNotIn('\x1b', stderr.getvalue())
+            self.assertNotIn('\u202e', stderr.getvalue())
+            run.assert_not_called(); snapshot.assert_not_called()
+
+    def test_retained_explanation_rejects_invalid_requests_and_responses(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / 'client.json'
+            config.write_text(json.dumps(dict(deploymentSocket='/fixture/socket', clientOnly=True)))
+            for options in [['--review-explanation', '../bad'], ['--review-explanation', '--security-override', 'a' * 64],
+                            ['--review-explanation', '--reason', 'deploy']]:
+                with mock.patch.object(sys, 'argv', ['client', str(config), *options]), \
+                     mock.patch.object(review.socket, 'socket') as socket_factory, \
+                     contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                    review.main()
+                socket_factory.assert_not_called()
+            for response in [b'{"ok":false}\n', b'{"ok":true,"reviewExplanation":[]}\n', b'x' * 16385]:
+                connection = mock.MagicMock()
+                connection.__enter__.return_value = connection
+                connection.makefile.return_value.__enter__.return_value.readline.return_value = response
+                with mock.patch.object(sys, 'argv', ['client', str(config), '--review-explanation', 'a' * 64]), \
+                     mock.patch.object(review.socket, 'socket', return_value=connection), self.assertRaises(ValueError):
+                    review.main()
+                self.assertEqual(json.loads(connection.sendall.call_args.args[0]), {'reviewExplanation': 'a' * 64})
+
     def test_security_pending_failure_is_visibly_critical(self):
         stderr = io.StringIO()
         with contextlib.redirect_stderr(stderr), self.assertRaisesRegex(ValueError, 'review.*model-denied'):

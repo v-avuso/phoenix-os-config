@@ -935,6 +935,38 @@ def command_process(config, request, uid, operator=False, critical=False, pid=No
     return result
 
 
+def review_explanation(config, selector, uid):
+    """Read advisory pending text only; never approve, consume, build or activate."""
+    if (uid not in {config['clientUid'], operator_uid(config)}
+            or not config.get('modelReviewEnabled', False)
+            or not config.get('securityReviewState')):
+        raise ValueError('pending explanation unavailable')
+    if not isinstance(selector, str) or (selector != 'latest' and not re.fullmatch('[a-f0-9]{64}', selector)):
+        raise ValueError('invalid pending selector')
+    with (Path(config['work']).parent / 'deployment.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        security = load_security(config)
+        candidates = [record for _, record in security.records(config, 'pending')
+                      if record.get('uid') == config['clientUid']
+                      and record.get('target') == config['target']
+                      and record.get('action') in {'test', 'switch', 'boot'}
+                      and isinstance(record.get('nonce'), str)
+                      and re.fullmatch('[a-f0-9]{64}', record['nonce'])
+                      and (selector == 'latest' or record['nonce'] == selector)]
+        if not candidates:
+            raise ValueError('pending explanation unavailable')
+        record = max(candidates, key=lambda item: item.get('timestamp', 0))
+        code = record.get('code')
+        review = load_review(config)
+        if not isinstance(code, str) or code not in review.FAILURE_CODES:
+            code = 'invalid-or-denied'
+        summary = record.get('summary')
+        return dict(ok=True, reviewExplanation=dict(
+            stage='review', code=code, summary=summary[:1000] if isinstance(summary, str) else '',
+            pendingNonce=record['nonce'], pendingAction=record['action'], pendingTarget=record['target'],
+            policyCurrent=record.get('policy') == security.policy_digest(config)))
+
+
 def serve(config):
     if os.getuid() != 0:
         raise ValueError('controller requires installed root service')
@@ -968,7 +1000,12 @@ def serve(config):
                     raise DeploymentFailure('source-transport', 'wire-capacity-exceeded')
             request = json.loads(data)
             command_request = isinstance(request,dict) and set(request) == {'command'}
-            if command_request:
+            explanation_request = isinstance(request, dict) and set(request) == {'reviewExplanation'}
+            if explanation_request:
+                if len(data) > 4096:
+                    raise ValueError('explanation transport bound')
+                result = review_explanation(config, request['reviewExplanation'], uid)
+            elif command_request:
                 if len(data)>4096: raise ValueError("command transport bound")
                 result = command_process(config,request['command'],uid,pid=pid)
             elif isinstance(request, dict) and set(request) == {'authorization'}:
@@ -997,7 +1034,10 @@ def serve(config):
                         connection.settimeout(10)
                 options = dict(config, _updateProgress=update_progress) if request.get('action') == 'update' and request.get('progress') is True else config
                 result = process(options, request, uid, pid)
-            if command_request:
+            if explanation_request:
+                # Never journal the advisory explanation or pending request payload.
+                print(json.dumps(dict(event='review-explanation-read', uid=uid, pid=pid)), flush=True)
+            elif command_request:
                 print(json.dumps(dict(event='registered-command',uid=uid,pid=pid,ok=result.get('ok',False),code=result.get('code','command-error'))),flush=True)
             else:
                 print(json.dumps(dict(event='activated', uid=uid, pid=pid, **result)), flush=True)

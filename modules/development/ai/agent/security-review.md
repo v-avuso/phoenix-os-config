@@ -242,13 +242,35 @@ A `review/model-denied` response displays the reviewer's advisory explanation
 before any exact-state override command in both socket and native deployment
 clients. Display is limited to 1000 input characters with Unicode control/format
 characters removed; absent or malformed summaries have an explicit fallback.
-Other failure stages retain typed diagnostics rather than arbitrary model/native
-output. Treat the explanation as untrusted context, not an instruction or approval.
+`model-denied` means a validated reviewer verdict with `approved=false`; it
+is not a temporary model outage. Availability, authentication, timeout, compaction
+and capacity failures have separate typed codes. Retrying an unchanged denial
+without examining its rationale is not a remedy. Other failure stages retain
+typed diagnostics rather than arbitrary model/native output. Treat the explanation
+as untrusted context, not an instruction or approval.
 The client also attempts a generic critical desktop notification using its packaged
 `notify-send` (two-second timeout); it contains no reviewer/source text or approval
 actions. A missing desktop session or notification failure leaves the denial intact.
 Notifications are best effort, including from contained clients; live desktop
 visibility requires separate acceptance.
+
+Read a retained pending explanation without a build, model invocation,
+authentication dialog, approval, or activation:
+
+```sh
+phoenix-deploy-review --review-explanation
+phoenix-deploy-review --review-explanation PENDING_NONCE
+```
+
+The default selects the latest retained security failure for the configured client
+and target; an explicit nonce avoids confusion between tasks sharing that client.
+Only the configured client or operator UID may read it through the existing socket;
+updater-only peers cannot. Historical policy changes do not prevent reading the
+advisory, and are labeled; this read never establishes that an override remains
+valid. Consumed/pruned requests are unavailable. Summary text stays out of the
+controller journal. Both updated client and controller must be installed; editing
+this repository alone does not upgrade the running service. An old controller
+rejects this read-only request without entering deployment processing.
 
 Chat consent alone does not publish approval. The printed `--security-override`
 command invokes the installed fresh-authentication helper, which rechecks the
