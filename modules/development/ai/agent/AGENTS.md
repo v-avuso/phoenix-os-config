@@ -240,3 +240,8 @@
 - For shutdown log markers, check each sink’s filter first: console WARN can omit
   INFO accepted by push. Prove ordinary delivery with actual RPC acknowledgement
   and a live gateway receipt, not console INFO, tail EOF or a post-restart memory tail.
+
+- For model-denied deployments, disclose a bounded, control-filtered advisory
+  summary to the requesting client before override guidance. Keep arbitrary native
+  stderr and other failure payloads private; test denial through the socket client
+  as well as the formatter so transport does not silently erase the explanation.

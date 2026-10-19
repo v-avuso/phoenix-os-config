@@ -536,7 +536,7 @@ FAILURE_STAGES = frozenset("request freeze baseline routine-policy build closure
 FAILURE_CODES = frozenset("source-capacity-exceeded wire-capacity-exceeded review-adapter-unsupported review-cli-incompatible-suspected review-model-unavailable-suspected review-rate-limit-suspected review-transport-failed-suspected invalid-or-denied rejected-or-failed timeout invalid-json io-failed operator-authentication-required rollback-incomplete unsafe-execution-guard mutation-still-running missing-binding baseline-changed profile-changed source-mismatch spool-recovery-required invalid-capability routine-resource-busy model-denied reviewer-invocation-failed review-invocation-failed review-authentication-failed review-authentication-missing review-startup-failed review-timeout review-output-limit review-context-oversized context-compacted context-request-invalid context-request-oversized schema-invalid binding-mismatch worker-envelope-invalid security-policy-changed security-approval-required approval-state-changed inspection-required pending-capacity pending-binding-invalid pending-caller-invalid pending-state-changed".split())
 
 
-def deployment_failure(result):
+def deployment_failure(result, config=None):
     """Display only bounded protocol diagnostics, shared by socket and operator."""
     stage, code = result.get("stage"), result.get("code")
     stage = stage if isinstance(stage, str) and stage in FAILURE_STAGES else "protocol"
@@ -562,6 +562,22 @@ def deployment_failure(result):
     if (isinstance(findings, list) and len(findings) <= 64 and all(
             isinstance(item, str) and re.fullmatch(r"[A-Za-z0-9_.:@-]{1,256}", item) for item in findings)):
         display["findings"] = findings
+    if stage == "review" and code == "model-denied":
+        # Model text is advisory, never protocol metadata or authorization.
+        summary = result.get("summary")
+        if isinstance(summary, str):
+            summary = ''.join(c for c in summary[:1000] if not unicodedata.category(c).startswith('C'))
+        if not isinstance(summary, str) or not summary:
+            summary = "No reviewer explanation was provided."
+        print("Reviewer explanation (advisory): " + summary, file=sys.stderr)
+        executable = (config or {}).get('notifySend')
+        if isinstance(executable, str) and Path(executable).is_absolute():
+            try:
+                run([executable, '--app-name=Phoenix deployment', '--urgency=critical',
+                     'Deployment declined by security review',
+                     'Activation did not occur. See the requesting client for the advisory explanation and authenticated override instructions.'], timeout=2)
+            except (OSError, ValueError, subprocess.SubprocessError):
+                pass  # Missing desktop/session must not obscure the denial.
     if "pendingNonce" in display:
         prefix = ("WARNING: Protected unit inspection requires approval: " if display.get("pendingKind") == "disruption"
                   else "CRITICAL: Security review failed for this exact pending deployment: ")
@@ -718,7 +734,7 @@ def main():
                     authorization.audit('client-authentication-failed', secrets.token_hex(16), os.getuid(), os.getpid(), named, 'human', category='authentication-failed-or-cancelled', trusted=False)
                     raise ValueError('operator authentication failed or cancelled') from None
                 if result.get("ok") is not True:
-                    deployment_failure(result)
+                    deployment_failure(result, config)
                 print(json.dumps(result, indent=2))
             else:
                 with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
@@ -733,7 +749,7 @@ def main():
                         response.extend(block)
                     result = json.loads(response)
                     if result.get("ok") is not True:
-                        deployment_failure(result)
+                        deployment_failure(result, config)
                     print(json.dumps(result, indent=2))
             return
         baseline_path = Path(config["baseline"]).resolve(strict=True)

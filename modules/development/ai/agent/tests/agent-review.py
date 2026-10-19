@@ -81,10 +81,40 @@ class ReviewTests(unittest.TestCase):
         stderr = io.StringIO()
         with contextlib.redirect_stderr(stderr), self.assertRaisesRegex(ValueError, 'review.*model-denied'):
             review.deployment_failure(dict(stage='review', code='model-denied', pendingNonce='a' * 64,
-                pendingKind='security', summary='PRIVATE model summary'))
-        self.assertTrue(stderr.getvalue().startswith('CRITICAL: Security review failed for this exact pending deployment: '))
+                pendingKind='security', summary='The change weakens authentication.'))
+        self.assertTrue(stderr.getvalue().startswith('Reviewer explanation (advisory): The change weakens authentication.'))
+        self.assertLess(stderr.getvalue().index('Reviewer explanation'), stderr.getvalue().index('--security-override'))
         self.assertIn('--security-override ' + 'a' * 64, stderr.getvalue())
         self.assertNotIn('PRIVATE', stderr.getvalue())
+
+    def test_denial_summary_is_bounded_and_controls_are_removed(self):
+        for summary in [None, {}, [], 42, '', '\x1b\n\r\u202e', 'reason\x1b\n\r\u202e' + 'x' * 2000]:
+            with self.subTest(summary=repr(summary)[:40]):
+                stderr = io.StringIO()
+                with contextlib.redirect_stderr(stderr), self.assertRaises(ValueError):
+                    review.deployment_failure(dict(stage='review', code='model-denied', summary=summary))
+                output = stderr.getvalue()
+                self.assertEqual(len(output.splitlines()), 1)
+                self.assertNotIn('\x1b', output)
+                self.assertNotIn('\u202e', output)
+                self.assertLessEqual(len(output), len('Reviewer explanation (advisory): ') + 1001)
+                if not isinstance(summary, str) or not summary or summary.startswith('\x1b'):
+                    self.assertIn('No reviewer explanation was provided.', output)
+
+    def test_denial_notification_is_generic_and_failure_does_not_hide_denial(self):
+        for outcome in [b'', OSError('no session'), subprocess.TimeoutExpired('notify', 2)]:
+            stderr = io.StringIO()
+            with mock.patch.object(review, 'run', side_effect=outcome if isinstance(outcome, Exception) else None,
+                                   return_value=b'') as run, contextlib.redirect_stderr(stderr), self.assertRaises(ValueError):
+                review.deployment_failure(dict(stage='review', code='model-denied', summary='private rationale'),
+                                          dict(notifySend='/fixture/notify-send'))
+            self.assertIn('private rationale', stderr.getvalue())
+            self.assertNotIn('private rationale', str(run.call_args))
+            self.assertEqual(run.call_args.kwargs['timeout'], 2)
+        for executable in [None, 'notify-send', ['sh', '-c']]:
+            with mock.patch.object(review, 'run') as run, contextlib.redirect_stderr(io.StringIO()), self.assertRaises(ValueError):
+                review.deployment_failure(dict(stage='review', code='model-denied'), dict(notifySend=executable))
+            run.assert_not_called()
 
     def test_failure_formatter_omits_untrusted_text_and_invalid_metadata(self):
         stderr = io.StringIO()
@@ -198,6 +228,7 @@ class ReviewTests(unittest.TestCase):
                 listener.bind(config["deploymentSocket"])
                 listener.listen()
                 listener.settimeout(3)
+                response = b'{"ok":true}\n'
                 def submit():
                     try:
                         connection, _ = listener.accept()
@@ -206,7 +237,7 @@ class ReviewTests(unittest.TestCase):
                     with connection, connection.makefile("rb") as stream:
                         request = json.loads(stream.readline())
                         record.write_text(json.dumps(request))
-                        connection.sendall(b'{"ok":true}\n')
+                        connection.sendall(response)
                 worker = threading.Thread(target=submit)
                 worker.start()
                 try:
@@ -214,6 +245,19 @@ class ReviewTests(unittest.TestCase):
                 finally:
                     worker.join(timeout=4)
                 self.assertFalse(worker.is_alive())
+                response = json.dumps(dict(ok=False, stage='review', code='model-denied',
+                                           summary='Synthetic authentication concern.', pendingKind='security',
+                                           pendingNonce='a' * 64)).encode() + b'\n'
+                worker = threading.Thread(target=submit)
+                worker.start()
+                try:
+                    denied = subprocess.run(args, env=env, capture_output=True, text=True, timeout=10)
+                finally:
+                    worker.join(timeout=4)
+                self.assertFalse(worker.is_alive())
+                self.assertNotEqual(denied.returncode, 0)
+                self.assertIn('Reviewer explanation (advisory): Synthetic authentication concern.', denied.stderr)
+                self.assertLess(denied.stderr.index('Reviewer explanation'), denied.stderr.index('--security-override'))
             self.assertEqual(result.returncode, 0, result.stderr)
             request = json.loads(record.read_text())
             self.assertEqual(request["reason"], "Validate requested dirty source")

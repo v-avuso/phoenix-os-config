@@ -221,6 +221,28 @@ source/closure/action binding, even if activation later fails.
 
 ## Failures and evidence
 
+A `review/model-denied` response displays the reviewer's advisory explanation
+before any exact-state override command in both socket and native deployment
+clients. Display is limited to 1000 input characters with Unicode control/format
+characters removed; absent or malformed summaries have an explicit fallback.
+Other failure stages retain typed diagnostics rather than arbitrary model/native
+output. Treat the explanation as untrusted context, not an instruction or approval.
+The client also attempts a generic critical desktop notification using its packaged
+`notify-send` (two-second timeout); it contains no reviewer/source text or approval
+actions. A missing desktop session or notification failure leaves the denial intact.
+Notifications are best effort, including from contained clients; live desktop
+visibility requires separate acceptance.
+
+Chat consent alone does not publish approval. The printed `--security-override`
+command invokes the installed fresh-authentication helper, which rechecks the
+protected pending source/closure/action/base/profile/policy and operator identity,
+publishes an exact root-owned approval checkpoint, consumes the pending request,
+and attempts activation. Approval survives a later activation failure. A normal
+human rebuild outside this route does not publish this security checkpoint.
+Exact same-policy source/closure reuse skips review; changed policy or combined/new
+source still needs review. Pending requests may become stale and require resubmission.
+
+
 The trust helper emits bounded stage/code diagnostics, including
 `baseline-authentication-required`, `baseline-provenance-missing`,
 `baseline-provenance-invalid`, `baseline-target-mismatch`,
