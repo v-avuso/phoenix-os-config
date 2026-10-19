@@ -243,7 +243,10 @@ before any exact-state override command in both socket and native deployment
 clients. Display is limited to 1000 input characters with Unicode control/format
 characters removed; absent or malformed summaries have an explicit fallback.
 `model-denied` means a validated reviewer verdict with `approved=false`; it
-is not a temporary model outage. Availability, authentication, timeout, compaction
+is displayed as “Deployment rejected by security reviewer” and is not a temporary
+model outage. Oversized errors explain the capacity limit and recommend reducing
+change scope or asking the operator about an inspected exact-state exception.
+Availability, authentication, timeout, compaction
 and capacity failures have separate typed codes. Retrying an unchanged denial
 without examining its rationale is not a remedy. Other failure stages retain
 typed diagnostics rather than arbitrary model/native output. Treat the explanation

@@ -589,6 +589,11 @@ def deployment_failure(result, config=None):
         print(prefix + json.dumps(display, ensure_ascii=True), file=sys.stderr)
         option = "--disruption-override " if display.get("pendingKind") == "disruption" else "--security-override "
         print("For an explicit authenticated exact-state override: phoenix-deploy-review " + option + display["pendingNonce"], file=sys.stderr)
+    if code == 'model-denied':
+        raise ValueError("Deployment rejected by security reviewer at " + stage + " (" + code + ").")
+    if code == 'review-context-oversized':
+        raise ValueError("Deployment failed at " + stage + " (" + code + "): review input exceeds supported capacity. "
+                         "Reduce the change scope; if that is impractical, ask the operator to inspect an explicit exact-state exception.")
     raise ValueError("Deployment failed at " + stage + " (" + code + ").")
 
 

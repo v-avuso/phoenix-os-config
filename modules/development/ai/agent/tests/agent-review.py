@@ -120,6 +120,15 @@ class ReviewTests(unittest.TestCase):
                     review.main()
                 self.assertEqual(json.loads(connection.sendall.call_args.args[0]), {'reviewExplanation': 'a' * 64})
 
+    def test_rejection_and_capacity_errors_have_actionable_human_labels(self):
+        for code, message in [('model-denied', 'Deployment rejected by security reviewer'),
+                              ('review-context-oversized', 'review input exceeds supported capacity')]:
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(ValueError) as failure:
+                review.deployment_failure(dict(stage='review', code=code))
+            self.assertIn(message, str(failure.exception))
+            if code == 'review-context-oversized':
+                self.assertIn('Reduce the change scope', str(failure.exception))
+
     def test_security_pending_failure_is_visibly_critical(self):
         stderr = io.StringIO()
         with contextlib.redirect_stderr(stderr), self.assertRaisesRegex(ValueError, 'review.*model-denied'):
