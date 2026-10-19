@@ -1,63 +1,99 @@
-"""Deploy only the Phoenix-owned adapter directory; never reconcile a vault."""
+"""Link the adapter directory into a vault; no copying or background refresh."""
 import argparse
+from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
+import secrets
+import stat
 
 
-def write_changed(path, data):
-    if path.exists() and path.read_bytes() == data:
-        return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(path.name + '.phoenix-tmp')
-    temporary.write_bytes(data)
-    os.replace(temporary, path)
+@contextmanager
+def vault_directory(vault, parts, create=False):
+    """Anchor writes to real vault directories, refusing redirected parents."""
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+    descriptor = os.open(vault, flags)
+    try:
+        for name in parts:
+            if create:
+                try:
+                    os.mkdir(name, dir_fd=descriptor)
+                except FileExistsError:
+                    pass
+            child = os.open(name, flags, dir_fd=descriptor)
+            os.close(descriptor)
+            descriptor = child
+        yield descriptor
+    finally:
+        os.close(descriptor)
 
 
-def deploy(source, vault, register=False):
-    if not source.is_dir():
-        raise RuntimeError(f'Adapter source unavailable: {source}')
-    target = vault / '3-misc/phoenix-typst/omd2typst'
-    if target.is_symlink():
-        raise RuntimeError(f'Refusing to overwrite symlink: {target}')
-    for item in source.glob('*.typ'):
-        destination = target / item.name
-        if destination.is_symlink():
-            raise RuntimeError(f'Refusing to overwrite symlink: {destination}')
-        write_changed(destination, item.read_bytes())
-    if register:
-        settings_file = vault / '.obsidian/plugins/omd-to-typst/data.json'
-        settings = json.loads(settings_file.read_text())
-        path = (target / 'phoenix-letter.typ').relative_to(vault).as_posix()
+def register_template(vault):
+    with vault_directory(vault, ('.obsidian', 'plugins', 'omd-to-typst')) as directory:
+        descriptor = os.open('data.json', os.O_RDONLY | os.O_NOFOLLOW, dir_fd=directory)
+        with os.fdopen(descriptor) as stream:
+            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                raise RuntimeError('Plugin settings must be a regular file')
+            settings = json.load(stream)
         entries = settings.setdefault('templates', [])
         entry = next((e for e in entries if e['name'] == 'phoenix-letter'), None)
         if entry is None:
             entry = {'name': 'phoenix-letter'}
             entries.append(entry)
-        entry.update(path=path, languages=['de', 'en'])
+        entry.update(path='3-misc/phoenix-typst/omd2typst/phoenix-letter.typ', languages=['de', 'en'])
         settings.update(defaultOutputFormat='pdf', outputMode='same-folder')
-        write_changed(settings_file, (json.dumps(settings, ensure_ascii=False, indent=2)+'\n').encode())
+        temporary = 'data.json.phoenix-' + secrets.token_hex(8)
+        try:
+            descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=directory)
+            with os.fdopen(descriptor, 'w') as stream:
+                stream.write(json.dumps(settings, ensure_ascii=False, indent=2) + '\n')
+            os.replace(temporary, 'data.json', src_dir_fd=directory, dst_dir_fd=directory)
+        finally:
+            try:
+                os.unlink(temporary, dir_fd=directory)
+            except FileNotFoundError:
+                pass
+
+
+def deploy(source, vault, register=False, migrate_copies=False):
+    source = source.resolve(strict=True)
+    if not source.is_dir():
+        raise RuntimeError(f'Adapter source unavailable: {source}')
+    # Only the adapter leaf is a link. No adapter contents are written via it.
+    with vault_directory(vault, ('3-misc', 'phoenix-typst'), create=True) as parent:
+        name, backup = 'omd2typst', '.omd2typst.before-symlink'
+        try:
+            existing = os.stat(name, dir_fd=parent, follow_symlinks=False)
+        except FileNotFoundError:
+            existing = None
+        if existing is not None and stat.S_ISLNK(existing.st_mode):
+            if os.readlink(name, dir_fd=parent) != str(source):
+                raise RuntimeError('Adapter link points elsewhere; refusing to replace it')
+        elif existing is not None:
+            if not migrate_copies or not stat.S_ISDIR(existing.st_mode):
+                raise RuntimeError('Existing adapter directory requires --migrate-copies; it will be preserved as .omd2typst.before-symlink')
+            # mkdir reserves the backup name without replacing any existing entry.
+            os.mkdir(backup, dir_fd=parent)
+            os.rename(name, backup, src_dir_fd=parent, dst_dir_fd=parent)
+            try:
+                os.symlink(str(source), name, dir_fd=parent)
+            except OSError:
+                os.rename(backup, name, src_dir_fd=parent, dst_dir_fd=parent)
+                raise
+        else:
+            os.symlink(str(source), name, dir_fd=parent)
+    if register:
+        register_template(vault)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', type=Path, required=True)
-    parser.add_argument('--register', action='store_true', help='Register template/settings once; reload Omd2Typst afterwards')
-    parser.add_argument('vault', type=Path, nargs='?')
+    parser.add_argument('--register', action='store_true', help='Register plugin settings once; reload Omd2Typst afterwards')
+    parser.add_argument('--migrate-copies', action='store_true', help='Preserve the existing adapter directory as .omd2typst.before-symlink')
+    parser.add_argument('vault', type=Path)
     args = parser.parse_args()
-    state = Path(os.environ.get('XDG_STATE_HOME', str(Path.home()/'.local/state'))) / 'phoenix-typst/vaults.json'
-    vaults = json.loads(state.read_text()) if state.exists() else []
-    if args.vault:
-        vault = str(args.vault.resolve())
-        state.parent.mkdir(parents=True, exist_ok=True)
-        deploy(args.source, Path(vault), args.register)
-        if vault not in vaults:
-            vaults.append(vault)
-            write_changed(state, (json.dumps(vaults)+'\n').encode())
-    else:
-        for vault in vaults:
-            if Path(vault).is_dir():
-                deploy(args.source, Path(vault))
+    deploy(args.source, args.vault.resolve(strict=True), args.register, args.migrate_copies)
 
 
 if __name__ == '__main__':

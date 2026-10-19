@@ -48,29 +48,42 @@ plugin disabled), register the vault once:
 phoenix-typst-vault --register /absolute/path/to/vault
 ```
 
-This copies the **whole adapter directory** into
-`3-misc/phoenix-typst/omd2typst/`, registers `phoenix-letter`, and sets PDF output
-to `same-folder`. Existing templates, default template and unrelated plugin settings
-are preserved. Enable/reload Omd2Typst after registration so it reads the settings.
-Choose **Export as PDF with template… → phoenix-letter** for letters; the existing
-general-document default remains unchanged. A note `folder/Name.md` exports to
-`folder/Name.pdf` (replacing an existing PDF).
+This creates one **directory symlink** at
+`3-misc/phoenix-typst/omd2typst` pointing to this checkout's
+`template-adapters/omd2typst` directory. Its parent folders remain regular vault
+directories. Saved edits and new adapters are visible through the link immediately;
+there is no copying service, timer, or persistent vault registry. Keep the configured
+checkout available. Edit adapters in Phoenix; editing through the vault link also
+edits the repository. A second machine needs its own valid local link.
 
-A user timer checks registered vaults every 30 seconds and copies only changed
-adapter files. No plugin settings are rewritten by the timer. It starts at login;
-run `phoenix-typst-vault` for immediate refresh. Registered absolute vault paths
-live privately in `$XDG_STATE_HOME/phoenix-typst/vaults.json` (normally
-`~/.local/state/phoenix-typst/vaults.json`). Remove a path there to stop its refresh.
-No personal vault path is committed.
+`--register` registers `phoenix-letter` and sets PDF output to `same-folder`.
+Existing templates, the default template and unrelated plugin settings are preserved.
+Enable/reload Omd2Typst after registration so it reads the settings. Choose
+**Export as PDF with template… → phoenix-letter** for letters. A note
+`folder/Name.md` exports to `folder/Name.pdf` (replacing an existing PDF).
 
-Directory symlinks were considered: Omd2Typst requires a vault-indexed `TFile`, so
-filesystem readability alone cannot establish discovery or watcher behavior.
-Live Electron symlink discovery was unavailable for verification; regular-file
-copying is the conservative fallback. The adapter is imported anew at every export,
-so subsequent content changes require no plugin reload. The installed 0.9.0
-converter/export test verifies this; live Obsidian indexing remains a user check.
-Do not edit generated vault adapters: edit Phoenix sources. Unexpected symlinks
-are refused, and unrelated vault templates are never deleted or rewritten.
+For an existing copied adapter directory, migrate once:
+
+```sh
+phoenix-typst-vault --migrate-copies /absolute/path/to/vault
+```
+
+The previous directory is preserved as hidden `.omd2typst.before-symlink` beside
+the new link; an existing backup or unexpected link is never replaced. Existing plugin
+paths remain valid, so migration needs no settings rewrite. The command refuses
+symlinked parent directories beneath the vault and never copies adapter contents
+through the destination link. To restore the copies, remove only the `omd2typst`
+symlink and rename `.omd2typst.before-symlink` back to `omd2typst`.
+
+Omd2Typst requires a vault-indexed `TFile`. The filesystem-backed installed-plugin
+fixture verifies export and rereading edited adapters through a directory link;
+live Obsidian directory-link discovery was also confirmed in the template list.
+Export from the live UI remains a user check. Check the template picker/export in
+Obsidian after creating the link; reload Obsidian if needed. Folder symlinks have
+[documented Obsidian limitations](https://obsidian.md/help/symlinks), especially
+with syncing and overlapping link targets. If this installation cannot index the
+folder reliably, retain regular copies and refresh them manually rather than
+introducing background polling.
 
 ## Letter frontmatter
 

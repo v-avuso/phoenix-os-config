@@ -41,14 +41,5 @@ in
       "typst/packages/local/phoenix-letter/0.1.0".source =
         config.lib.file.mkOutOfStoreSymlink "${sourceRoot}/templates/phoenix-letter";
     };
-    systemd.user.services.phoenix-typst-vault = {
-      Unit.Description = "Refresh registered Phoenix Typst vault adapters";
-      Service = { Type = "oneshot"; ExecStart = "${deploy}/bin/phoenix-typst-vault"; };
-    };
-    systemd.user.timers.phoenix-typst-vault = {
-      Unit.Description = "Keep registered Typst adapters current";
-      Timer = { OnStartupSec = "30s"; OnUnitActiveSec = "30s"; };
-      Install.WantedBy = [ "timers.target" ];
-    };
   };
 }
