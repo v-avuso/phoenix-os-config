@@ -61,6 +61,7 @@ let
   hardenedExtensions = with addons; [
     ublock-origin
     keepassxc-browser
+    leechblock-ng
     darkreader
     sponsorblock
     remove-youtube-s-suggestions
@@ -190,6 +191,24 @@ let
 
         settings = {
           "addon@darkreader.org".settings = darkReaderSettings;
+          # LeechBlock's time ranges are blocking windows; keep 18:00–19:00 open.
+          "leechblockng@proginosko.com".settings = {
+            numSets = "1";
+            clockTimeFormat = "2";
+            matchSubdomains = true;
+            sites1 = "instagram.com x.com tagesschau.de";
+            blockRE1 = "^(https?|file):\\/+([\\w:]+@)?(([^/]*\\.)?instagram\\.com|([^/]*\\.)?x\\.com|([^/]*\\.)?tagesschau\\.de)";
+            times1 = "0000-1800,1900-2400";
+            days1 = [
+              true
+              true
+              true
+              true
+              true
+              true
+              true
+            ];
+          };
         };
       };
     };
