@@ -28,6 +28,7 @@ nix build --impure --file commands/tests/commands-packaging.nix --no-link
 nix build --impure --file modules/security/tests/clamav-recovery.nix --no-link
 nix build --impure --file home/hypr-persist/tests/hypr-persist.nix --no-link
 nix build --impure --file home/kando/tests/packaging.nix --no-link
+nix build --impure --file modules/input/keyd/tests/symbols.nix --no-link
 python3 -B modules/input/mouse-side-button-debounce/test.py
 python3 -B home/thunar/tests/thunar-archive.py
 nix build --impure --file home/idle/tests/idle-command.nix --no-link

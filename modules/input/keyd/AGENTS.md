@@ -1,7 +1,9 @@
 # Symbol input
 
-- When changing symbol mappings, validate the full Compose path: keyd accepts
-  literal Unicode but emits a private Cancel sequence that applications may not
-  load. Prefer standard Compose macros on the configured US layout, keep the
-  user's normal locale Compose table available, and check every mapping with
-  `tests/symbols.py`; parser success alone does not prove character output.
+- When changing symbol mappings, prefer native XKB symbol levels and single
+  keyd chords. Literal Unicode uses keyd's private Compose encoding; even standard
+  Compose macros can behave differently between applications (observed in
+  Obsidian versus Codex). Parser/Compose-table success alone does not establish
+  application output. Check actual keyd press/release events through the configured
+  XKB state with `tests/symbols.nix`, verify both desktop consumers receive the
+  variant/options, and retain live application acceptance as a separate check.

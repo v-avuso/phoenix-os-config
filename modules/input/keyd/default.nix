@@ -1,7 +1,8 @@
 { ... }:
 
 {
-  services.xserver.xkb.options = "compose:menu";
+  # Keep ordinary US typing; the third/fourth levels provide desktop symbols.
+  services.xserver.xkb.variant = "altgr-weur";
 
   services.keyd = {
     enable = true;
@@ -9,20 +10,20 @@
       ids = [ "*" ];
       settings = {
         main.capslock = "layer(symbols)";
-        # Standard US Compose sequences avoid keyd-specific Cancel encodings.
+        # Single chords avoid application-specific Compose handling entirely.
         symbols = {
-          a = "macro(compose S-apostrophe a)";
-          o = "macro(compose S-apostrophe o)";
-          u = "macro(compose S-apostrophe u)";
-          s = "macro(compose s s)";
-          e = "macro(compose e equal)";
-          "-" = "macro(compose minus minus dot)";
-          grave = "macro(S-6)";
+          a = "G-a";
+          o = "G-o";
+          u = "G-u";
+          s = "G-8";
+          e = "G-5";
+          "-" = "G-minus";
+          grave = "S-6";
         };
         "symbols+shift" = {
-          a = "macro(compose S-apostrophe S-a)";
-          o = "macro(compose S-apostrophe S-o)";
-          u = "macro(compose S-apostrophe S-u)";
+          a = "G-S-a";
+          o = "G-S-o";
+          u = "G-S-u";
         };
       };
     };

@@ -4,13 +4,19 @@
 
 - Hold Caps Lock to type German letters and common symbols on the US desktop
   layout; Caps Lock itself never toggles capitalization.
-- Use standard Compose macros consistently so applications can use their built-in
-  Compose table rather than depending on keyd's private Cancel encoding.
+- Resolve each symbol with one keyboard chord, without application-dependent
+  Compose sequences, clipboard access or per-application remapping.
 
-`../default.nix` imports this module. `../../../home/input.nix` enables the normal
-locale Compose table for applications reading `~/.XCompose`. The module maps
-the Menu/Compose key to `Multi_key` with `compose:menu`; Hyprland and Plasma
-consume that same option. A physical Menu key consequently starts Compose.
+`../../default.nix` imports this module. It selects xkeyboard-config's maintained
+`us(altgr-weur)` variant, whose ordinary letters and punctuation retain US typing.
+Its third/fourth levels contain every required symbol. keyd emits single AltGr
+chords for those levels, and Shift+6 for the caret. Physical Right Alt also
+selects the variant's Western European symbols and dead keys.
+
+`../../../home/caelestia.nix` passes the system's variant/options to Hyprland;
+`../../../home/input.nix` does the same for Plasma. The normal locale Compose
+table remains available, but the Caps layer does not use it. Menu retains its
+normal meaning.
 
 | Hold Caps + | Output |
 | --- | --- |
@@ -21,13 +27,10 @@ consume that same option. A physical Menu key consequently starts Compose.
 | Minus | – |
 | Grave | ^ |
 
-Applications must support Compose input. Already-running applications may cache
-Compose tables; reopen the application after changing `~/.XCompose` if needed.
-The terminal console is not a desktop Compose client.
-
-Run `python3 -B modules/input/keyd/tests/symbols.py LIBXKBCOMMON COMPOSE KEYD XKB_CONFIG_ROOT`
-from the repository, supplying the selected packages' `lib/libxkbcommon.so`,
-`share/X11/locale/en_US.UTF-8/Compose`, `bin/keyd`, and `share/X11/xkb` paths. The fixture checks
-all ten mappings against libxkbcommon and validates the generated keyd config
-without injecting input. Physical shortcuts and application handling still need
-live desktop acceptance after deployment.
+Run `nix build --impure --file modules/input/keyd/tests/symbols.nix --no-link`.
+The isolated fixture compiles the pinned keyd parser/event engine, supplies real
+Caps/Shift/key press-release events, and passes emitted events through the
+configured XKB keyboard state. It checks all ten mappings, both modifier orders
+for uppercase, consecutive symbols, balanced releases and ordinary US input.
+It opens no keyboard devices and injects no live input. Physical shortcuts and
+application handling still need live desktop acceptance after deployment.
