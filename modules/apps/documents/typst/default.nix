@@ -24,12 +24,13 @@ in
   # profile makes it visible to Obsidian regardless of its desktop launcher.
   environment.systemPackages = [ pkgs.typst ];
 
-  # Metropole Report's declared defaults; TeX Gyre Heros is used by Briefs.
+  # Metropole Report defaults, Briefs' Heros and Phoenix letter's Liberation Sans.
   fonts.packages = with pkgs; [
     source-serif-pro
     source-sans-pro
     source-code-pro
     gyre-fonts
+    liberation_ttf
   ];
 
   home-manager.users.${user.name} = { config, ... }: {

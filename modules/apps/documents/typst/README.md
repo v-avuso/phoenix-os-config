@@ -17,10 +17,19 @@ fields, plugin installation and unrelated settings. Preserve upstream letter des
 
 Letter Pro provides A4 DIN 5008-B geometry, address window, sender header/return
 address, fold/hole marks and right-aligned multipage footers. Phoenix uses embedded
-TeX Gyre Heros (a Helvetica-compatible font already provided by `gyre-fonts`), with
-10pt body text, 14pt line baselines, 23pt paragraph baselines and 12.5pt headings.
-This follows the readable rhythm of the Letterhead reference export while retaining
-justification and German automatic hyphenation. The body restores `hyphenate: true`
+Liberation Sans (explicitly provided by `liberation_ttf`), with 10pt body text and
+12.5pt headings. Obsidian's PDF.js maps unembedded Helvetica to its Liberation Sans
+fallback; Poppler can choose a different substitute. Do not infer a viewer's actual
+glyphs from another renderer's font report. Phoenix embeds the installed font so
+its own output is consistent across viewers; different Liberation releases are
+not claimed to be identical.
+
+The spacing follows Letterhead 1.10.0's vector-export code: 14.5pt line baselines,
+21.5pt baseline distance across ordinary paragraph boundaries, 23pt after the
+standard greeting, 28.375pt from the preceding body line to a heading baseline,
+20.925pt from heading to body baseline, and 12.15pt information-row baselines.
+These are measured baseline distances, not CSS margins or Typst edge spacing.
+Following pages have a 25mm top margin. This retains justification and German automatic hyphenation. The body restores `hyphenate: true`
 **inside** the upstream body, after upstream disables it; hyphenation costs are
 unchanged. Body margins remain upstream's 25mm left and 20mm right.
 
@@ -32,8 +41,8 @@ This contrast check alone is not a claim of complete PDF accessibility.
 
 There is no cover or TOC. Keep the greeting, closing and sender name as separate
 plain Markdown paragraphs; no spacing commands or new YAML fields are required.
-The conventional “Mit freundlichen Grüßen” paragraph gets extra separation and
-stays with the following signature. A plain paragraph exactly matching
+The conventional “Mit freundlichen Grüßen” paragraph gets about 31.14pt baseline
+separation from the preceding paragraph and stays with the following signature. A plain paragraph exactly matching
 `sender_name` receives about 21mm baseline-to-baseline signing space above it;
 ordinary inline mentions are unchanged. The template does not append duplicate
 names or invent a greeting. Sender address remains a single line separated with
@@ -42,11 +51,20 @@ names or invent a greeting. Sender address remains a single line separated with
 The adapter neutralizes enumerated-list layout in multiline address metadata:
 Omd2Typst otherwise interprets a line such as `29. Kammer` as Typst enumeration,
 adding unwanted spacing. Addresses remain compact with the number retained.
-The fixture checks the recipient inside the nominal 85 × 45mm Form B field
-(x=20–105mm, y=45–90mm), with recipient text starting near y=62.7mm. This is a
+Letter Pro normally bottom-aligns its return line when postal annotations are
+absent. Phoenix supplies empty annotation content to select the existing three-row
+layout: return line in the top 5mm row, reserved postal area below, and recipient
+zone starting at 62.7mm. This raises the return line without silently moving the
+recipient into the reserved area. Letterhead's compact recipient begins earlier;
+matching it is not required for matching body typography.
+
+The fixture checks the return row separately from the recipient and checks the
+nominal 85 × 45mm Form B field (x=20–105mm, y=45–90mm), with recipient text starting near y=62.7mm. This is a
 PDF geometry check; actual window visibility also depends on envelope and folding.
-Do a print/fold check before first postal use. Keep sender/recipient lines short
-enough for the window; the template does not shrink overflowing addresses silently.
+See the [Klett DIN 5008 teaching diagram](https://www.klett.de/inhalt/media_fast_path/32/DO01_3-12-007171_Onlinematerialien_DIN5008.58281.pdf)
+for the 17.7mm upper zone and 27.3mm recipient zone. This is not a certification
+against the full paid standard. Do a print/fold check before first postal use.
+Keep sender/recipient lines short enough for the window; the template does not shrink overflowing addresses silently.
 
 Home Manager installs the wrapper as a local package link to the configured
 `user.repoDirectory`: saved design changes are immediately visible to Typst. This

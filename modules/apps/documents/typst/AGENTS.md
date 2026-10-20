@@ -16,3 +16,10 @@
   never write adapter content through the link, and preserve existing copies on
   migration. Missing live indexing evidence is not proof of incompatibility; seek
   the specific Obsidian picker/export check before choosing a fallback.
+
+- Match reference typography against its actual exporter and the intended viewer's
+  font mapping; Poppler substitution does not establish Obsidian glyphs. Measure
+  line, heading and information-row baselines separately, not just one paragraph gap.
+- Check the return-address row separately from recipient/window containment.
+  Letter Pro's no-annotations shortcut bottom-aligns the return line; empty content
+  selects its three-row layout without changing the DIN B recipient start.
