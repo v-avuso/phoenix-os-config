@@ -8,7 +8,16 @@
 
 #let template(fm: (:), doc) = {
   // Explicit allowlist. Never forward arbitrary frontmatter to the design.
-  let lines(value) = if type(value) == str { value.split("\n").join(linebreak()) } else { value }
+  let lines(value) = {
+    // The converter treats a literal address line such as "29. Kammer" as
+    // an enum. Render its number as address text, without list block spacing.
+    show enum: list => list.children.enumerate().map(((index, item)) => {
+      let number = item.number
+      if number == none { number = list.start + index }
+      [#number. #item.body]
+    }).join()
+    if type(value) == str { value.split("\n").join(linebreak()) } else { value }
+  }
   phoenix-letter(
     sender: (
       name: fm.at("sender_name", default: none),

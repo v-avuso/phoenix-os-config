@@ -5,28 +5,56 @@
   sender: (:), recipient: none, subject: none, date: none,
   reference: none, language: "de", body,
 ) = {
-  set text(lang: language, size: 11pt)
+  let muted = rgb("#666666")
+  let name = sender.at("name", default: none)
+  set text(lang: language, size: 10pt, fill: rgb("#1a1a1a"))
   letter-simple(
     format: "DIN-5008-B",
-    font: "Source Sans Pro",
+    // Helvetica-compatible, already installed by Phoenix; embedded by Typst.
+    font: "TeX Gyre Heros",
     sender: (
-      name: sender.at("name", default: none),
+      name: name,
       address: sender.at("address", default: none),
       extra: sender.at("extra", default: none),
     ),
     recipient: recipient,
     subject: subject,
-    date: date,
-    reference-signs: if reference == none { none } else { (([Aktenzeichen], [#reference]),) },
+    information-box: pad(right: 10mm, {
+      set text(size: 9pt)
+      set par(justify: false, leading: 0.45em, spacing: 0pt)
+      let rows = ()
+      if reference != none {
+        rows += (text(fill: muted)[Aktenzeichen], align(right, reference))
+      }
+      if date != none {
+        rows += (text(fill: muted)[Datum], align(right, date))
+      }
+      grid(columns: (auto, 1fr), column-gutter: 3mm, row-gutter: 1.2mm, ..rows)
+    }),
     folding-marks: true,
     hole-mark: true,
-    page-numbering: (current, total) => [Seite #current von #total],
+    page-numbering: (current, total) => text(size: 9pt, fill: muted)[Seite #current von #total],
     {
       // Must be INSIDE letter-simple's body: upstream sets hyphenate: false.
-      set text(lang: language, hyphenate: true)
-      set par(justify: true, leading: 0.65em, spacing: 0.8em)
+      // Fixed text edges give 14pt baselines and 23pt paragraph baselines,
+      // matching the reference letter's rhythm without Markdown spacers.
+      set text(lang: language, hyphenate: true, top-edge: 0.75em, bottom-edge: -0.25em)
+      set par(justify: true, leading: 4pt, spacing: 13pt)
       set heading(numbering: none)
-      show heading: set block(sticky: true, above: 1.2em, below: 0.5em)
+      show heading: set text(size: 12.5pt)
+      show heading: set block(sticky: true, above: 6mm, below: 2mm)
+      // Content stays in Markdown. Only whole, plain paragraphs are styled;
+      // mentions of the sender within ordinary text are unaffected.
+      show par: paragraph => {
+        if name != none and paragraph.body == text(name) {
+          block(above: 17.6mm, below: 0pt, breakable: false, paragraph)
+        } else if paragraph.body == [Mit freundlichen Grüßen] {
+          block(above: 6mm, below: 0pt, sticky: true, paragraph)
+        } else {
+          paragraph
+        }
+      }
+      v(1.6mm)
       body
     },
   )

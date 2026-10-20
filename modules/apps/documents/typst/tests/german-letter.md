@@ -8,6 +8,7 @@ sender_address: Musterstraße 12, 12345 Musterstadt
 sender_extra: erika@example.invalid
 recipient: |
   Sozialgericht Musterstadt
+  29. Kammer
   Gerichtsstraße 1
   12345 Musterstadt
 chatgpt_chat: PRIVATE_SENTINEL_DO_NOT_RENDER

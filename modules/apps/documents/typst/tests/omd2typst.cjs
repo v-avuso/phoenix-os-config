@@ -34,9 +34,11 @@ vm.runInNewContext(fs.readFileSync(plugin,'utf8')+'\nmodule.exports.test={render
  assert(text.includes('Erika Beispiel') && text.includes('Sozialgericht Musterstadt'));
  const pages=Number(info.match(/Pages:\s+(\d+)/)[1]); assert(pages>=3);
  for(let i=1;i<=pages;i++) assert(text.includes(`Seite ${i} von ${pages}`));
- assert(/Verhältnis[-‐\u00ad]\s*\nmäßigkeitsprüfung/u.test(text),'Expected German compound-word hyphenation');
+ assert(/\p{L}{5,}[-‐\u00ad]\s*\n\p{L}/u.test(text),'Expected automatic German hyphenation');
+ cp.execFileSync('python3',[path.join(__dirname,'layout.py'),pdf],{stdio:'inherit'});
  // Source edits are read again by Typst on the next export, without plugin cache.
- const target=path.join(root,template), original=fs.readFileSync(target,'utf8');
+ const target=fs.realpathSync(path.join(root,template)), original=fs.readFileSync(target,'utf8');
+ assert(target.startsWith(path.resolve(root, '..') + path.sep) && !target.startsWith(path.resolve(__dirname, '..') + path.sep), 'Reload test requires a disposable adapter copy');
  fs.writeFileSync(target,original.replace('    doc,','    [ADAPTER-RELOAD-PROBE #doc],'));
  await api.exportNote(new TFile(note),'pdf',entry,{outputMode:'same-folder',defaultLanguage:'de'},app,{});
  assert(extract().includes('ADAPTER-RELOAD-PROBE'));
