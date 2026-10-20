@@ -36,8 +36,10 @@ control. Letter Pro still owns page geometry, address zones and footer placement
 
 Aktenzeichen and date share the right-hand information block beside the recipient,
 with values aligned to the body's right edge. They no longer add rows above the
-subject. Multipage footers read “Seite X von Y” in 9pt `#666666` (about 5.74:1
-contrast on white, above the [WCAG normal-text 4.5:1 threshold](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html)).
+subject. Multipage footers read “Seite X von Y” in 9pt. Footers and the small return
+address use `#767676`: 4.542:1 against white, the lightest 8-bit neutral gray meeting the [WCAG normal-text 4.5:1 threshold](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html).
+`#777777` gives only 4.478:1. This fixed calculated value avoids a runtime color
+solver. It is a digital contrast check, not a guarantee for every printer or paper.
 This contrast check alone is not a claim of complete PDF accessibility.
 
 There is no cover or TOC. Keep greeting and closing as plain Markdown paragraphs;
@@ -58,7 +60,8 @@ do not require moving the whole section to a new page.
 The adapter neutralizes enumerated-list layout in multiline address metadata:
 Omd2Typst otherwise interprets a line such as `29. Kammer` as Typst enumeration,
 adding unwanted spacing. Addresses remain compact with the number retained.
-Phoenix places the return address in the top 5mm row, with a 1.2mm gap before
+Phoenix separates return-address parts with middle dots and places that row
+in the top 5mm, with a 1.2mm gap before
 an 80mm rule. The reserved postal area and recipient zone starting at 62.7mm
 remain unchanged. Letterhead’s compact recipient begins earlier; it is not used
 to redefine the DIN B recipient zone. Fold marks extend 5mm from the left page

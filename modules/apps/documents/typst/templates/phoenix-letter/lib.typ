@@ -28,6 +28,8 @@
   reference: none, language: "de", signature: none, body,
 ) = {
   let muted = rgb("#666666")
+  // Lightest 8-bit neutral gray meeting 4.5:1 against white (4.542:1).
+  let secondary = rgb("#767676")
   let name = sender.at("name", default: none)
   let address = sender.at("address", default: none)
   for (field, value) in (("sender_name", name), ("sender_address", address)) {
@@ -60,10 +62,10 @@
       )),
     ),
     address-box: address-tribox({
-      let parts = (name, address).filter(value => value != none and value != "")
+      let parts = (name,) + address.split(", ")
       if parts.len() > 0 {
         pad(left: 5mm, top: 0.5mm, stack(dir: ttb, spacing: 1.2mm,
-          text(size: 7pt, top-edge: 0.75em, bottom-edge: -0.25em, parts.join(", ")),
+          text(size: 7pt, fill: secondary, top-edge: 0.75em, bottom-edge: -0.25em, parts.join(" · ")),
           line(length: 80mm, stroke: 0.25pt + black),
         ))
       }
@@ -82,7 +84,7 @@
     }),
     folding-marks: false,
     hole-mark: false,
-    page-numbering: (current, total) => text(size: 9pt, fill: muted)[Seite #current von #total],
+    page-numbering: (current, total) => text(size: 9pt, fill: secondary)[Seite #current von #total],
     {
       if subject != none {
         pad(right: 10%, strong(subject))

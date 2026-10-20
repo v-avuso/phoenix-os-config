@@ -33,7 +33,7 @@ assert all(20 * mm <= float(b['xMin']) < float(b['xMax']) <= 105 * mm for b in a
 assert 62 * mm <= float(address[0]['yMin']) and float(address[-1]['yMax']) <= 90 * mm
 steps = [float(b['yMin']) - float(a['yMin']) for a, b in zip(address, address[1:])]
 assert max(steps) - min(steps) < 0.2, 'Numbered chamber line introduced list spacing'
-return_line = next(box for text, box in window if text.startswith('Erika Beispiel,'))
+return_line = next(box for text, box in window if text.startswith('Erika Beispiel ·'))
 assert 45 * mm <= float(return_line['yMin']) < 50 * mm, 'Return line must occupy the top 5mm row'
 reference = find('Aktenzeichen', pages[0])[1]
 assert float(reference['xMin']) >= 120 * mm and float(reference['yMin']) < 65 * mm
