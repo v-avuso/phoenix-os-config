@@ -1,6 +1,7 @@
 {
   config,
   inputs,
+  nixosConfig,
   lib,
   pkgs,
   phoenixKandoHyprLua,
@@ -168,6 +169,7 @@ let
       (builtins.readFile ./idle/blank.lua);
 
   hyprUser = ''
+    hl.config({ input = { kb_options = ${builtins.toJSON nixosConfig.services.xserver.xkb.options} } })
     ${idleBlankLua}
     ${phoenixKandoHyprLua}
     ${phoenixAgentGuiHyprLua}

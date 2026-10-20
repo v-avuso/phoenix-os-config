@@ -5,7 +5,7 @@
     ./desktop.nix
     ./development
     ./home-manager.nix
-    ./input/keyd.nix
+    ./input/keyd
     ./security
     ./services
   ];
