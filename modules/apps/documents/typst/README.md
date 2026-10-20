@@ -25,6 +25,13 @@ glyphs from another renderer's font report. Phoenix embeds the installed font so
 its own output is consistent across viewers; different Liberation releases are
 not claimed to be identical.
 
+Letterhead’s readable paragraph rhythm and restrained letter styling informed the
+Phoenix design. We chose Typst with Omd2Typst because the tested Letterhead vector
+export did not provide the required German automatic hyphenation and justification.
+The reusable Typst package also supports CLI use outside Obsidian. Letter Pro
+remains the layout foundation; Phoenix adapts typography and metadata without
+forking upstream. Letterhead is credited as a design reference, not bundled code.
+
 The spacing follows Letterhead 1.10.0's vector-export code: 14.5pt line baselines,
 21.5pt baseline distance across ordinary paragraph boundaries, 23pt after the
 standard greeting, 28.375pt from the preceding body line to a heading baseline,
