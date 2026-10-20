@@ -9,15 +9,14 @@
 #let template(fm: (:), doc) = {
   // Explicit allowlist. Never forward arbitrary frontmatter to the design.
   let lines(value) = {
-    // The converter treats a literal address line such as "29. Kammer" as
-    // an enum. Render its number as address text, without list block spacing.
-    show enum: list => list.children.enumerate().map(((index, item)) => {
-      let number = item.number
-      if number == none { number = list.start + index }
-      [#number. #item.body]
-    }).join()
-    if type(value) == str { value.split("\n").join(linebreak()) } else { value }
+    // Rebuild numbered address items as text before list realization/tagging.
+    if type(value) == str { return value.split("\n").join(linebreak()) }
+    if type(value) != content { return value }
+    if value.func() == enum.item { return [#value.number. #lines(value.body)] }
+    if value.has("children") { return value.children.map(lines).join() }
+    value
   }
+
   let recipient = fm.at("recipient", default: none)
   assert(recipient != none and recipient != [] and
     (type(recipient) != str or recipient.trim() != ""),
@@ -34,7 +33,18 @@
     reference: fm.at("reference", default: none),
     signature: fm.at("signature", default: none),
     language: fm.at("language", default: "de"),
-    doc,
+    context {
+      // Notes often use ## for their first section. Preserve relative hierarchy.
+      let depths = query(heading).map(h => h.depth)
+      let base = if depths.len() == 0 { 1 } else { calc.min(..depths) }
+      show heading.where(depth: base + 0): set heading(level: 1)
+      show heading.where(depth: base + 1): set heading(level: 2)
+      show heading.where(depth: base + 2): set heading(level: 3)
+      show heading.where(depth: base + 3): set heading(level: 4)
+      show heading.where(depth: base + 4): set heading(level: 5)
+      show heading.where(depth: base + 5): set heading(level: 6)
+      doc
+    },
   )
 }
 

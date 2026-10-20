@@ -43,11 +43,13 @@ control. Letter Pro still owns page geometry, address zones and footer placement
 
 Aktenzeichen and date share the right-hand information block beside the recipient,
 with values aligned to the body's right edge. They no longer add rows above the
-subject. Multipage footers read “Seite X von Y” in 9pt. Footers and the small return
-address use `#767676`: 4.542:1 against white, the lightest 8-bit neutral gray meeting the [WCAG normal-text 4.5:1 threshold](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html).
+subject. Multipage footers read “Seite X von Y” in 9pt `#767676`: 4.542:1 against white, the lightest 8-bit neutral gray meeting the [WCAG normal-text 4.5:1 threshold](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html).
 `#777777` gives only 4.478:1. This fixed calculated value avoids a runtime color
 solver. It is a digital contrast check, not a guarantee for every printer or paper.
-This contrast check alone is not a claim of complete PDF accessibility.
+The small return address instead uses 8pt `#666666` (5.74:1 against white) for
+better small-text readability. The measured row must fit its 80mm field; overly
+long sender details fail with an explicit error rather than wrap or clip. These
+contrast checks alone are not a claim of complete PDF accessibility.
 
 There is no cover or TOC. Keep greeting and closing as plain Markdown paragraphs;
 no spacing commands are required. “Mit freundlichen Grüßen” gets about 31.14pt
@@ -62,11 +64,18 @@ line separated with `, `; upstream splits it into header lines.
 
 Headings use a sticky block, keeping them with following text. Typst’s normal
 widow/orphan protection remains enabled; two following lines are acceptable and
-do not require moving the whole section to a new page.
+do not require moving the whole section to a new page. Typst 0.14.2 does not expose
+a reliable three-line minimum through its native layout settings; its widow/orphan
+costs control single-line fragments, not a configurable line count. We retain the
+two-line behavior instead of estimating line heights or inserting page breaks.
+See [upstream issue #5931](https://github.com/typst/typst/issues/5931).
 
 The adapter neutralizes enumerated-list layout in multiline address metadata:
-Omd2Typst otherwise interprets a line such as `29. Kammer` as Typst enumeration,
-adding unwanted spacing. Addresses remain compact with the number retained.
+Omd2Typst otherwise interprets a line such as `29. Kammer` as Typst enumeration.
+The adapter reconstructs these address items as text before list realization,
+keeping compact spacing without invalid list tags. Body headings remain semantic
+Typst headings; the adapter normalizes their shallowest Markdown depth to H1,
+preserving relative hierarchy. Skipped nested levels still fail PDF/UA checks.
 Phoenix separates return-address parts with middle dots and places that row
 in the top 5mm, with a 1.2mm gap before
 an 80mm rule. The reserved postal area and recipient zone starting at 62.7mm
@@ -216,27 +225,58 @@ subject: "…", date: "…", reference: "…", language: "de")`.
 No Obsidian or Markdown converter is needed. The source package also supports
 relative imports for repository-local use; upstream must still be available.
 
-Focused checks (Node, Typst and Poppler `pdftotext`/`pdfinfo` on PATH):
+## Links and accessibility checks
+
+Body links use the normal dark text color and a native 0.6pt dotted underline
+with round caps. They retain clickable annotations and semantic link tags across
+line wraps. For standalone use, `link-underline: "solid"` switches to a conventional
+solid underline; the default is `"dotted"`. The wrapper owns this style, not note
+content or link destinations.
+
+Ordinary Omd2Typst PDF export is unchanged. For opt-in strict compilation of an
+exported Typst source, use the vault as the root (the adapter import is vault-relative):
 
 ```sh
-typst compile modules/apps/documents/typst/tests/dates.typ /tmp/dates.pdf
-python3 modules/apps/documents/typst/tests/deployment.py
-# Use a disposable vault; its adapter link must point to a disposable copy:
-node modules/apps/documents/typst/tests/omd2typst.cjs /path/to/omd-to-typst/main.js /tmp/test-vault
+typst compile --root /path/to/vault --pdf-standard ua-1 /path/to/vault/letter.typ /tmp/letter-ua.pdf
+verapdf --flavour ua1 /tmp/letter-ua.pdf
 ```
 
-The latter executes the installed plugin's actual WASM converter and PDF export
-path with filesystem-backed Obsidian test doubles. It checks a representative
-three-page German letter, automatic hyphenation, sender/recipient, page totals,
-metadata exclusion, same-folder output, required-field rejection and generated/overridden/suppressed closing names and rereading adapter edits. Its PDF layout
-check also measures window bounds, numbered chamber-line spacing, paragraph rhythm,
-signature space, a separately checked top-right sender block and embedded fonts. Never aim the reload test at the live vault or
-the repository adapter: it deliberately edits its disposable source copy. It does not
-prove live Electron template discovery. The expanded installed-plugin suite took
-about 1.1 seconds on the development machine with dependencies already installed;
-this is an observation, not a performance guarantee. Run these focused checks for
-letter changes rather than for unrelated repository edits. Inspect PDFs visually as well; source
-fixtures use fictional identity data. Compilation alone cannot establish layout.
+A nonempty `subject` supplies the required PDF title; `language: de` marks German.
+The first semantic section must be H1 and deeper sections must not skip levels.
+Fold/hole marks and the return rule are `pdf.artifact` decorations. Page furniture
+is excluded from the body reading sequence. Private YAML stays outside rendered
+content and PDF metadata; converter-generated `.typ` files may still contain it.
+
+The automated runner compiles standalone/date fixtures, uses the installed
+Omd2Typst WASM converter and export path in a disposable vault, then performs
+strict UA compilation, independent veraPDF UA-1 validation and focused pypdf checks.
+It checks title/language, heading hierarchy, expected reading sequence, artifacts,
+wrapped clickable links, metadata exclusion, Liberation Sans regular/bold subsets,
+window geometry, hyphenation and page totals. It also rejects an invalid heading
+hierarchy and exercises 39 pagination variants and long return addresses.
+A validator failure fails the test; veraPDF's report is inspected, not just its exit code.
+
+Run with dependencies from the repository's locked nixpkgs, without activation:
+
+```sh
+letter_nixpkgs="$(nix eval --raw --no-write-lock-file .#nixosConfigurations.metal.pkgs.path)"
+nix-shell -I "nixpkgs=$letter_nixpkgs" \
+  -p typst nodejs poppler-utils verapdf 'python3.withPackages (p: [ p.pypdf ])' \
+  --run 'python3 modules/apps/documents/typst/tests/run.py /path/to/omd-to-typst/main.js'
+```
+
+The first dependency download includes veraPDF's Java runtime; cached checks run
+in seconds. `PHOENIX_PDF_PYTHON` may select another Python with pypdf; `VERAPDF` may
+select another validator executable. The runner creates and removes its own test
+vault and adapter copy. Never aim the lower-level reload test directly at a live
+vault or repository adapter: it deliberately edits its disposable copy.
+
+These checks cover machine-testable PDF/UA requirements and representative reading
+order, not screen-reader usability or every content-dependent accessibility rule.
+Review reading order, meaningful link text and any added tables/images manually.
+The installed-plugin fixture uses filesystem-backed Obsidian doubles; it does not
+prove live Electron template discovery. Inspect PDFs visually as well; fixture
+identity data is fictional. Compilation alone cannot establish accessibility.
 
 ## Upstream templates
 

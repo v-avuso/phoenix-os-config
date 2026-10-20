@@ -25,7 +25,8 @@
 // Presentation only: no Obsidian metadata or private identity defaults.
 #let phoenix-letter(
   sender: (:), recipient: none, subject: none, date: none,
-  reference: none, language: "de", signature: none, body,
+  reference: none, language: "de", signature: none,
+  link-underline: "dotted", body,
 ) = {
   let muted = rgb("#666666")
   // Lightest 8-bit neutral gray meeting 4.5:1 against white (4.542:1).
@@ -48,7 +49,7 @@
   set page(foreground: context {
     if here().page() == 1 {
       for (position, length) in ((105mm, 5mm), (148.5mm, 8mm), (210mm, 5mm)) {
-        place(top + left, dy: position, line(length: length, stroke: 0.25pt + black))
+        place(top + left, dy: position, pdf.artifact(line(length: length, stroke: 0.25pt + black)))
       }
     }
   })
@@ -65,8 +66,13 @@
       let parts = (name,) + address.split(", ")
       if parts.len() > 0 {
         pad(left: 5mm, top: 0.5mm, stack(dir: ttb, spacing: 1.2mm,
-          text(size: 7pt, fill: secondary, top-edge: 0.75em, bottom-edge: -0.25em, parts.join(" · ")),
-          line(length: 80mm, stroke: 0.25pt + black),
+          context {
+            let row = text(size: 8pt, fill: muted, top-edge: 0.75em, bottom-edge: -0.25em, parts.join(" · "))
+            assert(measure(row).width <= 80mm,
+              message: "Phoenix letter: Rücksendeadresse ist zu lang für das 80-mm-Feld. Absenderangaben kürzen.")
+            row
+          },
+          pdf.artifact(line(length: 80mm, stroke: 0.25pt + black)),
         ))
       }
     }, [], recipient-box(recipient)),
@@ -93,6 +99,11 @@
       // Explicit text edges preserve 14.5pt line and 21.5pt paragraph baselines.
       set text(lang: language, hyphenate: true, top-edge: 0.75em, bottom-edge: -0.25em)
       set par(justify: true, leading: 4.5pt, spacing: 11.5pt)
+      // Retain the original link element so PDF annotations and tags survive.
+      show link: element => underline(
+        stroke: (paint: rgb("#1a1a1a"), thickness: 0.6pt, dash: link-underline, cap: "round"),
+        offset: 1.8pt, element,
+      )
       set heading(numbering: none)
       show heading: set text(size: 12.5pt)
       show heading: set block(sticky: true, above: 16.5pt, below: 10.3pt)

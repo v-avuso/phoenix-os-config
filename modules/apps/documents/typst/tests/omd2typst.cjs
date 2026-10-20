@@ -37,10 +37,21 @@ vm.runInNewContext(fs.readFileSync(plugin,'utf8')+'\nmodule.exports.test={render
  for(let i=1;i<=pages;i++) assert(text.includes(`Seite ${i} von ${pages}`));
  assert(/\p{L}{5,}[-‐\u00ad]\s*\n\p{L}/u.test(text),'Expected automatic German hyphenation');
  cp.execFileSync('python3',[path.join(__dirname,'layout.py'),pdf],{stdio:'inherit'});
+ // Strict opt-in compile of the actual converter output; normal export stays unchanged.
+ const uaSource=path.join(root,'letters/representative.typ');
+ const uaPdf=path.join(root,'letters/representative-ua.pdf');
+ fs.writeFileSync(uaSource,await api.renderToTypst(markdown,'/'+template));
+ cp.execFileSync('typst',['compile','--root',root,'--pdf-standard','ua-1',uaSource,uaPdf],{stdio:'inherit'});
+ cp.execFileSync(process.env.PHOENIX_PDF_PYTHON || 'python3',[path.join(__dirname,'accessibility.py'),uaPdf],{stdio:'inherit'});
+ const invalidSource=path.join(root,'letters/invalid-hierarchy.typ');
+ fs.writeFileSync(invalidSource,fs.readFileSync(uaSource,'utf8').replace('=== Rechtlicher Rahmen','==== Rechtlicher Rahmen'));
+ const invalid=cp.spawnSync('typst',['compile','--root',root,'--pdf-standard','ua-1',invalidSource,path.join(root,'letters/invalid.pdf')],{encoding:'utf8'});
+ assert.notEqual(invalid.status,0,'Skipped heading levels must fail strict compilation');
+ assert(invalid.stderr.includes('heading'),invalid.stderr);
  // Source edits are read again by Typst on the next export, without plugin cache.
  const target=fs.realpathSync(path.join(root,template)), original=fs.readFileSync(target,'utf8');
  assert(target.startsWith(path.resolve(root, '..') + path.sep) && !target.startsWith(path.resolve(__dirname, '..') + path.sep), 'Reload test requires a disposable adapter copy');
- fs.writeFileSync(target,original.replace('    doc,','    [ADAPTER-RELOAD-PROBE #doc],'));
+ fs.writeFileSync(target,original.replace('      doc\n','      [ADAPTER-RELOAD-PROBE #doc]\n'));
  await api.exportNote(new TFile(note),'pdf',entry,{outputMode:'same-folder',defaultLanguage:'de'},app,{});
  assert(extract().includes('ADAPTER-RELOAD-PROBE'));
  fs.writeFileSync(target,original);
@@ -72,6 +83,15 @@ vm.runInNewContext(fs.readFileSync(plugin,'utf8')+'\nmodule.exports.test={render
   const tail=cp.execFileSync('pdftotext',[path.join(root,'letters/automatic-name.pdf'),'-'],{encoding:'utf8'}).split('Mit freundlichen Grüßen')[1];
   assert(expected ? tail.includes(expected) : !tail.includes('Erika Beispiel'));
  }
+ // Longer return addresses must fit at 8pt; reject overflow instead of clipping.
+ const longNote='letters/long-sender.md';
+ const longName='Erika Beispiel';
+ const longAddress='Friedrich-Wilhelm-Straße 27, 12161 Berlin';
+ fs.writeFileSync(path.join(root,longNote),markdown.replace('Musterstraße 12, 12345 Musterstadt',longAddress));
+ await api.exportNote(new TFile(longNote),'pdf',entry,{outputMode:'same-folder'},app,{});
+ cp.execFileSync('python3',[path.join(__dirname,'window.py'),path.join(root,'letters/long-sender.pdf'),`${longName} · ${longAddress.replace(', ',' · ')}`],{stdio:'inherit'});
+ fs.writeFileSync(path.join(root,longNote),markdown.replace('Musterstraße 12, 12345 Musterstadt','Eine außergewöhnlich lange Straßenbezeichnung mit sehr vielen zusätzlichen Adressangaben 123, 12345 Musterstadt'));
+ await assert.rejects(api.exportNote(new TFile(longNote),'pdf',entry,{outputMode:'same-folder'},app,{}), /Rücksendeadresse ist zu lang/);
  // Six lines fit; a seventh must be detected outside the nominal window.
  const windowNote='letters/window.md';
  const windowPdf=path.join(root,'letters/window.pdf');

@@ -56,7 +56,7 @@ assert abs(float(second_line['yMin']) - float(first_line['yMin']) - 14.5) < 0.2
 assert abs(float(first_line['yMin']) - float(heading_box['yMin']) - 22.745) < 0.2
 
 section = next(i for i, (text, _) in enumerate(pages[0]) if text == 'Prüfung 1')
-next_section = next(i for i, (text, _) in enumerate(pages[0]) if text == 'Prüfung 2')
+next_section = next((i for i, (text, _) in enumerate(pages[0]) if text == 'Prüfung 2'), len(pages[0]))
 starts = [i for i in range(section + 1, next_section)
           if pages[0][i][0].startswith('Die Sozialversicherungs')]
 assert len(starts) >= 2, 'Fixture must exercise a paragraph boundary'

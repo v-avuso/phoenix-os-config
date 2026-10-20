@@ -29,3 +29,10 @@
 - Check the return-address row separately from recipient/window containment.
   Keep the top return row, reserved postal area and DIN B recipient start distinct;
   changing return-rule padding must not shift the recipient into the postal area.
+
+- For PDF/UA changes, compile actual converter output, not just standalone Typst.
+  Replacing an enum in a show rule can leave invalid list tags; normalize address
+  content before list realization. Use heading depth for normalization, since
+  querying a level that the same rule changes can prevent layout convergence.
+- Pair strict UA compilation with veraPDF report checks; successful compilation
+  alone does not establish accessible reading order or content quality.
