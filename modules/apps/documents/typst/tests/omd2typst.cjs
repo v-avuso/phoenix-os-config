@@ -44,5 +44,13 @@ vm.runInNewContext(fs.readFileSync(plugin,'utf8')+'\nmodule.exports.test={render
  assert(extract().includes('ADAPTER-RELOAD-PROBE'));
  fs.writeFileSync(target,original);
  await api.exportNote(new TFile(note),'pdf',entry,{outputMode:'same-folder',defaultLanguage:'de'},app,{});
+ // Inline frontmatter is an insertion template, not an export-time profile.
+ const missingNote='letters/missing-sender.md';
+ fs.writeFileSync(path.join(root,missingNote),markdown.replace(/^sender_.*\n/gm,''));
+ await api.exportNote(new TFile(missingNote),'pdf',entry,{outputMode:'same-folder',defaultLanguage:'de',frontmatterInline:'sender_name: Unapplied Default'},app,{});
+ const missingPdf=path.join(root,'letters/missing-sender.pdf');
+ const missingText=cp.execFileSync('pdftotext',[missingPdf,'-'],{encoding:'utf8'});
+ assert(!missingText.includes('Unapplied Default') && !missingText.includes('erika@example.invalid'));
+ assert(!cp.execFileSync('pdfinfo',[missingPdf],{encoding:'utf8'}).includes('Author:'));
  console.log(`PASS: actual Omd2Typst converter/export, ${pages} pages, metadata allowlist, hyphenation, adapter reload; ${pdf}`);
 })().catch(e=>{console.error(e);process.exitCode=1;});

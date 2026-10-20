@@ -15,8 +15,9 @@ fields, plugin installation and unrelated settings. Preserve upstream letter des
 - The original four flat files in `templates/` remain unchanged Omd2Typst
   adapters, including `letter-pro.typ`. They are not standalone letter designs.
 
-Letter Pro provides A4 DIN 5008-B geometry, address window, sender header/return
-address, fold/hole marks and right-aligned multipage footers. Phoenix uses embedded
+Letter Pro’s composable `letter-generic` and address/header helpers provide A4
+DIN 5008-B geometry and right-aligned multipage footers. Phoenix supplies the
+return-address rule, information block and first-sheet handling marks. Phoenix uses embedded
 Liberation Sans (explicitly provided by `liberation_ttf`), with 10pt body text and
 12.5pt headings. Obsidian's PDF.js maps unembedded Helvetica to its Liberation Sans
 fallback; Poppler can choose a different substitute. Do not infer a viewer's actual
@@ -29,9 +30,9 @@ The spacing follows Letterhead 1.10.0's vector-export code: 14.5pt line baseline
 standard greeting, 28.375pt from the preceding body line to a heading baseline,
 20.925pt from heading to body baseline, and 12.15pt information-row baselines.
 These are measured baseline distances, not CSS margins or Typst edge spacing.
-Following pages have a 25mm top margin. This retains justification and German automatic hyphenation. The body restores `hyphenate: true`
-**inside** the upstream body, after upstream disables it; hyphenation costs are
-unchanged. Body margins remain upstream's 25mm left and 20mm right.
+Following pages have a 25mm top margin. This retains justification and explicit German automatic hyphenation in the body;
+hyphenation costs are unchanged. The generic upstream entry point avoids the
+simple preset’s implicit author and body-style overrides. Body margins remain upstream's 25mm left and 20mm right.
 
 Aktenzeichen and date share the right-hand information block beside the recipient,
 with values aligned to the body's right edge. They no longer add rows above the
@@ -51,12 +52,14 @@ names or invent a greeting. Sender address remains a single line separated with
 The adapter neutralizes enumerated-list layout in multiline address metadata:
 Omd2Typst otherwise interprets a line such as `29. Kammer` as Typst enumeration,
 adding unwanted spacing. Addresses remain compact with the number retained.
-Letter Pro normally bottom-aligns its return line when postal annotations are
-absent. Phoenix supplies empty annotation content to select the existing three-row
-layout: return line in the top 5mm row, reserved postal area below, and recipient
-zone starting at 62.7mm. This raises the return line without silently moving the
-recipient into the reserved area. Letterhead's compact recipient begins earlier;
-matching it is not required for matching body typography.
+Phoenix places the return address in the top 5mm row, with a 1.2mm gap before
+an 80mm rule. The reserved postal area and recipient zone starting at 62.7mm
+remain unchanged. Letterhead’s compact recipient begins earlier; it is not used
+to redefine the DIN B recipient zone. Fold marks extend 5mm from the left page
+edge at 105mm and 210mm; the punch mark extends 8mm at 148.5mm. All use a 0.25pt
+stroke and appear on the first page only. Printing to the edge depends on the printer.
+The typography takes inspiration from [Letterhead](https://github.com/johannes-kaindl/obsidian-letterhead);
+Phoenix includes no Letterhead code or fonts.
 
 The fixture checks the return row separately from the recipient and checks the
 nominal 85 × 45mm Form B field (x=20–105mm, y=45–90mm), with recipient text starting near y=62.7mm. This is a
@@ -136,7 +139,7 @@ so `sender: {name: ...}` is not supported. Replace all placeholders privately:
 ```yaml
 ---
 subject: "Stellungnahme im Verfahren …"
-date: "19. Oktober 2026"
+date: "19.10.2026"
 reference: "S … …/…"
 language: de
 sender_name: "Vorname Nachname"
@@ -149,10 +152,19 @@ recipient: |
 ---
 ```
 
-`sender_extra`, `reference` and `date` may be omitted; no date is invented.
+Omd2Typst’s inline frontmatter editor defines an **insertion template**, not
+export-time defaults. Run **Omd2Typst: Insert frontmatter** in an existing note
+to merge missing keys from it, preserving existing values. Keep the flat keys
+above, not `sender.name`. The plugin’s separate default-language setting does
+not supply sender fields; repeating `language: de` is harmless.
+
+ISO dates, German numeric dates and written German month names are rendered as
+`DD.MM.YYYY`; custom date text is preserved. `sender_extra`, `reference` and
+`date` may be omitted; no date is invented.
 All sender fields default to empty, with no public personal defaults. `recipient`
 uses YAML literal multiline syntax. `subject` also supplies the PDF title and
-`sender_name` supplies the author, as in upstream. Only these listed keys reach
+`sender_name` supplies the author. Missing sender fields compile safely with no
+identity or PDF author; signing-space recognition requires `sender_name`. Only these listed keys reach
 the wrapper. Unrelated metadata such as `chatgpt_chat` stays out of rendered text
 and PDF metadata, though the plugin can include it in intermediate `.typ` source.
 `title`, cover and TOC metadata are deliberately unused by this letter adapter.
@@ -176,6 +188,7 @@ relative imports for repository-local use; upstream must still be available.
 Focused checks (Node, Typst and Poppler `pdftotext`/`pdfinfo` on PATH):
 
 ```sh
+typst compile modules/apps/documents/typst/tests/optional-sender.typ /tmp/optional-sender.pdf
 python3 modules/apps/documents/typst/tests/deployment.py
 # Use a disposable vault; its adapter link must point to a disposable copy:
 node modules/apps/documents/typst/tests/omd2typst.cjs /path/to/omd-to-typst/main.js /tmp/test-vault
@@ -184,7 +197,7 @@ node modules/apps/documents/typst/tests/omd2typst.cjs /path/to/omd-to-typst/main
 The latter executes the installed plugin's actual WASM converter and PDF export
 path with filesystem-backed Obsidian test doubles. It checks a representative
 three-page German letter, automatic hyphenation, sender/recipient, page totals,
-metadata exclusion, same-folder output and rereading adapter edits. Its PDF layout
+metadata exclusion, same-folder output, missing-sender export and rereading adapter edits. Its PDF layout
 check also measures window bounds, numbered chamber-line spacing, paragraph rhythm,
 signature space and embedded fonts. Never aim the reload test at the live vault or
 the repository adapter: it deliberately edits its disposable source copy. It does not

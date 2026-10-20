@@ -1,4 +1,5 @@
 """Check observable layout in the synthetic Omd2Typst letter, using Poppler."""
+import re
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
@@ -67,3 +68,31 @@ fonts = subprocess.check_output(['pdffonts', pdf], text=True)
 assert 'LiberationSans' in fonts and 'LiberationSans-Bold' in fonts
 assert all('yes' in line for line in fonts.splitlines()[2:] if line.strip())
 print('PASS: top return row, window bounds, compact chamber line, reference/heading/line spacing, signing space, embedded Liberation Sans')
+
+# Inspect actual vector strokes: long return rule, clear gap, first-sheet marks.
+def strokes(page):
+    svg = ET.fromstring(subprocess.check_output([
+        'pdftocairo', '-svg', '-f', str(page), '-l', str(page), pdf, '-']))
+    result = []
+    for element in svg.iter():
+        if element.attrib.get('stroke-width') != '0.25':
+            continue
+        points = [float(n) for n in re.findall(r'-?\d+(?:\.\d+)?(?:e[+-]?\d+)?', element.attrib['d'])]
+        matrix = [float(n) for n in re.findall(r'-?\d+(?:\.\d+)?', element.attrib['transform'])]
+        a, b, c, d, e, f = matrix
+        x1, y1, x2, y2 = points
+        result.append((a*x1+c*y1+e, b*x1+d*y1+f, a*x2+c*y2+e, b*x2+d*y2+f))
+    return result
+
+first = strokes(1)
+rule = next(line for line in first if abs(line[0] - 25*mm) < 0.5)
+assert abs((rule[2] - rule[0])/mm - 80) < 0.2
+assert rule[1] - float(return_line['yMax']) >= 1.2*mm
+marks = [line for line in first if abs(line[0]) < 0.1]
+assert len(marks) == 3
+for line, (position, length) in zip(sorted(marks, key=lambda line: line[1]), ((105, 5), (148.5, 8), (210, 5))):
+    assert abs(line[1]/mm - position) < 0.2 and abs(line[2]/mm - length) < 0.2
+for page in range(2, len(pages)+1):
+    assert not strokes(page), 'Handling marks belong only to the first sheet'
+assert any('19.10.2026' in text for text, _ in pages[0])
+print('PASS: numeric date, 80mm return rule/clearance, 0.25pt edge marks on first page only')

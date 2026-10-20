@@ -6,8 +6,11 @@
   YAML mappings and treats multiline values as Typst markup. Numbered chamber
   lines can become enum items; verify compact address spacing with the actual
   converter. Use flat sender keys, and keep the adapter allowlist explicit.
-- Letter Pro 3.0.0 disables hyphenation inside `letter-simple`; restore it in
-  the supplied body, then check actual PDF line endings and visual layout.
+- Use Letter Pro’s composable helpers for wrapper-owned styles and metadata.
+  Its simple preset disables hyphenation and assumes a sender author; verify
+  omitted sender fields as well as actual German PDF line endings.
+- Omd2Typst inline frontmatter is an insertion template, not export-time defaults.
+  Check the installed plugin’s merge/export semantics before changing YAML keys.
 - Distinguish filesystem-backed plugin tests from live Obsidian indexing and
   watcher acceptance. Never infer directory-symlink discovery from CLI reads.
 
@@ -21,5 +24,5 @@
   font mapping; Poppler substitution does not establish Obsidian glyphs. Measure
   line, heading and information-row baselines separately, not just one paragraph gap.
 - Check the return-address row separately from recipient/window containment.
-  Letter Pro's no-annotations shortcut bottom-aligns the return line; empty content
-  selects its three-row layout without changing the DIN B recipient start.
+  Keep the top return row, reserved postal area and DIN B recipient start distinct;
+  changing return-rule padding must not shift the recipient into the postal area.
