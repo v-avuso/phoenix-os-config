@@ -72,5 +72,16 @@ vm.runInNewContext(fs.readFileSync(plugin,'utf8')+'\nmodule.exports.test={render
   const tail=cp.execFileSync('pdftotext',[path.join(root,'letters/automatic-name.pdf'),'-'],{encoding:'utf8'}).split('Mit freundlichen Grüßen')[1];
   assert(expected ? tail.includes(expected) : !tail.includes('Erika Beispiel'));
  }
+ // Six lines fit; a seventh must be detected outside the nominal window.
+ const windowNote='letters/window.md';
+ const windowPdf=path.join(root,'letters/window.pdf');
+ for (const count of [6,7]) {
+  const lines=Array.from({length:count},(_,i)=>`Fensterzeile ${i+1}`);
+  fs.writeFileSync(path.join(root,windowNote),markdown.replace(/^recipient: \|\n(?:  .*\n)*/m, 'recipient: |\n'+lines.map(line=>'  '+line+'\n').join('')));
+  await api.exportNote(new TFile(windowNote),'pdf',entry,{outputMode:'same-folder'},app,{});
+  const check=cp.spawnSync('python3',[path.join(__dirname,'window.py'),windowPdf,...lines],{encoding:'utf8'});
+  if (count === 6) { assert.equal(check.status,0,check.stderr); console.log(check.stdout.trim()); }
+  else { assert.notEqual(check.status,0); assert(check.stderr.includes('outside nominal window'),check.stderr); }
+ }
  console.log(`PASS: actual Omd2Typst converter/export, ${pages} pages, metadata allowlist, hyphenation, adapter reload; ${pdf}`);
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -77,6 +77,19 @@ See the [Klett DIN 5008 teaching diagram](https://www.klett.de/inhalt/media_fast
 for the 17.7mm upper zone and 27.3mm recipient zone. This is not a certification
 against the full paid standard. Do a print/fold check before first postal use.
 Keep sender/recipient lines short enough for the window; the template does not shrink overflowing addresses silently.
+The recipient is top-aligned and grows downward. The export fixture verifies six
+lines fit and that a seventh is detected below the nominal field. This is a test
+check, not an automatic overflow rejection during ordinary exports. To check an
+individual PDF, supply every expected address line (including the return row):
+
+```sh
+python3 modules/apps/documents/typst/tests/window.py /path/to/letter.pdf \
+  "Vorname Nachname · Straße Hausnummer · PLZ Ort" \
+  "Empfänger" "Straße Hausnummer" "PLZ Ort"
+```
+
+The checker fails on missing, wrapped or out-of-bounds lines. It measures the
+nominal PDF field, not physical envelope tolerances.
 
 Home Manager installs the wrapper as a local package link to the configured
 `user.repoDirectory`: saved design changes are immediately visible to Typst. This
@@ -212,7 +225,10 @@ metadata exclusion, same-folder output, required-field rejection and generated/o
 check also measures window bounds, numbered chamber-line spacing, paragraph rhythm,
 signature space, a separately checked top-right sender block and embedded fonts. Never aim the reload test at the live vault or
 the repository adapter: it deliberately edits its disposable source copy. It does not
-prove live Electron template discovery. Inspect PDFs visually as well; source
+prove live Electron template discovery. The expanded installed-plugin suite took
+about 1.1 seconds on the development machine with dependencies already installed;
+this is an observation, not a performance guarantee. Run these focused checks for
+letter changes rather than for unrelated repository edits. Inspect PDFs visually as well; source
 fixtures use fictional identity data. Compilation alone cannot establish layout.
 
 ## Upstream templates
