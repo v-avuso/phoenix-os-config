@@ -25,12 +25,22 @@
 // Presentation only: no Obsidian metadata or private identity defaults.
 #let phoenix-letter(
   sender: (:), recipient: none, subject: none, date: none,
-  reference: none, language: "de", body,
+  reference: none, language: "de", signature: none, body,
 ) = {
   let muted = rgb("#666666")
   let name = sender.at("name", default: none)
   let address = sender.at("address", default: none)
-  set document(title: if subject == none { "" } else { subject }, author: if name == none { () } else { name })
+  for (field, value) in (("sender_name", name), ("sender_address", address)) {
+    assert(type(value) == str and value.trim() != "",
+      message: "Phoenix letter: " + field + " fehlt. Absender im YAML ergänzen; in Obsidian: Omd2Typst: Insert frontmatter.")
+  }
+  assert(recipient != none and recipient != [] and
+    (type(recipient) != str or recipient.trim() != ""),
+    message: "Phoenix letter: recipient fehlt. Empfänger im YAML ergänzen.")
+  assert(signature == none or type(signature) == str,
+    message: "Phoenix letter: signature muss Text sein.")
+  let closing-name = if signature == none or signature == "" { name } else { signature.trim() }
+  set document(title: if subject == none { "" } else { subject }, author: name)
   set text(font: "Liberation Sans", lang: language, size: 10pt, fill: rgb("#1a1a1a"))
   // First-sheet handling aids. Edge-to-edge printing remains printer-dependent.
   set page(foreground: context {
@@ -87,8 +97,8 @@
       // Content stays in Markdown. Only whole, plain paragraphs are styled;
       // mentions of the sender within ordinary text are unaffected.
       show par: paragraph => {
-        if name != none and paragraph.body == text(name) {
-          block(above: 17.6mm, below: 0pt, breakable: false, paragraph)
+        if paragraph.body == text(name) {
+          []
         } else if paragraph.body == [Sehr geehrte Damen und Herren,] {
           block(above: 13pt, below: 13pt, paragraph)
         } else if paragraph.body == [Mit freundlichen Grüßen] {
@@ -99,6 +109,9 @@
       }
       v(1.6mm)
       body
+      if closing-name != "" {
+        block(above: 17.6mm, below: 0pt, breakable: false, box(closing-name))
+      }
     },
   )
 }

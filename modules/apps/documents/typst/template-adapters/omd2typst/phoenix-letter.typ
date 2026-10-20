@@ -18,16 +18,21 @@
     }).join()
     if type(value) == str { value.split("\n").join(linebreak()) } else { value }
   }
+  let recipient = fm.at("recipient", default: none)
+  assert(recipient != none and recipient != [] and
+    (type(recipient) != str or recipient.trim() != ""),
+    message: "Phoenix letter: recipient fehlt. Empfänger im YAML ergänzen.")
   phoenix-letter(
     sender: (
       name: fm.at("sender_name", default: none),
       address: fm.at("sender_address", default: none),
       extra: lines(fm.at("sender_extra", default: none)),
     ),
-    recipient: lines(fm.at("recipient", default: none)),
+    recipient: lines(recipient),
     subject: fm.at("subject", default: none),
     date: fm.at("date", default: none),
     reference: fm.at("reference", default: none),
+    signature: fm.at("signature", default: none),
     language: fm.at("language", default: "de"),
     doc,
   )

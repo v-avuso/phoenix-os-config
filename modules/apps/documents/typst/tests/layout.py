@@ -17,6 +17,12 @@ def find(needle, lines):
     return next((text, box) for text, box in lines if needle in text)
 
 
+# A return-address occurrence alone must not mask a missing top-right header.
+header = [(text, box) for text, box in pages[0]
+          if float(box['yMin']) < 45 * 72 / 25.4 and float(box['xMin']) > 120 * 72 / 25.4]
+for expected in ('Erika Beispiel', 'Musterstraße 12', '12345 Musterstadt', 'erika@example.invalid'):
+    assert any(expected in text for text, _ in header), f'Missing sender header: {expected}'
+
 # Recipient belongs to the DIN B window and numbered address lines are not lists.
 mm = 72 / 25.4
 window = [(text, box) for text, box in pages[0]

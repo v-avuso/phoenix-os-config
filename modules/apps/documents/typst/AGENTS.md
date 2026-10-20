@@ -8,7 +8,10 @@
   converter. Use flat sender keys, and keep the adapter allowlist explicit.
 - Use Letter Pro’s composable helpers for wrapper-owned styles and metadata.
   Its simple preset disables hyphenation and assumes a sender author; verify
-  omitted sender fields as well as actual German PDF line endings.
+  rejected missing sender fields as well as actual German PDF line endings.
+- Require sender name/address and recipient instead of silently omitting letter
+  identity. Check the top-right sender block separately from the return row;
+  one occurrence of the sender name does not prove both are present.
 - Omd2Typst inline frontmatter is an insertion template, not export-time defaults.
   Check the installed plugin’s merge/export semantics before changing YAML keys.
 - Distinguish filesystem-backed plugin tests from live Obsidian indexing and

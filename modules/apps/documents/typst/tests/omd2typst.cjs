@@ -32,6 +32,7 @@ vm.runInNewContext(fs.readFileSync(plugin,'utf8')+'\nmodule.exports.test={render
  const info=cp.execFileSync('pdfinfo',[pdf],{encoding:'utf8'});
  assert(!text.includes('PRIVATE_SENTINEL')); assert(!info.includes('PRIVATE_SENTINEL'));
  assert(text.includes('Erika Beispiel') && text.includes('Sozialgericht Musterstadt'));
+ assert.equal(text.split('Mit freundlichen Grüßen')[1].split('Erika Beispiel').length - 1, 1, 'Closing name must appear exactly once');
  const pages=Number(info.match(/Pages:\s+(\d+)/)[1]); assert(pages>=3);
  for(let i=1;i<=pages;i++) assert(text.includes(`Seite ${i} von ${pages}`));
  assert(/\p{L}{5,}[-‐\u00ad]\s*\n\p{L}/u.test(text),'Expected automatic German hyphenation');
@@ -46,11 +47,30 @@ vm.runInNewContext(fs.readFileSync(plugin,'utf8')+'\nmodule.exports.test={render
  await api.exportNote(new TFile(note),'pdf',entry,{outputMode:'same-folder',defaultLanguage:'de'},app,{});
  // Inline frontmatter is an insertion template, not an export-time profile.
  const missingNote='letters/missing-sender.md';
+ fs.rmSync(path.join(root,'letters/missing-sender.pdf'), {force:true});
  fs.writeFileSync(path.join(root,missingNote),markdown.replace(/^sender_.*\n/gm,''));
- await api.exportNote(new TFile(missingNote),'pdf',entry,{outputMode:'same-folder',defaultLanguage:'de',frontmatterInline:'sender_name: Unapplied Default'},app,{});
- const missingPdf=path.join(root,'letters/missing-sender.pdf');
- const missingText=cp.execFileSync('pdftotext',[missingPdf,'-'],{encoding:'utf8'});
- assert(!missingText.includes('Unapplied Default') && !missingText.includes('erika@example.invalid'));
- assert(!cp.execFileSync('pdfinfo',[missingPdf],{encoding:'utf8'}).includes('Author:'));
+ await assert.rejects(
+  api.exportNote(new TFile(missingNote),'pdf',entry,{outputMode:'same-folder',defaultLanguage:'de',frontmatterInline:'sender_name: Unapplied Default'},app,{}),
+  /sender_name/);
+ assert(!fs.existsSync(path.join(root,'letters/missing-sender.pdf')), 'Invalid letters must not produce PDFs');
+ for (const field of ['sender_name', 'sender_address', 'recipient']) {
+  const incomplete=field === 'recipient'
+   ? markdown.replace(/^recipient: \|\n(?:  .*\n)*/m, '')
+   : markdown.replace(new RegExp(`^${field}:.*$`, 'm'), `${field}: " "`);
+  fs.writeFileSync(path.join(root,missingNote),incomplete);
+  await assert.rejects(api.exportNote(new TFile(missingNote),'pdf',entry,{outputMode:'same-folder'},app,{}), new RegExp(field));
+ }
+ // A body without a manually typed name gets one generated closing name.
+ const automaticNote='letters/automatic-name.md';
+ fs.writeFileSync(path.join(root,automaticNote),markdown.replace(/\nErika Beispiel\s*$/, '\n'));
+ await api.exportNote(new TFile(automaticNote),'pdf',entry,{outputMode:'same-folder'},app,{});
+ const automaticText=cp.execFileSync('pdftotext',[path.join(root,'letters/automatic-name.pdf'),'-'],{encoding:'utf8'});
+ assert(automaticText.split('Mit freundlichen Grüßen')[1].includes('Erika Beispiel'));
+ for (const [value, expected] of [['Andere Person','Andere Person'], ['', 'Erika Beispiel'], [' ',null]]) {
+  fs.writeFileSync(path.join(root,automaticNote),markdown.replace(/\nErika Beispiel\s*$/, '\n').replace('language: de', `language: de\nsignature: "${value}"`));
+  await api.exportNote(new TFile(automaticNote),'pdf',entry,{outputMode:'same-folder'},app,{});
+  const tail=cp.execFileSync('pdftotext',[path.join(root,'letters/automatic-name.pdf'),'-'],{encoding:'utf8'}).split('Mit freundlichen Grüßen')[1];
+  assert(expected ? tail.includes(expected) : !tail.includes('Erika Beispiel'));
+ }
  console.log(`PASS: actual Omd2Typst converter/export, ${pages} pages, metadata allowlist, hyphenation, adapter reload; ${pdf}`);
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -31,8 +31,8 @@ standard greeting, 28.375pt from the preceding body line to a heading baseline,
 20.925pt from heading to body baseline, and 12.15pt information-row baselines.
 These are measured baseline distances, not CSS margins or Typst edge spacing.
 Following pages have a 25mm top margin. This retains justification and explicit German automatic hyphenation in the body;
-hyphenation costs are unchanged. The generic upstream entry point avoids the
-simple preset’s implicit author and body-style overrides. Body margins remain upstream's 25mm left and 20mm right.
+hyphenation costs are unchanged. The generic upstream entry point keeps metadata and body styling under wrapper
+control. Letter Pro still owns page geometry, address zones and footer placement. Body margins remain upstream's 25mm left and 20mm right.
 
 Aktenzeichen and date share the right-hand information block beside the recipient,
 with values aligned to the body's right edge. They no longer add rows above the
@@ -40,14 +40,20 @@ subject. Multipage footers read “Seite X von Y” in 9pt `#666666` (about 5.74
 contrast on white, above the [WCAG normal-text 4.5:1 threshold](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html)).
 This contrast check alone is not a claim of complete PDF accessibility.
 
-There is no cover or TOC. Keep the greeting, closing and sender name as separate
-plain Markdown paragraphs; no spacing commands or new YAML fields are required.
-The conventional “Mit freundlichen Grüßen” paragraph gets about 31.14pt baseline
-separation from the preceding paragraph and stays with the following signature. A plain paragraph exactly matching
-`sender_name` receives about 21mm baseline-to-baseline signing space above it;
-ordinary inline mentions are unchanged. The template does not append duplicate
-names or invent a greeting. Sender address remains a single line separated with
-`, `; upstream splits it into header lines.
+There is no cover or TOC. Keep greeting and closing as plain Markdown paragraphs;
+no spacing commands are required. “Mit freundlichen Grüßen” gets about 31.14pt
+baseline separation from the preceding paragraph and stays with the generated
+closing name. The template appends `sender_name` with about 21mm signing space.
+`signature: "Other name"` overrides the printed closing name; omitted or empty
+`signature` uses the sender name, while `signature: " "` suppresses it. A plain
+body paragraph exactly matching `sender_name` is removed to avoid duplicating an
+existing manually typed closing name. Inline mentions are unaffected. The template
+does not invent a greeting or closing formula. Sender address remains a single
+line separated with `, `; upstream splits it into header lines.
+
+Headings use a sticky block, keeping them with following text. Typst’s normal
+widow/orphan protection remains enabled; two following lines are acceptable and
+do not require moving the whole section to a new page.
 
 The adapter neutralizes enumerated-list layout in multiline address metadata:
 Omd2Typst otherwise interprets a line such as `29. Kammer` as Typst enumeration,
@@ -155,16 +161,18 @@ recipient: |
 Omd2Typst’s inline frontmatter editor defines an **insertion template**, not
 export-time defaults. Run **Omd2Typst: Insert frontmatter** in an existing note
 to merge missing keys from it, preserving existing values. Keep the flat keys
-above, not `sender.name`. The plugin’s separate default-language setting does
+above, not `sender.name`. This applies to both inline and Markdown-file
+insertion sources; neither supplies export-time fallback metadata. The plugin’s separate default-language setting does
 not supply sender fields; repeating `language: de` is harmless.
 
 ISO dates, German numeric dates and written German month names are rendered as
 `DD.MM.YYYY`; custom date text is preserved. `sender_extra`, `reference` and
 `date` may be omitted; no date is invented.
-All sender fields default to empty, with no public personal defaults. `recipient`
+Nonblank `sender_name`, `sender_address` and a nonempty `recipient` are required.
+Missing required identity/address fields stop compilation with a descriptive error;
+there are no public personal defaults. `recipient`
 uses YAML literal multiline syntax. `subject` also supplies the PDF title and
-`sender_name` supplies the author. Missing sender fields compile safely with no
-identity or PDF author; signing-space recognition requires `sender_name`. Only these listed keys reach
+`sender_name` supplies the author. `signature` controls only the closing name, never PDF authorship. Only these listed keys reach
 the wrapper. Unrelated metadata such as `chatgpt_chat` stays out of rendered text
 and PDF metadata, though the plugin can include it in intermediate `.typ` source.
 `title`, cover and TOC metadata are deliberately unused by this letter adapter.
@@ -188,7 +196,7 @@ relative imports for repository-local use; upstream must still be available.
 Focused checks (Node, Typst and Poppler `pdftotext`/`pdfinfo` on PATH):
 
 ```sh
-typst compile modules/apps/documents/typst/tests/optional-sender.typ /tmp/optional-sender.pdf
+typst compile modules/apps/documents/typst/tests/dates.typ /tmp/dates.pdf
 python3 modules/apps/documents/typst/tests/deployment.py
 # Use a disposable vault; its adapter link must point to a disposable copy:
 node modules/apps/documents/typst/tests/omd2typst.cjs /path/to/omd-to-typst/main.js /tmp/test-vault
@@ -197,9 +205,9 @@ node modules/apps/documents/typst/tests/omd2typst.cjs /path/to/omd-to-typst/main
 The latter executes the installed plugin's actual WASM converter and PDF export
 path with filesystem-backed Obsidian test doubles. It checks a representative
 three-page German letter, automatic hyphenation, sender/recipient, page totals,
-metadata exclusion, same-folder output, missing-sender export and rereading adapter edits. Its PDF layout
+metadata exclusion, same-folder output, required-field rejection and generated/overridden/suppressed closing names and rereading adapter edits. Its PDF layout
 check also measures window bounds, numbered chamber-line spacing, paragraph rhythm,
-signature space and embedded fonts. Never aim the reload test at the live vault or
+signature space, a separately checked top-right sender block and embedded fonts. Never aim the reload test at the live vault or
 the repository adapter: it deliberately edits its disposable source copy. It does not
 prove live Electron template discovery. Inspect PDFs visually as well; source
 fixtures use fictional identity data. Compilation alone cannot establish layout.
