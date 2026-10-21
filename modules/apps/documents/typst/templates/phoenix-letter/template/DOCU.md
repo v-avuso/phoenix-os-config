@@ -61,7 +61,7 @@ space makes the ending feel intentional and supports printing and signing.
 These are baseline distances, not interchangeable CSS margins or glyph bounding
 boxes. For example, the PDF test's 22.745pt heading/body bounding-box distance
 includes a font-ascent difference; it represents the 20.925pt baseline target.
-The implementation and [layout fixture](tests/layout.py) are the authoritative
+The implementation and [layout fixture](../tests/layout.py) are the authoritative
 values. Some values were translated from inspected exporter behavior and measured
 output into native Typst settings; Letterhead JavaScript is not bundled.
 
@@ -125,51 +125,26 @@ For contrast, see [WCAG 1.4.3](https://www.w3.org/WAI/WCAG22/Understanding/contr
 meeting this particular digital criterion alone does not establish overall accessibility.
 See [Typst's pagination limitation](https://github.com/typst/typst/issues/5931).
 
-## Architecture and automation
+## Template boundary
 
-| Layer | Ownership and reason |
-| --- | --- |
-| Typst compiler and font | Actual shaping, justification, German line breaking, pagination, PDF generation/tagging and font subsetting. These are Typst capabilities, not Letter Pro algorithms. |
-| Letter Pro 3.0.0 | Imported layout foundation; unchanged upstream. The official archive is fetched with a fixed hash and installed in Typst's data package directory. |
-| `templates/phoenix-letter/lib.typ` | Reusable presentation, sender validation, metadata/date handling, typography, return row, reference block, marks, closing name and link style. Usable by CLI without Obsidian. |
-| `template-adapters/omd2typst/phoenix-letter.typ` | Explicit metadata allowlist, address-content normalization and semantic heading-depth normalization. Keep conversion quirks here rather than in the reusable design. |
-| Phoenix Nix/Home Manager and vault helper | Compiler/font availability, local package link, offline upstream archive, and one-time vault link/settings registration. Private notes/defaults stay in the vault. |
+The compiler supplies shaping, German hyphenation, justification, pagination,
+PDF tagging and font subsetting. The imported Letter Pro package supplies layout
+helpers. `lib.typ` owns presentation, sender validation, document metadata/date
+handling, typography, return row, reference block, marks, closing name and links.
+It contains no Obsidian integration.
 
-The local `@local/phoenix-letter:0.1.0` package is a deliberate live source link to
-`user.repoDirectory`; it is not an immutable snapshot of the design. The upstream
-package is fixed, but exact output also depends on the checkout, compiler/fonts
-and private input. Nix's initial build may need network/cache access; subsequent
-Phoenix letter compilation needs no upstream download. Other original adapters
-keep their existing cache/download behavior.
-
-The whole adapter directory is linked into the vault, so edits and new adapters
-need no manual copying. The registration helper preserves unrelated settings,
-sets same-folder PDF output and preserves old copied adapters during migration.
-It refuses redirected parents/ambiguous targets rather than following them.
-Directory discovery was confirmed in the live workflow, and the operator's final
-visual/export acceptance supplements filesystem-backed plugin tests. Obsidian
-symlink/sync limitations still apply on other installations.
-
-Omd2Typst's inline/file frontmatter templates are insertion sources, not background
-export-time defaults. Insert missing keys into each note; note values are preserved.
-This keeps each note's inputs explicit but requires that insertion step. The separate
-default-language setting cannot supply sender identity. Flat keys are required by
-the evaluated converter. Unknown metadata such as `Chat`/`chatgpt_chat` is not
-forwarded to the wrapper; generated intermediate `.typ` source can still contain
-it and must be treated as private.
-
-The converter parses a chamber line such as `29. Kammer` as an enum item. The
-adapter rebuilds it as address text before list realization, preventing both unwanted
-list spacing and invalid PDF list tags. Markdown headings remain actual Typst
-headings: their shallowest source depth is normalized to H1 with show-set rules,
-preserving relative hierarchy and semantic elements. Skipped nested levels remain
-an error in strict UA compilation. Query source depth rather than the changing
-rendered level to avoid layout convergence loops.
+The [integration package](../README.md#integration-boundaries-and-decisions) owns
+Omd2Typst metadata normalization and its implementation history. The surrounding
+[Typst module](../../../README.md) owns Nix/Home Manager, pinned upstream installation,
+live local packages and adapter aggregation. Source directories were separated
+after `b1c434d`; those commits retain their historical paths. An extraction would
+still need dependency provisioning and licensing decisions, not a layout rewrite.
 
 ## Validation and its limits
 
-The reproducible runner is [tests/run.py](tests/run.py); README gives its locked
-Nix environment. Runtime requires Typst, font and Letter Pro; Markdown export also
+The template fixtures are in `tests/`; the [integration runner](../tests/run.py)
+exercises converter output. The [module README](../../../README.md) gives the locked
+Nix test environment. Runtime requires Typst, font and Letter Pro; Markdown export also
 requires Obsidian and its separately installed Omd2Typst plugin. Python powers the
 registration helper. Node/plugin doubles, Poppler, pypdf, veraPDF and its Java
 runtime are test tools, not requirements for ordinary standalone compilation.
@@ -260,7 +235,6 @@ Typst, fonts or optional integration/tool licensing obligations.
 | [Letterhead 1.10.0](https://github.com/johannes-kaindl/obsidian-letterhead/tree/56c63f472300ea9c06a10a1d27a22785761495f8) | [package.json](https://github.com/johannes-kaindl/obsidian-letterhead/blob/56c63f472300ea9c06a10a1d27a22785761495f8/package.json): AGPL-3.0-or-later; accompanying LICENSE is AGPL v3 | Design inspiration and inspected exporter metrics; no plugin code/font files imported, copied or bundled into Phoenix |
 | [Omd2Typst 0.9.0](https://github.com/tIsGoud/Obsidian-Omd2Typst/tree/a700fa2db58091a588a4ab43d8aa83ae02955257) | [package.json](https://github.com/tIsGoud/Obsidian-Omd2Typst/blob/a700fa2db58091a588a4ab43d8aa83ae02955257/package.json): AGPL-3.0-only; accompanying LICENSE is AGPL v3 | Separately installed converter/plugin, invoked by a thin Phoenix adapter; no plugin implementation vendored |
 | [Liberation Fonts 2.1.5](https://github.com/liberationfonts/liberation-fonts/blob/2.1.5/LICENSE) | Installed LICENSE: SIL OFL 1.1; Google/Red Hat copyrights and reserved names | Explicit font package; regular/bold subsets embedded in PDFs |
-| [Briefs 0.4.0](https://typst.app/universe/package/briefs/) / [Formal 0.2.0](https://typst.app/universe/package/formal/) / [Metropole Report 0.1.0](https://typst.app/universe/package/metropole-report/) | MIT / MIT package and MIT-0 templates / GPL-3.0-or-later respectively; original package metadata | Other existing adapters remain separate; not Phoenix Letter dependencies |
 
 The exact release declarations matter: do not substitute GitHub's generic “AGPL-3.0”
 label for the project's explicit `only`/`or-later` choice. The local installed plugin
@@ -285,13 +259,9 @@ license file was found in this repository audit; choosing a license for a future
 standalone release is an explicit owner decision, not part of this documentation
 change. Credit to Letterhead is intentional even without bundled plugin code.
 
-## Possible future directions — exploratory, not commitments
+## Exploratory future scope
 
-A separate open-source Phoenix Letter package/repository and separately maintained
-adapters could make reuse easier. A letter-authoring agent skill is another possible
-consumer, not an implemented feature. A standalone Rust application could offer
-persistent sender defaults, a multiline Markdown editor, one-click local PDF
-creation/Save As, and Windows/Linux/macOS distribution with bundled Typst and a
-suitable open-source font. Settings would live in application data or a portable
-configuration file, not modify the executable. These ideas require separate product,
-packaging, licensing and maintenance decisions; they are not an approved roadmap.
+The surrounding integration package's [VISION.md](../VISION.md) owns possible
+application/distribution ideas. They are not commitments and are not template
+requirements. The dependency audit above records the current recommendation to
+retain Letter Pro and the limits of a later independent implementation.

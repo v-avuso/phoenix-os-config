@@ -40,7 +40,7 @@ in
       "typst/packages/preview/letter-pro/3.0.0".source = letterPro;
       # Live design edits are deliberate; upstream remains immutable and hashed.
       "typst/packages/local/phoenix-letter/0.1.0".source =
-        config.lib.file.mkOutOfStoreSymlink "${sourceRoot}/templates/phoenix-letter";
+        config.lib.file.mkOutOfStoreSymlink "${sourceRoot}/templates/phoenix-letter/template";
     };
   };
 }

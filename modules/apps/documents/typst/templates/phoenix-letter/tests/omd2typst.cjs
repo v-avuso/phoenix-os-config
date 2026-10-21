@@ -89,7 +89,7 @@ vm.runInNewContext(fs.readFileSync(plugin,'utf8')+'\nmodule.exports.test={render
  const longAddress='Friedrich-Wilhelm-Straße 27, 12161 Berlin';
  fs.writeFileSync(path.join(root,longNote),markdown.replace('Musterstraße 12, 12345 Musterstadt',longAddress));
  await api.exportNote(new TFile(longNote),'pdf',entry,{outputMode:'same-folder'},app,{});
- cp.execFileSync('python3',[path.join(__dirname,'window.py'),path.join(root,'letters/long-sender.pdf'),`${longName} · ${longAddress.replace(', ',' · ')}`],{stdio:'inherit'});
+ cp.execFileSync('python3',[path.join(__dirname,'../template/tests/window.py'),path.join(root,'letters/long-sender.pdf'),`${longName} · ${longAddress.replace(', ',' · ')}`],{stdio:'inherit'});
  fs.writeFileSync(path.join(root,longNote),markdown.replace('Musterstraße 12, 12345 Musterstadt','Eine außergewöhnlich lange Straßenbezeichnung mit sehr vielen zusätzlichen Adressangaben 123, 12345 Musterstadt'));
  await assert.rejects(api.exportNote(new TFile(longNote),'pdf',entry,{outputMode:'same-folder'},app,{}), /Rücksendeadresse ist zu lang/);
  // Six lines fit; a seventh must be detected outside the nominal window.
@@ -99,7 +99,7 @@ vm.runInNewContext(fs.readFileSync(plugin,'utf8')+'\nmodule.exports.test={render
   const lines=Array.from({length:count},(_,i)=>`Fensterzeile ${i+1}`);
   fs.writeFileSync(path.join(root,windowNote),markdown.replace(/^recipient: \|\n(?:  .*\n)*/m, 'recipient: |\n'+lines.map(line=>'  '+line+'\n').join('')));
   await api.exportNote(new TFile(windowNote),'pdf',entry,{outputMode:'same-folder'},app,{});
-  const check=cp.spawnSync('python3',[path.join(__dirname,'window.py'),windowPdf,...lines],{encoding:'utf8'});
+  const check=cp.spawnSync('python3',[path.join(__dirname,'../template/tests/window.py'),windowPdf,...lines],{encoding:'utf8'});
   if (count === 6) { assert.equal(check.status,0,check.stderr); console.log(check.stdout.trim()); }
   else { assert.notEqual(check.status,0); assert(check.stderr.includes('outside nominal window'),check.stderr); }
  }
