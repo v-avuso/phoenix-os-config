@@ -2,125 +2,33 @@
 
 ## Intentions
 
-Keep local Markdown-to-PDF publishing reproducible and easy to maintain. Phoenix
-owns compiler, reusable designs and adapters; vaults retain private notes, identity
-fields, plugin installation and unrelated settings. Preserve upstream letter design.
+Generate professional German letters from Markdown or standalone Typst with
+predictable layout, justified text, automatic hyphenation and private metadata.
+Keep reusable designs independent of Obsidian and configuration easy to maintain.
 
-## Architecture and dependencies
+Phoenix Letter uses A4/DIN 5008-B geometry, Liberation Sans, a window-address field,
+fold/punch marks and discreet “Seite X von Y” pagination. There is no cover or TOC.
+The return row uses 8pt dark gray; body text is 10pt. Links have dark dotted
+underlines. Long return rows fail clearly instead of clipping.
 
-- `templates/phoenix-letter/`: reusable `@local/phoenix-letter:0.1.0` package,
-  independent of Obsidian. Wraps `@preview/letter-pro:3.0.0` without modifying it.
-- `template-adapters/omd2typst/`: thin YAML/content adapter exposing Omd2Typst's
-  `template`, `callout` and language-discovery dictionary.
-- The original four flat files in `templates/` remain unchanged Omd2Typst
-  adapters, including `letter-pro.typ`. They are not standalone letter designs.
+See [DOCU.md](DOCU.md) for design decisions, history, Letterhead attribution,
+precise spacing/colors, dependency/licensing audit and future considerations.
 
-Letter Pro’s composable `letter-generic` and address/header helpers provide A4
-DIN 5008-B geometry and right-aligned multipage footers. Phoenix supplies the
-return-address rule, information block and first-sheet handling marks. Phoenix uses embedded
-Liberation Sans (explicitly provided by `liberation_ttf`), with 10pt body text and
-12.5pt headings. Obsidian's PDF.js maps unembedded Helvetica to its Liberation Sans
-fallback; Poppler can choose a different substitute. Do not infer a viewer's actual
-glyphs from another renderer's font report. Phoenix embeds the installed font so
-its own output is consistent across viewers; different Liberation releases are
-not claimed to be identical.
+## Requirements and architecture
 
-Letterhead’s readable paragraph rhythm and restrained letter styling informed the
-Phoenix design. We chose Typst with Omd2Typst because the tested Letterhead vector
-export did not provide the required German automatic hyphenation and justification.
-The reusable Typst package also supports CLI use outside Obsidian. Letter Pro
-remains the layout foundation; Phoenix adapts typography and metadata without
-forking upstream. Letterhead is credited as a design reference, not bundled code.
+The Phoenix NixOS/Home Manager module supplies Typst, fonts (including
+`liberation_ttf`), and the pinned official Letter Pro 3.0.0 archive. The first Nix
+build may need network/cache access; installed Phoenix letters compile offline.
+The reusable `@local/phoenix-letter:0.1.0` package links to this repository's
+`templates/phoenix-letter/`; saved changes are immediately available. Keep the
+configured `user.repoDirectory` checkout available. This is a live source link,
+not an immutable design snapshot.
 
-The spacing follows Letterhead 1.10.0's vector-export code: 14.5pt line baselines,
-21.5pt baseline distance across ordinary paragraph boundaries, 23pt after the
-standard greeting, 28.375pt from the preceding body line to a heading baseline,
-20.925pt from heading to body baseline, and 12.15pt information-row baselines.
-These are measured baseline distances, not CSS margins or Typst edge spacing.
-Following pages have a 25mm top margin. This retains justification and explicit German automatic hyphenation in the body;
-hyphenation costs are unchanged. The generic upstream entry point keeps metadata and body styling under wrapper
-control. Letter Pro still owns page geometry, address zones and footer placement. Body margins remain upstream's 25mm left and 20mm right.
-
-Aktenzeichen and date share the right-hand information block beside the recipient,
-with values aligned to the body's right edge. They no longer add rows above the
-subject. Multipage footers read “Seite X von Y” in 9pt `#767676`: 4.542:1 against white, the lightest 8-bit neutral gray meeting the [WCAG normal-text 4.5:1 threshold](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html).
-`#777777` gives only 4.478:1. This fixed calculated value avoids a runtime color
-solver. It is a digital contrast check, not a guarantee for every printer or paper.
-The small return address instead uses 8pt `#666666` (5.74:1 against white) for
-better small-text readability. The measured row must fit its 80mm field; overly
-long sender details fail with an explicit error rather than wrap or clip. These
-contrast checks alone are not a claim of complete PDF accessibility.
-
-There is no cover or TOC. Keep greeting and closing as plain Markdown paragraphs;
-no spacing commands are required. “Mit freundlichen Grüßen” gets about 31.14pt
-baseline separation from the preceding paragraph and stays with the generated
-closing name. The template appends `sender_name` with about 21mm signing space.
-`signature: "Other name"` overrides the printed closing name; omitted or empty
-`signature` uses the sender name, while `signature: " "` suppresses it. A plain
-body paragraph exactly matching `sender_name` is removed to avoid duplicating an
-existing manually typed closing name. Inline mentions are unaffected. The template
-does not invent a greeting or closing formula. Sender address remains a single
-line separated with `, `; upstream splits it into header lines.
-
-Headings use a sticky block, keeping them with following text. Typst’s normal
-widow/orphan protection remains enabled; two following lines are acceptable and
-do not require moving the whole section to a new page. Typst 0.14.2 does not expose
-a reliable three-line minimum through its native layout settings; its widow/orphan
-costs control single-line fragments, not a configurable line count. We retain the
-two-line behavior instead of estimating line heights or inserting page breaks.
-See [upstream issue #5931](https://github.com/typst/typst/issues/5931).
-
-The adapter neutralizes enumerated-list layout in multiline address metadata:
-Omd2Typst otherwise interprets a line such as `29. Kammer` as Typst enumeration.
-The adapter reconstructs these address items as text before list realization,
-keeping compact spacing without invalid list tags. Body headings remain semantic
-Typst headings; the adapter normalizes their shallowest Markdown depth to H1,
-preserving relative hierarchy. Skipped nested levels still fail PDF/UA checks.
-Phoenix separates return-address parts with middle dots and places that row
-in the top 5mm, with a 1.2mm gap before
-an 80mm rule. The reserved postal area and recipient zone starting at 62.7mm
-remain unchanged. Letterhead’s compact recipient begins earlier; it is not used
-to redefine the DIN B recipient zone. Fold marks extend 5mm from the left page
-edge at 105mm and 210mm; the punch mark extends 8mm at 148.5mm. All use a 0.25pt
-stroke and appear on the first page only. Printing to the edge depends on the printer.
-The typography takes inspiration from [Letterhead](https://github.com/johannes-kaindl/obsidian-letterhead);
-Phoenix includes no Letterhead code or fonts.
-
-The fixture checks the return row separately from the recipient and checks the
-nominal 85 × 45mm Form B field (x=20–105mm, y=45–90mm), with recipient text starting near y=62.7mm. This is a
-PDF geometry check; actual window visibility also depends on envelope and folding.
-See the [Klett DIN 5008 teaching diagram](https://www.klett.de/inhalt/media_fast_path/32/DO01_3-12-007171_Onlinematerialien_DIN5008.58281.pdf)
-for the 17.7mm upper zone and 27.3mm recipient zone. This is not a certification
-against the full paid standard. Do a print/fold check before first postal use.
-Keep sender/recipient lines short enough for the window; the template does not shrink overflowing addresses silently.
-The recipient is top-aligned and grows downward. The export fixture verifies six
-lines fit and that a seventh is detected below the nominal field. This is a test
-check, not an automatic overflow rejection during ordinary exports. To check an
-individual PDF, supply every expected address line (including the return row):
-
-```sh
-python3 modules/apps/documents/typst/tests/window.py /path/to/letter.pdf \
-  "Vorname Nachname · Straße Hausnummer · PLZ Ort" \
-  "Empfänger" "Straße Hausnummer" "PLZ Ort"
-```
-
-The checker fails on missing, wrapped or out-of-bounds lines. It measures the
-nominal PDF field, not physical envelope tolerances.
-
-Home Manager installs the wrapper as a local package link to the configured
-`user.repoDirectory`: saved design changes are immediately visible to Typst. This
-is deliberately a live source link, not an immutable design snapshot. It requires
-that checkout to remain available. The original template distribution remains at
-`~/.local/share/phoenix/typst/templates`.
-
-The existing pinned import/cache was offline-capable only after a successful
-network download. Phoenix now fetches the official Letter Pro 3.0.0 archive with
-a fixed SHA-256 and installs it in the Typst **data** package directory, which
-precedes the cache. No vendored upstream copy or additional package framework is
-needed. Nix's first build needs network/cache access; subsequent letter compilation
-needs neither. Other original adapters retain their cache/download behavior.
-Typst and fonts come from locked nixpkgs. See [Typst package documentation](https://github.com/typst/packages#local-packages)
-and [Letter Pro source](https://github.com/Sematre/typst-letter-pro).
+For Markdown export, install Omd2Typst separately in the vault (tested: 0.9.0,
+Typst 0.14.2). `template-adapters/omd2typst/` maps the supported metadata/content
+to the design. The original four flat files in `templates/` are separate existing
+adapters, not standalone designs; their original cache/download behavior remains.
+Their distribution stays at `~/.local/share/phoenix/typst/templates`.
 
 ## Installation and Obsidian
 
@@ -162,7 +70,7 @@ symlink and rename `.omd2typst.before-symlink` back to `omd2typst`.
 Omd2Typst requires a vault-indexed `TFile`. The filesystem-backed installed-plugin
 fixture verifies export and rereading edited adapters through a directory link;
 live Obsidian directory-link discovery was also confirmed in the template list.
-Export from the live UI remains a user check. Check the template picker/export in
+Live exports and visual output were accepted by the operator on 2026-10-21. Check the template picker/export in
 Obsidian after creating the link; reload Obsidian if needed. Folder symlinks have
 [documented Obsidian limitations](https://obsidian.md/help/symlinks), especially
 with syncing and overlapping link targets. If this installation cannot index the
@@ -208,55 +116,75 @@ uses YAML literal multiline syntax. `subject` also supplies the PDF title and
 the wrapper. Unrelated metadata such as `chatgpt_chat` stays out of rendered text
 and PDF metadata, though the plugin can include it in intermediate `.typ` source.
 `title`, cover and TOC metadata are deliberately unused by this letter adapter.
+Keep the greeting and closing as plain Markdown paragraphs. The closing name is
+generated from `sender_name` with signing space. Omit `signature` or use `signature: ""`
+for that default; use `signature: "Other name"` to override or `signature: " "` to
+suppress it. An existing plain body paragraph exactly matching `sender_name` is
+removed to avoid duplication; inline mentions remain unchanged.
+
 Language defaults to German (`de`); `en` is accepted for English body hyphenation,
 while the requested footer/reference labels remain German.
 
-## Standalone CLI and checks
+## Standalone Typst
 
-After installation:
+After Phoenix installation, compile the example:
 
 ```sh
 typst compile modules/apps/documents/typst/tests/standalone.typ /tmp/letter.pdf
 ```
 
-Import `@local/phoenix-letter:0.1.0` and apply
-`#show: phoenix-letter.with(sender: (name: "…", address: "…"), recipient: […],
-subject: "…", date: "…", reference: "…", language: "de")`.
-No Obsidian or Markdown converter is needed. The source package also supports
-relative imports for repository-local use; upstream must still be available.
+Or create a source independent of Obsidian:
 
-## Links and accessibility checks
+```typst
+#import "@local/phoenix-letter:0.1.0": phoenix-letter
+#show: phoenix-letter.with(
+  sender: (name: "Erika Beispiel", address: "Musterstraße 12, 12345 Musterstadt"),
+  recipient: [Sozialgericht Musterstadt\ Gerichtsstraße 1\ 12345 Musterstadt],
+  subject: "Stellungnahme", date: "19.10.2026", language: "de",
+)
+Sehr geehrte Damen und Herren,
 
-Body links use the normal dark text color and a native 0.6pt dotted underline
-with round caps. They retain clickable annotations and semantic link tags across
-line wraps. For standalone use, `link-underline: "solid"` switches to a conventional
-solid underline; the default is `"dotted"`. The wrapper owns this style, not note
-content or link destinations.
+= Sachverhalt
+Hier steht der Brieftext.
 
-Ordinary Omd2Typst PDF export is unchanged. For opt-in strict compilation of an
-exported Typst source, use the vault as the root (the adapter import is vault-relative):
+Mit freundlichen Grüßen
+```
+
+`signature` has the same closing-name behavior as the adapter. Set
+`link-underline: "solid"` to use conventional solid link underlines; the default is
+`"dotted"`. Body text/destinations stay unchanged. Repository-relative imports also
+work when upstream is available; a local-package installation is not mandatory.
+
+## Validation
+
+Use short address lines. The recipient grows downward in the nominal field;
+six fixture lines fit, but extra/wrapped lines may not. To check an individual PDF,
+supply every expected address line, including its return row:
+
+```sh
+python3 modules/apps/documents/typst/tests/window.py /path/to/letter.pdf \
+  "Erika Beispiel · Musterstraße 12 · 12345 Musterstadt" \
+  "Sozialgericht Musterstadt" "Gerichtsstraße 1" "12345 Musterstadt"
+```
+
+The checker fails on missing, wrapped or out-of-bounds lines. It measures nominal
+PDF geometry, not actual envelopes/printer tolerances. No complete DIN certification
+is claimed; the recipient overflow checker is not run automatically on every export.
+
+Normal Obsidian PDF export stays unchanged. For opt-in PDF/UA-1 checks on exported
+Typst source, supply the vault root for its vault-relative adapter import:
 
 ```sh
 typst compile --root /path/to/vault --pdf-standard ua-1 /path/to/vault/letter.typ /tmp/letter-ua.pdf
 verapdf --flavour ua1 /tmp/letter-ua.pdf
 ```
 
-A nonempty `subject` supplies the required PDF title; `language: de` marks German.
-The first semantic section must be H1 and deeper sections must not skip levels.
-Fold/hole marks and the return rule are `pdf.artifact` decorations. Page furniture
-is excluded from the body reading sequence. Private YAML stays outside rendered
-content and PDF metadata; converter-generated `.typ` files may still contain it.
+Strict export requires a nonempty `subject`/PDF title and valid heading hierarchy.
+The adapter normalizes the shallowest Markdown heading depth to H1, preserving
+relative levels. Automated PDF/UA checks do not certify screen-reader usability
+or every content-dependent accessibility requirement. Inspect PDFs visually too.
 
-The automated runner compiles standalone/date fixtures, uses the installed
-Omd2Typst WASM converter and export path in a disposable vault, then performs
-strict UA compilation, independent veraPDF UA-1 validation and focused pypdf checks.
-It checks title/language, heading hierarchy, expected reading sequence, artifacts,
-wrapped clickable links, metadata exclusion, Liberation Sans regular/bold subsets,
-window geometry, hyphenation and page totals. It also rejects an invalid heading
-hierarchy and exercises 39 pagination variants and long return addresses.
-A validator failure fails the test; veraPDF's report is inspected, not just its exit code.
-
-Run with dependencies from the repository's locked nixpkgs, without activation:
+For the complete regression suite, use the repository's locked test dependencies:
 
 ```sh
 letter_nixpkgs="$(nix eval --raw --no-write-lock-file .#nixosConfigurations.metal.pkgs.path)"
@@ -265,32 +193,23 @@ nix-shell -I "nixpkgs=$letter_nixpkgs" \
   --run 'python3 modules/apps/documents/typst/tests/run.py /path/to/omd-to-typst/main.js'
 ```
 
-The first dependency download includes veraPDF's Java runtime; cached checks run
-in seconds. `PHOENIX_PDF_PYTHON` may select another Python with pypdf; `VERAPDF` may
-select another validator executable. The runner creates and removes its own test
-vault and adapter copy. Never aim the lower-level reload test directly at a live
-vault or repository adapter: it deliberately edits its disposable copy.
+The runner owns disposable fixtures/vaults; it checks standalone/converter exports,
+layout, pagination, address overflow, links, privacy, font subsets and strict UA-1
+output with independent veraPDF validation. Cached checks took about 5.2 seconds
+locally; initial downloads include Java. `PHOENIX_PDF_PYTHON` and `VERAPDF` can
+select alternate test executables. Never aim the lower-level adapter-reload test at
+a live vault or the repository adapter: it deliberately edits its disposable copy.
 
-These checks cover machine-testable PDF/UA requirements and representative reading
-order, not screen-reader usability or every content-dependent accessibility rule.
-Review reading order, meaningful link text and any added tables/images manually.
-The installed-plugin fixture uses filesystem-backed Obsidian doubles; it does not
-prove live Electron template discovery. Inspect PDFs visually as well; fixture
-identity data is fictional. Compilation alone cannot establish accessibility.
+## Attribution and licenses
 
-## Upstream templates
+Phoenix Letter imports [Letter Pro 3.0.0](https://github.com/Sematre/typst-letter-pro)
+(MIT), uses [Typst](https://github.com/typst/typst) (Apache-2.0) and embeds Liberation
+Sans (OFL-1.1). [Letterhead](https://github.com/johannes-kaindl/obsidian-letterhead)
+inspired the typography; its plugin code is not bundled. Omd2Typst is separately
+installed. See [the provenance audit](DOCU.md#provenance-licensing-and-credit) for
+exact plugin licenses, redistribution considerations and other existing templates.
+No new Phoenix software license is assigned by this documentation.
 
-| Obsidian name | Pinned import | Origin and license |
-| --- | --- | --- |
-| Letter Pro | `@preview/letter-pro:3.0.0` | [Sematre / typst-letter-pro](https://typst.app/universe/package/letter-pro/), MIT |
-| Briefs | `@preview/briefs:0.4.0` | [Tobias Enderle / briefs](https://typst.app/universe/package/briefs), MIT |
-| Formal | `@preview/formal:0.2.0` | [Vsevolod Shegolev / formal](https://typst.app/universe/package/formal/), MIT package code; MIT-0 templates |
-| Metropole Report | `@preview/metropole-report:0.1.0` | [Haydn Trowell / metropole-report](https://typst.app/universe/package/metropole-report/), GPL-3.0-or-later |
-
-Typst Universe pages are the source for versions and licensing; this README
-records the versions selected for Phoenix. To update a design, check its
-upstream API and license, change the pinned import (for Phoenix letters also update the fixed archive
-URL/hash in `default.nix`), compile representative English and German documents,
-and update this table.
-Nixpkgs supplies the compiler version; it is intentionally not pinned through a
-separate package framework.
+When updating upstream, verify its API/license, adjust the pinned import and the
+archive URL/hash in `default.nix`, and rerun representative German/English and
+accessibility checks. Compiler/fonts come from locked nixpkgs.
