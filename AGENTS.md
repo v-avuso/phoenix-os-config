@@ -5,24 +5,22 @@
 - Nix files describe current configuration; README provides orientation and
   docs/VISION.md describes future direction. Preserve cooling, authentication,
   and recovery constraints documented in operational guides.
-- Keep modules reasonably self-contained: colocate their implementation,
-  documentation, tests, fixtures and engineering guidance. Reserve root-level
-  `docs/` and `tests/` for repository-wide and genuinely cross-module concerns;
-  root README may briefly describe and link to modules.
-- Prefer reusable modules enabled by an import and minimal configuration. Keep
-  single-file modules flat; place a feature with multiple owned files (including
-  implementation, docs, and tests) in a named directory with `default.nix`.
-  Cohesive modules may keep tests at module level; avoid disproportionate
-  abstraction. See docs/ARCHITECTURE.md.
+- Keep reusable component sources separate from NixOS/Home Manager wiring;
+  deployment should reference those sources rather than maintain copies.
+  Multi-file Nix modules use a named directory with `default.nix`, enabled by an
+  import and minimal configuration; single-file modules may remain flat.
+  See [module boundaries](docs/ARCHITECTURE.md) for repository layout.
 - Keep agent policy and adapters under `modules/development/ai/agent`.
 - For media pipeline work, explicitly read `modules/apps/media/AGENTS.md`;
   root-started sessions must not assume subtree guidance was loaded.
+- For Typst publishing work, read [Typst guidance](modules/apps/documents/typst/AGENTS.md)
+  and its linked component guidance before editing designs or adapters.
 - Follow docs/CONFIGURATION_STATE.md for application ownership.
   Registered Caelestia/VSCodium experiments survive boot; explicit switch/test
   reasserts baselines. Promote reviewed settings to Nix beforehand.
 - Keep fan-policy reconciliation specialized and preserve hardware safety.
-- Update current behavior in README/recovery/state guides and future direction
-  in VISION.
+- Update current operation in README/recovery/state guides and future direction
+  in VISION; component READMEs/design docs own local architecture and rationale.
 - Agents may run inside OpenShell; use named broker diagnostics for
   containment issues.
 
@@ -40,6 +38,10 @@
 - Never use `path:.` on this checkout: it copies ignored private task notes
   into the Nix store. Standalone fixtures must also use a Git-flake source
   or a vetted disposable source tree.
+- When moving packaged sources or links, preserve public package identifiers and
+  deployment contracts unless migration is in scope. Verify referenced files and
+  relative link chains in Git-flake Nix-store sources and affected Home Manager
+  outputs, including isolated subtree copies when packaging selects a subtree.
 
 ## Commands and validation
 
