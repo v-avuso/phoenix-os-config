@@ -62,7 +62,7 @@ execution uses serial-qualified by-id paths and UUIDs.
 
 | Device | Observed identity/layout |
 | --- | --- |
-| Old Samsung 970 EVO Plus 1TB | Serial `S4EWNG0M109916K`; 1,000,204,886,016 bytes; currently nvme1n1 |
+| Old Samsung 970 EVO Plus 1TB | Serial `S4EWNG0M109916K`; 1,000,204,886,016 bytes; initially nvme1n1, observed as nvme2n1 after the USB attempt |
 | Old ESP p1 | FAT32 `7618-BF96`; PARTUUID `5949426d-e7fe-458d-9d04-e26f062da171` |
 | Old root p2 | Unencrypted Btrfs `e9d1b391-3f86-4254-9970-aa47df230474`; `/` ID 5, `home` ID 256, `nix` ID 257 |
 | Old swap p3 | Unencrypted swap `51f0275d-56fd-486c-93cb-9cdd6ebcc5eb`; 71,311,671,296 bytes; active, zero used at inspection |
@@ -94,6 +94,27 @@ Raw firmware entries: Boot0001/0005 reference the old ESP, Boot0004/0007 the new
 ESP. BootCurrent is 0001; BootOrder is 0001,0005,0004,0007,0002,0000. Recheck GUIDs
 at execution; entry numbers are mutable. The new target disables EFI-variable
 updates, retaining order while allowing installation onto its own mounted ESP.
+
+### Serial preflight compatibility
+
+The first USB log (`/home/v/log-phoenix-migrate.txt`, bundle `fc88829`) stops at
+the initial serial gate, before unlocking or restoration. It does not record the
+returned serial, so the precise presentation used in that session is unknown.
+Both actual NVMe serial fields contain five trailing spaces. The exact USB
+`lsblk` 2.42.3 binary reproduces a false mismatch when using its native sysfs
+fallback: `--raw` renders those spaces as literal `\x20`, which Python `.strip()`
+does not remove. The [upstream implementation](https://github.com/util-linux/util-linux/blob/v2.42.3/misc-utils/lsblk.c#L1021-L1028)
+selects udev properties or the sysfs field, so its display is not an identity API.
+
+Both preflight gates now follow the by-id link with `stat`, require a block device,
+and read `/sys/dev/block/MAJOR:MINOR/device/serial`. Only trailing ASCII spaces and
+newlines are removed; the entire remaining serial must match exactly. Missing
+identity, wrong serial, extra characters and regular-file aliases still stop.
+Mismatch errors include the alias, expected/observed serial and native field path.
+Actual source/destination serials and capacities pass this check; observed outer
+partition UUIDs/types still match. New encrypted filesystems remain locked and raw
+signature reads require root, so complete native layout checks remain mandatory
+on USB. No identity constants, approvals or write boundaries were relaxed.
 
 ## Restoration strategy and state selection
 

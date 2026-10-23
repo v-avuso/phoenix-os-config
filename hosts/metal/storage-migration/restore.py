@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -37,6 +38,18 @@ def capture(*args):
 
 def run(*args):
     subprocess.run([str(a) for a in args], check=True)
+
+
+def check_serial(disk, expected):
+    """Bind native NVMe identity to the by-id link's actual block device."""
+    device = Path(disk).stat()  # Follow the by-id link; never depend on nvme numbering.
+    require(stat.S_ISBLK(device.st_mode), f"Identity path is not a block device: {disk}")
+    native = Path(f"/sys/dev/block/{os.major(device.st_rdev)}:{os.minor(device.st_rdev)}/device/serial")
+    # NVMe serials are fixed-width, space-padded fields. lsblk --raw can emit
+    # literal \\x20 escapes for that padding when it falls back from udev to sysfs.
+    observed = native.read_text().rstrip(" \n")
+    require(observed == expected,
+            f"Disk serial mismatch for {disk}: expected {expected!r}, observed {observed!r} via {native}")
 
 
 def plain(path):
@@ -107,7 +120,7 @@ def preflight(apply):
         (OLD_DISK, "S4EWNG0M109916K", 0.99e12, 1.01e12),
         (NEW_DISK, "S7DSNJ0Y411212Z", 3.99e12, 4.01e12),
     ]:
-        require(capture("lsblk", "-dnro", "SERIAL", disk) == serial, "Disk serial mismatch")
+        check_serial(disk, serial)
         require(lower < int(capture("blockdev", "--getsize64", disk)) < upper, "Disk size mismatch")
     for suffix in ["", "-part1", "-part2", "-part3"]:
         require(capture("blockdev", "--getro", str(OLD_DISK) + suffix) == "1",

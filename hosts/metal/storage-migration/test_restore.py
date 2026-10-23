@@ -5,7 +5,9 @@ from pathlib import Path
 import shutil
 import subprocess
 import sqlite3
+import stat
 import struct
+from types import SimpleNamespace
 import uuid
 import tempfile
 import unittest
@@ -19,6 +21,35 @@ spec.loader.exec_module(restore)
 
 
 class Safety(unittest.TestCase):
+    def test_native_serial_accepts_only_fixed_width_padding(self):
+        disk = Path("/dev/disk/by-id/fixture")
+        device = SimpleNamespace(st_mode=stat.S_IFBLK, st_rdev=os.makedev(259, 4))
+        for serial in ["S4EWNG0M109916K\n", "S4EWNG0M109916K     \n"]:
+            with self.subTest(serial=serial), patch.object(Path, "stat", return_value=device), \
+                 patch.object(Path, "read_text", return_value=serial):
+                restore.check_serial(disk, "S4EWNG0M109916K")
+        for serial in ["S4J4NZ0R303233H     \n", "S4EWNG0M109916K\\x20\\x20\n", "S4EWNG0M109916K extra\n",
+                       " S4EWNG0M109916K\n", "S4EWNG0M109916K\t\n", ""]:
+            with self.subTest(serial=serial), patch.object(Path, "stat", return_value=device), \
+                 patch.object(Path, "read_text", return_value=serial):
+                with self.assertRaisesRegex(RuntimeError, "Disk serial mismatch.*expected.*observed"):
+                    restore.check_serial(disk, "S4EWNG0M109916K")
+
+    def test_native_serial_uses_resolved_device_number_and_refuses_non_devices(self):
+        disk = Path("/dev/disk/by-id/fixture")
+        with patch.object(Path, "stat", return_value=SimpleNamespace(st_mode=stat.S_IFBLK, st_rdev=os.makedev(259, 4))), \
+             patch.object(Path, "read_text", autospec=True, return_value="S4EWNG0M109916K     \n") as read:
+            restore.check_serial(disk, "S4EWNG0M109916K")
+            self.assertEqual(read.call_args.args[0], Path("/sys/dev/block/259:4/device/serial"))
+        with patch.object(Path, "stat", return_value=SimpleNamespace(st_mode=stat.S_IFREG)), \
+             patch.object(Path, "read_text") as read:
+            with self.assertRaisesRegex(RuntimeError, "not a block device"):
+                restore.check_serial(disk, "S4EWNG0M109916K")
+            read.assert_not_called()
+        with patch.object(Path, "stat", return_value=SimpleNamespace(st_mode=stat.S_IFBLK, st_rdev=os.makedev(259, 4))), \
+             patch.object(Path, "read_text", side_effect=FileNotFoundError("missing native identity")):
+            with self.assertRaises(OSError): restore.check_serial(disk, "S4EWNG0M109916K")
+
     @unittest.skipUnless(shutil.which("openssl"), "OpenSSL unavailable")
     def test_cold_syncthing_identity_and_sqlite_integrity_without_starting_service(self):
         with tempfile.TemporaryDirectory() as d:

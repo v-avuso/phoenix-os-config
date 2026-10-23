@@ -130,7 +130,9 @@ class Workflow(unittest.TestCase):
                 if args[0] == "lsblk" and "--json" in args:
                     return json.dumps({"blockdevices": [{"mountpoints": [None], "children": [{"mountpoints": [None]}]}]})
                 if args[:3] == ("lsblk", "-dnro", "SERIAL"):
-                    return "S4EWNG0M109916K" if args[3] == migrate.r.OLD_DISK else "S7DSNJ0Y411212Z"
+                    # Exact raw sysfs-fallback representation that broke the old gate.
+                    serial = "S4EWNG0M109916K" if args[3] == migrate.r.OLD_DISK else "S7DSNJ0Y411212Z"
+                    return serial + "\\x20" * 5
                 if args[:2] == ("blockdev", "--getsize64"):
                     return str(10**12 if args[2] == migrate.r.OLD_DISK else 4 * 10**12)
                 raise AssertionError(args)
@@ -150,6 +152,7 @@ class Workflow(unittest.TestCase):
                  patch.object(migrate.os, "geteuid", return_value=0), patch.object(migrate.sys.stdin, "isatty", return_value=True), \
                  patch.object(migrate.shutil, "which", return_value="/fixture"), patch.object(migrate, "firmware", return_value={}), \
                  patch.object(migrate.r, "capture", side_effect=capture), patch.object(migrate.r, "signature"), \
+                 patch.object(migrate.r, "check_serial") as serial_check, \
                  patch.object(migrate.r, "preflight", side_effect=preflight), \
                  patch.object(migrate.r, "run", side_effect=lambda *a: calls.append(a)), \
                  patch.object(migrate.Path, "exists", autospec=True, side_effect=lambda p: str(p) in ["/etc/NIXOS"]), \
@@ -157,6 +160,10 @@ class Workflow(unittest.TestCase):
                  patch.object(migrate.Path, "is_dir", autospec=True, side_effect=lambda p: str(p) == "/sys/firmware/efi/efivars" or is_dir(p)), \
                  contextlib.redirect_stdout(io.StringIO()):
                 driver.prepare()
+            self.assertEqual(serial_check.call_args_list, [
+                unittest.mock.call(migrate.r.OLD_DISK, "S4EWNG0M109916K"),
+                unittest.mock.call(migrate.r.NEW_DISK, "S7DSNJ0Y411212Z"),
+            ])
             old_mount = next(c for c in calls if c[0] == "mount" and c[-1] == old)
             self.assertIn("ro,nologreplay,subvolid=5", old_mount)
             self.assertEqual([c[0] for c in calls[:4]], ["blockdev"] * 4)

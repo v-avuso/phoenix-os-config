@@ -75,7 +75,7 @@ class Migration:
             (r.OLD_DISK, "S4EWNG0M109916K", .99e12, 1.01e12),
             (r.NEW_DISK, "S7DSNJ0Y411212Z", 3.99e12, 4.01e12),
         ]:
-            r.require(r.capture("lsblk", "-dnro", "SERIAL", disk) == serial, "Disk serial mismatch")
+            r.check_serial(disk, serial)
             r.require(lower < int(r.capture("blockdev", "--getsize64", disk)) < upper, "Disk size mismatch")
             inventory = json.loads(r.capture("lsblk", "--json", "--output", "NAME,MOUNTPOINTS", disk))
             def inspect(nodes, depth=0):

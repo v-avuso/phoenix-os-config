@@ -36,6 +36,9 @@
 - When inspecting an offline NixOS root, resolve absolute `/etc` and Nix-store
   symlinks within that root; host traversal can read the running installation
   instead of the target being inspected.
+- Hardware identity checks must compare native fields with only documented
+  padding removed; `lsblk --raw` can hex-escape NVMe serial padding. Exercise
+  native/fallback representations rather than only mocked, trimmed output.
 - Git flakes omit untracked files: the coordinator stages only owned new
   files before combined checks.
 - Never use `path:.` on this checkout: it copies ignored private task notes
