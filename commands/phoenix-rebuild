@@ -12,7 +12,7 @@ Optional --reason/--task are accepted for compatibility, not broker audit contex
 Agents must use ai-broker for authenticated immutable deployment and reservations.
 All actions forward nixos-rebuild arguments.
 Runs the selected workflow against the auto-selected PhoeNix OS flake target.
-Set PHOENIX_TARGET=vm or PHOENIX_TARGET=metal to override detection.
+PHOENIX_TARGET may confirm vm, metal or metal-4tb; conflicting roots are rejected.
 EOF
 }
 
@@ -85,6 +85,15 @@ fi
 target="$(phoenix-target)"
 
 flake_ref="${repo_root}#${target}"
+
+# A trailing --flake would override the guarded target in nixos-rebuild.
+for argument in "$@"; do
+  case "$argument" in
+    --flake|--flake=*)
+      printf 'phoenix-rebuild: --flake is owned by target selection; use --worktree for source selection\n' >&2
+      exit 2 ;;
+  esac
+done
 
 # These human-facing commands retain nixos-rebuild's terminal authentication/UI.
 # Agent deployment is a separate immutable ai-broker mapping, never an env mode.

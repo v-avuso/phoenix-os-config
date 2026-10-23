@@ -12,6 +12,18 @@ The protected controller validates publisher policy and immutable baseline/profi
 builds the submitted source and binds the resulting closure before boot staging.
 Routine updates invoke neither AI review nor graphical operator authentication.
 
+`phoenix.target` binds the updater, installed deployment policy and controller to
+one flake output. Both updater and deployment controller verify the stable root
+filesystem UUID with the packaged `phoenix-target` before work/activation. Human
+switch/boot commands use the same check. Unknown roots, stale installed targets
+and conflicting `PHOENIX_TARGET` values fail closed; overrides cannot select the
+other SSD. The updater uses its generated target, independent of that environment.
+The 4 TB migration initially forces updates off. After acceptance, remove that
+host override and install the reviewed committed source with explicit
+`PHOENIX_TARGET=metal-4tb phoenix-switch`; verify the installed source/profile
+baseline before allowing routine updates. See the
+[migration procedure](../../../hosts/metal/storage-migration/README.md).
+
 Source manifests preserve safe internal file symlinks, including the Typst adapter
 and package compatibility links. Literal targets and modes must match the approved
 baseline; routine updates cannot add or retarget links. See the shared

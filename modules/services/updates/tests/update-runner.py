@@ -17,6 +17,17 @@ import candidate
 
 
 class RunnerTests(unittest.TestCase):
+    def test_root_guard_rejects_before_preparation(self):
+        config = dict(target='metal', targetGuard='/nix/store/fixed-target/bin/phoenix-target')
+        with patch.object(runner.subprocess, 'run', side_effect=subprocess.CalledProcessError(2, 'guard')) as probe:
+            source = MagicMock()
+            with self.assertRaises(runner.UpdateDenied): runner.run(config, source)
+            source.assert_not_called()
+            self.assertEqual(source.mock_calls, [])
+            self.assertEqual(probe.call_args.args[0], [config['targetGuard'], '--require', 'metal'])
+        with patch.object(runner, '__file__', '/nix/store/fixed-updater.py'):
+            with self.assertRaises(runner.UpdateDenied): runner.verify_runtime_target({'target': 'metal'})
+
     def test_help_and_unknown_options_cannot_start_update(self):
         import contextlib
         import io

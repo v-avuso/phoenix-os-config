@@ -44,7 +44,8 @@ let
     caBundle = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
     nixHome = "/var/lib/phoenix-updates/nix-home";
     controllerSocket = "/run/phoenix-deploy/control.sock";
-    target = if config.networking.hostName == "phoenix-vm" then "vm" else "metal";
+    target = config.phoenix.target;
+    targetGuard = "${config.system.build.phoenixTarget}/bin/phoenix-target";
     baseline = "/etc/phoenix-agent/activated-source";
     systemProfile = "/nix/var/nix/profiles/system";
   });
@@ -71,6 +72,7 @@ in
   };
 
   config = {
+    system.build.phoenixUpdateRunnerConfig = runnerConfig;
     assertions = [
       {
         assertion = !cfg.enable || config.systemd.services.phoenix-updates.serviceConfig.User == config.phoenix.authorization.updaterUser;

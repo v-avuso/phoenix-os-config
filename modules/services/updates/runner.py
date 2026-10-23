@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import re
 import socket
+import subprocess
 import sys
 import tempfile
 import time
@@ -318,7 +319,22 @@ def atomic_json(path, value):
         Path(name).unlink(missing_ok=True)
 
 
+def verify_runtime_target(config):
+    guard = config.get('targetGuard')
+    if guard is None and not str(Path(__file__).resolve()).startswith('/nix/store/'):
+        return  # Repository-only fixtures; installed runners always bind the guard.
+    try:
+        if not isinstance(guard, str) or not guard.startswith('/nix/store/'):
+            raise ValueError('missing installed root guard')
+        subprocess.run([guard, '--require', config['target']], check=True, timeout=10,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env={'PATH': os.defpath})
+    except (ValueError, OSError, subprocess.SubprocessError):
+        raise UpdateDenied(dict(stage='baseline', code='baseline-policy-mismatch',
+                                summary='Installed target does not match the root filesystem')) from None
+
+
 def run(config, c):
+    verify_runtime_target(config)
     progress('Checking source baseline and local edits')
     repo = Path(config['repo']).resolve(strict=True)
     state = Path(config['state'])
@@ -537,6 +553,12 @@ def main():
     parser.add_argument('--json', action='store_true', help='Print the final result as JSON; progress stays on stderr.')
     args = parser.parse_args()
     config = json.loads(Path(args.config).read_text())
+    try:
+        verify_runtime_target(config)
+    except UpdateDenied as error:
+        result = dict(status='failed', stage=error.stage, code=error.code, reason=str(error))
+        print(json.dumps(result) if args.json else format_result(result))
+        return 1
     spec = importlib.util.spec_from_file_location('candidate', config['candidateScript'])
     c = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(c)

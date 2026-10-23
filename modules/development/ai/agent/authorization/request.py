@@ -41,7 +41,7 @@ def policy(config):
         raise ValueError('invalid installed authorization policy version')
     if any(type(value[key]) is not int or value[key] < 0 for key in ('clientUid', 'operatorUid', 'updaterUid')):
         raise ValueError('invalid installed caller policy')
-    if value['target'] not in {'metal', 'vm'} or not isinstance(value['diagnostics'], dict) or set(value['diagnostics']) != {'admin.' + op for op in DIAGNOSTICS} or any(mode not in {'automatic', 'human', 'denied'} for mode in value['diagnostics'].values()):
+    if value['target'] not in {'metal', 'metal-4tb', 'vm'} or not isinstance(value['diagnostics'], dict) or set(value['diagnostics']) != {'admin.' + op for op in DIAGNOSTICS} or any(mode not in {'automatic', 'human', 'denied'} for mode in value['diagnostics'].values()):
         raise ValueError('invalid installed decision policy')
     for configured, installed in [('clientUid', 'clientUid'), ('client_uid', 'clientUid'), ('operatorUid', 'operatorUid'), ('updaterUid', 'updaterUid')]:
         if configured in config and (type(config[configured]) is not int or config[configured] != value[installed]):

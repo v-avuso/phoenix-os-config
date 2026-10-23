@@ -9,7 +9,7 @@
 }:
 let
   cfg = config.services.phoenixDeployment;
-  installedTarget = if config.networking.hostName == "phoenix-vm" then "vm" else "metal";
+  installedTarget = config.phoenix.target;
   authorizationPolicy = toString config.system.build.phoenixAuthorizationPolicy;
   authorizationLibrary = toString config.system.build.phoenixAuthorizationLibrary;
   transportPolicy = pkgs.writeText "phoenix-deployment-transport.json" (builtins.readFile ./transport.json);
@@ -191,6 +191,7 @@ let
       clientUid = if config.phoenix.agent.identity.enable then config.phoenix.agent.identity.uid else config.users.users.${user.name}.uid;
       operatorUid = config.users.users.${user.name}.uid;
       target = installedTarget;
+      targetGuard = "${config.system.build.phoenixTarget}/bin/phoenix-target";
       reviewerUser = "phoenix-deploy-review";
       builderUser = "phoenix-deploy-build";
       reviewHome = "/var/lib/phoenix-deploy-review";

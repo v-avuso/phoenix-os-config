@@ -170,7 +170,21 @@ def frozen_github_reference(owner, repo, branch=None, directory=None):
     return reference
 
 
+def verify_runtime_target(config):
+    guard = config.get('targetGuard')
+    if guard is None and not str(Path(__file__).resolve()).startswith('/nix/store/'):
+        return  # Repository-only synthetic fixtures; installed configs must bind a guard.
+    if not isinstance(guard, str) or not guard.startswith('/nix/store/'):
+        raise DeploymentFailure('baseline', 'baseline-policy-mismatch')
+    try:
+        subprocess.run([guard, '--require', config['target']], check=True, timeout=10,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env={'PATH': os.defpath})
+    except (OSError, subprocess.SubprocessError):
+        raise DeploymentFailure('baseline', 'baseline-policy-mismatch') from None
+
+
 def activate(config, closure, action, run):
+    verify_runtime_target(config)
     activation_action = 'boot' if action == 'update' else action
     command = [closure + '/bin/switch-to-configuration', activation_action]
     if action == 'test':
@@ -289,6 +303,7 @@ def process(config, request, uid, pid, operator=False):
     named = None
     try:
         request_valid(request, config['target'], bool(config.get('reservations')))
+        verify_runtime_target(config)
         named = authorization.named('deployment.' + request['action'], {'target': request['target']}, request.get('task', 'phoenix-updater' if request['action'] == 'update' else 'phoenix-deployment'), request['reason'])
         # Revalidate the installed decision on every entrance, including legacy requests.
         installed = authorization.policy(config)

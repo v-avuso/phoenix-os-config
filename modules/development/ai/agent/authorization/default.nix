@@ -20,7 +20,7 @@ let
     clientUid = if config.phoenix.agent.identity.enable then config.phoenix.agent.identity.uid else config.users.users.${user.name}.uid;
     operatorUid = config.users.users.${user.name}.uid;
     inherit updaterUid;
-    target = if config.networking.hostName == "phoenix-vm" then "vm" else "metal";
+    target = config.phoenix.target;
     diagnostics = lib.listToAttrs (map (name: { name = "admin.${name}"; value = config.phoenix.authorization.diagnostics.${name}; }) names);
     wakeupDevices = config.phoenix.agent.wakeupDevices;
     statusServices = [ "coolercontrold.service" "clamav-daemon.service" "clamav-clamonacc.service" "opensnitchd.service" "NetworkManager.service" ];

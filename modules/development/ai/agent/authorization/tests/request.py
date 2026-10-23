@@ -21,6 +21,17 @@ auth = load('authorization', ROOT / 'authorization/request.py')
 admin = load('authorization_admin', ROOT / 'admin.py')
 deploy = load('authorization_deployment', ROOT / 'deployment.py')
 class Contract(unittest.TestCase):
+    def test_4tb_policy_allows_only_its_installed_target(self):
+        policy = auth.default_policy(False, 1000, 1000, target='metal-4tb')
+        config = dict(authorizationPolicy=policy)
+        self.assertEqual(auth.policy(config)['target'], 'metal-4tb')
+        for action in ['test', 'switch', 'boot', 'update']:
+            request = auth.named('deployment.' + action, {'target': 'metal-4tb'}, 'migration', 'Validate explicit 4 TB target')
+            self.assertIn(auth.validate(request, policy), ['automatic', 'human'])
+            for wrong in ['metal', 'vm']:
+                request['arguments']['target'] = wrong
+                with self.assertRaises(ValueError): auth.validate(request, policy)
+
     def setUp(self):
         self.policy = auth.default_policy(False, 1000, 1000, [], ['NetworkManager.service'])
         self.request = auth.named('admin.dmesg', {}, 'fixture', 'Read kernel diagnostics')

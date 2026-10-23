@@ -46,7 +46,9 @@ records installation and runtime status separately.
 Home Manager installs commands on the user's PATH for Bash, Fish, agents,
 scripts, and keybinds. `config/user.nix` defines `repoDirectory`; override the
 checkout temporarily with `PHOENIX_REPO_ROOT`. `phoenix-target --info` explains
-automatic selection; `PHOENIX_TARGET=metal` or `vm` overrides it.
+automatic selection from the root filesystem UUID. `PHOENIX_TARGET=metal`,
+`metal-4tb` or `vm` can confirm the selection; conflicts and unknown physical
+roots stop the command.
 Command implementations are packaged with the system generation; rebuilds use
 the selected live checkout as their flake source.
 
@@ -94,6 +96,13 @@ See the [recovery runbook](docs/RECOVERY_RUNBOOK.md) for generation rollback,
 fresh installation, and private-state restoration. A NixOS rollback restores
 system configuration; it does not restore documents, databases, credentials,
 or all mutable settings.
+
+The prepared [4 TB SSD migration](hosts/metal/storage-migration/README.md) retains
+`metal`/`default` for rollback and adds `metal-4tb`. Its QUICKSTART uses one portable
+live-USB launcher, with separate restore/install approvals. Root UUID guards bind
+commands, updater and agent deployment to the correct installed target.
+Updates and Syncthing remain held on the migration target
+until their documented acceptance checks pass.
 
 [Media viewers](modules/apps/README.md): local audio/video in mpv and images in swayimg.
 

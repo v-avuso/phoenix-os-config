@@ -517,7 +517,7 @@ def deployment_failure(result, config=None):
         if isinstance(value, str) and re.fullmatch(pattern, value):
             display[key] = value
     for key, allowed in {"pendingAction": {"test", "switch", "boot", "update"},
-                         "pendingTarget": {"metal", "vm"},
+                         "pendingTarget": {"metal", "metal-4tb", "vm"},
                          "pendingKind": {"security", "disruption"},
                          "proofLimit": {"unit-artifacts-only"}}.items():
         value = result.get(key)
@@ -564,7 +564,7 @@ def main():
     parser.add_argument("--authorization-context", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--task", default="phoenix-deployment", help="bounded task label")
     parser.add_argument("--reason", help="concrete authorized task purpose")
-    parser.add_argument("--target", choices=["metal", "vm"])
+    parser.add_argument("--target", choices=["metal", "metal-4tb", "vm"])
     parser.add_argument("--action", choices=(["test", "switch", "boot"] if config.get("clientOnly") else ["review", "build", "test", "switch", "boot"]), default=("test" if config.get("clientOnly") else "review"))
     parser.add_argument("--security-override", metavar="PENDING_NONCE", help="authenticate an explicit exact-state review override")
     parser.add_argument("--disruption-override", metavar="PENDING_NONCE", help="authenticate one exact protected unit exception")
@@ -597,7 +597,7 @@ def main():
         identity = {}
         for key, pattern in {'pendingNonce': r'[a-f0-9]{64}',
                              'pendingAction': r'test|switch|boot',
-                             'pendingTarget': r'metal|vm'}.items():
+                             'pendingTarget': r'metal|metal-4tb|vm'}.items():
             value = explanation.get(key)
             if isinstance(value, str) and re.fullmatch(pattern, value):
                 identity[key] = value

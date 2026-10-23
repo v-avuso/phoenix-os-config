@@ -2,17 +2,30 @@
 let
   flake = builtins.getFlake ("git+file://" + toString ../..);
   config = flake.nixosConfigurations.metal.config;
+  newConfig = flake.nixosConfigurations.metal-4tb.config;
   pkgs = flake.inputs.nixpkgs.legacyPackages.x86_64-linux;
   user = import ../../config/user.nix { inherit (pkgs) lib; };
   sandboxCommands = import ../. {
     inherit pkgs user;
     includeDesktopCommands = false;
+    targetProbe = pkgs.writeShellScript "fixture-root-probe" ''
+      printf '%s\n' e9d1b391-3f86-4254-9970-aa47df230474
+    '';
   };
-  commands = builtins.head (
-    builtins.filter (
-      package: (package.name or "") == "phoenix-user-commands"
-    ) config.home-manager.users.${user.name}.home.packages
-  );
+  # Only root identity is synthetic; compile the real packaged command flow.
+  commandsFor = c: import ../. {
+    inherit pkgs user;
+    # This fixture exercises storage selection/deployment, not desktop packages.
+    includeDesktopCommands = false;
+    defaultTarget = c.phoenix.target;
+    nixosRebuild = c.system.build.nixos-rebuild;
+    targetProbe = pkgs.writeShellScript "fixture-root-probe" ''
+      printf '%s\n' ${pkgs.lib.escapeShellArg (if c.phoenix.target == "metal-4tb" then
+        "b1756a78-0da5-47a3-a73c-38112d1ac945" else "e9d1b391-3f86-4254-9970-aa47df230474")}
+    '';
+  };
+  commands = commandsFor config;
+  newCommands = commandsFor newConfig;
   nativeBroker = builtins.head (builtins.filter (package: (package.name or "") == "ai-broker")
     config.home-manager.users.${user.name}.home.packages);
   sandboxBroker = import ../../modules/development/ai/agent/authorization/adapter.nix {
@@ -25,6 +38,7 @@ let
   };
 in
 assert (builtins.fromJSON config.system.build.phoenixAuthorizationPolicy.text).target == "metal";
+assert (builtins.fromJSON newConfig.system.build.phoenixAuthorizationPolicy.text).target == "metal-4tb";
 pkgs.runCommand "phoenix-command-packaging" { } ''
   # This checkout deliberately contains an unusable dispatcher. The installed
   # executable must use its packaged implementation while reading flake.nix
@@ -36,6 +50,12 @@ pkgs.runCommand "phoenix-command-packaging" { } ''
   chmod +x "$checkout/commands/phoenix-rebuild"
 
   export PHOENIX_REPO_ROOT="$checkout"
+  unset PHOENIX_TARGET
+  ${newCommands}/bin/phoenix-target --info > selected
+  grep -Fxq 'target=metal-4tb source=root-filesystem:b1756a78-0da5-47a3-a73c-38112d1ac945' selected
+  ${newCommands}/bin/phoenix-rebuild --print switch > new-activation
+  grep -Fq '#metal-4tb' new-activation
+  grep -Fq 'nixos-rebuild --sudo switch' new-activation
   export PHOENIX_TARGET=metal
   ${commands}/bin/phoenix-rebuild --print build > result
   grep -Fq 'nixos-rebuild build --flake ' result

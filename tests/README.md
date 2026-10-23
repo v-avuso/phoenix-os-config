@@ -7,6 +7,9 @@ index. Run from the repository root:
 python3 home/mutable-json-settings/tests/mutable-json-settings.py
 python3 modules/tests/mutable-settings-activation.py
 python3 commands/tests/commands.py
+python3 -B hosts/metal/storage-migration/test_restore.py
+python3 -B hosts/metal/storage-migration/test_migrate.py
+nix eval --impure --file modules/tests/target.nix
 nix shell --inputs-from . nixpkgs#lua --command lua home/idle/tests/idle-blank.lua home/idle/blank.lua home/idle/black.frag
 nix shell --inputs-from . nixpkgs#lua --command lua home/workspaces/tests/navigation.lua home/workspaces/navigation.lua
 python3 -B modules/development/ai/agent/authorization/tests/request.py
@@ -54,6 +57,11 @@ python3 -B modules/development/ai/agent/tests/reservation-deployment.py
 - **Command fixtures:** mocked execution covers host detection, environment
   precedence, argument handling, and session dispatch. The package fixture verifies
   the installed dispatcher ignores a rogue checkout script and build needs no sudo.
+- **Storage migration fixtures:** disposable files/keys/databases exercise restore
+  guards, metadata preservation, Syncthing/EFI checks, approval/failure sequencing,
+  owned-resource cleanup and portable bundle contents. Provide Python 3, rsync,
+  OpenSSL and ACL tools on PATH to avoid skipped coverage; target evaluation and
+  command packaging also check the separate 4 TB target. No disk migration runs.
 - **ClamAV fixture:** asserts configured unit relationships and tests recovery
   against a fake systemctl, including partially and fully active services.
 - **Security evaluations:** assert OpenSnitch observation mode plus the inbound

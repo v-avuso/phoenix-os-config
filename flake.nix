@@ -91,6 +91,7 @@
           modules = [ hostPath ];
         };
       metal = mkHost ./hosts/metal/configuration.nix;
+      metal-4tb = mkHost ./hosts/metal/ssd4tb/configuration.nix;
       vm = mkHost ./hosts/vm/configuration.nix;
     in
     {
@@ -98,7 +99,7 @@
       # and its companion/bubblewrap/ripgrep layout come from Nixpkgs.
       packages.${system}.codex-cli = inputs.nixpkgs-unstable.legacyPackages.${system}.codex;
       nixosConfigurations = {
-        inherit metal vm;
+        inherit metal metal-4tb vm;
 
         default = metal;
       };

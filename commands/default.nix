@@ -4,14 +4,12 @@
   nixosRebuild ? pkgs.nixos-rebuild-ng,
   includeDesktopCommands ? true,
   hyprlandPackage ? pkgs.hyprland,
+  defaultTarget ? null,
+  targetProbe ? "${pkgs.util-linux}/bin/findmnt",
 }:
 
 let
-  phoenixTarget = pkgs.writeShellApplication {
-    name = "phoenix-target";
-    runtimeInputs = [ pkgs.systemd ];
-    text = builtins.readFile ./phoenix-target;
-  };
+  phoenixTarget = import ./target.nix { inherit pkgs defaultTarget; rootProbe = targetProbe; };
 
   phoenixSource = pkgs.writeScriptBin "phoenix-source" (
     builtins.replaceStrings [ "#!/usr/bin/env python3" ]

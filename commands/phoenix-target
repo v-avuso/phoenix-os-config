@@ -4,18 +4,18 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  phoenix-target [--info|--source]
+  phoenix-target [--info|--source|--require TARGET]
 
 Prints the selected PhoeNix OS flake target.
 
-Resolution order:
-  1. PHOENIX_TARGET when set
-  2. vm when systemd-detect-virt detects a VM
-  3. metal fallback
+Selects metal/metal-4tb by stable root filesystem UUID, or vm in a VM.
+Unknown metal roots, conflicting PHOENIX_TARGET and stale installed targets fail.
+--require checks the target expected by an updater or deployment controller.
 EOF
 }
 
 mode="target"
+expected=""
 
 case "${1:-}" in
   "")
@@ -25,6 +25,10 @@ case "${1:-}" in
     ;;
   --source)
     mode="source"
+    ;;
+  --require)
+    [ "$#" -eq 2 ] || { printf 'phoenix-target: --require needs one target\n' >&2; exit 2; }
+    expected="$2"
     ;;
   -h|--help)
     usage
@@ -37,25 +41,27 @@ case "${1:-}" in
     ;;
 esac
 
-if [ -n "${PHOENIX_TARGET:-}" ]; then
-  target="$PHOENIX_TARGET"
-  source="env:PHOENIX_TARGET"
-elif command -v systemd-detect-virt >/dev/null 2>&1 && systemd-detect-virt --quiet --vm; then
-  target="vm"
-  source="systemd-detect-virt"
-else
-  target="metal"
-  source="fallback"
-fi
-
-case "$target" in
-  vm|metal)
-    ;;
+root_uuid="$("${phoenix_root_probe:-findmnt}" --noheadings --raw --output UUID --target /)" || {
+  printf 'phoenix-target: cannot identify root filesystem; refusing selection\n' >&2; exit 2;
+}
+case "$root_uuid" in
+  e9d1b391-3f86-4254-9970-aa47df230474) target="metal" ;;
+  b1756a78-0da5-47a3-a73c-38112d1ac945) target="metal-4tb" ;;
   *)
-    printf 'phoenix-target: invalid PHOENIX_TARGET=%s; expected vm or metal\n' "$target" >&2
-    exit 2
-    ;;
+    if systemd-detect-virt --quiet --vm; then
+      target="vm"
+    else
+      printf 'phoenix-target: unknown root filesystem UUID; refusing selection\n' >&2; exit 2
+    fi ;;
 esac
+source="root-filesystem:$root_uuid"
+[ "$target" != vm ] || source="systemd-detect-virt"
+for declared in "${PHOENIX_TARGET:-}" "${phoenix_configured_target:-}" "$expected"; do
+  if [ -n "$declared" ] && [ "$declared" != "$target" ]; then
+    printf 'phoenix-target: requested/installed target %s conflicts with root target %s\n' "$declared" "$target" >&2
+    exit 2
+  fi
+done
 
 case "$mode" in
   target)

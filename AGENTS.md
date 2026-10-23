@@ -33,6 +33,9 @@
   inspect the exact upstream implementation/diff and provide bounded source
   evidence.
 - Do not silently update flake.lock.
+- When inspecting an offline NixOS root, resolve absolute `/etc` and Nix-store
+  symlinks within that root; host traversal can read the running installation
+  instead of the target being inspected.
 - Git flakes omit untracked files: the coordinator stages only owned new
   files before combined checks.
 - Never use `path:.` on this checkout: it copies ignored private task notes
@@ -49,7 +52,8 @@
   `phoenix-build`, `phoenix-gc`, `phoenix-test`, `phoenix-switch`, and `phoenix-boot`.
   `phoenix-rebuild --print <action>` previews the dispatcher command.
 - `config/user.nix` owns `repoDirectory`; `PHOENIX_REPO_ROOT` overrides the
-  checkout and `PHOENIX_TARGET=metal|vm` overrides target detection.
+  checkout. Root UUID selects `metal|metal-4tb`; `PHOENIX_TARGET` can confirm
+  that selection (or `vm`) but a mismatch fails closed.
 - Evaluate metal with:
   `nix eval --no-write-lock-file .#nixosConfigurations.metal.config.system.build.toplevel.drvPath`
   Use the corresponding `vm` output when relevant.

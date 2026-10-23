@@ -34,6 +34,7 @@ class Commands(unittest.TestCase):
             "XDG_CURRENT_DESKTOP": "",
             "XDG_SESSION_DESKTOP": "",
             "HYPRLAND_INSTANCE_SIGNATURE": "",
+            "TEST_ROOT_UUID": "e9d1b391-3f86-4254-9970-aa47df230474",
         }
         for name in ("nixos-rebuild", "hyprctl", "qdbus", "hyprshutdown"):
             executable = self.bin / name
@@ -51,6 +52,12 @@ class Commands(unittest.TestCase):
         target = self.bin / "phoenix-target"
         target.write_text((ROOT / "commands/phoenix-target").read_text())
         target.chmod(0o755)
+        probe = self.bin / "findmnt"
+        probe.write_text('#!/bin/sh\nprintf "%s\\n" "$TEST_ROOT_UUID"\n')
+        probe.chmod(0o755)
+        detector = self.bin / "systemd-detect-virt"
+        detector.write_text('#!/bin/sh\n[ "${TEST_VM:-0}" = 1 ]\n')
+        detector.chmod(0o755)
 
     def run_command(self, name, *args, env=None):
         return subprocess.run(
@@ -92,7 +99,7 @@ class Commands(unittest.TestCase):
     def test_activation_only_adds_sudo_to_underlying_rebuild(self):
         for action in ("test", "switch", "boot"):
             with self.subTest(action=action):
-                result = self.run_command("phoenix-rebuild", action, env={"PHOENIX_TARGET": "vm"})
+                result = self.run_command("phoenix-rebuild", action, env={"PHOENIX_TARGET": "vm", "TEST_ROOT_UUID": "vm-root", "TEST_VM": "1"})
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(self.recorded()["args"],
                                  ["--sudo", action, "--flake", f"{self.repo}#vm"])
@@ -173,7 +180,7 @@ print('cwd/common-metadata/edit/profile-isolation passed')
             for action in ("build", "dry-build", "test", "switch", "boot"):
                 result = self.run_command("phoenix-rebuild", action, "--print", *selector,
                                           "--option", "example", "value with spaces",
-                                          env={"PHOENIX_TARGET": "vm"})
+                                          env={"PHOENIX_TARGET": "vm", "TEST_ROOT_UUID": "vm-root", "TEST_VM": "1"})
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn(f"{other}#vm", shlex.split(result.stdout))
                 self.assertEqual(shlex.split(result.stdout)[-3:],
@@ -207,16 +214,46 @@ print('cwd/common-metadata/edit/profile-isolation passed')
     def test_target_detection_and_override_precedence(self):
         detector = self.bin / "systemd-detect-virt"
         for vm, override, expected in ((True, "", "vm"), (False, "", "metal"),
-                                       (True, "metal", "metal"), (False, "vm", "vm")):
+                                       (False, "metal", "metal"), (True, "vm", "vm")):
             with self.subTest(vm=vm, override=override):
                 detector.write_text(f"#!/bin/sh\nexit {0 if vm else 1}\n")
                 detector.chmod(0o755)
                 result = self.run_command("phoenix-target", "--info",
-                                          env={"PHOENIX_TARGET": override})
+                                          env={"PHOENIX_TARGET": override, "TEST_ROOT_UUID": "vm-root" if vm else self.env['TEST_ROOT_UUID']})
                 self.assertEqual(result.returncode, 0, result.stderr)
-                source = "env:PHOENIX_TARGET" if override else (
-                    "systemd-detect-virt" if vm else "fallback")
+                source = "systemd-detect-virt" if vm else "root-filesystem:" + self.env['TEST_ROOT_UUID']
                 self.assertEqual(result.stdout, f"target={expected} source={source}\n")
+
+    def test_4tb_explicit_and_installed_target(self):
+        result = self.run_command("phoenix-rebuild", "--print", "switch", env={"PHOENIX_TARGET": "metal-4tb", "TEST_ROOT_UUID": "b1756a78-0da5-47a3-a73c-38112d1ac945"})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("#metal-4tb", result.stdout)
+        self.assertFalse(self.record.exists())
+        for override, expected, source in [("", "metal-4tb", "root-filesystem:b1756a78-0da5-47a3-a73c-38112d1ac945"),
+                                            ("metal-4tb", "metal-4tb", "root-filesystem:b1756a78-0da5-47a3-a73c-38112d1ac945")]:
+            result = self.run_command("phoenix-target", "--info", env={
+                "PHOENIX_TARGET": override, "phoenix_configured_target": "metal-4tb", "TEST_ROOT_UUID": "b1756a78-0da5-47a3-a73c-38112d1ac945"})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, f"target={expected} source={source}\n")
+
+    def test_new_root_rejects_old_override_stale_package_and_unknown_identity(self):
+        for environment in [
+            {"TEST_ROOT_UUID": "b1756a78-0da5-47a3-a73c-38112d1ac945", "PHOENIX_TARGET": "metal"},
+            {"TEST_ROOT_UUID": "b1756a78-0da5-47a3-a73c-38112d1ac945", "PHOENIX_TARGET": "", "phoenix_configured_target": "metal"},
+            {"TEST_ROOT_UUID": "unknown", "PHOENIX_TARGET": "metal-4tb"},
+        ]:
+            for action in ["switch", "boot"]:
+                with self.subTest(environment=environment, action=action):
+                    result = self.run_command("phoenix-rebuild", action, env=environment)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertFalse(self.record.exists())
+
+    def test_trailing_flake_cannot_override_guarded_target(self):
+        for argument in [("--flake", ".#metal"), ("--flake=.#metal",)]:
+            result = self.run_command("phoenix-rebuild", "boot", *argument, env={
+                "TEST_ROOT_UUID": "b1756a78-0da5-47a3-a73c-38112d1ac945", "PHOENIX_TARGET": "metal-4tb"})
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(self.record.exists())
 
     def test_hyprland_logout_dispatches_graceful_shutdown(self):
         result = self.run_command("phoenix-logout", env={"HYPRLAND_INSTANCE_SIGNATURE": "fixture"})

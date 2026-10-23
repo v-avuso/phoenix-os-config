@@ -22,6 +22,20 @@ routine_spec.loader.exec_module(routine)
 
 
 class DeploymentTests(unittest.TestCase):
+    def test_root_guard_rejects_before_freeze_and_before_profile_mutation(self):
+        config = dict(target='metal', targetGuard='/nix/store/fixed-target/bin/phoenix-target')
+        error = deploy.subprocess.CalledProcessError(2, 'guard')
+        with mock.patch.object(deploy.subprocess, 'run', side_effect=error) as probe, \
+             mock.patch.object(deploy, 'process_inner') as freeze:
+            with self.assertRaises(deploy.DeploymentFailure): deploy.process(config, self.request(), 1000, 23)
+            freeze.assert_not_called()
+            mutate = mock.Mock()
+            with self.assertRaises(deploy.DeploymentFailure): deploy.activate(config, '/unbuilt', 'boot', mutate)
+            mutate.assert_not_called()
+            self.assertEqual(probe.call_args.args[0], [config['targetGuard'], '--require', 'metal'])
+        with mock.patch.object(deploy, '__file__', '/nix/store/fixed-deployment.py'):
+            with self.assertRaises(deploy.DeploymentFailure): deploy.verify_runtime_target({'target': 'metal'})
+
     def request(self):
         return dict(files={'flake.nix': '{}', 'flake.lock': '{}'},
                     modes={'flake.nix': '100644', 'flake.lock': '100644'},

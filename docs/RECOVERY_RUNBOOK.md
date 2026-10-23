@@ -16,6 +16,12 @@ restore sources. The repository is not their backup.
 
 ## Fresh installation or disk replacement
 
+For the already-installed 4 TB Phoenix SSD, use the
+[specific migration procedure](../hosts/metal/storage-migration/README.md).
+It preserves the 1 TB disk and `metal` target, restores all of `/home/v` offline,
+and uses `metal-4tb` for the encrypted installation. Its pending native checks
+and execution approvals take precedence over the generic steps below.
+
 1. Boot the NixOS installer, partition and mount the intended disks under
    `/mnt`, and generate the installation configuration. Review the disk layout
    before any destructive operation.

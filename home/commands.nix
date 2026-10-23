@@ -3,6 +3,7 @@ let
   deploymentHelper = nixosConfig.system.build.phoenixDeploymentClient or null;
   phoenixCommands = import ../commands {
     inherit pkgs user;
+    defaultTarget = nixosConfig.phoenix.target;
     nixosRebuild = nixosConfig.system.build.nixos-rebuild;
     hyprlandPackage = if nixosConfig.programs.hyprland.enable then
       nixosConfig.programs.hyprland.package else pkgs.hyprland;
