@@ -11,6 +11,8 @@ import sys
 import restore as r
 from checks import check_efi, check_syncthing, fresh_identity
 
+NIX = ["nix", "--extra-experimental-features", "nix-command flakes"]
+
 
 def approve(word, explanation):
     print(explanation, flush=True)
@@ -154,14 +156,14 @@ class Migration:
         release = json.loads((self.source.parent / "release.json").read_text())
         r.require(build.get("commit") == release["commit"] and build.get("cacheReady") is True,
                   "Prebuilt closure is incomplete or belongs to another launcher")
-        expected = r.capture("nix", "eval", "--raw", "--no-write-lock-file",
+        expected = r.capture(*NIX, "eval", "--raw", "--no-write-lock-file",
                              str(self.source) + "#nixosConfigurations.metal-4tb.config.system.build.toplevel.outPath")
         r.require(build.get("system") == expected and expected.startswith("/nix/store/"),
                   "Prebuilt closure differs from the reviewed metal-4tb configuration")
         print("Importing the prebuilt Phoenix closure through Nix; preserving the fresh store database", flush=True)
-        r.run("nix", "copy", "--from", (control / "nix-cache").as_uri(),
+        r.run(*NIX, "copy", "--from", (control / "nix-cache").as_uri(),
               "--to", r.NEW, "--no-check-sigs", expected)
-        info = json.loads(r.capture("nix", "path-info", "--store", r.NEW,
+        info = json.loads(r.capture(*NIX, "path-info", "--store", r.NEW,
                                     "--json", "--json-format", "1", expected))[expected]
         r.require(info["narHash"] == build.get("narHash"), "Imported Phoenix closure hash mismatch")
         return expected

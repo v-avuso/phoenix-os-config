@@ -102,7 +102,8 @@ class Workflow(unittest.TestCase):
             build = {"commit": "a" * 40, "cacheReady": True, "system": system, "narHash": "sha256-fixture"}
             calls = []
             def capture(*args):
-                if args[1] == "eval": return system
+                self.assertEqual(args[:3], tuple(migrate.NIX))
+                if args[3] == "eval": return system
                 if args[args.index("--json-format") + 1] == "2":
                     # Native Nix 2.34 format 2 is an envelope with basename keys.
                     return json.dumps({"version": 2, "storeDir": "/nix/store",
@@ -114,7 +115,7 @@ class Workflow(unittest.TestCase):
                 driver = migrate.Migration(source)
                 receipt.write_text(json.dumps(build))
                 self.assertEqual(driver.import_prebuilt(), system)
-                self.assertEqual(calls[0][:3], ("nix", "copy", "--from"))
+                self.assertEqual(calls[0][:5], (*migrate.NIX, "copy", "--from"))
                 self.assertIn("--no-check-sigs", calls[0])
                 self.assertNotIn("--profile", calls[0])
                 for changes in [{"commit": "b" * 40}, {"system": system + "-old"}, {"cacheReady": False},

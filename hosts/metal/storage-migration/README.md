@@ -252,6 +252,9 @@ SYSTEM` to export its complete closure. This is an ordinary Nix binary cache,
 not a copy of the live Nix database. A real disposable two-import trial preserved
 the fresh target database record and imported the new record successfully.
 The actual fresh target's root-owned Nix database/profile remain unchanged online.
+The actual import function also passed a disposable tiny-store trial with Nix's
+experimental defaults disabled, preserving the fresh record and profile. Each
+Nix invocation explicitly enables its required command/flake features for the USB.
 
 An adjacent `build.json` is published only after the final committed build/cache
 export succeeds. It records the source commit, system path and NAR hash. After
