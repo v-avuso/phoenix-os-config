@@ -3,6 +3,7 @@ import argparse
 import importlib.util
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -59,6 +60,20 @@ with tempfile.TemporaryDirectory() as renamed_directory:
 
 if patcher.resolver((args.source / initial).read_text())[3]:
     originals = {name: (args.source / name).read_text() for name in owners}
+    lookup, _, call, _ = patcher.resolver(originals[initial])
+    symbol = lookup.split('(', 1)[0].removeprefix('function ')
+    current = call.startswith('xe=')
+    seams = patcher.CURRENT_SEAMS if current else patcher.NEW_SEAMS
+    # Normalize only this fixture's explicitly reviewed generated identifiers.
+    # Production matching still requires the exact resolver, call and seams.
+    helpers = dict(zip(
+        ['EJ','e4e','t4e','s4e','c4e','DJ','OJ','h4e','g4e','kJ','_4e','n4e','AJ','b4e','a4e'],
+        ['zH','Q7e','$7e','a9e','o9e','BH','VH','p9e','m9e','HH','h9e','e9e','UH','v9e','r9e'])) if current else {}
+    canonical = {value: key for key, value in helpers.items()}
+    if current:
+        canonical.update({'WH':'jJ', 'GH':'MJ', 'T9e':'D4e', 'b9e':'S4e'})
+    def normalize(text, names):
+        return re.sub(r'[A-Za-z_$][\w$]*', lambda match: names.get(match[0], match[0]), text)
     def extract(source, name):
         start = source.index('function ' + name + '(')
         end = source.find('function ', start + 9)
@@ -71,15 +86,15 @@ if patcher.resolver((args.source / initial).read_text())[3]:
             target.write_text(source)
         patcher.patch(root)
         changed = (root / initial).read_text()
-        assert 'be=rSo(i,L,R,pe,o,se,oe)' in changed
-        for seam in patcher.NEW_SEAMS:
+        assert call[:-1] + ',se,oe)' in changed
+        for seam in seams:
             assert seam in changed
         script = "const assert=require('node:assert/strict');"
-        script += extract(changed, 'rSo')
-        script += extract(originals[initial], 'rSo').replace('function rSo(', 'function Native(')
-        shared = originals['webview/assets/app-shared-61271c39e3c5.js']
+        script += extract(changed, symbol).replace('function ' + symbol + '(', 'function rSo(')
+        script += extract(originals[initial], symbol).replace('function ' + symbol + '(', 'function Native(')
+        shared = originals[next(name for name in owners if '/app-shared-' in name)]
         for name in ['EJ','e4e','t4e','s4e','c4e','DJ','OJ','h4e','g4e','kJ','_4e','n4e','AJ','b4e','a4e']:
-            script += extract(shared, name)
+            script += normalize(extract(shared, helpers.get(name, name)), canonical)
         script += "const jJ={default:(a,b)=>JSON.stringify(a)===JSON.stringify(b)},MJ={granular:{}},D4e={type:'readOnly',networkAccess:false},S4e='guardian_approval';"
         script += """
 const modes=['read-only','auto','custom','full-access','guardian-approvals','granular'];
@@ -120,16 +135,21 @@ assert.equal(effective.approvalsReviewer,'auto_review');
 assert.deepEqual(a4e(effective),{sandboxPolicy:{type:'dangerFullAccess'}});
 assert.equal(t4e({...ordinary,sandboxPolicy:{type:'readOnly',networkAccess:false}}),'read-only');
 """
-        script = script.replace('JE_EXPRESSION',patcher.NEW_SEAMS[0].split('=',1)[1]).replace('PROFILE_EXPRESSION',patcher.NEW_SEAMS[1].split('=',1)[1]).replace('SEND_EXPRESSION',patcher.NEW_SEAMS[2].split('=',1)[1])
+        locals_map = {'xe':'be','P':'N','Ee':'Te','Te':'we','Me':'je','L':'I','I':'F','Je':'qe'} if current else {}
+        script = script.replace('JE_EXPRESSION',normalize(seams[0].split('=',1)[1], locals_map)).replace('PROFILE_EXPRESSION',normalize(seams[1].split('=',1)[1], locals_map)).replace('SEND_EXPRESSION',normalize(seams[2].split('=',1)[1], locals_map))
         subprocess.run([shutil.which('node'),'-e',script],check=True,capture_output=True,text=True)
         for name, source in originals.items():
             actual = (root/name).read_text()
             assert not any(key in actual for key in patcher.KEYS)
             for key in patcher.KEYS:
                 assert actual.count(key.replace('`','`phoenix-sandbox.',1)) == source.count(key)
-        for invalid in [changed, originals[initial].replace(patcher.NEW_LOOKUP,'changed'),
-                        originals[initial]+patcher.NEW_LOOKUP,
-                        originals[initial].replace(patcher.NEW_SEAMS[3],'changed')]:
+        for invalid in [changed, originals[initial].replace(lookup,'changed'),
+                        originals[initial]+lookup,
+                        originals[initial].replace(call,'changed'),
+                        originals[initial]+call,
+                        originals[initial]+(patcher.NEW_CALL if current else patcher.CURRENT_CALL).replace('rSo(',symbol+'('),
+                        *(originals[initial].replace(seam,'changed') for seam in seams),
+                        *(originals[initial]+seam for seam in seams)]:
             for name, source in originals.items():
                 (root/name).write_text(source)
             (root/initial).write_text(invalid)

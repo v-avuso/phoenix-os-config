@@ -51,6 +51,16 @@ NEW_SEAMS = (
     "updateThreadPermissions(n,Ne(e))",
     "if(n!=null&&se!=null&&!b&&!we&&(nx(i)||be==null||!De||Oe))return",
 )
+# Official 26.1016.61520 retains the resolver/reconciliation bodies but renames
+# their generated locals. Keep this reviewed variant explicit and fail closed.
+CURRENT_CALL = "xe=rSo(i,R,z,me,o)"
+CURRENT_SEAMS = (
+    "Me=n!=null&&se!=null&&(oe==null||oe.startsWith(`:`))&&xe!=null&&P.includes(xe)&&se!==Ee",
+    "Ye=b||Te||Me?null:L?ne:oe",
+    "Xe=b||Te||Me||Je||!I&&(L||oe==null&&(se!==`custom`||ce?.type===`dangerFullAccess`))",
+    "updateThreadPermissions(n,Pe(e))",
+    "if(n!=null&&se!=null&&!b&&!Te&&(rx(i)||xe==null||!Oe||ke))return",
+)
 
 
 def resolver(source):
@@ -62,7 +72,16 @@ def resolver(source):
         matches = list(re.finditer(pattern, source))
         if len(matches) == 1:
             name = matches[0].group(1)
-            return matches[0].group(), replacement.replace(canonical + '(', name + '('), call.replace(canonical + '(', name + '('), new
+            if new:
+                calls = [candidate.replace(canonical + '(', name + '(')
+                         for candidate in (NEW_CALL, CURRENT_CALL)]
+                present = [candidate for candidate in calls if candidate in source]
+                if len(present) != 1:
+                    raise ValueError("Pinned permission preference/default seam changed")
+                call = present[0]
+            else:
+                call = call.replace(canonical + '(', name + '(')
+            return matches[0].group(), replacement.replace(canonical + '(', name + '('), call, new
     raise ValueError("Pinned permission preference/default seam changed")
 
 
@@ -106,7 +125,7 @@ def patch(root):
     if source.count(lookup) != 1 or source.count(call) != 1:
         raise ValueError("Pinned permission preference/default seam changed")
     # Guard the upstream reconciliation that makes the default effective on resume.
-    for seam in NEW_SEAMS if new else (
+    for seam in CURRENT_SEAMS if call.startswith('xe=') else NEW_SEAMS if new else (
         "Ce=n!=null&&oe!=null&&(ae==null||ae.startsWith(`:`))&&(M!=null||pe!=null&&Sci(pe,P))&&oe!==_e",
         "Re=b||Ce?null:L?te:ae",
         "Be=b||Ce||ze||!I&&(L||ae==null&&oe!==`custom`)",
