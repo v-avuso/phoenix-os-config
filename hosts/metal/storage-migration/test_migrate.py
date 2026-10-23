@@ -91,6 +91,32 @@ class Workflow(unittest.TestCase):
         self.assertIn("--no-write-lock-file", installer)
         self.assertFalse(any(str(migrate.r.OLD) in str(c) for c in calls))
 
+    def test_prebuilt_cache_binds_commit_target_and_hash_without_setting_profiles(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); source = root / "source"; source.mkdir()
+            (root / "release.json").write_text(json.dumps({"commit": "a" * 40}))
+            control = root / "target/home" / migrate.r.FRESH_HOME / migrate.r.ONLINE_CONTROL
+            (control / "nix-cache").mkdir(parents=True)
+            receipt = control / "build.json"
+            system = "/nix/store/" + "a" * 32 + "-nixos-system-phoenix"
+            build = {"commit": "a" * 40, "cacheReady": True, "system": system, "narHash": "sha256-fixture"}
+            calls = []
+            def capture(*args):
+                return system if args[1] == "eval" else json.dumps({system: {"narHash": "sha256-fixture"}})
+            with patch.object(migrate.r, "NEW", root / "target"), \
+                 patch.object(migrate.r, "capture", side_effect=capture), \
+                 patch.object(migrate.r, "run", side_effect=lambda *args: calls.append(args)):
+                driver = migrate.Migration(source)
+                receipt.write_text(json.dumps(build))
+                self.assertEqual(driver.import_prebuilt(), system)
+                self.assertEqual(calls[0][:3], ("nix", "copy", "--from"))
+                self.assertIn("--no-check-sigs", calls[0])
+                self.assertNotIn("--profile", calls[0])
+                for changes in [{"commit": "b" * 40}, {"system": system + "-old"}, {"cacheReady": False},
+                                {"narHash": "sha256-wrong"}]:
+                    receipt.write_text(json.dumps(build | changes))
+                    with self.assertRaises(RuntimeError): driver.import_prebuilt()
+
     def test_cleanup_closes_only_owned_resources_in_reverse_order(self):
         driver = migrate.Migration(Path("/reviewed"))
         driver.mounts = [migrate.r.OLD, migrate.r.NEW, migrate.r.NEW / "home"]
@@ -103,6 +129,17 @@ class Workflow(unittest.TestCase):
                                  ("cryptsetup", "close", migrate.r.ROOT_MAP.name)])
         self.assertEqual(driver.mounts, [])
         self.assertEqual(driver.mappings, [])
+
+    def test_installer_uses_verified_prebuilt_system_only_on_target(self):
+        driver = migrate.Migration(Path("/reviewed")); calls = []
+        system = "/nix/store/" + "a" * 32 + "-nixos-system-phoenix"
+        with patch.object(driver, "mount"), patch.object(driver, "unmount"), \
+             patch.object(driver, "import_prebuilt", return_value=system), \
+             patch.object(migrate.r, "run", side_effect=lambda *args: calls.append(args)):
+            driver.install()
+        installer = next(c for c in calls if c[0] == "nixos-install")
+        self.assertEqual(installer[1:5], ("--root", migrate.r.NEW, "--system", system))
+        self.assertNotIn("--flake", installer)
 
     def test_cleanup_failure_is_no_go(self):
         driver = migrate.Migration(Path("/reviewed"))

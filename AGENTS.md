@@ -38,6 +38,9 @@
   instead of the target being inspected. Cold Btrfs migration mounts use
   `ro,rescue=nologreplay`; test emitted options and native mount validation
   together so spelling changes preserve the no-write boundary.
+  Cold SQLite WAL checks use disposable writable DB/WAL copies: `mode=ro` can
+  still require SHM creation. Retain the underlying error; do not infer missing
+  or corrupt state from a read-only access failure.
 - Hardware identity checks must compare native fields with only documented
   padding removed; `lsblk --raw` can hex-escape NVMe serial padding. Exercise
   native/fallback representations rather than only mocked, trimmed output.

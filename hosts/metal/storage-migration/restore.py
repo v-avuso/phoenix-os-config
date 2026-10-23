@@ -24,6 +24,7 @@ OLD_DISK = Path("/dev/disk/by-id/nvme-Samsung_SSD_970_EVO_Plus_1TB_S4EWNG0M10991
 NEW_DISK = Path("/dev/disk/by-id/nvme-Samsung_SSD_990_PRO_with_Heatsink_4TB_S7DSNJ0Y411212Z")
 FRESH_HOME = ".phoenix-fresh-v-before-migration"
 STAGING_HOME = ".phoenix-restoring-v"
+ONLINE_CONTROL = ".phoenix-migration-online"
 RSYNC = ["rsync", "-aHAXS", "--numeric-ids"]
 
 
@@ -199,7 +200,24 @@ def copy_home(source, home, *, validator=None):
         plain(path)
     require(not fresh.exists(), "Fresh-home backup exists; refusing a second publication")
     require(target.is_dir(), "Expected fresh v home")
-    run(*RSYNC, "--info=progress2", "--stats", str(source) + "/", str(stage) + "/")
+    control = target / ONLINE_CONTROL
+    options = []
+    if control.exists():
+        plain(control); plain(control / "manifest.json"); plain(control / "home")
+        manifest = json.loads((control / "manifest.json").read_text())
+        require(manifest.get("version") == 1 and manifest.get("sourceRootUUID") == OLD_UUID
+                and manifest.get("targetRootUUID") == NEW_UUID
+                and manifest.get("status") in ["seeded", "partial"], "Online seed is incomplete or belongs to other disks")
+        require((control / "home").is_dir() and not stage.exists(), "Online seed/staging conflict; stop for review")
+        # The seed is unpublished migration data. Retain replaced/stale seed files
+        # separately rather than retaining stale entries in the completed home.
+        saved = control / "seed-before-final-sync"
+        plain(saved)
+        require(not saved.exists(), "Earlier final seed synchronization; stop for review")
+        (control / "home").rename(stage)
+        options = ["--delete", "--backup", "--backup-dir=" + str(saved)]
+        print("Reusing online seed; preserving replaced/stale seed files with fresh-home backup", flush=True)
+    run(*RSYNC, *options, "--info=progress2", "--stats", str(source) + "/", str(stage) + "/")
     print("Checking all home file checksums and metadata (a second full read)…", flush=True)
     if validator:
         validator(stage)

@@ -2,9 +2,11 @@
 import hashlib
 import re
 from pathlib import Path
+import shutil
 import sqlite3
 import struct
 import subprocess
+import tempfile
 import uuid
 import xml.etree.ElementTree as ET
 
@@ -72,20 +74,30 @@ def check_syncthing(home):
     mapping = {}
     for path in databases:
         require(not path.is_symlink(), "Symlinked Syncthing database refused")
-        # mode=ro honours an existing cold WAL. The source is already offline,
-        # kernel/mount read-only; this cannot repair/checkpoint source files.
+        # Read-only SQLite still needs writable SHM when WAL recovery is needed.
+        # Inspect a private disposable DB/WAL copy, never creating source files.
+        # SHM is a regenerable index, not database content; rebuild it in scratch.
         try:
-            database = sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=2)
-            try:
-                database.execute("PRAGMA query_only=ON")
-                result = database.execute("PRAGMA quick_check").fetchall()
-                if path.name == "main.db":
-                    mapping = dict(database.execute("SELECT folder_id, database_name FROM folders"))
-            finally:
-                database.close()
+            with tempfile.TemporaryDirectory(prefix="phoenix-cold-index-") as temporary:
+                scratch = Path(temporary) / path.name
+                for source in [path, Path(str(path) + "-wal")]:
+                    require(not source.is_symlink(), "Symlinked Syncthing database/WAL refused")
+                    if source.exists():
+                        require(source.is_file(), "Unexpected Syncthing database/WAL object")
+                        copied = Path(temporary) / source.name
+                        shutil.copyfile(source, copied)
+                        copied.chmod(0o600)
+                database = sqlite3.connect(scratch.as_uri() + "?mode=ro", uri=True, timeout=2)
+                try:
+                    database.execute("PRAGMA query_only=ON")
+                    result = database.execute("PRAGMA quick_check").fetchall()
+                    if path.name == "main.db":
+                        mapping = dict(database.execute("SELECT folder_id, database_name FROM folders"))
+                finally:
+                    database.close()
             require(result == [("ok",)], f"Syncthing database integrity failed: {path.name}")
         except sqlite3.Error as error:
-            raise RuntimeError(f"Cannot verify cold Syncthing database {path.name}; stop for review") from error
+            raise RuntimeError(f"Cannot verify cold Syncthing database {path.name}: {error}; stop for review") from error
     require(set(mapping) == set(FOLDERS.values()), "Syncthing configured/indexed folder IDs differ")
     require(all(isinstance(name, str) and Path(name).name == name
                 and (database_dir / name) in databases for name in mapping.values()),

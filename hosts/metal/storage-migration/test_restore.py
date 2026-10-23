@@ -1,5 +1,6 @@
 """Disposable checks only: no host disks, private profiles or root operations."""
 import importlib.util
+import json
 import os
 from pathlib import Path
 import shutil
@@ -13,6 +14,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 from checks import FOLDERS, check_folders, check_efi, check_syncthing, fresh_identity
+import online
 import xml.etree.ElementTree as ET
 
 spec = importlib.util.spec_from_file_location("restore", Path(__file__).with_name("restore.py"))
@@ -79,6 +81,28 @@ class Safety(unittest.TestCase):
             report = check_syncthing(home)
             self.assertEqual(len(report["databases"]), 6)
             self.assertEqual(before, {p.relative_to(home): p.read_bytes() for p in home.rglob("*") if p.is_file()})
+            # A cold WAL without a usable SHM needs a writable scratch directory.
+            # Emulate the USB's read-only source; the committed WAL row is essential.
+            (index / "folder.0001.db").rename(index / "folder.wal-only.db")
+            report["databases"][next(iter(FOLDERS.values()))] = "folder.wal-only.db"
+            first = index / "main.db"
+            database = sqlite3.connect(first)
+            database.execute("PRAGMA journal_mode=WAL")
+            database.execute("update folders set database_name='folder.wal-only.db' where database_name='folder.0001.db'")
+            database.commit()
+            cold_db, cold_wal = first.read_bytes(), Path(str(first) + "-wal").read_bytes()
+            database.close()
+            first.write_bytes(cold_db)
+            Path(str(first) + "-wal").write_bytes(cold_wal)
+            first.chmod(0o444); Path(str(first) + "-wal").chmod(0o444)
+            index.chmod(0o555)
+            before = {p.relative_to(home): p.read_bytes() for p in home.rglob("*") if p.is_file()}
+            try:
+                self.assertEqual(check_syncthing(home), report)
+                self.assertEqual(before, {p.relative_to(home): p.read_bytes() for p in home.rglob("*") if p.is_file()})
+                self.assertFalse(Path(str(first) + "-shm").exists())
+            finally:
+                index.chmod(0o700); first.chmod(0o600)
             (index / "main.db").write_bytes(b"corrupted database")
             with self.assertRaises(RuntimeError): check_syncthing(home)
 
@@ -220,6 +244,68 @@ class Safety(unittest.TestCase):
                 restore.restore_directory(relative)
                 (new / relative / "db").write_text("changed after copy")
                 with self.assertRaises(RuntimeError): restore.restore_directory(relative)
+
+    def test_online_seed_is_incremental_and_stale_seed_data_is_retained_outside_final_home(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d); source, home = root / "source", root / "home"
+            source.mkdir(); (home / "v").mkdir(parents=True)
+            (home / "v/fresh").write_text("fresh installation")
+            control = home / "v" / restore.ONLINE_CONTROL
+            seed = control / "home"; seed.mkdir(parents=True)
+            (seed / "unchanged").write_text("large seeded file")
+            (seed / "stale").write_text("retain stale online seed")
+            (seed / "changed").write_text("old online version")
+            (source / "changed").write_text("new final cold version")
+            restore.run(*restore.RSYNC, seed / "unchanged", source / "unchanged")
+            inode = (seed / "unchanged").stat().st_ino
+            (control / "manifest.json").write_text(json.dumps({"version": 1,
+                "sourceRootUUID": restore.OLD_UUID, "targetRootUUID": restore.NEW_UUID, "status": "seeded"}))
+            restore.copy_home(source, home)
+            self.assertEqual((home / "v/unchanged").stat().st_ino, inode)
+            self.assertFalse((home / "v/stale").exists())
+            backup = home / restore.FRESH_HOME / restore.ONLINE_CONTROL / "seed-before-final-sync"
+            self.assertEqual((backup / "stale").read_text(), "retain stale online seed")
+            self.assertEqual((backup / "changed").read_text(), "old online version")
+            self.assertEqual((home / "v/changed").read_text(), "new final cold version")
+            self.assertEqual((home / restore.FRESH_HOME / "fresh").read_text(), "fresh installation")
+
+    def test_online_seed_requires_matching_disks_and_stopped_copy(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d); source, home = root / "source", root / "home"
+            source.mkdir(); control = home / "v" / restore.ONLINE_CONTROL
+            (control / "home").mkdir(parents=True)
+            manifest = {"version": 1, "sourceRootUUID": restore.OLD_UUID,
+                        "targetRootUUID": restore.NEW_UUID, "status": "copying"}
+            for changes in [{}, {"status": "seeded", "targetRootUUID": restore.OLD_UUID}]:
+                (control / "manifest.json").write_text(json.dumps(manifest | changes))
+                with self.assertRaises(RuntimeError): restore.copy_home(source, home)
+                self.assertTrue((control / "home").exists())
+
+    def test_online_filters_include_cold_profiles_and_defer_active_databases(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d); source = root / "source"
+            paths = ["ordinary", ".mozilla/profile/places.sqlite", ".config/syncthing/config.xml",
+                     ".local/state/syncthing/index-v2/main.db", ".codex/session.json", ".config/Codex/preferences",
+                     ".local/share/keyrings/login.keyring", ".config/phoenix-kando/config.json",
+                     ".local/state/codex/session.json", ".cache/state", "other/state.db"]
+            for relative in paths:
+                path = source / relative; path.parent.mkdir(parents=True, exist_ok=True); path.write_text(relative)
+            for cold in [False, True]:
+                target = root / str(cold); target.mkdir()
+                restore.run(*restore.RSYNC, *online.rsync_filters(cold), str(source) + "/", str(target) + "/")
+                actual = {str(p.relative_to(target)) for p in target.rglob("*") if p.is_file()}
+                expected = {"ordinary", ".mozilla/profile/places.sqlite"}
+                if cold:
+                    expected |= {".config/syncthing/config.xml", ".local/state/syncthing/index-v2/main.db"}
+                self.assertEqual(actual, expected)
+
+    def test_online_wrong_source_fails_before_creating_destination(self):
+        with tempfile.TemporaryDirectory() as d:
+            target = Path(d) / "untouched"
+            with patch.object(online.os, "geteuid", return_value=1000), \
+                 patch.object(online.r, "capture", return_value=restore.NEW_UUID):
+                with self.assertRaisesRegex(RuntimeError, "old Phoenix root"): online.target_control(target)
+            self.assertFalse(target.exists())
 
     def test_rejects_symlink_destination(self):
         with tempfile.TemporaryDirectory() as d:

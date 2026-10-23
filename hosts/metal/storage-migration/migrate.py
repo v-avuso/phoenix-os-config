@@ -136,11 +136,35 @@ class Migration:
         # Only the reviewed Git archive is exposed to Nix, never private/untracked home data.
         r.run("git", "init", "--quiet", self.source)
         r.run("git", "-C", self.source, "add", "--force", "--all")
-        # Native installer builds in the destination store and installs its profile/ESP.
-        # It does not activate services in the live USB. Normal downloads are intentional.
-        r.run("nixos-install", "--root", r.NEW, "--flake", str(self.source) + "#metal-4tb",
+        system = self.import_prebuilt()
+        # Native installer changes only the destination profile, activation and ESP.
+        selection = ["--system", system] if system else ["--flake", str(self.source) + "#metal-4tb"]
+        r.run("nixos-install", "--root", r.NEW, *selection,
               "--no-root-passwd", "--no-channel-copy", "--no-write-lock-file")
         r.run("nixos-enter", "--root", r.NEW, "-c", "chown -hR navidrome:navidrome /var/lib/navidrome")
+
+    def import_prebuilt(self):
+        control = r.NEW / "home" / r.FRESH_HOME / r.ONLINE_CONTROL
+        receipt = control / "build.json"
+        r.plain(receipt)
+        if not receipt.exists():
+            return None  # Normal supported target-store build/download remains available.
+        r.plain(control / "nix-cache")
+        build = json.loads(receipt.read_text())
+        release = json.loads((self.source.parent / "release.json").read_text())
+        r.require(build.get("commit") == release["commit"] and build.get("cacheReady") is True,
+                  "Prebuilt closure is incomplete or belongs to another launcher")
+        expected = r.capture("nix", "eval", "--raw", "--no-write-lock-file",
+                             str(self.source) + "#nixosConfigurations.metal-4tb.config.system.build.toplevel.outPath")
+        r.require(build.get("system") == expected and expected.startswith("/nix/store/"),
+                  "Prebuilt closure differs from the reviewed metal-4tb configuration")
+        print("Importing the prebuilt Phoenix closure through Nix; preserving the fresh store database", flush=True)
+        r.run("nix", "copy", "--from", (control / "nix-cache").as_uri(),
+              "--to", r.NEW, "--no-check-sigs", expected)
+        info = json.loads(r.capture("nix", "path-info", "--store", r.NEW,
+                                    "--json", "--json-format", "2", expected))[expected]
+        r.require(info["narHash"] == build.get("narHash"), "Imported Phoenix closure hash mismatch")
+        return expected
 
     def verify(self):
         # Resolve absolute /etc links inside the target, never against the live USB.
