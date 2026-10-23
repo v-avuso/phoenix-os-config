@@ -8,7 +8,187 @@ Do not clone partition tables, format, repartition, replace encryption or copy
 the old ESP. `metal-4tb` selects the new hardware; `metal` and `default` retain
 the old UUIDs. Both use hostname `phoenix` and password-capable PAM.
 
-## QUICKSTART
+## Outcome and acceptance, 2026-10-24
+
+**PASS for the checked migration, boot and data workflows.** Phoenix is running
+generation 2 on the encrypted 4 TB SSD. The operator verified Hyprland, Firefox
+sessions/logins, Codex including this migration conversation, and sudo with both
+password and YubiKey. Syncthing and unattended updates remain held. Do not rerun
+the migration launcher on this installation.
+
+The successful path was online seeding followed by operator-run cold completion
+from USB. The retained `operation-report.json` records the unpublished 307 GB seed;
+it is not a final-snapshot receipt. The installed system and prebuilt receipt both
+identify `/nix/store/2p81i3jnylb9zajfx2qh8fggw10pq7yr-nixos-system-phoenix-26.05.20261021.da6dc0e`,
+built from `f78460731ea874de809f70b0ed067de4b377fcc9`. The active source is
+`/nix/store/far8896yi9zqb5zakbnysjkm7rz3bcmy-source`. The complete successful USB
+console log was not located; current boot/data evidence and the operator's report
+establish the outcome, rather than claiming a fixture proved execution.
+
+| Acceptance check | Evidence / limit |
+| --- | --- |
+| Physical destination | Samsung 990 PRO 4TB, serial `S7DSNJ0Y411212Z`; root Btrfs `b1756a78-0da5-47a3-a73c-38112d1ac945` behind the expected LUKS2 p2 mapping. |
+| Filesystems | `/` default/top-level ID 5, `/home` ID 256, `/nix` ID 257; `/boot` FAT `B4E3-63E5`. Native enumeration also includes `srv`, `tmp`, `var/tmp`, `var/lib/portables` and `var/lib/machines`; no snapshot subvolumes. |
+| Encrypted swap | Expected LUKS p3 mapping and inner UUID `f323eb11-c576-45a5-9e5d-af4a329c94cb`; active, initially zero used. Old unencrypted swap inactive. Hibernation/resume remains untested. |
+| Target selection | Installed `phoenix-target --info` reports `metal-4tb` from root UUID; switch/boot previews select it. `PHOENIX_TARGET=metal` is rejected. Installed agent controller policy has `target=metal-4tb` and the shared root guard. Update units are absent, so no updater was executed. Focused target evaluation passes. |
+| Home Manager / ownership | `home-manager-v.service` succeeded with generation `3a5lnmyk9jicv9xkczb30zcr2gmfbwa8`; its user GC root resolves. Home is `1000:100`, mode 0700; matching subordinate UID/GID ranges remain. Foreign container UIDs were retained in inspected files. |
+| Identity / authentication | Fresh machine-id matches the preparation receipt and differs from old. The v password hash matches old and is unlocked; U2F file matches exactly, owner `1000:100`, mode 0600; hostname `phoenix`. Neither installation has SSH host-key files to transfer. |
+| Browser / Codex / keyring | Operator runtime checks pass. Firefox key/certificate databases match old. All 20 apparently absent Codex sessions are compressed archives whose decompressed bytes match old originals. All four keyring files exist; three match, one changed after use. |
+| Syncthing | Both services inactive, both installed marker conditions intact, acceptance marker absent. Old/new checks pass all seven cold SQLite indexes, six exact folder mappings and certificate/key agreement; reports and all six configuration files match. Checksum dry-run of 9,072 regular personal files / 38,867,312,543 bytes finds no content changes. No synchronization started. |
+| Navidrome | Running; main database matches old byte-for-byte and old cold database passes `quick_check`. Artwork/cache retained; new WAL/SHM reflects running use. Ownership is corrected to installed `991:988` (old `991:985`). Music is the verified home `sync/music`, mounted privately into the service. Accounts/playlists still need UI acceptance. |
+| Core services | Home Manager, display manager, NetworkManager, Nix daemon, Navidrome, CoolerControl, fan watchdog and agent sockets active/successful. No failed user units. Two failed system units are Polkit authentication helpers; one journal reports `No session for cookie`. No service restart/reset was attempted. Fan response/fallback needs operator verification. |
+| EFI / rollback | Current EFI check passes. Old ESP was briefly mounted read-only: both loader executables and all 14 entries' kernel/initrd files exist. Old current closure's init/kernel/initrd and root-aware fstab resolve correctly. This establishes bootability in principle, not a rollback boot test. |
+
+### Quantified storage accounting
+
+All values below are GiB (2^30 bytes), rounded. Measurements were made natively,
+with root privileges for protected files. Before reading old file trees, its
+desktop read-write mount was replaced by `/mnt/phoenix-old`, mounted
+`ro,noatime,rescue=nologreplay,subvolid=5`. Both installations' real subvolumes were
+included, including temporary subvolumes omitted by a simple `du -x /`.
+The running destination changes during measurement; these are bounded observations,
+not simultaneous frozen snapshots. Small diagnostic store/cache additions occurred.
+
+| Whole-filesystem measure | Old | New | Old minus new | Meaning |
+| --- | ---: | ---: | ---: | --- |
+| Btrfs used | 526.09 | 273.26 | **252.82** | Actual used data plus duplicated metadata/system blocks at the recorded sample. |
+| Data, single | 515.88 | 269.04 | 246.84 | Used data extents. |
+| Metadata, DUP (physical) | 10.21 | 4.22 | 5.99 | Twice the logical metadata usage. |
+| Allocated chunks | 587.02 | 360.02 | 227.00 | Includes free space inside allocated chunks; not another used-file total. |
+
+`df` initially reported 526.59 versus 273.71 GiB: its reserve accounting and live
+writes differ slightly from Btrfs `Used`. Never add the `/`, `/home` and `/nix`
+`df` figures: they share one filesystem. System blocks contribute less than 1 MiB.
+
+| Major tree / measure | Old | New | Difference | Explanation |
+| --- | ---: | ---: | ---: | --- |
+| `/nix`, `du` allocated | 216.22 | 36.48 | 179.74 | Deliberate closure installation instead of copying the old store/history/build state. |
+| `/nix/store`, unique physical extents (`compsize`) | 202.20 | 30.01 | **172.19** | Counts shared extents once; distinguishes compression from `du` block accounting. |
+| `/home/v`, apparent | 333.74 | 237.85 | **95.89** | Almost entirely the operator-confirmed post-migration Trash cleanup. |
+| Trash, apparent | 95.91 | <0.01 | 95.91 | Intentionally emptied on new; retained unchanged on old. Mostly discarded VM/ISO data. |
+| `/home/v`, `du` allocated | 335.79 | 226.49 | 109.30 | Also affected by sparse zero runs and shared-extent accounting. |
+| `/home/v`, unique physical extents (`compsize`) | 300.49 | 225.28 | **75.20** | Old sharing saves more space than new sharing; full byte totals cannot be inferred from `du` alone. |
+| Retained fresh-home migration backup, `du` | 0 | 14.36 | -14.36 | Mostly the retained 14.25 GiB local Nix binary cache, plus recovery copies. |
+| `/tmp`, `du` allocated | 12.09 | 0.13 | 11.96 | Old temporary build/test trees deliberately not migrated. |
+| `/var/lib`, `du` allocated | 2.04 | 0.14 | 1.90 | Includes 1.49 GiB old coredumps and old regenerable signatures/state. Navidrome retained. |
+| `/var/log`, `du` allocated | 0.96 | 0.03 | 0.93 | Historical logs deliberately not migrated. |
+| Home `.cache`, `du` allocated | 2.91 | 2.91 | ~0 | Home caches were included in cold completion. No blanket cache omission. |
+
+The tree rows use different, overlapping measures and must not be added. A complete
+`compsize -b -x` traversal of **all eight subvolumes** reports 517.05 versus
+269.91 GiB of unique physical file extents, a 247.14 GiB difference. This closely
+tracks the 246.84 GiB Btrfs data difference; inline extents, block rounding and
+live-destination timing prevent exact equality. The remaining approximately
+5.99 GiB is the measured metadata difference. Compression saves approximately
+4.09 GiB on old versus 4.39 GiB on new: only **0.29 GiB more savings**, not the
+explanation for the discrepancy.
+
+Home extent sharing was measured rather than inferred: `btrfs filesystem du -s
+--raw` reports old Total/Exclusive/Set-shared = 334.21 / 292.54 / 7.27 GiB,
+new = 224.69 / 224.68 / 0.003 GiB. These columns are not additive.
+`compsize` referenced-minus-uncompressed-unique extents decrease from 34.76 to
+0.77 GiB, so the new copy loses about 33.99 GiB of duplicate-reference savings.
+Sparse allocation partly offsets that loss: two large Steam files and one VM
+image retain exact full-file SHA256 matches while using 12.60 GiB fewer blocks.
+Steam's complete apparent size matches exactly (115.20 GiB); its allocated size
+falls by 9.87 GiB. There are no historical snapshots on either disk.
+See upstream [Btrfs accounting](https://btrfs.readthedocs.io/en/latest/btrfs-filesystem.html)
+and [compsize semantics](https://github.com/kilobyte/compsize).
+
+Nix's read-only old-store query found **63,869 versus 17,632 registered paths**;
+NAR sizes are 202.62 versus 33.92 GiB (logical serialized content, not disk blocks).
+Current Phoenix closures are virtually equal: **25.702 versus 25.703 GiB**.
+The old store has 70.31 GiB beyond its current closure in the union of retained
+system profiles, plus 106.61 GiB outside that union; the new store has 8.22 GiB
+outside its current closure. Native inspection finds 14 old profile links and 14
+EFI entries, despite the earlier estimate of ten. Additional old GC-root links
+include 48 under deployment state and several temporary build/review outputs;
+recent GC does not imply that only the current system remains. Old-only Codex
+desktop-related paths account for 110.67 GiB NAR and `phoenix-codex.tar.gz` paths
+for 28.39 GiB; these overlap the history/build categories, not extra totals.
+No GC was run. The old store was queried only while mounted read-only, using
+Nix 2.34's explicit `read-only-local-store` feature and `read-only=true`.
+
+### Missing, changed and still unverified data
+
+The privileged inventory examined 858,313 old and 855,538 new regular-file/symlink
+entries without permission errors. The old-only paths are Trash, compressed
+Codex originals, replaced Codex runtime/artifact-generation files, Firefox local
+storage and one GVfs metadata file; no other old-only home paths were found.
+All 23 Downloads files (1.52 GB) also pass a content-checksum dry-run.
+The three largest allocation differences and two additional files pass full hashes.
+
+Firefox has 140 old-only WhatsApp cache files (270.72 MiB) and one old-only ChatGPT
+IndexedDB-associated file (2.48 MiB). Its cache churn is consistent with live use,
+but the small IndexedDB file's application-level significance is **unverified**;
+do not claim every browser-local byte is unchanged. Preserve it on old for any
+later inspection. Active browser/Codex/keyring databases naturally differ and
+were not treated as cold integrity snapshots. No unexpectedly absent ordinary
+personal tree or Codex conversation was identified. This was an inventory plus
+targeted checksum audit, not a new checksum of every 4 TB installation file.
+
+### Holds, remaining acceptance and retention
+
+Syncthing's migration consistency checks pass; release still needs explicit
+operator approval, confirmation of the six folders' expected contents/peer state,
+and assurance that the old installation will remain offline. Keep both marker
+conditions until then. Observe the first scan for unexpected deletions.
+Automatic updates need the reviewed removal of the forced disable, a build and
+an explicitly authorized installation of that exact `metal-4tb` source. Neither
+hold was released. These documentation changes do not replace the active
+`f784607` source/closure binding or supply deployment approval.
+
+Remaining interaction: Navidrome accounts/playlists, lock/login/keyring behavior
+and cooling/fallback per the fan guide; hibernation is not established. The failed
+Polkit helper needs separate diagnosis if native dialogs remain invisible; no
+authentication policy was changed. Two native read-only services succeeded during
+accounting, but later Polkit requests failed/timed out; the operator ran the final
+immutable read-only diagnostics via terminal sudo.
+
+Keep old serial `S4EWNG0M109916K` unchanged **through at least 2026-11-24**, and longer
+until the operator approves retirement. Its root remains mounted read-only at
+`/mnt/phoenix-old`; its ESP is unmounted and swap inactive. The separate 2 TB SSD
+`S4J4NZ0R303233H` remained unmounted and received no task writes. No source-file
+writes, garbage collection, firmware changes, activation or reboot were performed
+during acceptance. The initial desktop read-write mount predates these checks;
+no claim is made about activity before it was replaced by the read-only mount.
+Rollback remains a deliberate shutdown/firmware selection of the old SSD, never
+a reverse-sync of whole live profiles or concurrent use of one Syncthing identity.
+
+Private raw evidence for this session is under `/tmp/phoenix-acceptance`
+(`consolidated-audit.txt`, `extra-audit.txt`, Nix inventories, checksum reports).
+That directory is temporary and may disappear at reboot; this document retains
+the non-secret measurements and acceptance limits.
+
+### Lessons and future work
+
+The three failed native preflights happened before restoration/install approval:
+
+1. Fixed-width NVMe serial padding was rendered by `lsblk --raw` as literal
+   `\x20`, defeating string trimming. Compare the native sysfs field, removing
+   only documented padding; retain exact identity checks and native regression cases.
+2. The USB kernel rejected standalone `nologreplay`; the supported cold mount
+   option is `rescue=nologreplay`. Validate actual mount options on the intended
+   kernel as well as emitted strings.
+3. Cold SQLite WAL reads can require writable SHM even with `mode=ro`. Inspect
+   disposable DB/WAL copies, preserve the underlying error and never infer corrupt
+   or missing indexes from a read-only access error. Actual cold databases and the
+   WAL fixture reproduce the old failure; the original detailed third log is absent.
+
+Online seeding reduced cold copying, while final offline synchronization remained
+necessary for active profiles. Supported Nix cache import reused the reviewed
+closure without cloning the database. Root UUID guards remain a small shared
+boundary across human, updater and agent paths. Future improvements should focus
+on a representative boot-to-boot trial and a pinned runtime before adding guards;
+use upstream tools for storage/copy/install semantics and retain durable logs
+outside a live USB's temporary home. See [VISION.md](VISION.md) for the optional
+backlog; none of those enhancements is implemented by this acceptance work.
+
+## QUICKSTART (original migration; completed)
+
+The following procedure documents the completed migration and is retained for
+recovery review. **Do not launch it against the current migrated installation.**
+Any retry requires review of the actual target and retained recovery directories.
 
 Before shutdown, save the prepared **`phoenix-migrate`** file to a writable USB
 volume. Close Firefox/Codex normally and shut down cleanly.
@@ -31,13 +211,12 @@ Codex or ChatGPT is needed. Network is required for tools and normal Nix downloa
 are optional: append `--network --bluetooth` only if their migration is wanted.
 The default plan preserves home, the v password and Navidrome.
 
-**Readiness: GO to launch the guided preflight; execution still needs the two
-operator confirmations. NO-GO for first Phoenix boot until the launcher reports
-SUCCESS.** Online preparation is an unpublished seed, not a consistent final home.
-No installation, activation, boot-profile or EFI change has been performed online.
+The original execution required both operator confirmations and a final SUCCESS
+before first boot. Online preparation was an unpublished seed, not a consistent
+final home; installation and bootloader changes occurred only during cold completion.
 
-The final firmware selection and first-boot acceptance require the operator.
-Boot order is deliberately preserved, so the old SSD may otherwise boot again.
+The original workflow left final firmware selection and first-boot acceptance to
+the operator. Boot order was deliberately preserved; select the intended SSD.
 
 ## Tool responsibilities
 
@@ -56,13 +235,16 @@ ID, SSH keys and root password remain; hostname is phoenix. Syncthing and automa
 updates stay held. The old installation remains the rollback. Boot/login,
 applications and cooling still need real-machine acceptance.
 
-## Online preparation and remaining cold work
+## Completed online preparation and cold handoff
 
-The old Phoenix remains running on the 1 TB SSD. The operator authorized stopping
+This section records the preparation state before the successful USB completion;
+the old installation is no longer the running system. Paths describe that stage.
+
+The old Phoenix was running on the 1 TB SSD. The operator authorized stopping
 Syncthing/Navidrome; both were stopped before their cold-state checks. The 2 TB
-backup remains unmounted and excluded. Dolphin's new root mount is the Btrfs
-top level: its real `home` and `nix` subvolumes are accessible underneath it.
-No extra mounts are necessary for this online seed.
+backup remained unmounted and excluded. Dolphin's new root mount was the Btrfs
+top level: its real `home` and `nix` subvolumes were accessible underneath it.
+No extra mounts were necessary for the online seed.
 
 The unpublished seed is `/run/media/v/root/home/v/.phoenix-migration-online/home`.
 Its adjacent `manifest.json` records identities, exclusions and rsync outcome;
@@ -211,10 +393,11 @@ the existing unlock mechanism; runtime acceptance is still needed.
 
 ## Targeting and accepted decisions
 
-The currently installed `phoenix-target --info` reports `metal`; the installed
-`phoenix-switch --print` selects `#metal`, and the installed `phoenix-update`
-runner JSON also selects `metal`. These are correct for the running old SSD.
-The existing installed selector cannot yet select `metal-4tb`.
+Before migration, the old installation selected `metal`. The new installed
+`phoenix-target --info` reports `metal-4tb`; switch/boot previews and agent policy
+agree with the native root UUID. A conflicting explicit `metal` fails closed.
+The updater remains declaratively disabled; its shared targeting is covered by
+the focused target evaluation rather than executing an update during acceptance.
 
 The prepared configuration declares `phoenix.target = "metal-4tb"`. A small
 shared packaged selector identifies the actual root by stable filesystem UUID:
@@ -452,10 +635,10 @@ mismatches before source/profile mutation. Target evaluation checks old/new/VM
 policy agreement, storage declarations, both sync guards and eventual update
 enablement. These checks never migrate data or activate the host.
 
-The whole Phoenix system has built without activation. Online copying, actual
-cold Syncthing checks and a disposable Nix cache trial provide preparation evidence.
-Actual privileged native cold preflight, Phoenix installation,
-LUKS boot, password/YubiKey, cooling and desktop/application acceptance are still
-operator checks. No fixture establishes a completed migration or bootability.
-No format, publication, installation, deployment or activation was run online;
-flake.lock and the old hardware snapshot remain unchanged.
+The whole Phoenix system built before migration. Online copying, actual cold
+Syncthing checks and a disposable Nix cache trial provided preparation evidence.
+The operator subsequently completed the USB migration and booted generation 2;
+current acceptance evidence and remaining checks are recorded above. No fixture
+alone establishes bootability. During this acceptance pass only read-only
+diagnostics, focused evaluation and documentation were performed; flake.lock,
+hardware configuration, service holds and the running system closure are unchanged.
