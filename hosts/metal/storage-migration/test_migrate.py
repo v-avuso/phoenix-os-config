@@ -102,7 +102,12 @@ class Workflow(unittest.TestCase):
             build = {"commit": "a" * 40, "cacheReady": True, "system": system, "narHash": "sha256-fixture"}
             calls = []
             def capture(*args):
-                return system if args[1] == "eval" else json.dumps({system: {"narHash": "sha256-fixture"}})
+                if args[1] == "eval": return system
+                if args[args.index("--json-format") + 1] == "2":
+                    # Native Nix 2.34 format 2 is an envelope with basename keys.
+                    return json.dumps({"version": 2, "storeDir": "/nix/store",
+                                       "info": {Path(system).name: {"narHash": "sha256-fixture"}}})
+                return json.dumps({system: {"narHash": "sha256-fixture"}})
             with patch.object(migrate.r, "NEW", root / "target"), \
                  patch.object(migrate.r, "capture", side_effect=capture), \
                  patch.object(migrate.r, "run", side_effect=lambda *args: calls.append(args)):

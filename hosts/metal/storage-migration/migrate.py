@@ -162,7 +162,7 @@ class Migration:
         r.run("nix", "copy", "--from", (control / "nix-cache").as_uri(),
               "--to", r.NEW, "--no-check-sigs", expected)
         info = json.loads(r.capture("nix", "path-info", "--store", r.NEW,
-                                    "--json", "--json-format", "2", expected))[expected]
+                                    "--json", "--json-format", "1", expected))[expected]
         r.require(info["narHash"] == build.get("narHash"), "Imported Phoenix closure hash mismatch")
         return expected
 
