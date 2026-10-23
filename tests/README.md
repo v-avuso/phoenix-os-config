@@ -37,6 +37,7 @@ nix build --impure --file home/idle/tests/idle-command.nix --no-link
 python3 -B home/timewall/tests/timewall.py
 nix build --impure --file home/timewall/tests/timewall-packaging.nix --no-link
 nix build --impure --file home/thunar/tests/thunar-packaging.nix --no-link
+nix build --impure --file home/tests/caelestia-cli.nix --no-link
 nix eval --impure --file modules/security/tests/opensnitch-observation.nix
 nix eval --impure --file modules/security/tests/pam-desktop-conditional.nix
 nix eval --impure --file modules/tests/desktop-services.nix

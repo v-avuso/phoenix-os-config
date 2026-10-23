@@ -67,6 +67,8 @@
 ## Activation recovery
 
 - **Older symlink validators:** The updater and protected deployer share the [frozen-source contract](../modules/development/ai/agent/source-manifest.md). An installed validator that rejects an already active source's legitimate links requires the documented, explicitly approved one-time native recovery. Preserve source checks and review policy; the schedule needs no change.
+- **Caelestia CLI builds:** Phoenix exports upstream's existing Hatch VCS version in the standard `preBuild` hook. This preserves builds from immutable Git-free sources when newer nixpkgs keeps the legacy declaration as a non-exported shell variable; the upstream value remains authoritative. `home/tests/caelestia-cli.nix` builds the real wheel and import checks.
+- **Quickshell compatibility:** The nested flake input pins upstream `5d5d498`, the single commit after the shell's locked `41651d7` that fixes Qt 6.12 MOC compilation. Keep the shell's upstream packaging and feature selection; revisit this pin when the shell advances its Quickshell dependency beyond that fix. See [upstream issue 1235](https://github.com/quickshell-mirror/quickshell/issues/1235).
 
 - **ClamAV:** Signature downloads are timer-driven (two minutes after boot and hourly, with missed calendar checks caught up). They are not a required activation job. Existing databases/scanners remain usable while offline; first-install recovery starts scanning after a successful download.
 - **Retries:** FreshClam failures retry after five minutes, capped at three starts within thirty minutes; the hourly timer permits later recovery. Keep failures visible rather than marking network errors successful. No AI or database deletion is involved.

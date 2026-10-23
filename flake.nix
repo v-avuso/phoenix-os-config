@@ -23,6 +23,8 @@
     caelestia-shell = {
       url = "github:caelestia-dots/shell";
       inputs.nixpkgs.follows = "nixpkgs-unstable";
+      # One-commit Qt 6.12 MOC compatibility fix; keep the shell's package recipe.
+      inputs.quickshell.url = "git+https://git.outfoxxed.me/outfoxxed/quickshell?rev=5d5d49873fe8cf1f99ddfd5006ceb2057c5c9b13";
     };
 
     caelestia-dots = {

@@ -21,6 +21,11 @@ let
   caelestiaCli =
     inputs.caelestia-shell.inputs.caelestia-cli.packages.${system}.default.overrideAttrs
       (old: {
+        # Structured attrs keep upstream's VCS version as a shell variable.
+        # Export its existing value for Hatch without replacing version policy.
+        preBuild = (old.preBuild or "") + ''
+          export SETUPTOOLS_SCM_PRETEND_VERSION
+        '';
         patchPhase = old.patchPhase + ''
           patch -p1 < ${../patches/caelestia-gtk-thunar.patch}
         '';
