@@ -74,8 +74,8 @@ def validate_mounts(mounts, *, apply):
                 and mount.get("fsroot") == "/", f"Wrong filesystem/top-level at {root}")
         opts = set(mount["options"].split(","))
         if root == OLD:
-            require("ro" in opts and "nologreplay" in opts,
-                    "Old filesystem must be ro,nologreplay")
+            require("ro" in opts and "rescue=nologreplay" in opts,
+                    "Old filesystem must be ro,rescue=nologreplay")
         elif apply:
             require("rw" in opts, "Destination must be read-write for apply")
         for other in mounts:

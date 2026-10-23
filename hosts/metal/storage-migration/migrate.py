@@ -95,12 +95,12 @@ class Migration:
         r.signature(str(r.NEW_DISK) + "-part3", "crypto_LUKS", r.SWAP_LUKS)
         for suffix in ["", "-part1", "-part2", "-part3"]:
             r.run("blockdev", "--setro", str(r.OLD_DISK) + suffix)
-        self.mount(str(r.OLD_DISK) + "-part2", r.OLD, "-t", "btrfs", "-o", "ro,nologreplay,subvolid=5")
+        self.mount(str(r.OLD_DISK) + "-part2", r.OLD, "-t", "btrfs", "-o", "ro,rescue=nologreplay,subvolid=5")
         for part, mapper, flags in [(2, r.ROOT_MAP, []), (3, r.SWAP_MAP, ["--readonly"])]:
             print(f"Unlock the NEW SSD {'root' if part == 2 else 'swap'} (password is not displayed).", flush=True)
             r.run("cryptsetup", "open", *flags, str(r.NEW_DISK) + f"-part{part}", mapper.name)
             self.mappings.append(mapper.name)
-        self.mount(r.ROOT_MAP, r.NEW, "-t", "btrfs", "-o", "ro,nologreplay,subvolid=5")
+        self.mount(r.ROOT_MAP, r.NEW, "-t", "btrfs", "-o", "ro,rescue=nologreplay,subvolid=5")
         self.mount(str(r.NEW_DISK) + "-part1", r.ESP, "-o", "ro")
         self.syncthing, self.identity = r.preflight(False)
         for relative in self.selected_state():

@@ -165,7 +165,9 @@ class Workflow(unittest.TestCase):
                 unittest.mock.call(migrate.r.NEW_DISK, "S7DSNJ0Y411212Z"),
             ])
             old_mount = next(c for c in calls if c[0] == "mount" and c[-1] == old)
-            self.assertIn("ro,nologreplay,subvolid=5", old_mount)
+            self.assertIn("ro,rescue=nologreplay,subvolid=5", old_mount)
+            new_mount = next(c for c in calls if c[0] == "mount" and c[-1] == new)
+            self.assertIn("ro,rescue=nologreplay,subvolid=5", new_mount)
             self.assertEqual([c[0] for c in calls[:4]], ["blockdev"] * 4)
             self.assertTrue(all(c[1] == "--setro" for c in calls[:4]))
             self.assertFalse(any(c[0] in ["rsync", "nixos-install"] for c in calls))

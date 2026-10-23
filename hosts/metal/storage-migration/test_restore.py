@@ -131,7 +131,7 @@ class Safety(unittest.TestCase):
         return [
             dict(target="/", uuid="live", options="rw", fstype="overlay", fsroot="/"),
             dict(target=str(restore.OLD), uuid=restore.OLD_UUID,
-                 options="ro,nologreplay", fstype="btrfs", fsroot="/"),
+                 options="ro,rescue=nologreplay", fstype="btrfs", fsroot="/"),
             dict(target=str(restore.NEW), uuid=restore.NEW_UUID,
                  options="rw", fstype="btrfs", fsroot="/"),
         ]
@@ -139,12 +139,19 @@ class Safety(unittest.TestCase):
     def test_correct_offline_mounts(self):
         restore.validate_mounts(self.mounts(), apply=True)
 
+    def test_source_requires_read_only_rescue_nologreplay(self):
+        for options in ["ro", "ro,rescue=usebackuproot", "rw,rescue=nologreplay"]:
+            with self.subTest(options=options):
+                mounts = self.mounts()
+                mounts[1]["options"] = options
+                with self.assertRaises(RuntimeError): restore.validate_mounts(mounts, apply=True)
+
     def test_rejects_live_source_writable_source_wrong_disk_and_nested_mount(self):
         for change in ["live", "writable", "wrong", "nested", "replay", "subvolume", "target-ro"]:
             with self.subTest(change=change):
                 mounts = self.mounts()
                 if change == "live": mounts[0]["uuid"] = restore.OLD_UUID
-                if change == "writable": mounts[1]["options"] = "rw,nologreplay"
+                if change == "writable": mounts[1]["options"] = "rw,rescue=nologreplay"
                 if change == "wrong": mounts[2]["uuid"] = restore.OLD_UUID
                 if change == "nested": mounts.append(dict(target=str(restore.OLD / "home/v/mount"), uuid="other", options="ro"))
                 if change == "replay": mounts[1]["options"] = "ro"

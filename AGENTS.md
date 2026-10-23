@@ -35,7 +35,9 @@
 - Do not silently update flake.lock.
 - When inspecting an offline NixOS root, resolve absolute `/etc` and Nix-store
   symlinks within that root; host traversal can read the running installation
-  instead of the target being inspected.
+  instead of the target being inspected. Cold Btrfs migration mounts use
+  `ro,rescue=nologreplay`; test emitted options and native mount validation
+  together so spelling changes preserve the no-write boundary.
 - Hardware identity checks must compare native fields with only documented
   padding removed; `lsblk --raw` can hex-escape NVMe serial padding. Exercise
   native/fallback representations rather than only mocked, trimmed output.

@@ -250,9 +250,13 @@ scan/peer status; stop on unexpected missing data or mass deletions. See
 The QUICKSTART is the normal execution procedure. The launcher checks real root,
 UEFI/live-USB identity, no active swap, exact disk serials/sizes/signatures, no
 existing mounts/mappings and empty ordinary mountpoints. It sets the old SSD and
-all partitions kernel read-only **before** mounting it `ro,nologreplay`. It opens
+all partitions kernel read-only **before** mounting it `ro,rescue=nologreplay`. It opens
 only the two new LUKS mappings (swap read-only), mounts the new root/ESP read-only,
-then runs the complete `restore.py` preflight. That checks native Btrfs UUIDs,
+then runs the complete `restore.py` preflight. The source validator requires both
+`ro` and `rescue=nologreplay` in the native mount options. This uses the supported
+[Btrfs rescue syntax](https://btrfs.readthedocs.io/en/latest/btrfs-man5.html#mount-options)
+to suppress log replay; the USB kernel rejects the former standalone spelling.
+That preflight checks native Btrfs UUIDs,
 root/default/subvolume IDs, LUKS2 headers/backing devices, actual swap signature,
 ESP GUID/loader images/active firmware entries, account/subordinate IDs, usable
 source password, YubiKey/keyring/Syncthing state and available capacity.
