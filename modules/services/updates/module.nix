@@ -35,6 +35,7 @@ let
     policyFile = "config/updates.json";
     candidateScript = toString (pkgs.replaceVars ./candidate.py {
       deploymentTransportPolicy = toString config.system.build.phoenixDeploymentTransportPolicy;
+      sourceManifestLibrary = toString config.system.build.phoenixSourceManifestLibrary;
     });
     git = "${pkgs.git}/bin/git";
     nix = "${pkgs.nix}/bin/nix";

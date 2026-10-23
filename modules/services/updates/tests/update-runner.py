@@ -60,6 +60,43 @@ class RunnerTests(unittest.TestCase):
         self.git('reset', '--hard', self.head)
         return commit
 
+    def test_existing_typst_links_survive_candidate_transport_and_baseline_comparison(self):
+        prefix = 'modules/apps/documents/typst/'
+        links = [prefix + 'template-adapters/omd2typst/phoenix-letter.typ',
+                 prefix + 'templates/phoenix-letter/lib.typ', prefix + 'templates/phoenix-letter/typst.toml']
+        for name in links:
+            original = ROOT / name
+            canonical = original.resolve().relative_to(ROOT)
+            target = self.repo / canonical
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(original.resolve().read_bytes())
+            link = self.repo / name; link.parent.mkdir(parents=True, exist_ok=True)
+            link.symlink_to(original.readlink())
+        self.git('add', '.'); self.git('commit', '-qm', 'legitimate Typst links')
+        head = self.git('rev-parse', 'HEAD').strip()
+        files, modes = candidate._manifest(self.config['git'], self.repo, self.home, head)
+        frozen = self.root / 'frozen'
+        candidate.source_manifest.materialize(frozen, files, modes)
+        self.assertEqual(candidate._commit_inventory(self.config['git'], self.repo, self.home, head),
+                         candidate._inventory(frozen))
+        for name in links:
+            self.assertEqual(modes[name], '120000')
+            self.assertEqual((frozen / name).readlink(), (ROOT / name).readlink())
+
+    def test_candidate_submodule_and_unsafe_symlink_commits_are_rejected(self):
+        for target in ['/etc/passwd', '../outside', 'missing', 'config', 'link']:
+            with self.subTest(target=target):
+                link = self.repo / 'link'
+                link.unlink(missing_ok=True); link.symlink_to(target)
+                self.git('add', 'link'); self.git('commit', '-qm', 'unsafe link')
+                with self.assertRaises(ValueError):
+                    candidate._manifest(self.config['git'], self.repo, self.home, self.git('rev-parse', 'HEAD').strip())
+        self.git('rm', 'link')
+        self.git('update-index', '--add', '--cacheinfo', '160000,' + self.head + ',vendor')
+        self.git('commit', '-qm', 'submodule')
+        with self.assertRaises(candidate.CandidateError):
+            candidate._manifest(self.config['git'], self.repo, self.home, self.git('rev-parse', 'HEAD').strip())
+
     def test_source_transport_accepts_large_escaped_manifest_and_matches_controller(self):
         spec = importlib.util.spec_from_file_location('capacity_deploy', ROOT / 'modules/development/ai/agent/deployment.py')
         deploy = importlib.util.module_from_spec(spec)
@@ -115,7 +152,7 @@ class RunnerTests(unittest.TestCase):
                                    ('review', 'modules/development/ai/agent/deploy-review.py'),
                                    ('candidate', 'modules/services/updates/candidate.py')]:
                 script = Path(directory) / (name + '.py')
-                script.write_text((ROOT / relative).read_text().replace('@deploymentTransportPolicy@', str(policy)).replace('@authorizationLibrary@', str(ROOT / 'modules/development/ai/agent/authorization/request.py')))
+                script.write_text((ROOT / relative).read_text().replace('@deploymentTransportPolicy@', str(policy)).replace('@authorizationLibrary@', str(ROOT / 'modules/development/ai/agent/authorization/request.py')).replace('@sourceManifestLibrary@', str(ROOT / 'modules/development/ai/agent/source-manifest.py')))
                 spec = importlib.util.spec_from_file_location('isolated_' + name, script)
                 module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(module)

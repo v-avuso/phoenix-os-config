@@ -4,6 +4,7 @@ import importlib.util
 import contextlib
 import io
 import json
+import os
 from pathlib import Path
 import shutil
 import socket
@@ -611,6 +612,26 @@ class ReviewTests(unittest.TestCase):
             with self.assertRaises(OSError):
                 review.audit(config, binding, "built")
             self.assertEqual((home / "auth.json").read_text(), "credential-must-not-log")
+
+    def test_snapshot_preserves_tracked_relative_symlinks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repo = root / 'repo'; repo.mkdir()
+            git = shutil.which('git')
+            def execute(*args):
+                subprocess.run([git, '-C', str(repo), *args], check=True, capture_output=True)
+            execute('init'); execute('config', 'user.name', 'Fixture')
+            execute('config', 'user.email', 'fixture@example.invalid')
+            for name in ('flake.nix', 'flake.lock', 'canonical'):
+                (repo / name).write_text('{}')
+            (repo / 'link').symlink_to('canonical')
+            execute('add', '.'); execute('commit', '-m', 'tracked symlink')
+            frozen = root / 'frozen'
+            _, files = review.snapshot({'repo': str(repo), 'git': git}, frozen)
+            self.assertEqual(files['link'], 'canonical')
+            self.assertEqual(os.readlink(frozen / 'link'), 'canonical')
+            self.assertEqual(review.source_modes(frozen, files)['link'], '120000')
+            self.assertEqual(review.baseline_files(frozen), files)
 
     def test_snapshot_includes_working_tree_and_git_visible_untracked_files(self):
         with tempfile.TemporaryDirectory() as directory:

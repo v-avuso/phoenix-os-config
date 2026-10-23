@@ -13,8 +13,9 @@ let
   authorizationPolicy = toString config.system.build.phoenixAuthorizationPolicy;
   authorizationLibrary = toString config.system.build.phoenixAuthorizationLibrary;
   transportPolicy = pkgs.writeText "phoenix-deployment-transport.json" (builtins.readFile ./transport.json);
-  controllerScript = pkgs.replaceVars ./deployment.py { deploymentTransportPolicy = toString transportPolicy; inherit authorizationLibrary; };
-  reviewScript = pkgs.replaceVars ./deploy-review.py { deploymentTransportPolicy = toString transportPolicy; inherit authorizationLibrary; };
+  sourceManifestLibrary = toString (pkgs.writeText "phoenix-source-manifest.py" (builtins.readFile ./source-manifest.py));
+  controllerScript = pkgs.replaceVars ./deployment.py { deploymentTransportPolicy = toString transportPolicy; inherit authorizationLibrary sourceManifestLibrary; };
+  reviewScript = pkgs.replaceVars ./deploy-review.py { deploymentTransportPolicy = toString transportPolicy; inherit authorizationLibrary sourceManifestLibrary; };
   sourceSelector = pkgs.writeScript "phoenix-source" (
     builtins.replaceStrings [ "#!/usr/bin/env python3" ]
       [ "#!${pkgs.python3}/bin/python3" ] (builtins.readFile ../../../../commands/phoenix-source)
@@ -34,6 +35,7 @@ let
     implementation = builtins.hashString "sha256" (builtins.readFile ./authorization/command-policy.py);
     controller = builtins.hashString "sha256" (builtins.readFile ./deployment.py);
     review = builtins.hashString "sha256" (builtins.readFile ./deploy-review.py);
+    sourceManifest = builtins.hashString "sha256" (builtins.readFile ./source-manifest.py);
     prompt = builtins.hashString "sha256" (builtins.readFile ./authorization/command-review-policy.md);
     provider = if cfg.securityReview.enable then toString reviewerCodexPackage else null;
     inherit (cfg.securityReview) adapter model effort;
@@ -98,6 +100,7 @@ let
       authorizationPresentation = toString config.system.build.phoenixAuthorizationPresentation;
       authorizationLibrary = authorizationLibrary;
       deploymentTransportPolicy = toString transportPolicy;
+      inherit sourceManifestLibrary;
       modelReviewEnabled = cfg.securityReview.enable;
       operatorCommand = lib.optionals (!cfg.securityReview.enable) operatorCommand;
       inherit overrideCommand disruptionOverrideCommand;
@@ -130,6 +133,7 @@ let
       authorizationPresentation = toString config.system.build.phoenixAuthorizationPresentation;
       authorizationLibrary = authorizationLibrary;
       deploymentTransportPolicy = toString transportPolicy;
+      inherit sourceManifestLibrary;
       modelReviewEnabled = cfg.securityReview.enable;
       operatorCommand = lib.optionals (!cfg.securityReview.enable) operatorCommand;
       inherit overrideCommand disruptionOverrideCommand;
@@ -172,6 +176,7 @@ let
       commandExec = toString (pkgs.writeText "phoenix-command-exec.py" (builtins.readFile ./authorization/command-exec.py));
       authorizationLibrary = authorizationLibrary;
       deploymentTransportPolicy = toString transportPolicy;
+      inherit sourceManifestLibrary;
       modelReviewEnabled = cfg.securityReview.enable;
       operatorName = user.name;
       disruptionScript = toString (pkgs.writeText "phoenix-disruption.py" (builtins.readFile ./disruption.py));
@@ -233,6 +238,7 @@ in
     system.build.phoenixCommandSandboxClient = commandClient true;
 
     system.build.phoenixDeploymentTransportPolicy = transportPolicy;
+    system.build.phoenixSourceManifestLibrary = sourceManifestLibrary;
     system.build.phoenixDeploymentClient = deployReview;
     system.build.phoenixDeploymentSandboxClient = deployClient;
     _module.args.phoenixDeployReviewPackage = deployClient;

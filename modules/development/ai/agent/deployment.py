@@ -28,6 +28,11 @@ _auth_spec = importlib.util.spec_from_file_location('phoenix_authorization', AUT
 authorization = importlib.util.module_from_spec(_auth_spec)
 _auth_spec.loader.exec_module(authorization)
 
+SOURCE_MANIFEST_PATH = "@sourceManifestLibrary@"
+_source_spec = importlib.util.spec_from_file_location('phoenix_source_manifest', SOURCE_MANIFEST_PATH if SOURCE_MANIFEST_PATH.startswith('/') else Path(__file__).with_name('source-manifest.py'))
+source_manifest = importlib.util.module_from_spec(_source_spec)
+_source_spec.loader.exec_module(source_manifest)
+
 # Nix substitutes an immutable policy path; repository fixtures use the source file.
 TRANSPORT_PATH = "@deploymentTransportPolicy@"
 TRANSPORT = json.loads((Path(TRANSPORT_PATH) if TRANSPORT_PATH.startswith("/") else Path(__file__).with_name("transport.json")).read_text())
@@ -84,13 +89,14 @@ def request_valid(request, target, reservations=False):
         path = Path(name)
         if path.is_absolute() or any(p in {'.', '..', '.git'} for p in name.split('/')) or str(path) != name:
             raise ValueError('unsafe source name')
-        if not isinstance(content, str) or modes[name] not in {'100644', '100755'}:
+        if not isinstance(content, str) or modes[name] not in {'100644', '100755', '120000'}:
             raise ValueError('unsupported source type')
         total += len(content.encode())
     if any(str(parent) in files for name in files for parent in Path(name).parents if str(parent) != '.'):
         raise ValueError('file/directory prefix collision')
     if total > SOURCE_LIMIT:
         raise DeploymentFailure('source-transport', 'source-capacity-exceeded')
+    source_manifest.validate(files, modes)
 
 
 def store_path(value, kind):
@@ -339,15 +345,7 @@ def process_inner(config, request, uid, pid, state):
         temporary.chmod(0o755)
         source = temporary / 'source'
         source.mkdir(mode=0o755)
-        for name, content in request['files'].items():
-            path = source / name
-            path.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
-            for parent in path.parents:
-                if parent == source.parent:
-                    break
-                parent.chmod(0o755)
-            path.write_text(content)
-            path.chmod(0o755 if request['modes'][name] == '100755' else 0o644)
+        source_manifest.materialize(source, request['files'], request['modes'])
         build_home = temporary / 'build'
         build_home.mkdir(mode=0o700)
         account = pwd.getpwnam(config['builderUser'])
@@ -483,8 +481,11 @@ def process_inner(config, request, uid, pid, state):
         branch = request.get('branch', 'detached-' + request['commit'])
         checkpoint, context_base, context_old = False, baseline, old
         if security:
-            checkpoint, context_base, context_old = security.choose_checkpoint(
-                config, request['target'], source_store, closure, branch, baseline, request['files'], review, store_path)
+            try:
+                checkpoint, context_base, context_old = security.choose_checkpoint(
+                    config, request['target'], source_store, closure, branch, baseline, request['files'], review, store_path)
+            except security.ApprovalBaselineRequired:
+                raise DeploymentFailure('baseline', 'approved-checkpoint-required') from None
         if review_required and not checkpoint:
             binding['reviewBase'] = context_base
             work = temporary / 'review'

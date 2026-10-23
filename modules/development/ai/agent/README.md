@@ -150,6 +150,7 @@ containment, decision and execution responsibilities.
 | Authorization | `authorization/` | Installed decision policy and shared request library; consumes security-review selection and declared caller/operator identities. |
 | Diagnostics | `broker.nix`, `admin.py` | Authorization policy/library, fixed root socket dispatcher and native Polkit helpers; seven typed operations. |
 | Deployment and security review | `deployment.nix`, `deployment.py`, `security-review.nix` | Authorization, immutable source/build binding, activation/rollback helpers; optional isolated reviewer and exact approval checkpoints. |
+| Frozen source format | [`source-manifest.py`](source-manifest.md) | Preserves regular files and safe internal file links across snapshot, review, transport and store verification; documents old-validator recovery. |
 | OpenShell runtime | `default.nix`, `image.nix`, `launch.py` | Pinned OpenShell and Podman, workspace/network policy, history and broker clients; enforces the worker boundary. |
 | Bubblewrap GUI | `gui.nix`, `gui-*.py` | nix-bwrapper desktop preset and pinned Flatpak manifest; CLI/HTTP relays enter OpenShell, with separately controlled GUI state sharing. |
 | Experimental controls | `identity.nix`, `reservations.nix`, `shutdown-ordering.nix`, deployment disruption guard and authorization explanation | Optional runtime identity/lifetime, deployment coordination/inspection and native presentation extensions; remain off independently of enabled security review and GUI sharing. |
@@ -196,14 +197,17 @@ containment, decision and execution responsibilities.
   [review policy](review-policy.md).
 - **Approval reuse and fallback:** Root-owned approval records bind exact immutable
   source, closure, target and installed policy; retain at most 32 records. Exact
-  candidate reuse skips AI. Context uses the smallest diff among the activated
-  snapshot and all independently approved same-policy/target snapshots across
+  candidate reuse skips AI. Context uses the smallest diff among independently
+  approved same-policy/target snapshots across
   branches, which need not be the latest approval. Branch labels grant no authority. Review denial or
   error blocks activation and returns an exact pending decision; explicit
   `phoenix-deploy-review --security-override PENDING_NONCE` requires separate
   authentication and accepts only that protected source/closure/action. Approval
   remains reusable after an activation failure; current baseline/profile checks
   still apply. Never include secrets in task reasons.
+  Activation alone grants no review-context trust; absent a matching protected
+  checkpoint, deployment stops with `approved-checkpoint-required`. See the
+  [reviewed recovery transition](source-manifest.md#one-time-recovery-from-an-older-validator).
 - **Acceptance limits:** Offline fixtures cover controller/worker/checkpoint and
   failure composition with explicit stubs. Actual protected retained-auth review,
   root process/build/worker/adapter/checkpoint reuse, and recorder-based reservation

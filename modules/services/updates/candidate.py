@@ -5,6 +5,7 @@ The delayed policy prototype is preserved in Git commit ed38a0b; unused
 cooldown selection and incomplete request/controller orchestration are retired.
 """
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -20,6 +21,10 @@ TRANSPORT_PATH = "@deploymentTransportPolicy@"
 TRANSPORT = json.loads((Path(TRANSPORT_PATH) if TRANSPORT_PATH.startswith("/") else Path(__file__).parents[2] / "development/ai/agent/transport.json").read_text())
 SOURCE_LIMIT = TRANSPORT["sourceBytes"]
 WIRE_LIMIT = TRANSPORT["wireBytes"]
+SOURCE_MANIFEST_PATH = "@sourceManifestLibrary@"
+_source_spec = importlib.util.spec_from_file_location('phoenix_source_manifest', SOURCE_MANIFEST_PATH if SOURCE_MANIFEST_PATH.startswith('/') else Path(__file__).parents[2] / 'development/ai/agent/source-manifest.py')
+source_manifest = importlib.util.module_from_spec(_source_spec)
+_source_spec.loader.exec_module(source_manifest)
 
 def _revision(value, field):
     if not isinstance(value, str) or not REVISION.fullmatch(value):
@@ -167,29 +172,14 @@ def git(exe, repo, home, *args):
                 output_limit=SOURCE_LIMIT + 1 if args[:2] == ("cat-file", "blob") else 2 * 1024 * 1024)
 
 def _inventory(path):
-    files = {}
-    for root, dirs, names in os.walk(path, followlinks=False):
-        if any((Path(root) / name).is_symlink() for name in dirs):
-            raise CandidateError("approved source contains symlinks")
-        for name in names:
-            item = Path(root) / name
-            if item.is_symlink() or not item.is_file():
-                raise CandidateError("approved source contains unsupported files")
-            relative = item.relative_to(path).as_posix()
-            mode = "100755" if item.stat().st_mode & 0o111 else "100644"
-            files[relative] = (mode, hashlib.sha256(item.read_bytes()).hexdigest())
-    return files
+    files, modes = source_manifest.read_tree(path, SOURCE_LIMIT)
+    return {name: (modes[name], hashlib.sha256(content.encode('utf-8')).hexdigest())
+            for name, content in files.items()}
 
 def _commit_inventory(exe, repo, home, commit):
-    result = {}
-    for entry in filter(None, git(exe, repo, home, "ls-tree", "-r", "-z", "--full-tree", commit).split(b"\0")):
-        metadata, name = entry.split(b"\t", 1)
-        mode, kind, oid = metadata.decode().split()
-        if kind != "blob" or mode not in {"100644", "100755"}:
-            raise CandidateError("approved source contains symlinks or submodules")
-        content = git(exe, repo, home, "cat-file", "blob", oid)
-        result[name.decode()] = (mode, hashlib.sha256(content).hexdigest())
-    return result
+    files, modes = _manifest(exe, repo, home, commit)
+    return {name: (modes[name], hashlib.sha256(content.encode('utf-8')).hexdigest())
+            for name, content in files.items()}
 
 def validate_community_payload(payload):
     if not isinstance(payload, dict) or set(payload) != {"version", "amd64", "arm64"}:
@@ -264,7 +254,7 @@ def _manifest(exe, repo, home, commit):
         metadata, raw_name = entry.split(b"\t", 1)
         mode, kind, oid, size = metadata.decode().split()
         name = raw_name.decode()
-        if kind != "blob" or mode not in {"100644", "100755"} or name.startswith("/") or ".git" in name.split("/"):
+        if kind != "blob" or mode not in {"100644", "100755", "120000"} or name.startswith("/") or ".git" in name.split("/"):
             raise CandidateError("candidate source contains unsupported paths")
         total += int(size)
         if total > SOURCE_LIMIT:
@@ -277,4 +267,5 @@ def _manifest(exe, repo, home, commit):
         modes[name] = mode
     if not {"flake.nix", "flake.lock"} <= files.keys():
         raise CandidateError("candidate source misses flake files")
+    source_manifest.validate(files, modes)
     return files, modes

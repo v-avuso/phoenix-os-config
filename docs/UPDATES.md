@@ -66,6 +66,8 @@
 
 ## Activation recovery
 
+- **Older symlink validators:** The updater and protected deployer share the [frozen-source contract](../modules/development/ai/agent/source-manifest.md). An installed validator that rejects an already active source's legitimate links requires the documented, explicitly approved one-time native recovery. Preserve source checks and review policy; the schedule needs no change.
+
 - **ClamAV:** Signature downloads are timer-driven (two minutes after boot and hourly, with missed calendar checks caught up). They are not a required activation job. Existing databases/scanners remain usable while offline; first-install recovery starts scanning after a successful download.
 - **Retries:** FreshClam failures retry after five minutes, capped at three starts within thirty minutes; the hourly timer permits later recovery. Keep failures visible rather than marking network errors successful. No AI or database deletion is involved.
 - **Controller refresh:** Changed deployment units reload gracefully after their active request/response, then systemd starts installed code/settings. This avoids killing the controller during its own deployment. Older controllers require one authenticated restart when adopting this mechanism; thereafter no manual restart is expected.

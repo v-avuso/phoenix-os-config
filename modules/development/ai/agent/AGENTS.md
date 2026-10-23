@@ -14,6 +14,9 @@
 - Freeze Git-visible working-tree changes before builds, including new files and
   deletions. A clean commit is not an activation prerequisite. Ignore branch names
   as authority; only root-owned exact source/closure/policy checkpoints authorize reuse.
+- An activated source marker is provenance, not review approval. Never select it
+  as trusted diff context without a matching protected checkpoint; after native
+  recovery or policy changes, require an explicit independently reviewed transition.
 - Before declaring final integration/updater readiness, synchronize intended tracked
   content with the activated/staged approved source: new documentation commits also
   change that boundary. Report the final binding in the journal/operator handoff;

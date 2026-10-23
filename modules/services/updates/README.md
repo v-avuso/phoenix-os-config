@@ -12,6 +12,11 @@ The protected controller validates publisher policy and immutable baseline/profi
 builds the submitted source and binds the resulting closure before boot staging.
 Routine updates invoke neither AI review nor graphical operator authentication.
 
+Source manifests preserve safe internal file symlinks, including the Typst adapter
+and package compatibility links. Literal targets and modes must match the approved
+baseline; routine updates cannot add or retarget links. See the shared
+[source contract and old-validator recovery](../../development/ai/agent/source-manifest.md).
+
 `phoenix-update` prints short preparation phases and forwards controller build
 output as it happens, including Nix lock preparation diagnostics. Long-running
 Nix preparation commands emit a heartbeat after 30 seconds without output. Its

@@ -627,8 +627,12 @@ class DeploymentTests(unittest.TestCase):
             (source / 'upstream-linux-packages.json').write_text(json.dumps(payload))
             self.assertEqual(routine.validate_community_payload(directory), '1.2.3')
 
-    def non_model_deployment(self, action='update', operator=False, updater_socket=False, malicious=False, progress=False, build_failure=False, stalled_reader=False):
+    def non_model_deployment(self, action='update', operator=False, updater_socket=False, malicious=False, progress=False, build_failure=False, stalled_reader=False, symlinks=False, retarget=False):
         before, _modes, candidate, modes = self.routine_sources()
+        if symlinks:
+            before.update({'canonical': 'source', 'other': 'other source', 'alias': 'canonical'})
+            candidate.update({'canonical': 'source', 'other': 'other source', 'alias': 'other' if retarget else 'canonical'})
+            modes.update({'canonical': '100644', 'other': '100644', 'alias': '120000'})
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             baseline = root / 'baseline'
@@ -638,11 +642,8 @@ class DeploymentTests(unittest.TestCase):
             profile = root / 'profile'
             marker = profile / 'etc/phoenix-agent'
             marker.mkdir(parents=True)
-            for name, content in before.items():
-                for target in (baseline, profile_source):
-                    path = target / name
-                    path.parent.mkdir(parents=True, exist_ok=True)
-                    path.write_text(content)
+            for target in (baseline, profile_source):
+                deploy.source_manifest.materialize(target, before, modes)
             (marker / 'activated-source').symlink_to(profile_source)
             frozen, closure, old_runtime = root / 'frozen', root / 'closure', root / 'old-runtime'
             (closure / 'etc/phoenix-agent').mkdir(parents=True)
@@ -661,20 +662,14 @@ class DeploymentTests(unittest.TestCase):
                 run = mock.Mock(return_value=b'')
                 run_build = staticmethod(native_review.run_build)
                 BuildError = native_review.BuildError
-                @staticmethod
-                def baseline_files(path):
-                    return {item.relative_to(path).as_posix(): item.read_text()
-                            for item in path.rglob('*') if item.is_file()}
-                @staticmethod
-                def source_modes(path, files):
-                    return {name: ('100755' if (path / name).stat().st_mode & 0o111 else '100644')
-                            for name in files}
+                baseline_files = staticmethod(native_review.baseline_files)
+                source_modes = staticmethod(native_review.source_modes)
             account = mock.Mock(pw_uid=os.getuid(), pw_gid=os.getgid())
             as_user_calls = []
             def as_user(_config, user, argv, _run, **kwargs):
                 as_user_calls.append((user, argv))
                 if argv[:3] == ['nix', 'store', 'add-path']:
-                    shutil.copytree(argv[3], frozen)
+                    shutil.copytree(argv[3], frozen, symlinks=True)
                     return str(frozen).encode()
                 if argv[:2] == ['nix', 'build']:
                     if progress:
@@ -690,7 +685,7 @@ class DeploymentTests(unittest.TestCase):
                           reviewHome='/protected/auth', nix='nix', nixStore='nix-store', baseline='/etc/phoenix-agent/activated-source',
                           routineUpdateScript=str(Path(__file__).resolve().parents[5] / 'modules/development/ai/agent/routine-update.py'),
                           system='x86_64-linux', systemdRun='systemd-run', configPath='config', controller='controller',
-                          python='python', activationEnvironment={}, modelReviewEnabled=False, operatorUid=os.getuid(), clientUid=os.getuid())
+                          python='python', activationEnvironment={}, modelReviewEnabled=symlinks, operatorUid=os.getuid(), clientUid=os.getuid())
             request = dict(files=candidate, modes=modes, commit='a' * 40, action='update', target='metal',
                            reason='Stage deterministic stable package updates',
                            expectedBase=str(baseline), expectedProfile=str(profile))
@@ -701,7 +696,7 @@ class DeploymentTests(unittest.TestCase):
                 del request['expectedBase'], request['expectedProfile']
             if updater_socket:
                 config.update(clientUid=2000, operatorUid=1000,
-                              authorizationPolicy=dict(deploy.authorization.default_policy(False, 2000, 1000), updaterUid=1000))
+                              authorizationPolicy=dict(deploy.authorization.default_policy(symlinks, 2000, 1000), updaterUid=1000))
             if malicious:
                 # A valid source manifest containing an unauthorized source change.
                 request['files']['unapproved.nix'] = 'malicious = true;'
@@ -755,12 +750,12 @@ class DeploymentTests(unittest.TestCase):
                 self.assertEqual(as_user_calls, [])
                 Review.run.assert_not_called()
                 return
-            if malicious:
+            if malicious or retarget:
                 self.assertFalse(result['ok'])
                 self.assertEqual(result['stage'], 'routine-policy')
                 self.assertFalse(any(call.args[0][0] == 'systemd-run' for call in Review.run.call_args_list))
                 return
-            self.assertTrue(result['ok'])
+            self.assertTrue(result['ok'], result)
             self.assertEqual(result['action'], action)
             self.assertEqual([user for user, _argv in as_user_calls], ['builder'] * (3 if action == 'update' else 2))
             self.assertEqual(Review.run.call_count, 4)  # realize source/closure/runtime, then transient activation
@@ -784,6 +779,10 @@ class DeploymentTests(unittest.TestCase):
 
     def test_routine_update_reaches_boot_without_invoking_reviewer(self):
         self.non_model_deployment()
+
+    def test_routine_symlink_update_is_ai_free_and_retarget_is_denied(self):
+        self.non_model_deployment(updater_socket=True, symlinks=True)
+        self.non_model_deployment(updater_socket=True, symlinks=True, retarget=True)
 
     def test_disabled_reviewer_requires_authenticated_operator_for_manual_deploy(self):
         with mock.patch.object(deploy, 'process_inner') as inner:
@@ -964,9 +963,10 @@ class DeploymentTests(unittest.TestCase):
             owner = Path(__file__).resolve().parents[5] / 'modules/development/ai/agent'
             baseline = root / 'baseline'
             baseline.mkdir()
-            initial = {'flake.nix': '{}\n', 'flake.lock': '{}\n', 'context.nix': 'needed context\n'}
-            for name, text in initial.items():
-                (baseline / name).write_text(text)
+            initial = {'flake.nix': '{}\n', 'flake.lock': '{}\n', 'context.nix': 'needed context\n',
+                       'context-alias.nix': 'context.nix'}
+            deploy.source_manifest.materialize(baseline, initial,
+                {name: ('120000' if name == 'context-alias.nix' else '100644') for name in initial})
             profile = root / 'profile'
             (profile / 'etc/phoenix-agent').mkdir(parents=True)
             (profile / 'etc/phoenix-agent/activated-source').symlink_to(baseline)
@@ -1032,7 +1032,7 @@ class DeploymentTests(unittest.TestCase):
                     key = json.dumps(files, sort_keys=True)
                     if key not in frozen_sources:
                         frozen = root / ('frozen-' + str(len(frozen_sources)))
-                        shutil.copytree(argv[3], frozen)
+                        shutil.copytree(argv[3], frozen, symlinks=True)
                         frozen_sources[key] = frozen
                     return str(frozen_sources[key]).encode()
                 if argv[:2] == ['nix', 'eval']:
@@ -1070,12 +1070,13 @@ class DeploymentTests(unittest.TestCase):
                 return original_resolve(path, *args, **kwargs)
 
             request = dict(self.request(), files=dict(initial, **{'flake.nix': '{ changed = true; }\n' + '# unchanged approved context\n' * 12,
-                'private.nix': 'unrequested secret content\n'}), branch='feature')
+                'private.nix': 'unrequested secret content\n', 'new-alias.nix': 'context.nix'}), branch='feature')
             # An unchanged private file belongs in both frozen states, never prompt data.
             (baseline / 'private.nix').write_text(request['files']['private.nix'])
             if live:
                 request['files']['flake.nix'] = '# Isolated acceptance comment; no behavior change.\n{}\n'
-            request['modes'] = {name: '100644' for name in request['files']}
+            request['modes'] = {name: ('120000' if name in {'context-alias.nix', 'new-alias.nix'} else '100644')
+                                for name in request['files']}
             account = mock.Mock(pw_uid=os.getuid(), pw_gid=os.getgid())
             with mock.patch.object(deploy, 'load_review', return_value=review), mock.patch.object(deploy, 'load_security', return_value=security), \
                  mock.patch.object(review, 'run', side_effect=command), mock.patch.object(deploy, 'as_user', side_effect=user_command), \
@@ -1110,6 +1111,9 @@ class DeploymentTests(unittest.TestCase):
                 if not live:
                     self.assertIn('-{}', prompts[0])
                 self.assertIn('+# Isolated acceptance comment' if live else '+{ changed = true; }', prompts[0])
+                self.assertIn('mode new-alias.nix: absent -> 120000', prompts[0])
+                self.assertIn('+context.nix', prompts[0])
+                self.assertTrue(all((source / 'new-alias.nix').is_symlink() for source in frozen_sources.values()))
                 self.live_stage = 'exact-reuse'
                 request['branch'] = 'another-branch'
                 self.assertTrue(deploy.process(config, request, 1000, 22)['ok'])
@@ -1197,7 +1201,18 @@ class DeploymentTests(unittest.TestCase):
             self.assertFalse(security.choose_checkpoint({},'metal','merged','closure','feature','activated',{'file':'candidate'},review,verify)[0])
             self.assertEqual(security.choose_checkpoint({},'metal','merged','closure','feature','activated',{'file':'candidate'},review,verify)[1],'approved')
             approved['policy']='old'
-            self.assertFalse(security.choose_checkpoint({},'metal','approved','closure','main','activated',{'file':'candidate'},review,verify)[0])
+            with self.assertRaises(security.ApprovalBaselineRequired):
+                security.choose_checkpoint({},'metal','approved','closure','main','activated',{'file':'candidate'},review,verify)
+
+    def test_unapproved_activation_cannot_supply_empty_review_context(self):
+        security = self.security()
+        review = mock.Mock()
+        with mock.patch.object(security, 'policy_digest', return_value='new-policy'), \
+             mock.patch.object(security, 'records', return_value=[]):
+            with self.assertRaises(security.ApprovalBaselineRequired):
+                security.choose_checkpoint({}, 'metal', 'active', 'closure', 'main', 'active',
+                                           {'file': 'already active but unreviewed'}, review, mock.Mock())
+        review.baseline_files.assert_not_called()
 
     def test_trust_active_requires_enabled_review_root_and_exact_operator(self):
         config = dict(modelReviewEnabled=True, operatorUid=1000, clientUid=2000)
@@ -1357,19 +1372,20 @@ class DeploymentTests(unittest.TestCase):
                 return str(path)
             library = package('authorization.py', (owner / 'authorization/request.py').read_text())
             transport = package('transport.json', (owner / 'transport.json').read_text())
+            manifest = package('source-manifest.py', (owner / 'source-manifest.py').read_text())
             def snapshot(name):
                 repo = root / name; repo.mkdir()
                 config = {}
                 for key, filename in [('policy', 'review-policy.md'), ('reviewScript', 'deploy-review.py'), ('securityReviewScript', 'security-review.py'), ('controller', 'deployment.py')]:
-                    contents = (owner / filename).read_text().replace('@authorizationLibrary@', library).replace('@deploymentTransportPolicy@', transport)
+                    contents = (owner / filename).read_text().replace('@authorizationLibrary@', library).replace('@deploymentTransportPolicy@', transport).replace('@sourceManifestLibrary@', manifest)
                     path = repo / filename; path.write_text(contents); config[key] = str(path)
-                config.update(authorizationLibrary=library, deploymentTransportPolicy=transport, adapter='codex', model='gpt-6-luna', effort='high')
+                config.update(authorizationLibrary=library, deploymentTransportPolicy=transport, sourceManifestLibrary=manifest, adapter='codex', model='gpt-6-luna', effort='high')
                 return config
             first, relocated = snapshot('repository-a'), snapshot('repository-b')
             (root / 'repository-b/unrelated-doc.md').write_text('unrelated repository change')
             expected = security.policy_digest(first)
             self.assertEqual(expected, security.policy_digest(relocated))
-            for key in ('authorizationLibrary', 'deploymentTransportPolicy'):
+            for key in ('authorizationLibrary', 'deploymentTransportPolicy', 'sourceManifestLibrary'):
                 changed = dict(first, **{key: package(key, Path(first[key]).read_text() + '\nchanged')})
                 self.assertNotEqual(expected, security.policy_digest(changed))
             Path(relocated['controller']).write_text(Path(relocated['controller']).read_text() + '\n# actual security code change')

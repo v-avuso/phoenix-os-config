@@ -16,11 +16,15 @@ import tempfile
 RETENTION = 32
 
 
+class ApprovalBaselineRequired(ValueError):
+    """Activation markers are not protected security approval records."""
+
+
 def policy_digest(config):
     digest = hashlib.sha256()
     for key in ('policy', 'reviewScript', 'securityReviewScript', 'controller'):
         digest.update(key.encode() + b'\0' + Path(config[key]).read_bytes() + b'\0')
-    for key in ('authorizationLibrary', 'deploymentTransportPolicy'):
+    for key in ('authorizationLibrary', 'deploymentTransportPolicy', 'sourceManifestLibrary'):
         if config.get(key):
             digest.update(key.encode() + b'\0' + Path(config[key]).read_bytes() + b'\0')
     # These are immutable installed execution identities/options. Changing the
@@ -92,7 +96,7 @@ def records(config, suffix):
 
 def choose_checkpoint(config, target, source, closure, branch, baseline, files, review, verify_source):
     policy = policy_digest(config)
-    exact, candidates = False, [(baseline, review.baseline_files(Path(baseline)))]
+    exact, candidates = False, []
     for _, record in records(config, 'approved'):
         if record.get('policy') != policy or record.get('target') != target:
             continue
@@ -107,6 +111,8 @@ def choose_checkpoint(config, target, source, closure, branch, baseline, files, 
         # Every candidate is independently approved under this policy and target.
         # Branch labels never limit authority, nor authorize merged combinations.
         candidates.append((approved_source, review.baseline_files(Path(approved_source))))
+    if not candidates:
+        raise ApprovalBaselineRequired('explicit reviewed checkpoint transition required for installed policy')
     # Diff size is only a selection heuristic among independently approved states.
     candidate_modes = review.source_modes(Path(source), files)
     selected = min(candidates, key=lambda item: len(review.source_diff(

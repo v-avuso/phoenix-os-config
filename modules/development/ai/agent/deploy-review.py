@@ -41,6 +41,11 @@ _auth_spec = importlib.util.spec_from_file_location('phoenix_authorization', AUT
 authorization = importlib.util.module_from_spec(_auth_spec)
 _auth_spec.loader.exec_module(authorization)
 
+SOURCE_MANIFEST_PATH = "@sourceManifestLibrary@"
+_source_spec = importlib.util.spec_from_file_location('phoenix_source_manifest', SOURCE_MANIFEST_PATH if SOURCE_MANIFEST_PATH.startswith('/') else Path(__file__).with_name('source-manifest.py'))
+source_manifest = importlib.util.module_from_spec(_source_spec)
+_source_spec.loader.exec_module(source_manifest)
+
 def run(argv, *, cwd=None, env=None, data=None, timeout=60, fail_on_compaction=False, pass_fds=()):
     """Bound both execution and output; terminate the whole child process group."""
     with tempfile.TemporaryFile() as output, tempfile.TemporaryFile() as errors, tempfile.TemporaryFile() as input_file:
@@ -163,73 +168,27 @@ def git(config, *args):
 
 
 def worktree_file(repo, name):
-    """Read one regular working-tree file without following symlink components."""
-    path = Path(name)
-    if path.is_absolute() or path.as_posix() != name or any(part in {"", ".", "..", ".git"} for part in path.parts):
-        raise ValueError("unsafe source path")
-    root_fd = os.open(repo, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW)
-    parent_fd = root_fd
-    try:
-        for part in path.parts[:-1]:
-            next_fd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW,
-                              dir_fd=parent_fd)
-            if parent_fd != root_fd:
-                os.close(parent_fd)
-            parent_fd = next_fd
-        try:
-            file_fd = os.open(path.parts[-1], os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW, dir_fd=parent_fd)
-        except FileNotFoundError:
-            return None
-        try:
-            before = os.fstat(file_fd)
-            if not stat.S_ISREG(before.st_mode):
-                raise ValueError("symlinks and submodules require a separate reviewed deployment path")
-            data = bytearray()
-            while True:
-                block = os.read(file_fd, min(65536, SOURCE_LIMIT + 1 - len(data)))
-                if not block:
-                    break
-                data.extend(block)
-                if len(data) > SOURCE_LIMIT:
-                    raise ValueError("source exceeds transport capacity; reduce source scope before deployment")
-            after = os.fstat(file_fd)
-            if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns,
-                    before.st_mode & 0o777) != \
-                    (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns,
-                     after.st_mode & 0o777):
-                raise ValueError("working-tree source changed during snapshot; retry deployment")
-            return bytes(data), ("100755" if before.st_mode & 0o111 else "100644")
-        finally:
-            os.close(file_fd)
-    except OSError as error:
-        if error.errno == errno.ENOENT:
-            return None
-        if error.errno in {errno.ELOOP, errno.EISDIR}:
-            raise ValueError("symlinks and submodules require a separate reviewed deployment path") from None
-        raise
-    finally:
-        if parent_fd != root_fd:
-            os.close(parent_fd)
-        os.close(root_fd)
+    return source_manifest.read_entry(repo, name, SOURCE_LIMIT)
 
 
 def snapshot(config, destination):
     commit = git(config, "rev-parse", "--verify", "HEAD^{commit}").decode().strip()
     if git(config, "ls-files", "-u", "-z"):
         raise ValueError("resolve unmerged paths before deployment")
-    names = set(git(config, "ls-files", "--cached", "-z").split(b"\0"))
+    tracked = set(git(config, "ls-files", "--cached", "-z").split(b"\0"))
+    names = set(tracked)
     names.update(git(config, "ls-files", "--others", "--exclude-standard", "-z").split(b"\0"))
     entries = git(config, "ls-tree", "-rz", "--full-tree", commit).split(b"\0")
     for entry in filter(None, entries):
         metadata, raw_name = entry.split(b"\t", 1)
         mode, kind, oid = metadata.decode().split()
-        if mode not in {"100644", "100755"} or kind != "blob":
-            raise ValueError("symlinks and submodules require a separate reviewed deployment path")
+        if mode not in {"100644", "100755", "120000"} or kind != "blob":
+            raise ValueError("submodules and unsupported source modes require a separate reviewed deployment path")
         names.add(raw_name)
     names.discard(b"")
     if len(names) > 2000:
         raise ValueError("source contains too many files for bounded review; reduce scope before deployment")
-    files, total = {}, 0
+    files, modes, total = {}, {}, 0
     repo = Path(config["repo"])
     for raw_name in sorted(names):
         name = raw_name.decode("utf-8")
@@ -244,34 +203,30 @@ def snapshot(config, destination):
             files[name] = content.decode("utf-8")
         except UnicodeError:
             raise ValueError("binary source requires separate review; never omit it") from None
-        path = Path(name)
-        target = destination / path
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(content)
-        target.chmod(0o755 if mode == "100755" else 0o644)
+        modes[name] = mode
+    source_manifest.validate(files, modes, tracked={name.decode('utf-8') for name in tracked if name})
     if "flake.nix" not in files or "flake.lock" not in files:
         raise ValueError("frozen source needs flake.nix and flake.lock")
+    source_manifest.materialize(destination, files, modes)
     return commit, files
 
 
 def baseline_files(path):
     if (path / ".git").exists():
         raise ValueError("activated baseline contains Git metadata; use a reviewed clean Git-flake deployment baseline")
-    files, total = {}, 0
-    for item in sorted(path.rglob("*")):
-        if item.is_symlink():
-            raise ValueError("baseline contains unsupported symlink")
-        if item.is_file():
-            content = item.read_bytes()
-            total += len(content)
-            if total > SOURCE_LIMIT:
-                raise ValueError("baseline exceeds source transport capacity")
-            files[str(item.relative_to(path))] = content.decode("utf-8")
-    return files
+    try:
+        return source_manifest.read_tree(path, SOURCE_LIMIT)[0]
+    except ValueError as error:
+        if str(error).startswith('source exceeds transport capacity'):
+            raise ValueError('baseline exceeds source transport capacity') from None
+        raise
 
 
 def source_modes(path, files):
-    return {name: ("100755" if (path / name).stat().st_mode & 0o111 else "100644") for name in files}
+    current, modes = source_manifest.read_tree(path, SOURCE_LIMIT)
+    if current != files:
+        raise ValueError('source changed while reading manifest modes')
+    return modes
 
 
 def source_diff(before, after, before_modes=None, after_modes=None):
@@ -534,7 +489,7 @@ def warn_deployment_diff(config, files, modes):
 
 
 FAILURE_STAGES = frozenset("request freeze baseline routine-policy build closure-binding review verdict baseline-recheck activation authentication source-transport protocol reservation disruption override".split())
-FAILURE_CODES = frozenset("source-capacity-exceeded wire-capacity-exceeded review-adapter-unsupported review-cli-incompatible-suspected review-model-unavailable-suspected review-rate-limit-suspected review-transport-failed-suspected invalid-or-denied rejected-or-failed timeout invalid-json io-failed operator-authentication-required rollback-incomplete unsafe-execution-guard mutation-still-running missing-binding baseline-changed profile-changed source-mismatch spool-recovery-required invalid-capability routine-resource-busy model-denied reviewer-invocation-failed review-invocation-failed review-authentication-failed review-authentication-missing review-startup-failed review-timeout review-output-limit review-context-oversized context-compacted context-request-invalid context-request-oversized schema-invalid binding-mismatch worker-envelope-invalid security-policy-changed security-approval-required approval-state-changed inspection-required pending-capacity pending-binding-invalid pending-caller-invalid pending-state-changed".split())
+FAILURE_CODES = frozenset("source-capacity-exceeded wire-capacity-exceeded review-adapter-unsupported review-cli-incompatible-suspected review-model-unavailable-suspected review-rate-limit-suspected review-transport-failed-suspected invalid-or-denied rejected-or-failed timeout invalid-json io-failed operator-authentication-required rollback-incomplete unsafe-execution-guard mutation-still-running missing-binding baseline-changed profile-changed source-mismatch spool-recovery-required invalid-capability routine-resource-busy model-denied reviewer-invocation-failed review-invocation-failed review-authentication-failed review-authentication-missing review-startup-failed review-timeout review-output-limit review-context-oversized context-compacted context-request-invalid context-request-oversized schema-invalid binding-mismatch worker-envelope-invalid security-policy-changed security-approval-required approved-checkpoint-required approval-state-changed inspection-required pending-capacity pending-binding-invalid pending-caller-invalid pending-state-changed".split())
 
 
 def reviewer_explanation(summary):

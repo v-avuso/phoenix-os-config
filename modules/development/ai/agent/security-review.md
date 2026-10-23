@@ -208,12 +208,14 @@ source/closure, another branch, or the possibly different next-boot profile. It
 checks ownership/binding and the runtime closure's versioned target/source
 provenance, and rechecks runtime/profile/policy while holding the existing deployment and activation locks before
 publishing an exact checkpoint. It performs no model call, build or activation.
-It is explicit seeding, not automatic per-generation approval and not a
-prerequisite for the activated-source diff baseline.
+It is explicit seeding, not automatic per-generation approval. Activation alone
+never supplies trusted review context.
 
 Exact source **and closure** reuse skips AI globally across branches. New sources
 still need review. Context chooses the smallest content/mode diff among the
-activated source and all independently approved same-policy/target checkpoints.
+independently approved same-policy/target checkpoints only. If none exist,
+`approved-checkpoint-required` requires an explicit reviewed checkpoint transition;
+the active source marker remains concurrency/provenance evidence, not approval.
 Branch labels are metadata. A union/merge of approved changes is a new integration
 state: the remaining diff needs review; approvals are never blindly combined.
 An explicit fresh human override advances only its protected exact pending
@@ -290,7 +292,7 @@ The trust helper emits bounded stage/code diagnostics, including
 `baseline-provenance-invalid`, `baseline-target-mismatch`,
 `baseline-runtime-mismatch`, `baseline-state-changed` and
 `baseline-verification-failed`. Existing generations without provenance cannot
-be explicitly seeded; ordinary activated-source diff review remains available.
+be explicitly seeded; use an independently reviewed bound recovery transition.
 Provenance records the installed target/source correspondence; it does not prove
 code safety. Fresh operator authentication explicitly trusts the current active
 state. No Nix graph reconstruction, IFD or original Git metadata is required. Review failures retain existing typed authentication, input,
