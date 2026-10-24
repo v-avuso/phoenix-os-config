@@ -30,6 +30,12 @@ The completed Phoenix migration does not require these changes.
   rsync, cryptsetup, Btrfs and systemd interfaces. Keep project code responsible for
   plan validation, state selection and sequencing. Preserve simple recovery paths;
   avoid carrying private copies of upstream storage/install mechanisms.
+- **Extremely low priority — CoolerControl UI password:** Identify the narrow
+  persistent password state if a future migration should retain it. The migrated
+  application worked after setting a new control password; no change is needed now.
+- **Only if it recurs — authorization:** One suspend request was rejected before
+  the first local `phoenix-switch`. Preserve that observation without expanding
+  the authorization surface or investigating an isolated, nonblocking failure.
 
 Any future work needs its own acceptance limits, representative end-to-end trial,
 cost budget and operator authorization. Never experiment on the retained old SSD.

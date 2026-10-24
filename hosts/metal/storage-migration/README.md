@@ -10,17 +10,82 @@ the old UUIDs. Both use hostname `phoenix` and password-capable PAM.
 
 ## Outcome and acceptance, 2026-10-24
 
-**PASS for the checked migration, boot and data workflows.** Phoenix is running
-generation 2 on the encrypted 4 TB SSD. The operator verified Hyprland, Firefox
-sessions/logins, Codex including this migration conversation, and sudo with both
-password and YubiKey. Syncthing and unattended updates remain held. Do not rerun
-the migration launcher on this installation.
+**PASS for the checked migration, boot and data workflows.** The initial boot was
+generation 2 on the encrypted 4 TB SSD. The operator has since successfully run
+`phoenix-switch` on that SSD and accepted Firefox, Codex, Navidrome, the user
+environment and authentication by password and YubiKey. Do not rerun the migration
+launcher on this installation.
+
+### Final acceptance and service release
+
+The operator authorized release on 2026-10-24. The release configuration removes
+the temporary `metal-4tb` updater disable and both Syncthing marker conditions;
+normal shared service configuration now applies. No acceptance marker needs to
+be created or retained. Old `metal` configuration and root-identity guards are
+unchanged. The stopped Syncthing identity, seven indexes and six folder mappings
+were rechecked against the first audit before release; all matched. The prior
+38.9 GB personal-data checksum audit was reused, not repeated unnecessarily.
+There are 29 pre-existing `sync-conflict` files; all 29 match the read-only old
+SSD byte-for-byte. Preserve them and compare this baseline after startup rather
+than treating historical conflicts as new migration failures.
+
+Apply this exact reviewed source through `phoenix-authorize ... -- phoenix-switch
+--worktree /home/v/repos/code/phoenix-os-config`. Verify `syncthing.service` is
+running, `syncthing-init.service` succeeded, the API reports the original device
+identity, all six folders are healthy, no unexpected deletions/conflicts appear
+and available peers connect. Normal send/receive operation can apply legitimate
+changes accumulated on peers; do not reset the restored indexes or force a
+rescan/revert to suppress a discrepancy. Stop and investigate unexpected changes.
+
+The normal updater timer is enabled declaratively, daily at **21:00 local time**,
+with persistent scheduling. Check its next deadline and `metal-4tb` runner/controller
+targets after activation; do not launch a full update just to validate it. Current
+runtime, boot profile, active-source provenance and protected deployment journal
+are the authoritative installation binding. Commit completed source without
+adding a self-referential receipt edit afterward.
+
+CoolerControl otherwise worked but requested a new UI control password after
+migration. Preserving that UI password is an extremely low-priority future idea.
+`phoenix-authorize` rejected one suspend request before the first local
+`phoenix-switch`; do not investigate unless it recurs. Neither observation blocks
+migration acceptance. See [VISION.md](VISION.md); no such improvement is implemented.
+
+### Old-SSD rollback after synchronization resumes
+
+Keep old serial `S4EWNG0M109916K` unchanged through at least **2026-11-24**.
+It has the **same Syncthing identity and an increasingly stale index**. Never
+let that installation reconnect as the active device, even if the new system
+has been shut down. Do not modify the old SSD merely to prepare rollback.
+
+For an emergency old-SSD boot, unplug Ethernet and isolate Wi-Fi first. In the
+old systemd-boot entry, press **e** and append these temporary kernel parameters
+before booting (do not save changes to the ESP):
+
+```text
+systemd.mask=syncthing.service systemd.mask=syncthing-init.service systemd.mask=phoenix-updates.service systemd.mask=phoenix-updates.timer systemd.mask=NetworkManager.service
+```
+
+These [systemd runtime masks](https://www.freedesktop.org/software/systemd/man/latest/systemd-debug-generator.html)
+last only for that boot and prevent the services starting in the initial boot
+transaction. Verify all five units are masked/inactive **before any networking**;
+if kernel editing/isolation is unavailable, use a live USB instead of booting old.
+Never start a manual or user Syncthing instance there. Keep old Syncthing masked
+for the entire rollback session, even if networking is later required. A permanent
+rollback needs a separately reviewed identity/index/data reconciliation; do not
+reuse the stale database, unpause it blindly or reverse-sync complete homes.
+
+The source data and original boot remain available for offline recovery. Booting
+old normally will write its filesystem; retention means no such boot until an
+explicit recovery decision. The unchanged old sync data also remains an offline
+recovery copy of the pre-release state, not a live second peer.
+
+### Initial audit evidence (before service release)
 
 The successful path was online seeding followed by operator-run cold completion
 from USB. The retained `operation-report.json` records the unpublished 307 GB seed;
-it is not a final-snapshot receipt. The installed system and prebuilt receipt both
+it is not a final-snapshot receipt. The initial installed system and prebuilt receipt both
 identify `/nix/store/2p81i3jnylb9zajfx2qh8fggw10pq7yr-nixos-system-phoenix-26.05.20261021.da6dc0e`,
-built from `f78460731ea874de809f70b0ed067de4b377fcc9`. The active source is
+built from `f78460731ea874de809f70b0ed067de4b377fcc9`. Its initial active source was
 `/nix/store/far8896yi9zqb5zakbnysjkm7rz3bcmy-source`. The complete successful USB
 console log was not located; current boot/data evidence and the operator's report
 establish the outcome, rather than claiming a fixture proved execution.
@@ -127,21 +192,18 @@ were not treated as cold integrity snapshots. No unexpectedly absent ordinary
 personal tree or Codex conversation was identified. This was an inventory plus
 targeted checksum audit, not a new checksum of every 4 TB installation file.
 
-### Holds, remaining acceptance and retention
+### Initial holds and retention
 
-Syncthing's migration consistency checks pass; release still needs explicit
-operator approval, confirmation of the six folders' expected contents/peer state,
-and assurance that the old installation will remain offline. Keep both marker
-conditions until then. Observe the first scan for unexpected deletions.
-Automatic updates need the reviewed removal of the forced disable, a build and
-an explicitly authorized installation of that exact `metal-4tb` source. Neither
-hold was released. These documentation changes do not replace the active
-`f784607` source/closure binding or supply deployment approval.
+During the initial audit both components remained held. The later explicit
+operator approval and declarative release are described above. Do not create a
+marker for the accepted configuration: its temporary conditions have been removed.
+Normal updates still require a matching installed source baseline and the existing
+protected target/review mechanisms; no old deployment approvals were transferred.
 
-Remaining interaction: Navidrome accounts/playlists, lock/login/keyring behavior
-and cooling/fallback per the fan guide; hibernation is not established. The failed
-Polkit helper needs separate diagnosis if native dialogs remain invisible; no
-authentication policy was changed. Two native read-only services succeeded during
+The operator subsequently accepted Navidrome and authentication. Hibernation is
+not established and is outside migration closure. CoolerControl's password prompt
+and the earlier suspend authorization rejection are optional observations above.
+No authentication policy was changed. Two native read-only services succeeded during
 accounting, but later Polkit requests failed/timed out; the operator ran the final
 immutable read-only diagnostics via terminal sudo.
 
@@ -150,7 +212,8 @@ until the operator approves retirement. Its root remains mounted read-only at
 `/mnt/phoenix-old`; its ESP is unmounted and swap inactive. The separate 2 TB SSD
 `S4J4NZ0R303233H` remained unmounted and received no task writes. No source-file
 writes, garbage collection, firmware changes, activation or reboot were performed
-during acceptance. The initial desktop read-write mount predates these checks;
+during the initial accounting audit. Later targeted activation is explicitly
+authorized for service release. The initial desktop read-write mount predates these checks;
 no claim is made about activity before it was replaced by the read-only mount.
 Rollback remains a deliberate shutdown/firmware selection of the old SSD, never
 a reverse-sync of whole live profiles or concurrent use of one Syncthing identity.
@@ -481,7 +544,8 @@ that read-only WAL access can still need writable SHM/directory access. The fixe
 checker passes that same fixture, consumes WAL-only folder mappings and leaves
 all input bytes unchanged; it does not ignore WAL or use immutable mode.
 
-Both `syncthing.service` and `syncthing-init.service` require the root-owned
+The original migration bundle made both `syncthing.service` and
+`syncthing-init.service` require the root-owned
 `/var/lib/phoenix-migration/syncthing-accepted` marker on the new target. It must
 remain absent through installation/first boot. This prevents Nix's configuration
 updater from starting synchronization indirectly. The source must be shut down;
@@ -498,7 +562,8 @@ Compare the certificate fingerprint with pre-migration local output, inspect all
 six real folders and their expected content, and retain their exact folder IDs.
 The offline check verifies identity/index/layout and copy fidelity; it is not a
 full Syncthing rescan or proof that peers were up to date. After explicit sync
-approval, create the root-owned marker and start both units. Observe the first
+approval, remove the temporary conditions declaratively as described above and
+activate the reviewed new-host source. Observe the first
 scan/peer status; stop on unexpected missing data or mass deletions. See
 [Syncthing state](https://docs.syncthing.net/users/config.html) and
 [marker safety](https://docs.syncthing.net/users/faq.html#i-am-seeing-the-error-message-folder-marker-missing-what-do-i-do).
@@ -590,20 +655,20 @@ environments, Syncthing identity, Navidrome accounts/playlists and selected pair
 Do not delete backups or enable the updater before acceptance. Confirm
 `phoenix-target --info` reports the new root UUID and `metal-4tb`;
 `PHOENIX_TARGET=metal-4tb` may be used as an additional confirmation.
-The restored Syncthing units remain
-held until their root marker is deliberately created after the checks above.
+The original migration bundle held Syncthing through first boot. The accepted
+configuration removes those temporary conditions; see the release checks above.
 
-After acceptance and separate commit/activation authorization, remove the new
-host's forced `services.phoenixUpdates.enable = false` override. Commit that small
-enablement change to the configured source branch (`main`), then install that
-exact source with `PHOENIX_TARGET=metal-4tb phoenix-switch`. Confirm the installed
-activated-source/system-profile baseline matches the committed source. The updater
+The accepted new-host configuration removes the forced updater disable. Install
+that exact committed source from `main` through the authorized deployment path.
+Confirm the installed activated-source/system-profile baseline matches the
+committed source. The updater
 and protected policy then both select `metal-4tb`; `phoenix-update` and its timer
 can stage normal updates without changing the old `metal` configuration. Do not
 manually copy old deployment approvals/checkpoints or edit protected baselines.
 
 Rollback: cleanly shut down, reconnect/select old serial `S4EWNG0M109916K` in
-firmware, and boot its existing entry/generation. Volatile read-only flags clear
+firmware, and boot its existing entry/generation **only with the offline isolation
+and temporary service masks above**. Volatile read-only flags clear
 at reboot. Its hardware target and EFI were preserved; do not activate `metal-4tb`
 on it. The old checkout retains the committed preparation; its installed generation
 is unchanged. New post-migration writes exist only on the new SSD: do not reverse-sync entire homes/databases or

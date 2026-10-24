@@ -9,11 +9,6 @@
   boot.loader.efi.canTouchEfiVariables = lib.mkForce false;
   phoenix.target = "metal-4tb";
 
-  # Resume after first-boot acceptance and a committed, installed source baseline.
-  services.phoenixUpdates.enable = lib.mkForce false;
-
-  # Never synchronize the restored identity before explicit acceptance. The
-  # init service requires syncthing.service, so guard both units.
-  systemd.services.syncthing.unitConfig.ConditionPathExists = "/var/lib/phoenix-migration/syncthing-accepted";
-  systemd.services.syncthing-init.unitConfig.ConditionPathExists = "/var/lib/phoenix-migration/syncthing-accepted";
+  # Migration accepted: inherit normal Syncthing and update services. The old
+  # SSD must remain offline or boot with the rollback masks in the runbook.
 }
