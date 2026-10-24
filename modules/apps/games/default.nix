@@ -13,5 +13,8 @@ in
 
   # The explicit layer is inert unless a game requests it. No Man's Sky's
   # per-game launch options are documented in this module's README.md.
-  environment.systemPackages = [ nmsFrameGenerationFix ];
+  environment.systemPackages = [
+    pkgs.lutris-free
+    nmsFrameGenerationFix
+  ];
 }

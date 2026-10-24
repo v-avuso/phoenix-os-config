@@ -1,7 +1,11 @@
 # Gaming
 
-This module enables Steam and packages game-specific compatibility support.
+This module enables Steam, installs Lutris, and packages game-specific compatibility support.
 It is imported by [`modules/apps`](../README.md).
+
+Lutris uses `pkgs.lutris-free`; its library and runner settings remain user-managed.
+Steam already enables 32-bit graphics support through its NixOS module, so this
+module does not duplicate that option or add standalone Wine packages.
 
 ## Steam UI scaling
 
