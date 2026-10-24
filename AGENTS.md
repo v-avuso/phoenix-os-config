@@ -41,6 +41,11 @@
   Cold SQLite WAL checks use disposable writable DB/WAL copies: `mode=ro` can
   still require SHM creation. Retain the underlying error; do not infer missing
   or corrupt state from a read-only access failure.
+- Before closing a storage migration, exercise reviewed deployment as well as
+  human switching. Complete home omits service-owned reviewer login under
+  `/var/lib/phoenix-deploy-review`; restore it selectively through the installed
+  importer. Keep login continuity separate from root approval authority: old
+  checkpoints require matching target/policy/closure, never blanket adoption.
 - Hardware identity checks must compare native fields with only documented
   padding removed; `lsblk --raw` can hex-escape NVMe serial padding. Exercise
   native/fallback representations rather than only mocked, trimmed output.

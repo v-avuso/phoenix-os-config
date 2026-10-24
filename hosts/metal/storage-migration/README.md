@@ -44,6 +44,40 @@ runtime, boot profile, active-source provenance and protected deployment journal
 are the authoritative installation binding. Commit completed source without
 adding a self-referential receipt edit afterward.
 
+### Reviewer state and frozen approvals
+
+The first reviewed release exposed two separate dependencies. The operator used
+the installed `phoenix-review-trust-active` helper with fresh Polkit authentication
+to approve the exact already-running 4 TB baseline. That does not approve a new
+release. Normal review then reported `review-authentication-missing`: the reviewer's
+retained login was outside home and had been missed by the initial migration.
+
+On operator authorization, a narrowly scoped immutable helper verified both native
+disk identities, the old cold read-only mount and absent target credentials. It
+read only the old reviewer's `auth.json`, staged it on the new SSD and reused the
+installed controller's authentication importer for locking, atomic publication,
+new service ownership, mode 0600 and removal of only the new staging name.
+The restored bytes matched; the source bytes and mtime remained unchanged. No
+credential values were emitted and no security override was used. A real normal
+review, rather than merely a human `phoenix-switch`, is the final readiness test.
+
+| State | Location | Treatment |
+| --- | --- | --- |
+| Editable worktrees | `/home/v/.codex/worktrees/*/phoenix-os-config` | Preserved with complete home and registered Git worktrees. |
+| Frozen source / system closures | `/nix/store/*-source` and system paths | Immutable objects; selected closure imported, older objects retained on old SSD. These are not Btrfs snapshots. |
+| Approved/pending review records and GC roots | `/var/lib/phoenix-deploy/security-review` | Root-protected authorization state; never adopted as ordinary user profile data. |
+| Reviewer login and audit history | `/var/lib/phoenix-deploy-review` | Service-owned separate profile. Only the required retained login was restored; historical audit files stay on old. |
+| Legacy login staging | `/home/v/.local/state/phoenix-agent-review` | Supported importer consumes its `auth.json`; protected reviewer then owns refreshes. |
+
+The old checkpoint inventory contains **18 approved records, all targeting `metal`**;
+none matches the installed policy or is compatible with `metal-4tb`. Zero approvals
+were copied. They remain intact under the old mount for historical inspection.
+Records bind source, closure, target and policy; branch/worktree labels are metadata,
+not independent authority. Reuse is global across matching approved states, not a
+guaranteed snapshot per worktree. Mutable approval records stay outside user home
+so editing one's checkout cannot forge root authorization; the separate reviewer
+login also avoids sharing the desktop app's live authentication/refresh lifecycle.
+
 CoolerControl otherwise worked but requested a new UI control password after
 migration. Preserving that UI password is an extremely low-priority future idea.
 `phoenix-authorize` rejected one suspend request before the first local
