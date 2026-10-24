@@ -60,6 +60,14 @@ new service ownership, mode 0600 and removal of only the new staging name.
 The restored bytes matched; the source bytes and mtime remained unchanged. No
 credential values were emitted and no security override was used. A real normal
 review, rather than merely a human `phoenix-switch`, is the final readiness test.
+That normal protected review and switch passed on 2026-10-24 without override.
+The final read-only continuity check verified its persistent, current-policy
+`metal-4tb` approval, retained source/closure roots and matching runtime/boot profile.
+See the [exact security-review receipt](../../../modules/development/ai/agent/security-review.md#phoenix-4-tb-continuity-receipt--2026-10-24).
+Future incremental reviews can reuse this baseline across compatible branches and
+worktrees. Manual activation does not publish independent approval. Migration
+acceptance is complete; [portable review proposals](../../../modules/development/ai/agent/VISION.md)
+remain a separate optional workstream. No operational configuration was changed.
 
 | State | Location | Treatment |
 | --- | --- | --- |

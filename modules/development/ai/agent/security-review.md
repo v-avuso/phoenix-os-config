@@ -184,9 +184,9 @@ not hard capped. No upstream dependency-review batches run.
 
 ## Baseline and checkpoint reuse
 
-The first review already compares against the activated source; it does not
-review the whole repository. Exact root-owned checkpoints retain source, built
-closure, target and an installed policy/execution digest. The digest includes
+Protected review compares against a retained approved checkpoint, not an
+unreviewed activated-source marker. Exact root-owned checkpoints retain source,
+built closure, target and an installed policy/execution digest. The digest includes
 adapter/model/effort, authorization policy and effective caller/builder/reviewer
 identities. Embedded authorization/transport helpers are packaged as stable
 individual store files and their bytes are hashed: unrelated repository relocation
@@ -213,13 +213,82 @@ never supplies trusted review context.
 
 Exact source **and closure** reuse skips AI globally across branches. New sources
 still need review. Context chooses the smallest content/mode diff among the
-independently approved same-policy/target checkpoints only. If none exist,
+protected approved same-policy/target checkpoints only. If none exist,
 `approved-checkpoint-required` requires an explicit reviewed checkpoint transition;
 the active source marker remains concurrency/provenance evidence, not approval.
 Branch labels are metadata. A union/merge of approved changes is a new integration
 state: the remaining diff needs review; approvals are never blindly combined.
 An explicit fresh human override advances only its protected exact pending
 source/closure/action binding, even if activation later fails.
+
+### Authentication, human trust and independent review
+
+Reviewer login permits model access; ordinary Polkit authentication permits a
+specific privileged request. Neither alone supplies a successful independent
+review verdict. The normal protected route validates the worker's exact bound
+verdict before publishing approval. A manual human `phoenix-switch` uses
+`nixos-rebuild --sudo`: it bypasses that reviewer but does not publish approval.
+The next protected deployment still selects protected approved context and
+includes any remaining manually introduced candidate changes. Reverting to an
+already approved exact source/closure needs no repeated review. A changed review
+policy invalidates old-policy reuse and requires an explicit trusted transition.
+
+There are deliberate human authorities: `phoenix-review-trust-active` seeds an
+exact runtime checkpoint without model review, and a critical override approves
+an exact pending decision. These must not be described as independent review.
+The current approved-record schema does not label those origins separately;
+correlate the controller/authorization journal with the exact binding. A root
+administrator remains able to replace the implementation/state. This boundary
+does not claim protection against a malicious administrator.
+
+One compatible baseline is sufficient for branch/worktree continuity. Selection
+uses immutable content and modes, target and policy, not Git ancestry or branch
+names; the smallest retained diff is preferred. Dirty/new/deleted Git-visible
+content is frozen too. Older worktrees may need the current target and source
+manifest contract before deployment. Another machine or target does not inherit
+approval from Git history. See [portable review proposals](VISION.md).
+
+### Phoenix 4 TB continuity receipt — 2026-10-24
+
+Read-only native inspection confirmed the following installed binding:
+
+| Evidence | Verified value |
+| --- | --- |
+| Reviewed source revision | `d1bcedd5095e1ab790cefd31e4f806ae1a22f41d`; all 376 tracked entries matched frozen content, link targets and executable modes before this documentation change |
+| Frozen source | `/nix/store/qni8ijdvyzbszd352pj11ks3cafkpay7-source` |
+| Reviewed closure; runtime and boot profile | `/nix/store/xgghdihkzyb462alnl3sl5nq8cky74ir-nixos-system-phoenix-26.05.20261021.da6dc0e` |
+| Current system generation | `system-4-link`; runtime and boot profile agree |
+| Target / running root UUID | `metal-4tb` / `b1756a78-0da5-47a3-a73c-38112d1ac945` |
+| Protected record | `/var/lib/phoenix-deploy/security-review/6b647c6099bedcfebc4073046b871e9cd10195ab30f938c976e3ab0036b84cd4.approved.json` |
+| Installed policy/execution digest | `1363552c463b55016da001d659a8849f2ce610dd3c7ee38602fa70d0d44b1b54` |
+| Record creation | `2026-10-24T07:37:00.954215Z` (09:37 CEST) |
+| Reviewer configuration | Isolated Codex adapter, CLI 0.159.0, requested model `gpt-6-luna`, effort `high`; not a signed attestation of the provider's model version |
+
+The controller journal records normal review of a **20,222-byte diff** at 09:36:40,
+approval at 09:37:00 and successful protected switch at 09:37:06 CEST, without
+override. This advanced the earlier operator-seeded runtime checkpoint to an
+independently reviewed source/build. The matching record is root-owned 0600 in
+a root-owned 0700 directory; both immutable source/closure GC roots resolve
+correctly. Two approved records were present; the current binding matches the
+installed policy. An installed, read-only `choose_checkpoint` call confirmed
+exact reuse even with a different branch label; record bytes remained unchanged.
+
+Nine disposable fixtures passed: exact source/closure/policy/branch selection,
+unreviewed activation exclusion, invalid closure binding rejection, protected
+record publication, execution fingerprinting, fingerprint stability on source
+relocation, trust-active admission/rechecks, and controller → worker → adapter →
+checkpoint composition. These are zero-model fixtures, not a new live review.
+No approval, deployment, activation or old-SSD operation occurred during this audit.
+An additional Nix 2.34.9 `nix-store --query --roots` confirmed the registered
+approval roots but unexpectedly removed 12 stale GC-registration links while
+enumerating them. No garbage collection ran or source/closure data was deleted.
+Strict read-only audits should inspect known links directly instead.
+
+This receipt and VISION are documentation-only changes, not a new reviewed
+deployment. The approved runtime remains the binding above. If committed `main`
+differs from both active and staged source, the updater safely defers until the
+next authorized deployment; this audit does not activate documentation to refresh
+its own receipt. Migration acceptance can close independently of future proposals.
 
 ## Diff estimates and review scope
 
