@@ -180,10 +180,10 @@ let
       kb_options = ${builtins.toJSON nixosConfig.services.xserver.xkb.options},
     } })
     ${idleBlankLua}
+    ${phoenixGameWindowsHyprLua}
     ${phoenixKandoHyprLua}
     ${phoenixAgentGuiHyprLua}
     ${phoenixWorkspacesHyprLua}
-    ${phoenixGameWindowsHyprLua}
 
     hl.monitor({
       output = "DP-1",
@@ -237,7 +237,7 @@ in
     ./hypr-persist/default.nix
     ./kando
     ./workspaces
-    ./game-windows
+    ./hyprland/gaming/windows
     ./thunar/default.nix
     ./timewall/default.nix
   ];

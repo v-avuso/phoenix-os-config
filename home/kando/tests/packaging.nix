@@ -5,7 +5,6 @@ let
   pkgs = flake.inputs.nixpkgs.legacyPackages.x86_64-linux;
   user = import ../../../config/user.nix { inherit (pkgs) lib; };
   metal = flake.nixosConfigurations.metal.config;
-  vm = flake.nixosConfigurations.vm.config;
   home = metal.home-manager.users.${user.name};
   wrapped = pkgs.lib.findFirst (
     p: p.name == "kando-phoenix-${pkgs.kando.version}"
@@ -18,24 +17,8 @@ let
     url = "https://registry.npmjs.org/zod/-/zod-4.3.6.tgz";
     hash = "sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg==";
   };
-  mouse = metal.systemd.services."phoenix-mouse-debounce@".serviceConfig;
+  hyprlandCheck = import ../hyprland/tests/packaging.nix;
 in
-assert !(vm.systemd.services ? "phoenix-mouse-debounce@");
-assert !(vm.home-manager.users.${user.name}.systemd.user.services ? kando);
-assert mouse.User == "phoenix-mouse-debounce";
-assert mouse.Group == "phoenix-mouse-debounce";
-assert
-  mouse.SupplementaryGroups == [
-    "input"
-    "uinput"
-  ];
-assert mouse.DevicePolicy == "closed";
-assert pkgs.lib.hasSuffix " --map-side-buttons" mouse.ExecStart;
-assert
-  mouse.DeviceAllow == [
-    "/dev/input/by-id/usb-Razer_Razer_Viper_V2_Pro_000000000000-event-mouse r"
-    "/dev/uinput rw"
-  ];
 assert
   pkgs.lib.toList home.systemd.user.services.kando.Service.ExecStart
   == [ "${wrapped}/bin/kando --close-menu" ];
@@ -48,6 +31,7 @@ pkgs.runCommand "phoenix-kando-check"
     ];
   }
   ''
+      test -e ${hyprlandCheck}
       mkdir zod
       tar xf ${zod} -C zod
       cp -r ${pkgs.kando.src} source
@@ -62,7 +46,7 @@ pkgs.runCommand "phoenix-kando-check"
     entry = pathlib.Path(sys.argv[1]).read_text()
     assert f'Exec={sys.argv[2]} %U' in entry
     assert 'Exec=kando ' not in entry
-    print('Kando: actual managed desktop/service path and closed non-root mouse unit passed')
+    print('Kando: actual managed desktop/service path passed')
     PY
       touch "$out"
   ''

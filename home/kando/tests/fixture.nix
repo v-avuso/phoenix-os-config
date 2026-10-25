@@ -1,5 +1,5 @@
 # Evaluate the adapter without a system build or copying the checkout into store.
-{ nixpkgsPath }:
+{ nixpkgsPath, gameBypass ? true, gameButtons ? "mouse" }:
 let
   upstreamLib = import (nixpkgsPath + "/lib");
   lib = upstreamLib // {
@@ -28,6 +28,8 @@ let
     phoenixBlankCommand = "/nix/store/fixture-blank/bin/blank";
     config = {
       phoenix.kando.enable = true;
+      phoenix.kando.gameBypass = gameBypass;
+      phoenix.kando.gameButtons = gameButtons;
       xdg.configHome = "/home/fixture/.config";
       home.homeDirectory = "/home/fixture";
     };

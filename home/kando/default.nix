@@ -8,7 +8,7 @@
 }:
 let
   cfg = config.phoenix.kando;
-  hypr = inputs.nixpkgs-unstable.legacyPackages.${pkgs.stdenv.hostPlatform.system}.hyprland;
+  desktop = import ./hyprland { inherit config inputs pkgs; };
   directory = "${config.xdg.configHome}/phoenix-kando/kando";
   writer = import ../mutable-json-settings/default.nix { inherit pkgs; };
   # Exact 2.3 schemas: top-level settings; --config-dir is silently ignored.
@@ -83,15 +83,15 @@ let
     menus = [
       (menu "Global" "global-menu" null [
         (command "Overview" "view_quilt" 0
-          ''${hypr}/bin/hyprctl eval 'hl.plugin.hyprexpo.expo("on all")' ''
+          desktop.commands.overview
         )
         (command "Terminal" "terminal" 45 "${pkgs.foot}/bin/foot")
-        (command "Next workspace" "arrow_forward" 90 "${hypr}/bin/hyprctl eval 'phoenix_workspace_step(1)'")
+        (command "Next workspace" "arrow_forward" 90 desktop.commands.nextWorkspace)
         (command "Blank screen" "bedtime" 135 phoenixBlankCommand)
-        (command "Close window" "close" 180 "${hypr}/bin/hyprctl dispatch 'hl.dsp.window.close()'")
+        (command "Close window" "close" 180 desktop.commands.closeWindow)
         (command "Audio" "volume_up" 225 "${pkgs.pwvucontrol}/bin/pwvucontrol")
         (command "Previous workspace" "arrow_back" 270
-          "${hypr}/bin/hyprctl eval 'phoenix_workspace_step(-1)'"
+          desktop.commands.previousWorkspace
         )
         (command "Files" "folder" 315 "${pkgs.xdg-utils}/bin/xdg-open \"${config.home.homeDirectory}\"")
       ])
@@ -120,7 +120,7 @@ let
   };
   configBaseline = pkgs.writeText "kando-config-baseline.json" (builtins.toJSON settings);
   menusBaseline = pkgs.writeText "kando-menus-baseline.json" (builtins.toJSON menus);
-  # Stock 2.3 discards GlobalShortcuts.Deactivated. Hyprland already sends
+  # Stock 2.3 discards GlobalShortcuts.Deactivated. The desktop adapter supplies
   # both edges; this narrow patch feeds that lifetime into Kando's existing
   # PointerInput. Unlike uinput/click adapters, no synthetic input escapes the
   # menu or requires another privileged device owner. Remove when upstream
@@ -146,21 +146,19 @@ let
         --replace-fail 'Exec=kando %U' "Exec=$out/bin/kando %U"
     '';
   };
-  lua = ''
-    -- Held keys avoid Hyprland retaining pointer focus on the underlying app.
-    -- transparent prevents __lua key-shadowing from suppressing portal release.
-    hl.bind("F23", hl.dsp.global("menu.kando.Kando:global-menu"), { transparent = true })
-    hl.bind("F24", hl.dsp.global("menu.kando.Kando:contextual-menu"), { transparent = true })
-    hl.window_rule({
-      name = "phoenix-kando",
-      match = { class = "^menu[.]kando[.]Kando$", title = "^Kando Menu$" },
-      no_blur = true, opaque = true, move = {0, 0}, size = {"100%", "100%"},
-      rounding = 0, border_size = 0, no_anim = true, float = true, pin = true, stay_focused = true,
-    })
-  '';
 in
 {
   options.phoenix.kando.enable = lib.mkEnableOption "Phoenix's contextual Kando menus";
+  options.phoenix.kando.gameBypass = lib.mkOption {
+    type = lib.types.bool;
+    default = true;
+    description = "Route held side-button shortcuts to classified games instead of Kando.";
+  };
+  options.phoenix.kando.gameButtons = lib.mkOption {
+    type = lib.types.enum [ "mouse" "keys" ];
+    default = "mouse";
+    description = "Translate game shortcuts to native mouse buttons, or retain F23/F24 key passthrough.";
+  };
   config = lib.mkIf cfg.enable {
     assertions = [
       {
@@ -168,7 +166,7 @@ in
         message = "Review Kando schemas and adapter before upgrading Phoenix's pinned 2.3 integration.";
       }
     ];
-    _module.args.phoenixKandoHyprLua = lua;
+    _module.args.phoenixKandoHyprLua = desktop.lua;
     home.packages = [ wrapped ];
     xdg.dataFile."kando/config.json.nix-baseline".source = configBaseline;
     xdg.dataFile."kando/menus.json.nix-baseline".source = menusBaseline;
@@ -188,8 +186,8 @@ in
           configBaseline
           menusBaseline
         ];
-        PartOf = [ "hyprland-session.target" ];
-        After = [ "hyprland-session.target" ];
+        PartOf = [ desktop.sessionTarget ];
+        After = [ desktop.sessionTarget ];
       };
       Service = {
         ExecStartPre = [
@@ -201,7 +199,7 @@ in
         Restart = "on-failure";
         RestartSec = 2;
       };
-      Install.WantedBy = [ "hyprland-session.target" ];
+      Install.WantedBy = [ desktop.sessionTarget ];
     };
   };
 }

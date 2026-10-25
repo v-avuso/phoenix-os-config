@@ -12,7 +12,8 @@ python3 -B hosts/metal/storage-migration/test_migrate.py
 nix eval --impure --file modules/tests/target.nix
 nix shell --inputs-from . nixpkgs#lua --command lua home/idle/tests/idle-blank.lua home/idle/blank.lua home/idle/black.frag
 nix shell --inputs-from . nixpkgs#lua --command lua home/workspaces/tests/navigation.lua home/workspaces/navigation.lua
-nix shell --inputs-from . nixpkgs#lua --command lua home/game-windows/tests/game-windows.lua home/game-windows/game-windows.lua
+nix shell --inputs-from . nixpkgs#lua --command lua home/hyprland/gaming/windows/tests/game-windows.lua home/hyprland/gaming/windows/game-windows.lua home/hyprland/gaming/windows/classification.lua
+nix shell --inputs-from . nixpkgs#lua --command lua home/kando/hyprland/tests/shortcuts.lua home/kando/hyprland/shortcuts.lua home/hyprland/gaming/windows/classification.lua
 python3 -B modules/development/ai/agent/authorization/tests/request.py
 python3 -B modules/development/ai/agent/tests/agent-admin.py
 python3 -B modules/development/ai/agent/tests/agent-launch.py
@@ -81,10 +82,14 @@ python3 -B modules/development/ai/agent/tests/reservation-deployment.py
   a daemon or importing live session state. New files must be staged for its
   Git-flake source; logout/login and reboot restoration need manual acceptance.
 - **Kando fixtures:** validate menus against the exact upstream 2.3 schemas and
-  real context-selection method; check managed launch paths and the closed,
+  real context-selection method and managed launch paths. The parent fixture includes
+  `home/kando/hyprland/tests/packaging.nix` for routing, rollback and the closed,
   non-root input unit. Fake events exercise stable-release debounce, unchanged
   high-resolution wheel events, recovery and cleanup without grabbing hardware.
   Portal shortcuts, focus, gestures and hotplug require manual acceptance.
+- **Game-window fixtures:** `home/hyprland/gaming/windows/tests/` checks pure
+  metadata classification, class overrides, initial rules and late tiling changes.
+  It does not establish runtime fullscreen/workspace behavior.
 - **Psysonic output fixture:** `modules/services/tests/psysonic-output.py` takes
   the pinned upstream source directory as its argument and needs patch, rustc,
   a C linker and Node 24. It checks device predicates and startup recovery using

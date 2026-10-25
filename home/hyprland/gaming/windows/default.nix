@@ -22,12 +22,14 @@ in
       description = "Exact classes exempt from Phoenix game handling, including game dialogs.";
     };
   };
-  config._module.args.phoenixGameWindowsHyprLua = lib.optionalString cfg.enable ''
-    local configureGameWindows = dofile("${./game-windows.lua}")
-    configureGameWindows({
+  config._module.args.phoenixGameWindowsHyprLua = ''
+    local gameWindowOptions = {
+      enable = ${if cfg.enable then "true" else "false"},
       extra_classes = ${luaList cfg.extraClasses},
       excluded_classes = ${luaList cfg.excludedClasses},
       excluded_regex = ${json ("negative:(" + lib.concatMapStringsSep "|" lib.escapeRegex cfg.excludedClasses + ")")},
-    })
+    }
+    local phoenixIsGameWindow = dofile("${./classification.lua}")(gameWindowOptions)
+    dofile("${./game-windows.lua}")(gameWindowOptions, phoenixIsGameWindow)
   '';
 }

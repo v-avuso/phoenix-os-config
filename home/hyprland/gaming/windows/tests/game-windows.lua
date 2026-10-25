@@ -1,4 +1,10 @@
 local configure = dofile(arg[1])
+local classify = dofile(arg[2])
+local generic = classify({extra_classes = {}, excluded_classes = {}})
+assert(generic({tags = {"game"}}) and generic({tags = {"game*"}}))
+assert(generic({content_type = "game"}))
+assert(not generic({class = "fixture-game.exe", xwayland = true, fullscreen = 2}))
+assert(not generic({class = "steam_app_123456"})) -- upstream tag is authoritative
 local events, rules, actions = {}, {}, {}
 hl = {
   window_rule = function(r) rules[#rules + 1] = r end,
@@ -12,16 +18,24 @@ hl = {
     },
   },
 }
-configure({extra_classes = {"wow.exe", "dialog.exe"}, excluded_classes = {"dialog.exe"},
-  excluded_regex = "negative:(dialog\\.exe)"})
-assert(#rules == 3 and rules[3].match.class == "^wow\\.exe$")
+local options = {extra_classes = {"fixture-game.exe", "dialog.exe"}, excluded_classes = {"dialog.exe"},
+  excluded_regex = "negative:(dialog\\.exe)"}
+local is_game = classify(options)
+configure(options, is_game)
+assert(#rules == 3 and rules[3].match.class == "^fixture-game\\.exe$")
 assert(rules[1].tile and rules[1].no_follow_mouse and rules[1].confine_pointer == false)
 assert(rules[1].match.class == "negative:(dialog\\.exe)")
+assert(is_game({class = "fixture-game.exe"}) and is_game({tags = {"game*"}}))
+assert(not is_game(nil) and not is_game({class = "dialog.exe", tags = {"game"}}))
+local rules_before = #rules
+local classify_only = classify({extra_classes = {"fixture-game.exe"}, excluded_classes = {}})
+configure({enable = false, extra_classes = {}, excluded_classes = {}}, classify_only)
+assert(classify_only({class = "fixture-game.exe"}) and #rules == rules_before)
 local function window(class, monitor, rank)
   return {address = class, class = class, monitor = {id = monitor}, focus_history_id = rank,
     mapped = true, visible = true, accepts_input = true, workspace = {active = true}}
 end
-local game = window("steam_app_275850", 1, 0)
+local game = window("steam_app_123456", 1, 0)
 game.tags, game.fullscreen, game.floating = {"game*"}, 2, true
 local browser = window("firefox", 2, 2)
 browser.fullscreen, browser.xwayland, browser.floating = 2, true, true
@@ -35,7 +49,7 @@ game.floating = false
 count = #actions
 events["window.fullscreen"](game)
 assert(#actions == count) -- no fullscreen transition for an already tiled game
-local wine = window("wow.exe", 1, 0)
+local wine = window("fixture-game.exe", 1, 0)
 wine.floating = true
 events["window.fullscreen"](wine)
 assert(actions[#actions].window == wine)

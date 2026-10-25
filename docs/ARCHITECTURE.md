@@ -22,3 +22,11 @@ Examples: [Kando](../home/kando/README.md) keeps its patch and selection fixture
 with its Home Manager module; the [mouse adapter](../modules/input/mouse-side-button-debounce/README.md)
 keeps device handling and its synthetic tests together. They remain separate
 because user menu integration and system input access have different owners.
+
+Hyprland-specific gaming behavior belongs under
+[`home/hyprland/gaming/windows/`](../home/hyprland/gaming/windows/README.md).
+Its pure window-metadata classifier is shared by tiling actions and Kando routing.
+Kando's parent module owns reusable settings, menus, packaging and persistence;
+[`home/kando/hyprland/`](../home/kando/hyprland/README.md) owns its concrete desktop
+commands, bindings, session target, window rules and compositor tests. Caelestia
+composes them without changing the public configuration options.

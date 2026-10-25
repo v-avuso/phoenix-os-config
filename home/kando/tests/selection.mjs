@@ -61,8 +61,6 @@ assert.equal(data.service.Service.ExecStartPre.length, 2);
 assert.equal(data.service.Unit['X-Restart-Triggers'].length, 2);
 assert.deepEqual(data.activation.before, ['reloadSystemd']);
 assert.deepEqual(data.activation.after, ['writeBoundary']);
-assert.ok(data.lua.includes('hl.bind("F23", hl.dsp.global("menu.kando.Kando:global-menu"), { transparent = true })'));
-assert.ok(data.lua.includes('hl.bind("F24", hl.dsp.global("menu.kando.Kando:contextual-menu"), { transparent = true })'));
 assert.equal(data.settings.warpMouse, false);
 assert.ok(data.wrapper.includes('--set KANDO_HOLD_SHORTCUT_IDS global-menu,contextual-menu'));
 for (const name of ['Firefox', 'ChatGPT']) {
