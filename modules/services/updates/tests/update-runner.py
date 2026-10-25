@@ -384,6 +384,32 @@ else:
         output.assert_called_with('Building candidate')
         self.assertTrue(json.loads(connection.sendall.call_args.args[0])['progress'])
 
+    def test_startup_collects_failed_branch_even_when_baseline_defers(self):
+        self.setup_pipeline()
+        (self.repo/'flake.lock').write_text('old candidate')
+        self.git('add', 'flake.lock')
+        self.git('-c', 'user.email=phoenix-updates@localhost', 'commit', '-qm', 'failed candidate')
+        stale = 'codex/updates/20261024-210015'
+        pending = 'codex/updates/20261024-220015'
+        checked = 'codex/updates/20261024-230015'
+        for branch in (stale, pending, checked):
+            self.git('branch', branch)
+        self.git('reset', '--hard', self.head)
+        self.git('worktree', 'add', str(self.root/'checked'), checked)
+        state = Path(self.config['state'])
+        details = dict(branch=stale, diagnostics='retained build error')
+        (state/'failed-candidate.json').write_text(json.dumps(details))
+        (state/'pending.json').write_text(json.dumps(dict(branch=pending)))
+        # Defer before even reading the incomplete pending recovery record.
+        self.git('checkout', '-b', 'other-work')
+        with patch.object(runner, 'revision') as network:
+            self.assertEqual(runner.run(self.config, candidate)['status'], 'deferred')
+            network.assert_not_called()
+        self.assertFalse(self.git('branch', '--list', stale).strip())
+        for branch in (pending, checked):
+            self.assertTrue(self.git('branch', '--list', branch).strip())
+        self.assertEqual(json.loads((state/'failed-candidate.json').read_text()), details)
+
     def test_precommit_failure_preserves_previous_failed_candidate_details(self):
         self.setup_pipeline()
         retained = Path(self.config['state']) / 'failed-candidate.json'

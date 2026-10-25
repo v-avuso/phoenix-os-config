@@ -222,16 +222,25 @@ def integrate(config, c, home, head, commit, paths):
         alternate.unlink(missing_ok=True)
 
 
-def cleanup_branches(config, c, home, keep=()):
+def cleanup_branches(config, c, home, keep=(), keep_failed=True):
     """Remove only recognizable service-authored candidates with no worktree."""
     if not config.get('cleanupBranches', True):
         return
     repo = config['repo']
     retained = Path(config.get('state', '/nonexistent')) / 'failed-candidate.json'
-    if retained.exists():
+    if keep_failed and retained.exists():
         keep = (*keep, json.loads(retained.read_text()).get('branch'))
     checked_out = {line[7:] for line in c.git(config['git'], repo, home, 'worktree', 'list', '--porcelain').decode().splitlines()
                    if line.startswith('branch ')}
+    # Sanitized Git uses a private common directory, so its worktree inventory
+    # omits worktrees registered by ordinary Git. Read their HEADs as data too.
+    directory, _safe = c.git_metadata(repo, home)
+    marker = directory / 'commondir'
+    common = (directory / marker.read_text().strip()).resolve(strict=True) if marker.exists() else directory
+    for head in (common / 'worktrees').glob('*/HEAD'):
+        value = head.read_text().strip()
+        if value.startswith('ref: '):
+            checked_out.add(value[5:])
     branches = c.git(config['git'], repo, home, 'for-each-ref', '--format=%(refname:short)', 'refs/heads/codex/updates/').decode().splitlines()
     legacy = 'modules/development/ai/codex-package.nix'
     for branch in branches:
@@ -341,6 +350,13 @@ def run(config, c):
     home = state / 'command-home'
     home.mkdir(exist_ok=True)
     Path(config['nixHome']).mkdir(exist_ok=True)
+    # The runner lock excludes another updater. Clean before baseline/network
+    # checks so a deferred or failed retry still collects yesterday's candidates.
+    # A staged candidate is recovery state, rather than a discarded attempt.
+    pending_path = state / 'pending.json'
+    pending_branch = json.loads(pending_path.read_text()).get('branch') if pending_path.exists() else None
+    progress('Cleaning obsolete update branches')
+    cleanup_branches(config, c, home, keep=(pending_branch,), keep_failed=False)
     source_branch = config.get('sourceBranch', 'main')
     if c.git(config['git'], repo, home, 'symbolic-ref', '--quiet', '--short', 'HEAD').decode().strip() != source_branch:
         return dict(status='deferred', reason='configured update branch is not checked out')
@@ -349,7 +365,6 @@ def run(config, c):
     base = str(Path(config['baseline']).resolve(strict=True))
     profile = str(Path(config['systemProfile']).resolve(strict=True))
     approved = [base, str((Path(profile) / 'etc/phoenix-agent/activated-source').resolve(strict=True))]
-    pending_path = state / 'pending.json'
     if pending_path.exists():
         pending = json.loads(pending_path.read_text())
         if pending['source'] == approved[1]:

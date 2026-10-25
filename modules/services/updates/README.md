@@ -38,10 +38,14 @@ log in the updater state directory: the latest five logs, at most 5MiB each (com
 the final result pointing to its log. Build failures retain their stage, code and
 bounded diagnostic tail in `last-result.json`.
 
-The latest failed committed candidate remains under `codex/updates/` with its
+The latest failed committed candidate remains until the next run under `codex/updates/` with its
 commit, branch and failure details in `failed-candidate.json`. Temporary worktrees
 are removed. A later failure replaces that retained candidate; successful staging
-clears it and normal cleanup removes obsolete service-authored branches. Existing
+clears it. At startup, before baseline and network checks, cleanup removes obsolete
+service-authored candidate branches, including the previous failed candidate.
+Failure diagnostics remain available even after its branch is removed. Branches
+checked out in worktrees and candidates awaiting staged integration are preserved;
+`cleanupBranches = false` disables branch collection for debugging. Existing
 unchanged-candidate retry limits still apply; retention does not authorize staging
 or bypass current baseline checks.
 
