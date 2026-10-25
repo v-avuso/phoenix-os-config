@@ -212,6 +212,9 @@ let
     -- Hyprland's graceful shutdown utility and return to SDDM's actual greeter VT1.
     -- Remove if Phoenix changes display manager or upstream logout behavior is fixed.
     hl.config({
+      misc = {
+        vrr = 2,
+      },
       -- Kando disables its own pointer moves; compositor focus activation can
       -- still warp it. The pinned compositor exposes only a global guard.
       cursor = {
