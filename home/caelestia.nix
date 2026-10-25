@@ -7,6 +7,7 @@
   phoenixKandoHyprLua,
   phoenixAgentGuiHyprLua ? "",
   phoenixWorkspacesHyprLua,
+  phoenixGameWindowsHyprLua,
   ...
 }:
 
@@ -182,6 +183,7 @@ let
     ${phoenixKandoHyprLua}
     ${phoenixAgentGuiHyprLua}
     ${phoenixWorkspacesHyprLua}
+    ${phoenixGameWindowsHyprLua}
 
     hl.monitor({
       output = "DP-1",
@@ -235,6 +237,7 @@ in
     ./hypr-persist/default.nix
     ./kando
     ./workspaces
+    ./game-windows
     ./thunar/default.nix
     ./timewall/default.nix
   ];

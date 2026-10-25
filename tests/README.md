@@ -12,6 +12,7 @@ python3 -B hosts/metal/storage-migration/test_migrate.py
 nix eval --impure --file modules/tests/target.nix
 nix shell --inputs-from . nixpkgs#lua --command lua home/idle/tests/idle-blank.lua home/idle/blank.lua home/idle/black.frag
 nix shell --inputs-from . nixpkgs#lua --command lua home/workspaces/tests/navigation.lua home/workspaces/navigation.lua
+nix shell --inputs-from . nixpkgs#lua --command lua home/game-windows/tests/game-windows.lua home/game-windows/game-windows.lua
 python3 -B modules/development/ai/agent/authorization/tests/request.py
 python3 -B modules/development/ai/agent/tests/agent-admin.py
 python3 -B modules/development/ai/agent/tests/agent-launch.py

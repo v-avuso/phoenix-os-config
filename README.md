@@ -10,6 +10,8 @@ for one workstation, not a general-purpose distribution.
 - **Metal:** Hyprland/Caelestia on Wayland, SDDM login, NVIDIA graphics, and
   CoolerControl with a kernel-backed firmware fan fallback. Plasma is retained
   only on the VM target.
+  [Game window policy](home/game-windows/README.md) keeps classified games tiled;
+  direct pointer release until click remains a proposed compositor extension.
 - **VM:** historical Plasma/X11 setup, currently untested. Its tracked hardware
   file is a structural placeholder: evaluation can succeed, but deployment
   requires a real generated hardware snapshot.
