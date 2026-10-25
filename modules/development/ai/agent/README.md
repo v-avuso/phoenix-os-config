@@ -50,6 +50,10 @@ or restricted policy outranks stale host-wide preferences; deliberate picker
 changes still apply to that chat. Named/unknown profiles are not automatically
 widened. Read-only
 still requires an unsupported nested sandbox here and needs an operator decision.
+For named/unknown profiles, the preference resolver returns no preference; the
+upstream resume branch then keeps the thread's mode/profile and sends no automatic
+permission override. This is checked through the branch's outgoing fields, not
+only through the resolver result or the displayed picker mode.
 Shared chats retain upstream thread permission history, so verify effective Native
 permissions on return; preference isolation alone is not runtime acceptance.
 

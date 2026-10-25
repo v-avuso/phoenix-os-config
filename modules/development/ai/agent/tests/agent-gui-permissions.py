@@ -164,6 +164,42 @@ assert.equal(t4e({...ordinary,sandboxPolicy:{type:'readOnly',networkAccess:false
                       'Fe':'je','R':'I','ie':'ne','Ze':'qe','L':'F','Te':'inherited','ue':'ce'} if latest else \
                      {'xe':'be','P':'N','Ee':'Te','Te':'we','Me':'je','L':'I','I':'F','Je':'qe'} if current else {}
         script = script.replace('JE_EXPRESSION',normalize(seams[0].split('=',1)[1], locals_map)).replace('PROFILE_EXPRESSION',normalize(seams[1].split('=',1)[1], locals_map)).replace('SEND_EXPRESSION',normalize(seams[2].split('=',1)[1], locals_map))
+        # A rejected host preference is not itself sufficient: execute the actual
+        # resume condition and its outgoing permission fields before fallback.
+        start = changed.index(seams[4])
+        early_return = changed[start:changed.index('};', start) + 2]
+        resume_names = {'Ce':'be', 'le':'se', 'ce':'oe', 'S':'b', 'Oe':'we',
+                        'zS':'isRemote', 'je':'available', 'Me':'widening',
+                        'Ze':'special', 'Le':'encode'} if latest else \
+                       {'xe':'be', 'Te':'we', 'rx':'isRemote', 'Oe':'available',
+                        'ke':'widening', 'Je':'special', 'Pe':'encode'} if current else \
+                       {'nx':'isRemote', 'De':'available', 'Oe':'widening',
+                        'qe':'special', 'Ne':'encode'}
+        condition = normalize(seams[4].removeprefix('if(').removesuffix(')return'), resume_names)
+        fields = {}
+        for field in ('agentMode', 'permissionProfileId', 'shouldSendPermissionOverrides',
+                      'permissionOverrideThreadSettings'):
+            fields[field] = normalize(re.search(r'\b' + field + r':([^,}]+)', early_return)[1], resume_names)
+        script += """
+const resumed=(saved,se,oe)=>{
+ const n='chat',i='local',be=rSo(i,{local:saved},{},false,null,se,oe),
+       b=false,we=false,available=true,widening=false,special=false,
+       isRemote=()=>false,encode=()=>{throw Error('Unexpected permission override')};
+ if(RESUME_CONDITION)return {RESUME_FIELDS};
+ return {fallthrough:true};
+};
+for(const saved of modes){
+ for(const profile of ['named-restricted',':unknown',':danger-full-access']){
+  assert.deepEqual(resumed(saved,'auto',profile),{
+   agentMode:'auto',permissionProfileId:profile,
+   shouldSendPermissionOverrides:false,permissionOverrideThreadSettings:null
+  });
+ }
+}
+// The fixture must still reach normal preference reconciliation when allowed.
+assert.deepEqual(resumed('full-access','auto',':workspace'),{fallthrough:true});
+""".replace('RESUME_CONDITION', condition).replace(
+            'RESUME_FIELDS', ','.join(name + ':' + value for name, value in fields.items()))
         if latest:
             # Execute the new release's actual profile/send expressions too:
             # inherited defaults and model-required restrictions remain upstream.

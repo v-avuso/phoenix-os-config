@@ -60,6 +60,7 @@ CURRENT_SEAMS = (
     "Xe=b||Te||Me||Je||!I&&(L||oe==null&&(se!==`custom`||ce?.type===`dangerFullAccess`))",
     "updateThreadPermissions(n,Pe(e))",
     "if(n!=null&&se!=null&&!b&&!Te&&(rx(i)||xe==null||!Oe||ke))return",
+    "permissionOverrideThreadSettings:Je?Pe(se):null,permissionProfileId:oe,shouldSendPermissionOverrides:Je",
 )
 # Official 26.1021.22027 adds inherited defaults for new chats. Preserve that
 # logic; only pass the renamed current-thread mode/profile to our resolver.
@@ -72,6 +73,7 @@ LATEST_SEAMS = (
     "if(n!=null&&le!=null&&!S&&!Oe&&(zS(i)||Ce==null||!je||Me))return",
     "threadApprovalsReviewer:se,threadPermissionProfileId:ce,threadMode:le,threadSandboxPolicy:ue",
     "Te=R&&o&&!I&&!re.isSet",
+    "permissionOverrideThreadSettings:Ze?Le(le):null,permissionProfileId:ce,shouldSendPermissionOverrides:Ze",
 )
 RECONCILIATION = {
     NEW_CALL: (NEW_SEAMS, ',se,oe)'),
@@ -142,7 +144,9 @@ def patch(root):
     lookup, replacement, call, new = resolver(source)
     if source.count(lookup) != 1 or source.count(call) != 1:
         raise ValueError("Pinned permission preference/default seam changed")
-    # Guard the upstream reconciliation that makes the default effective on resume.
+    # An undefined preference preserves the current thread through the upstream
+    # early return, before the host-default fallback can emit permission overrides.
+    # Guard both reconciliation and the preserved profile/override result.
     if new:
         name = lookup.split('(', 1)[0].removeprefix('function ')
         seams, extra = RECONCILIATION[call.replace(name + '(', 'rSo(')]

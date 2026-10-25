@@ -207,7 +207,9 @@
   keys can be separate shared writers; guard pinned owners and resumed-thread
   reconciliation. Test restricted/unknown current profiles against saved host-wide
   modes; current chat policy must outrank stale preferences. Characterize the pinned
-  mode decoder through outgoing permissions: Approve for me is guardian-approvals,
+  resume branch's preserved profile and outgoing override fields too: an undefined
+  resolver result alone does not prove that fallback preserves restrictions.
+  Characterize the mode decoder through outgoing permissions: Approve for me is guardian-approvals,
   not auto. Verify Native return.
 
 - Sandbox revision replacement must hold the setup lock and a separate exclusive
