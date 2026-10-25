@@ -182,6 +182,8 @@
   over generated minifier names. Check old and updated bundles and preserve handler
   bodies to avoid unnecessary failures from harmless build-symbol changes. Keep
   unrecognized permission/reconciliation logic fail-closed rather than guessing.
+  Verify current-thread argument bindings too: generated locals can change roles
+  even when a resolver's body is unchanged.
 
 - When service and contained client identities differ, derive narrowly named
   operation roles and the service user from one declarative account owner; do not

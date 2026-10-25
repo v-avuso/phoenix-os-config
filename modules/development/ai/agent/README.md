@@ -53,6 +53,14 @@ still requires an unsupported nested sandbox here and needs an operator decision
 Shared chats retain upstream thread permission history, so verify effective Native
 permissions on return; preference isolation alone is not runtime acceptance.
 
+The permission adapter accepts reviewed file-name aliases and resolver variants,
+while checking every preference writer and the associated resume logic before
+writing any bundle. This avoids failures from asset hashes and the known thread-file
+rename without guessing at changed permission behavior. New semantic variants need
+the actual-bundle fixture in `tests/agent-gui-permissions.py` and a system build;
+configuration defaults alone do not replace resume handling or preference isolation.
+The 26.1021.22027 variant preserves upstream inherited defaults for new chats.
+
 The worker image and sandbox GUI use `time.timeZone` with pinned Nixpkgs timezone
 data (UTC when unset). The worker's immutable `/etc/localtime` also handles SSH
 sessions that discard timezone environment variables. This changes local time

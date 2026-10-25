@@ -15,6 +15,27 @@ spec = importlib.util.spec_from_file_location("patcher", Path(__file__).resolve(
 patcher = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(patcher)
 owners, initial = patcher.layout(args.source)
+# Both reviewed thread-file names work; two competing writers must still fail.
+with tempfile.TemporaryDirectory() as directory:
+    root = Path(directory)
+    thread = next(name for name in owners if 'local-conversation-thread-' in name)
+    other = thread.replace('pending-local-', 'local-') if 'pending-local-' in thread else thread.replace('local-', 'pending-local-', 1)
+    for name in owners:
+        target = root / (other if name == thread else name)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text((args.source / name).read_text())
+    patcher.patch(root)
+    for name in owners:
+        (root / (other if name == thread else name)).write_text((args.source / name).read_text())
+    (root / thread).write_text((args.source / thread).read_text())
+    before = {path: path.read_bytes() for path in root.rglob('*.js')}
+    try:
+        patcher.patch(root)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError('Duplicate thread preference owner accepted')
+    assert before == {path: path.read_bytes() for path in root.rglob('*.js')}
 # An unsupported interpolated selection writer must not hide behind exact-key counts.
 for unknown_owner, expression in [(False, "`permission-selection-by-host-id:${renamed}`"),
                                   (True, "`permission-selection-by-host-id:${renamed}`"),
@@ -63,15 +84,19 @@ if patcher.resolver((args.source / initial).read_text())[3]:
     lookup, _, call, _ = patcher.resolver(originals[initial])
     symbol = lookup.split('(', 1)[0].removeprefix('function ')
     current = call.startswith('xe=')
-    seams = patcher.CURRENT_SEAMS if current else patcher.NEW_SEAMS
+    latest = call.startswith('Ce=')
+    seams = patcher.LATEST_SEAMS if latest else patcher.CURRENT_SEAMS if current else patcher.NEW_SEAMS
     # Normalize only this fixture's explicitly reviewed generated identifiers.
     # Production matching still requires the exact resolver, call and seams.
     helpers = dict(zip(
         ['EJ','e4e','t4e','s4e','c4e','DJ','OJ','h4e','g4e','kJ','_4e','n4e','AJ','b4e','a4e'],
-        ['zH','Q7e','$7e','a9e','o9e','BH','VH','p9e','m9e','HH','h9e','e9e','UH','v9e','r9e'])) if current else {}
+        ['dY','B7e','V7e','q7e','J7e','fY','pY','t9e','n9e','mY','r9e','H7e','hY','o9e','G7e'] if latest else
+        ['zH','Q7e','$7e','a9e','o9e','BH','VH','p9e','m9e','HH','h9e','e9e','UH','v9e','r9e'])) if current or latest else {}
     canonical = {value: key for key, value in helpers.items()}
     if current:
         canonical.update({'WH':'jJ', 'GH':'MJ', 'T9e':'D4e', 'b9e':'S4e'})
+    if latest:
+        canonical.update({'c9e':'jJ', 'gY':'MJ', 'm9e':'D4e', 'l9e':'S4e'})
     def normalize(text, names):
         return re.sub(r'[A-Za-z_$][\w$]*', lambda match: names.get(match[0], match[0]), text)
     def extract(source, name):
@@ -86,7 +111,7 @@ if patcher.resolver((args.source / initial).read_text())[3]:
             target.write_text(source)
         patcher.patch(root)
         changed = (root / initial).read_text()
-        assert call[:-1] + ',se,oe)' in changed
+        assert call[:-1] + (',le,ce)' if latest else ',se,oe)') in changed
         for seam in seams:
             assert seam in changed
         script = "const assert=require('node:assert/strict');"
@@ -117,7 +142,7 @@ for(const saved of modes){
  assert.equal(rSo('local',preferences,{},false,null,'auto',':workspace'),saved);
 }
 const reconcile=(be,se,oe)=>{
- const n='chat',N=modes,Te=be,b=false,we=false,qe=false,F=false,I=false,ne=null,ce={type:'workspaceWrite'};
+ const n='chat',N=modes,Te=be,b=false,we=false,qe=false,F=false,I=false,ne=null,inherited=false,ce={type:'workspaceWrite'};
  const je=JE_EXPRESSION;
  return {reconcile:je,profile:PROFILE_EXPRESSION,send:SEND_EXPRESSION};
 };
@@ -135,8 +160,30 @@ assert.equal(effective.approvalsReviewer,'auto_review');
 assert.deepEqual(a4e(effective),{sandboxPolicy:{type:'dangerFullAccess'}});
 assert.equal(t4e({...ordinary,sandboxPolicy:{type:'readOnly',networkAccess:false}}),'read-only');
 """
-        locals_map = {'xe':'be','P':'N','Ee':'Te','Te':'we','Me':'je','L':'I','I':'F','Je':'qe'} if current else {}
+        locals_map = {'Ce':'be','F':'N','ke':'Te','le':'se','ce':'oe','S':'b','Oe':'we',
+                      'Fe':'je','R':'I','ie':'ne','Ze':'qe','L':'F','Te':'inherited','ue':'ce'} if latest else \
+                     {'xe':'be','P':'N','Ee':'Te','Te':'we','Me':'je','L':'I','I':'F','Je':'qe'} if current else {}
         script = script.replace('JE_EXPRESSION',normalize(seams[0].split('=',1)[1], locals_map)).replace('PROFILE_EXPRESSION',normalize(seams[1].split('=',1)[1], locals_map)).replace('SEND_EXPRESSION',normalize(seams[2].split('=',1)[1], locals_map))
+        if latest:
+            # Execute the new release's actual profile/send expressions too:
+            # inherited defaults and model-required restrictions remain upstream.
+            script += """
+const newChat=(inherit,profile,modelRequired=false,readOnlyRequired=false)=>{
+ const n=null,le=null,ce=null,Ce='custom',F=modes,ke='custom',S=modelRequired,Oe=readOnlyRequired,
+       R=true,ie=profile,Ze=false,L=false,o=inherit,I=false,re={isSet:false},ue=null;
+ const Te=INHERIT_EXPRESSION;
+ const Fe=RECONCILE_EXPRESSION;
+ return {profile:PROFILE_EXPRESSION,send:SEND_EXPRESSION};
+};
+assert.deepEqual(newChat(true,null),{profile:null,send:false});
+assert.deepEqual(newChat(false,null),{profile:null,send:true});
+assert.deepEqual(newChat(false,'named-restricted'),{profile:'named-restricted',send:true});
+assert.deepEqual(newChat(false,'named-restricted',true),{profile:null,send:true});
+assert.deepEqual(newChat(false,'named-restricted',false,true),{profile:null,send:true});
+""".replace('INHERIT_EXPRESSION', seams[6].split('=',1)[1]).replace(
+                'RECONCILE_EXPRESSION', seams[0].split('=',1)[1]).replace(
+                'PROFILE_EXPRESSION', seams[1].split('=',1)[1]).replace(
+                'SEND_EXPRESSION', seams[2].split('=',1)[1])
         subprocess.run([shutil.which('node'),'-e',script],check=True,capture_output=True,text=True)
         for name, source in originals.items():
             actual = (root/name).read_text()
@@ -147,7 +194,8 @@ assert.equal(t4e({...ordinary,sandboxPolicy:{type:'readOnly',networkAccess:false
                         originals[initial]+lookup,
                         originals[initial].replace(call,'changed'),
                         originals[initial]+call,
-                        originals[initial]+(patcher.NEW_CALL if current else patcher.CURRENT_CALL).replace('rSo(',symbol+'('),
+                        *(originals[initial]+other.replace('rSo(',symbol+'(')
+                          for other in patcher.RECONCILIATION if not other.startswith(call.split('=',1)[0]+'=')),
                         *(originals[initial].replace(seam,'changed') for seam in seams),
                         *(originals[initial]+seam for seam in seams)]:
             for name, source in originals.items():

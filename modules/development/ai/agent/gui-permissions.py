@@ -61,6 +61,23 @@ CURRENT_SEAMS = (
     "updateThreadPermissions(n,Pe(e))",
     "if(n!=null&&se!=null&&!b&&!Te&&(rx(i)||xe==null||!Oe||ke))return",
 )
+# Official 26.1021.22027 adds inherited defaults for new chats. Preserve that
+# logic; only pass the renamed current-thread mode/profile to our resolver.
+LATEST_CALL = "Ce=rSo(i,z,ee,ge,c)"
+LATEST_SEAMS = (
+    "Fe=n!=null&&le!=null&&(ce==null||ce.startsWith(`:`))&&Ce!=null&&F.includes(Ce)&&le!==ke",
+    "Qe=S||Oe||Fe?null:R?ie:ce",
+    "$e=S||Oe||Fe||Ze||!L&&!Te&&(R||ce==null&&(le!==`custom`||ue?.type===`dangerFullAccess`))",
+    "updateThreadPermissions(n,Le(e))",
+    "if(n!=null&&le!=null&&!S&&!Oe&&(zS(i)||Ce==null||!je||Me))return",
+    "threadApprovalsReviewer:se,threadPermissionProfileId:ce,threadMode:le,threadSandboxPolicy:ue",
+    "Te=R&&o&&!I&&!re.isSet",
+)
+RECONCILIATION = {
+    NEW_CALL: (NEW_SEAMS, ',se,oe)'),
+    CURRENT_CALL: (CURRENT_SEAMS, ',se,oe)'),
+    LATEST_CALL: (LATEST_SEAMS, ',le,ce)'),
+}
 
 
 def resolver(source):
@@ -74,7 +91,7 @@ def resolver(source):
             name = matches[0].group(1)
             if new:
                 calls = [candidate.replace(canonical + '(', name + '(')
-                         for candidate in (NEW_CALL, CURRENT_CALL)]
+                         for candidate in RECONCILIATION]
                 present = [candidate for candidate in calls if candidate in source]
                 if len(present) != 1:
                     raise ValueError("Pinned permission preference/default seam changed")
@@ -88,16 +105,17 @@ def resolver(source):
 def layout(root):
     """Resolve generated filenames by family and exhaustively checked key counts."""
     root = Path(root)
-    families = ((".vite/build/src-*.js", (1, 0, 0, 0)),
-                ("webview/assets/app-initial-*.js", (2, 2, 1, 3)),
-                ("webview/assets/app-shared-*.js", (1, 0, 0, 0)),
-                ("webview/assets/pending-local-conversation-thread-*.js", (1, 0, 0, 0)))
+    families = (((".vite/build/src-*.js",), (1, 0, 0, 0)),
+                (("webview/assets/app-initial-*.js",), (2, 2, 1, 3)),
+                (("webview/assets/app-shared-*.js",), (1, 0, 0, 0)),
+                (("webview/assets/pending-local-conversation-thread-*.js",
+                  "webview/assets/local-conversation-thread-*.js"), (1, 0, 0, 0)))
     owners = {}
     for family, counts in families:
-        matches = [path for path in root.glob(family)
+        matches = [path for pattern in family for path in root.glob(pattern)
                    if tuple(path.read_text().count(key) for key in KEYS) == counts]
         if len(matches) != 1:
-            raise ValueError("Permission preference owner family changed: " + family)
+            raise ValueError("Permission preference owner family changed: " + ', '.join(family))
         owners[str(matches[0].relative_to(root))] = counts
     initial = next(name for name in owners if '/app-initial-' in name)
     return owners, initial
@@ -125,15 +143,20 @@ def patch(root):
     if source.count(lookup) != 1 or source.count(call) != 1:
         raise ValueError("Pinned permission preference/default seam changed")
     # Guard the upstream reconciliation that makes the default effective on resume.
-    for seam in CURRENT_SEAMS if call.startswith('xe=') else NEW_SEAMS if new else (
-        "Ce=n!=null&&oe!=null&&(ae==null||ae.startsWith(`:`))&&(M!=null||pe!=null&&Sci(pe,P))&&oe!==_e",
-        "Re=b||Ce?null:L?te:ae",
-        "Be=b||Ce||ze||!I&&(L||ae==null&&oe!==`custom`)",
-        "updateThreadPermissions(n,Te(e))",
-    ):
+    if new:
+        name = lookup.split('(', 1)[0].removeprefix('function ')
+        seams, extra = RECONCILIATION[call.replace(name + '(', 'rSo(')]
+    else:
+        seams = (
+            "Ce=n!=null&&oe!=null&&(ae==null||ae.startsWith(`:`))&&(M!=null||pe!=null&&Sci(pe,P))&&oe!==_e",
+            "Re=b||Ce?null:L?te:ae",
+            "Be=b||Ce||ze||!I&&(L||ae==null&&oe!==`custom`)",
+            "updateThreadPermissions(n,Te(e))",
+        )
+        extra = ',oe,ae)'
+    for seam in seams:
         if source.count(seam) != 1:
             raise ValueError("Pinned resumed-thread permission reconciliation changed")
-    extra = ',se,oe)' if new else ',oe,ae)'
     changes[initial] = source.replace(lookup, replacement).replace(call, call[:-1] + extra)
     for path, source in changes.items():
         for key in KEYS:
