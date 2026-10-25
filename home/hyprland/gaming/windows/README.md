@@ -12,6 +12,7 @@ directly; no extra hierarchy modules are needed just to group files.
 - `classification.lua` is a pure predicate over Hyprland window metadata and exact
   class overrides. It makes no compositor calls.
 - `game-windows.lua` owns initial rules and bounded event reconciliation.
+- `game-overrides.lua` owns narrowly matched, game-specific startup workarounds.
 - `default.nix` preserves `phoenix.gameWindows.*` and initializes the shared predicate
   before [Kando's Hyprland adapter](../../../kando/hyprland/README.md).
 - `tests/` exercises classification, rules, late changes and exclusions.
@@ -71,6 +72,7 @@ Alt-Tab remains unchanged; there is no automatic monitor selection.
 
 ```sh
 nix shell --inputs-from . nixpkgs#lua --command lua home/hyprland/gaming/windows/tests/game-windows.lua home/hyprland/gaming/windows/game-windows.lua home/hyprland/gaming/windows/classification.lua
+nix shell --inputs-from . nixpkgs#lua --command lua home/hyprland/gaming/windows/tests/game-overrides.lua home/hyprland/gaming/windows/game-overrides.lua
 nix eval --no-write-lock-file .#nixosConfigurations.metal-4tb.config.system.build.toplevel.drvPath
 nix flake check --no-build --no-write-lock-file .
 ```
@@ -89,19 +91,29 @@ while retaining the previously prepared Kando work; do not reset the whole workt
 Only source preparation, non-deploying checks and an authorized local commit are
 performed; no activation, reload, restart or game interruption is used for validation.
 
-## Automatic fullscreen: deferred
+## World of Warcraft startup fullscreen workaround
 
-Automatic tiling remains enabled. The operator reports that the classified
-`steam_app_default` game behaves correctly once compositor fullscreen is set,
-but sometimes initially appears maximized/tiled. The current read-only sample is
-already fullscreen 2; it does not show initial client fullscreen requests. Tags and
-shared classes do not reliably separate a game's main surface from same-class
-launchers/dialogs. A blanket `fullscreen = true` rule would affect all of them.
-No such rule or recurring fullscreen-enforcement callback is added. Preserve the
-existing manual fullscreen shortcut. On the next natural launch, record the main
-window's `fullscreen`/`fullscreenClient`, class, tags and initial dialog behavior;
-only then scope an initial rule that respects manual exits and existing placement.
-This remains open without blocking finalization of the working tiling/input code.
+WoW's Fullscreen (Windowed) mode can initially leave Caelestia visible until
+`Super + F` enables compositor fullscreen. A read-only sample on 2026-10-25 confirmed
+both `initialTitle = "World of Warcraft"` and `initialClass = "steam_app_default"`,
+alongside `xwayland = true` and the existing `game*` tag. Thus the identifying title
+is already available for a static rule; no title-change listener is needed.
+
+The override requires that exact title, exact class and XWayland together, and sets
+only native `fullscreen = true`. It does not match differently titled Battle.net,
+Wine dialogs or other applications sharing that class. Existing game tiling remains
+responsible for `floating = false`. Hyprland 0.56.2 applies static fullscreen once
+at mapping, so manual fullscreen exits remain possible; there is no recurring
+enforcement, input change or workspace/monitor assignment. Different/localized
+initial titles will retain manual `Super + F` behavior.
+
+Runtime validation is pending. After an authorized deployment, check the next
+natural WoW launch with `hyprctl -j activewindow`: expect `fullscreen: 2` and
+`floating: false`, the intended monitor, no visible panel and unaffected dialogs.
+Toggle `Super + F` off/on and confirm normal Kando/side-button behavior after
+Alt-Tab and clicking back. This static rule does not change an already open window;
+no WoW restart is required now, but verification needs a subsequent launch.
+To roll back only this workaround, revert its commit (preserving other work).
 
 ## Persistent grabbing cursor: diagnosis pending
 

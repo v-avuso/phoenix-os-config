@@ -31,5 +31,6 @@ in
     }
     local phoenixIsGameWindow = dofile("${./classification.lua}")(gameWindowOptions)
     dofile("${./game-windows.lua}")(gameWindowOptions, phoenixIsGameWindow)
+    dofile("${./game-overrides.lua}")(gameWindowOptions)
   '';
 }
