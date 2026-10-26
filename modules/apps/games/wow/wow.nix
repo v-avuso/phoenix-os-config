@@ -70,18 +70,25 @@ let
       instawow
       pkgs.util-linux
       pkgs.jq
+      pkgs.procps
+      pkgs.coreutils
     ];
     text = ''
       mkdir -p "''${XDG_STATE_HOME:-$HOME/.local/state}/phoenix-wow"
       exec 9>"''${XDG_STATE_HOME:-$HOME/.local/state}/phoenix-wow/lock"
       flock -w 3600 9
-      if [[ "''${1:-}" == sync ]]; then
+      wow_sync() {
         while IFS= read -r addon; do
-          installed=$(instawow -v -p phoenix-retail list --format json "$addon")
+          installed=$(instawow -v -p phoenix-retail list --format json "$addon") || return "$?"
           if [[ $(jq length <<< "$installed") == 0 ]]; then
-            instawow -v -p phoenix-retail install "$addon"
+            instawow -v -p phoenix-retail install "$addon" || return "$?"
           fi
         done < <(jq -r '.[]' ${./wow-addons.json})
+      }
+      if [[ "''${1:-}" == sync ]]; then
+        wow_sync
+      elif [[ "''${1:-}" == scheduled-update ]]; then
+        ${builtins.readFile ./scheduled-update.sh}
       else
         exec instawow -v -p phoenix-retail "$@"
       fi
@@ -100,11 +107,13 @@ lib.mkIf (config.phoenix.target == "metal-4tb") {
       ${settingsWriter} reassert ${profileBaseline} "${user.homeDirectory}/.config/instawow/profiles/phoenix-retail/config.json" object
     '';
     systemd.user.services.wow-addons-update = {
-      Unit.Description = "Update managed WoW Retail add-ons";
+      Unit = {
+        Description = "Update managed WoW Retail add-ons";
+        OnFailure = [ "wow-addons-update-notify.service" ];
+      };
       Service = {
         Type = "oneshot";
-        ExecStartPre = "${wowAddons}/bin/wow-addons sync";
-        ExecStart = "${wowAddons}/bin/wow-addons update";
+        ExecStart = "${wowAddons}/bin/wow-addons scheduled-update";
         TimeoutStartSec = "2h";
         UMask = "0077";
         StandardOutput = "journal";
@@ -133,10 +142,19 @@ lib.mkIf (config.phoenix.target == "metal-4tb") {
         ];
       };
     };
+    systemd.user.services.wow-addons-update-notify = {
+      Unit.Description = "Notify about a terminal WoW add-on update failure";
+      Service = {
+        Type = "oneshot";
+        ExecStart = ''${pkgs.libnotify}/bin/notify-send --app-name="WoW add-ons" --urgency=normal "WoW add-on update failed" "See journalctl --user -u wow-addons-update.service for details."'';
+        NoNewPrivileges = true;
+        ProtectSystem = "strict";
+      };
+    };
     systemd.user.timers.wow-addons-update = {
-      Unit.Description = "Daily WoW add-on updates at 09:00 Berlin time";
+      Unit.Description = "Daily WoW add-on updates at 05:00 Berlin time";
       Timer = {
-        OnCalendar = "*-*-* 09:00:00 Europe/Berlin";
+        OnCalendar = "*-*-* 05:00:00 Europe/Berlin";
         Persistent = true;
         AccuracySec = "1min";
       };

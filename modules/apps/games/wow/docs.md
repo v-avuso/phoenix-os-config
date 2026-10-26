@@ -9,13 +9,21 @@ package/profile/timer integration.
 
 **Main installation:** 37 additions plus three existing packages, followed by
 Chatty Little NPC base v3.5.3, Vanilla English voices v3.3.4 and Midnight
-English voices v1.2.11 = 43 managed.
+English voices v1.2.11, plus Simple Addon Manager v1.67 = 44 managed.
 All 37 passed disposable installation first; 92 trial folders were audited for
 Retail compatibility. The bundled DBM-Party-Forever excludes Retail explicitly.
-The full native `wow-addons update` completed with exit 0 across all 43 packages;
-manifest/database equality passed. The AddOns directory contains 100 folders. All
+The original full native `wow-addons update` completed with exit 0 across all 43 packages;
+manifest/database equality passed. The original AddOns directory contained 100 folders. All
 64 existing WTF file hashes remained unchanged. Both voice-pack TOCs include
 120105 and their required Chatty dependency was verified in installed files.
+Follow-up: Simple Addon Manager passed isolated and actual installation (TOC 120100). Its
+targeted update check reports up to date; native instawow returns status 1 for that targeted result.
+All-package updates filter ordinary up-to-date results instead; the scheduler deliberately supplies no
+package arguments. No arbitrary status-1 errors are swallowed.
+The follow-up full 44-package sync/update passed inside the declared sandbox with status 0
+(4m38s, 5.3 GB peak). All 44 manifest entries match managed identities; there are 101 addon folders.
+All 64 WTF files and global credential configuration remained byte-identical. Backup SQLite integrity
+and archive paths passed inspection; no restore or in-game test was performed.
 In-game behavior has not been tested. No settings were applied beyond upstream defaults; existing
 ToxiUI was left untouched. Versions below are 2026-10-26 snapshots.
 `Installed` means package installation, not runtime acceptance. `Blocked` means
@@ -37,7 +45,7 @@ tokens are absent on this installation.
 | Waypoint UI / navigation display | [github:Adaptvx/Waypoint-UI](https://github.com/Adaptvx/Waypoint-UI/releases) | Installed 1.7.4 |
 | BtWQuests / quest-chain journal | [wowi:24680](https://www.wowinterface.com/downloads/info24680-BtWQuests.html) | Installed v2.65.0 |
 | BtWQuests Midnight / current chains | Bundled by [wowi:24680](https://www.wowinterface.com/downloads/info24680-BtWQuests.html) | Installed v3.1; TOC 120105 |
-| BtWQuests Prologue / expansion introductions | [wago:kNM3d3Kz](https://addons.wago.io/user/Breeni) | Blocked: Wago token |
+| BtWQuests Midnight Prologue / expansion introduction | [wago:kNM3d3Kz](https://addons.wago.io/user/Breeni) | Blocked: Wago token; compatible published archive still unverified |
 | BtWQuests Dragonflight / legacy chains | [github:Breeni/BtWQuestsDragonflight](https://github.com/Breeni/BtWQuestsDragonflight/releases) | Installed v12.15 |
 | BtWQuests TWW / legacy chains | [github:Breeni/BtWQuestsTheWarWithin](https://github.com/Breeni/BtWQuestsTheWarWithin/releases) | Installed v11.4 |
 | BtWQuests Cataclysm / optional Tirisfal chains | [wowi:25552](https://www.wowinterface.com/downloads/info25552-BtWQuestsCataclysm.html) | Optional, not installed; disposable v2.23 passed, TOC 120105 |
@@ -54,7 +62,7 @@ tokens are absent on this installation.
 | HandyNotes Pandaria / treasures | [github:kemayo/wow-handynotes-lostandfound](https://github.com/kemayo/wow-handynotes-lostandfound/releases) | Installed v53 |
 | HandyNotes Wrath / treasures | [github:kemayo/wow-handynotes-wrath](https://github.com/kemayo/wow-handynotes-wrath/releases) | Installed v32 |
 | HandyNotes BC / treasures | [github:kemayo/wow-handynotes-burningcrusade](https://github.com/kemayo/wow-handynotes-burningcrusade/releases) | Installed v26 |
-| RareScanner / rare alerts | [curse:rarescanner](https://www.curseforge.com/wow/addons/rarescanner) | Blocked: CF token; 12.1.5.3 maintained |
+| RareScanner / rare alerts | [wago:kaNeng62](https://addons.wago.io/addons/rarescanner); [curse:rarescanner](https://www.curseforge.com/wow/addons/rarescanner) | Blocked: both require missing tokens; 12.1.5.3 maintained |
 | GatherMate2 / observed gathering nodes | [github:Nevcairiel/GatherMate2](https://github.com/Nevcairiel/GatherMate2/releases) | Installed 1.52.3 |
 | GatherMate2_Data / seed gathering nodes | [github:Nevcairiel/GatherMate2_Data](https://github.com/Nevcairiel/GatherMate2_Data/releases) | Installed v41.0; manual import |
 | Routes / gathering route planning | [github:Nevcairiel/Routes](https://github.com/Nevcairiel/Routes/releases) | Installed v1.8.7 |
@@ -68,7 +76,7 @@ tokens are absent on this installation.
 | Rematch / pet teams | [original distribution](https://www.curseforge.com/wow/addons/rematch) | Deferred: original 5.3.1 targets 12.0, known 12.1 breakage |
 | DBM / encounter warnings | [github:DeadlyBossMods/DeadlyBossMods](https://github.com/DeadlyBossMods/DeadlyBossMods/releases) | Installed 12.1.17 |
 | DBM Dungeons, Delves & Events / extra encounters | [github:DeadlyBossMods/DBM-Dungeons](https://github.com/DeadlyBossMods/DBM-Dungeons/releases) | Installed r268 |
-| Details! / damage analysis | [curse:61284](https://www.curseforge.com/wow/addons/details) | Blocked: CF token; ancient GitHub release unusable |
+| Details! / damage analysis | [wago:qv63A7Gb](https://addons.wago.io/addons/details-damage-meter-standalone); [curse:61284](https://www.curseforge.com/wow/addons/details) | Blocked: both require missing tokens; GitHub release has no asset |
 | GTFO / audible hazard warning | [wowi:17996](https://www.wowinterface.com/downloads/info17996-GTFO.html) | Installed 6.12.2; Midnight detection restricted |
 | Mythic Dungeon Tools / route planning | [github:Nnoggie/MythicDungeonTools](https://github.com/Nnoggie/MythicDungeonTools/releases) | Installed 6.3.23 |
 | Raider.IO / group history information | [github:RaiderIO/raiderio-addon](https://github.com/RaiderIO/raiderio-addon/releases) | Installed v202610260600 |
@@ -89,6 +97,8 @@ tokens are absent on this installation.
 | DynamicCam / general world camera | [wago:b6XVoOGp](https://addons.wago.io/addons/dynamiccam) | Blocked: Wago/CF token; official GitHub has no release assets |
 | TradeSkillMaster / economy operations | [curse:26886](https://www.curseforge.com/wow/addons/tradeskill-master) | Blocked: CF token; companion ownership unresolved |
 | TSM_AppHelper / companion price data | [official companion setup](https://support.tradeskillmaster.com/tsm-desktop-application/how-do-i-set-up-the-tsm-desktop-application) | Deferred: no verified native URI; companion-owned mutable data |
+| Simple Addon Manager / searchable addon enablement and profiles | [github:Eliote/SimpleAddonManager](https://github.com/Eliote/SimpleAddonManager/releases/tag/v1.67) | Installed v1.67; TOC 120100; native install/update passed |
+| BlizzMove / moving Blizzard windows | [github:Kiatra/BlizzMove](https://github.com/Kiatra/BlizzMove/releases/tag/v3.8.5) | Compatible TOC 120105; omitted because WindTools already provides moving frames |
 | Chatty Little NPC / dialogue voice player | [github:mantaskazlauskas/ChattyLittleNpc](https://github.com/mantaskazlauskas/ChattyLittleNpc/releases) | Installed v3.5.3; voice packs separate |
 | English Vanilla voice pack / old-world speech | [github:mantaskazlauskas/ChattyLittleNPC-Vanilla-Voiceovers](https://github.com/mantaskazlauskas/ChattyLittleNPC-Vanilla-Voiceovers/releases) | Installed v3.3.4; archive 1.29 GB |
 | English Midnight voice pack / current speech | [github:mantaskazlauskas/ChattyLittleNPC-Midnight-english-voiceover-pack](https://github.com/mantaskazlauskas/ChattyLittleNPC-Midnight-english-voiceover-pack/releases) | Installed v1.2.11; archive 432 MB |
@@ -136,30 +146,102 @@ guidance](https://support.tradeskillmaster.com/how-do-i-fix-an-error-about-appda
 to ignore both TSM and AppHelper in other managers when companion-managed; AppHelper contains writable
 prices. No companion, account setup or custom sync is provided.
 
-## Optional native action bars
+## Native UI overrides and key ownership
 
-Export the current ElvUI profile first. `/ec` → **ActionBars → Player Bars → Bar 1** exposes
-**Mouseover**, **Inherit Global Fade**, **Alpha**, **Visibility State** and **Action Paging**. Keep main
-Mouseover off, utility Mouseover on, per-bar global fade inheritance off and Alpha 1; keep populated
-bars enabled. Mouse-hide only genuine utilities; keep essential combat-cooldown bars visible until
-native cooldown views are verified. Preserve visibility conditions, 12 slots, stance/pet/extra/zone bars and
-native special states. Mouseover-hidden cooldowns are invisible until hovered; a paged main bar shows
-only its current page's cooldowns. `/moveui` handles placement without replacing profiles.
+No offline settings edits, custom preset addon or inert override file were added. The
+[README](README.md#native-action-bar-preset-out-of-combat) contains the operational one-time procedure.
+The official [ElvUI installer template](https://github.com/tukui-org/ElvUI/wiki/layout-installer-template)
+supports profiles/installers, but a full wizard adds lifecycle/versioning/testing work and reloads the UI.
+Native controls plus two explicit binding commands are cheaper for this small set of overrides.
+ElvUI profile exports preserve the layout; Blizzard bindings and CVars require the private backup or
+repeating the documented commands. No permanent process reasserts player preferences.
 
-The [README](README.md#optional-refinements) owns the optional paging steps. In installed
-[ElvUI](https://github.com/tukui-org/ElvUI), native vehicle/override/temporary-shapeshift and manually
-selected bar-state clauses precede the editable class string; the default page is appended afterward.
-Preserve this priority. A custom unconditional catch-all in the editable string makes appended
-modifier clauses unreachable; inspect rather than replacing it speculatively. Retaining Druid clauses
-first protects native form pages but limits the example to the base/humanoid bar. Slots on pages 2/3
-are shared with existing bars, not new independent action storage.
+| Feature | Owner / non-default application |
+|---|---|
+| Base layout, bars, bags, nameplates, repairs/selling | Existing ElvUI/ToxiUI profile; native `/ec`/`/moveui` only |
+| Blizzard window movement, ElvUI extensions | WindTools; no second mover or broad QoL suite |
+| Main bar / utility visibility | User applies native per-bar fade/mouseover controls; preserve cooldown visibility |
+| Shift/Ctrl action pages | Prepend two native paging conditions to the existing class string; retain form clauses |
+| Numeric modified bindings | User-invoked native `SetBinding`/`SaveBindings`; main Shift/Ctrl, pets Ctrl+Shift; Alt reserved |
+| Press-and-hold casting | Native Combat checkbox / `ActionButtonUseKeyHeldSpell=1`; no raw WTF edits |
+| Quest automation | WoW-Pro defaults changed manually off so Dialogue UI owns story interaction |
+| Navigation | TomTom data + Waypoint UI presentation; native destination replacement is a player choice |
+| General camera | Native game defaults until DynamicCam available; Dialogue UI owns NPC interactions |
+| World quests, economy, damage analysis | WQT, TSM, Details intended owners, currently provider blocked |
+| Boss warnings | DBM, no BigWigs |
+| Addon enablement / troubleshooting | Simple Addon Manager, no second disk updater |
 
-Paging changes display pages, **not modified-key bindings**. Ten existing Shift+number CLICK bindings
-were observed in one private cache; no explicit Ctrl+number cache entries establish effective runtime
-bindings. Preserve them until the player chooses otherwise. Mouseover-hidden utility cooldowns remain
-invisible until hovered; the main bar shows only its current page's cooldowns. Actual hold/release,
-modified casts, forms and vehicle/pet/extra/zone behavior need player acceptance. No settings,
-bindings, actions or profile overrides have been applied by this work.
+Installed ElvUI `AB:GetPage` places override, vehicle/possess, temporary shapeshift, manually selected
+pages 2–6 and bonusbar 5 ahead of the editable class string, then appends default page 1. Preserve this
+native priority. Prepending Shift/Ctrl clauses enables them in ordinary Druid forms; releasing restores
+the retained form page. This deliberately supersedes class-specific modifier clauses while held.
+Pages 2/3 are shared action storage, not empty independent bars; the player assigns spells. Alt prevents
+these modifier pages. Ctrl+Shift remains a pet shortcut even when the main bar displays Shift's page.
+
+The static private audit found ten explicit Shift-numeric CLICK assignments, no explicit Ctrl-numeric
+or Ctrl+Shift-numeric assignments in one cache. Inherited defaults and runtime overrides remain
+unknown. The user authorizes replacing modifier bindings; high-frequency main casts take Shift/Ctrl,
+pet commands move to Ctrl+Shift numeric keys. ElvUI reads `ACTIONBUTTON1..12` for main buttons and
+`BONUSACTIONBUTTON1..10` for pets and redirects their bindings to its visible secure buttons. Essential
+movement/base/Alt bindings are untouched. Source inspection cannot prove effective runtime bindings.
+
+Blizzard-authored [Combat settings source](https://github.com/Gethe/wow-ui-source/blob/live/Interface/AddOns/Blizzard_SettingsDefinitions_Frame/Combat.lua)
+registers `ActionButtonUseKeyHeldSpell`; Accessibility mirrors it. `ActionButtonUseKeyDown` controls
+press/release activation and `empowerTapControls` controls empowered-spell input; neither is changed.
+The repository is a source mirror, not proof the installed game build behaves identically. Hold/release,
+modified casts, forms, pet/vehicle/extra/zone actions and combat behavior remain in-game acceptance.
+
+## Provider access and recovery options
+
+A renewed bounded scan found legitimate Wago alternatives for **Details** (`wago:qv63A7Gb`, also
+identified by the [author TOC](https://github.com/Tercioo/Details-Damage-Meter/blob/master/Details.toc)) and
+**RareScanner** (`wago:kaNeng62`). WQT remains `wago:lQNlrEKe`. Actual native dry-runs for these three and
+`curse:26886` (TSM) all fail explicitly with **access token missing**; they were not installed. Compatible
+stable release selection must still be tested after access exists. The catalogue does not index every
+Wago project, so absence from search is not proof a source is unavailable.
+
+Instawow 7.3's native onboarding says consumer Wago download tokens are issued to eligible **Patreon
+subscribers**, pointing to [Wago Patreon login](https://addons.wago.io/patreon). No free self-service
+consumer token route was verified; current tier/price could not be established from the public page.
+[Wago developer upload keys](https://docs.wago.io/) serve a different API and are not a substitute.
+If the operator independently chooses eligible membership, obtains a token and consents to storage,
+configure it privately through the native masked prompt (not executed here):
+
+```sh
+umask 077
+instawow -p phoenix-retail profile configure global_config.access_tokens.wago_addons
+```
+
+This global field shares existing app-owned credential storage and permissions described below.
+No token belongs in arguments, chat, Nix or Git. After onboarding, resolve/install in a disposable profile
+before adding the successful URI to the manifest. This would also unlock investigation of Better Fishing,
+BugGrabber (then BugSack), DynamicCam and other Wago entries in the table; it does not guarantee
+all packages are published/compatible. Midnight Prologue's official GitHub has no releases and its
+Wago archive remains unverified even with a token.
+
+For CF-only entries, instawow requires an operator-provided CurseForge Core API key; native prompt:
+`instawow -p phoenix-retail profile configure global_config.access_tokens.cfcore`.
+[CurseForge's official console](https://console.curseforge.com/) owns key eligibility/approval and
+publisher download permissions still apply. No key application or subscription was initiated. Leatrix,
+Home Bound, Altoholic/DataStore, GuildFinder+, Ultimate Mouse Cursor and TSM have no verified current
+native token-free alternative from this scan. Original Rematch remains compatibility-deferred.
+Official publisher/CurseForge project pages may also offer browser ZIP downloads without a new
+account where the publisher permits them. That is a legitimate manual fallback, but it would require
+manual updates and must stay outside the managed manifest until native resolution works. No such
+unmanaged installation or second updater was added here.
+BugSack alone is installable but not useful without BugGrabber. Do not install source-only repositories,
+private-server backports or unauthorised mirrors as substitutes.
+
+[OPie](https://www.townlong-yak.com/addons/opie) has a legitimate current direct author download,
+but that host is not a native instawow provider. A manual author installation would require separate
+maintenance; it was left out rather than adding a custom downloader. The installed collection is usable
+without any of these accounts. Syndicator, KeystoneLoot and Simulationcraft remain future candidates.
+
+TSM's simplest supported companion is its official Windows/macOS application; an operator-reviewed
+Wine trial is possible, but [Linux is explicitly unsupported](https://support.tradeskillmaster.com/en_US/tsm-desktop-application/can-i-run-the-tsm-desktop-application-on-linux).
+Community Linux clients remain unreviewed and are not installed. A future companion trial needs
+explicit trust/login approval and **one owner** for TSM/AppHelper updates and mutable pricing, per the
+official guidance above. No TSM credentials were requested.
 
 ## Installation, updates and authentication
 
@@ -169,11 +251,28 @@ one-hour-wait flock. Native commands need `instawow -p phoenix-retail`. The depl
 additive; explicit removal and adoption remain operator actions (`wow-addons remove SOURCE`, or
 deliberately `wow-addons install --replace SOURCE` after backup). Never reconcile whole directories.
 
-The daily 09:00 Europe/Berlin timer syncs then updates; Persistent catches missed runs without waking
-the computer. Journal receives errors; service access masks unrelated home and exposes only AddOns, tool
-config/cache/state and shared lock. No process check, signal, game start or reload occurs. Wait for
-writes before a manual reload: loaded Lua is not hot-patched and mixed files can otherwise load. Large voice-package
-resolution/update can take minutes and exceed 1 GB RAM (observed process RSS about 1.2 GB).
+The daily **05:00 Europe/Berlin** persistent timer runs one serialized `scheduled-update` invocation.
+A small shell loop retries failed sync/update sequences after 60, 300 and 900 seconds; native
+`RestartSteps` interpolates delays and does not express this exact sequence. Success stops immediately;
+final failure retains its exit status and native `OnFailure` starts one local notification service.
+No success/skip notifications. Journal logs attempts, waits, skips and command errors; the updater's
+existing home masking exposes only AddOns/tool paths. The notification service separately uses the
+user desktop bus, without exposing it to the network updater.
+
+Exact case-insensitive WoW executable-name checks precede sync and update and every retry. Running
+Retail (or conservatively Classic) is a successful skip, not a retryable failure. Detection errors fail
+closed. A game starting after preflight remains a launch race: this does not interpose on Lutris or
+provide an atomic launcher lock. Do not start WoW during active writes. A skip itself is not a missed
+timer event and waits for the next scheduled/manual run. `Persistent` catches missed calendar events
+when the user manager returns; it does not wake the computer.
+
+Focused checks: `python3 -B -m unittest discover -s modules/apps/games/wow/tests -v`.
+The opt-in native fixture uses `PHOENIX_WOW_SYSTEMD_TEST=1` and disposable user units: success,
+transient failure, four terminal failures with status 23 and exactly one stub notification, running-game
+skip with the fake process left alive, and real persistent-timer catch-up all pass. Stubs avoid network,
+real package writes, 21-minute waits and desktop notification spam. This establishes systemd delivery
+to the notification command, not visual desktop acceptance. Full native package updates can take
+minutes; the previous 43-package service run observed a 5.4 GB peak, largely voice metadata.
 
 Instawow 7.3.0 is pinned in wow.nix because locked 7.0.0.post1 rejects catalogue `forever_classic`.
 Upstream versioningit/wcwidth and Click 8.4.1 are supplied; aiohttp/rapidfuzz/yarl lower bounds are
@@ -209,6 +308,13 @@ The pre-change private rollback point is
 `~/.local/state/phoenix-wow/backups/collection-20261026T090133Z`: `retail-before.tar.gz` contains WTF
 and AddOns; `instawow.sqlite` and `managed-before.json` retain manager state/inventory. The collection
 installation did not modify saved settings.
+
+The follow-up private backup `~/.local/state/phoenix-wow/backups/followup-20261026T125010Z`
+contains `wtf-before.tar.gz`, a consistent `instawow.sqlite`, inventory and manifest. Only Simple Addon
+Manager was added; no settings were changed. For this follow-up alone, close WoW, stop updater writes,
+remove `github:Eliote/SimpleAddonManager` through instawow, restore the previous manifest/revision and
+deploy it. Keep the archived WTF for optional recovery after in-game changes. Never restore a database
+without restoring matching package files, and preserve current state first.
 
 For a full rollback, perform these steps in order; **no restore has been performed**:
 

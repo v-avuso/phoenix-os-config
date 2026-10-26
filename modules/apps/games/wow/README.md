@@ -2,95 +2,114 @@
 
 ## Intentions
 
-Keep the existing Lutris installation and ToxiUI setup; add maintained Midnight add-ons for stories,
-exploration, collecting and group play. Package updates never apply settings, write WTF, launch the game
-or reload its UI.
+Keep the existing Lutris installation and ToxiUI foundation. Install compatible packages additively;
+never overwrite private settings, launch WoW or reload its UI. [Technical notes](docs.md) own sources,
+feature ownership and recovery; [VISION.md](VISION.md) describes future possibilities.
 
-**Applied configuration:** upstream add-on defaults only. Existing ElvUI/ToxiUI profiles remain
-untouched. The main collection and Chatty Little NPC base are installed with Vanilla and Midnight
-English voice packs (43 managed packages). Native update and manifest/database checks passed.
-In-game acceptance is separate; see the [package status and technical notes](docs.md).
+**Installed:** 44 managed packages, including Simple Addon Manager and Chatty Little NPC with Vanilla
+and Midnight English voices. Existing ElvUI/ToxiUI settings remain unchanged. No UI settings or bindings
+have been applied automatically. Missing provider credentials still block several requested packages.
 
 ## Manual configuration — first play
 
-Allow a few minutes after opening WoW yourself. Wait for any add-on update to finish before a manual
-reload; newly installed add-ons may require reopening the game.
+Open WoW yourself **after package writes finish**. These are one-time native changes, not a preset
+that will overwrite later customization. No ToxiUI installer reset is needed.
 
-- [ ] **Keep the existing interface:** dismiss any optional ElvUI/ToxiUI installer reset. Applying a
-  ToxiUI installer profile overwrites the current profile.
-- [ ] **Place the minimap if needed:** `/moveui` → drag the minimap mover to the bottom-right → finish
-  moving. Keep the rest of the existing layout.
-- [ ] **Read quests deliberately:** right-click the **WoW-Pro minimap button** (or **Esc → Settings →
-  AddOns → WoW-Pro**). Under **Main → Automation**, turn **Auto Select**, **Auto Accept**, and **Auto
-  Turnin** off. These default to on and overlap story interaction through Dialogue UI.
-- [ ] **Check navigation:** **Esc → Settings → AddOns → Waypoint UI → Extensions → TomTom**: leave
-  **Track TomTom Waypoints** on (default). Turn **Auto-Replace Waypoint** off if you want to preserve a
-  manually selected destination; leave it on for guide-led navigation. Right-click a TomTom world-map
-  waypoint → **Set as waypoint arrow** and check the Waypoint UI destination. If two arrows are
-  distracting, use the optional display setting below.
-- [ ] **Check usability:** talk to an NPC, follow a guide waypoint, read text at normal viewing
-  distance, and confirm current unit/group frames are readable. No automatic layout, scaling or
-  keybinding changes have been applied.
+- [ ] **Keep a rollback:** `/ec` → **Profiles → Export Profile**, save privately. The private WTF backup
+  described in [recovery](docs.md#settings-portability-and-recovery) also preserves bindings; profile
+  exports alone do not. Dismiss optional ElvUI/ToxiUI installer resets.
+- [ ] **Read quests deliberately:** right-click the WoW-Pro minimap button → **Main → Automation**;
+  disable **Auto Select**, **Auto Accept**, **Auto Turnin** to keep Dialogue UI in control of interaction.
+- [ ] **Navigation:** **Esc → Settings → AddOns → Waypoint UI → Extensions → TomTom**: keep tracking
+  enabled. Disable **Auto-Replace Waypoint** if manually selected destinations should survive new
+  waypoints. Otherwise retain its guide-led default. Verify one guide destination before playing.
+- [ ] **Hold casting:** **Esc → Settings → Gameplay → Combat → Press and Hold Casting** → enabled
+  (also mirrored under Accessibility). Alternatively `/console ActionButtonUseKeyHeldSpell 1`.
+  Leave key-down and empowered-spell settings unchanged; they control different behavior.
 
-## Optional refinements
+### Native action-bar preset (out of combat)
 
-- **Layout:** `/tx settings` opens ToxiUI; `/ec` opens ElvUI; `/moveui` moves frames, including the
-  minimap. `/ec` → **UnitFrames → Group Units → Party/Raid** adjusts group-frame sizes. Keep stock 4K
-  scaling initially; choose changes by readability. ToxiUI offers horizontal/vertical layouts, without a
-  verified named healer preset.
-- **Action bars:** after exporting the current profile, `/ec` → **ActionBars → Player Bars → Bar 1**:
-  **Mouseover** off, **Inherit Global Fade** off, **Alpha** 1. For utility bars, enable **Mouseover**,
-  disable **Inherit Global Fade**, and keep the bars enabled/populated. Hide only genuine utility
-  bars; keep any bar showing essential combat cooldowns visible until native cooldown views are verified. `/moveui` places them at the
-  bottom. Preserve special bars, existing actions and bindings. Nothing is applied automatically.
-- **Shift/Ctrl paging (optional, out of combat):** export the current profile, then `/ec` →
-  **ActionBars → Player Bars → Bar 1 → Action Paging**. Privately copy the actual class-specific
-  string; preserve every existing native clause in its original order. Only if there is **no custom
-  unconditional catch-all**, append `[nomod:alt,mod:shift] 2; [nomod:alt,mod:ctrl] 3;` with no final
-  unconditional page number. Stop if unsure about the current string. Shift selects page 2, Ctrl page 3;
-  Alt suppresses both, and Shift wins together. Keep pages 7–10 reserved for forms. Retained Druid
-  clauses take priority, so this example affects only the base/humanoid bar. Pages 2/3 use existing
-  shared slots; populate deliberately. Inspect `/kb` and game Key Bindings first: ten Shift+number
-  CLICK bindings were observed, while effective Ctrl bindings remain unknown. Do not clear bindings;
-  paging does not remap modified keys, so same-slot casts may conflict. Check hold/release, casts,
-  cooldowns, forms and vehicle/special bars before relying on it. See [technical limits](docs.md#optional-native-action-bars).
-- **Dialogue camera:** press **F1 during NPC interaction** → **Camera → Camera Movement**; choose
-  **Off** only if you dislike motion. Dialogue UI owns NPC camera; optional DynamicCam owns general
-  world camera and is not currently configured.
-- **Gathering data:** open GatherMate2 in WoW's add-on settings → **Import** and choose the installed
-  GatherMate2_Data dataset. Installing the dataset alone does not populate nodes. `/routes` opens route
-  planning after selecting desired nodes.
-- **One navigation arrow:** keep TomTom's arrow and Waypoint UI tracking active; Waypoint UI →
-  **Appearance → Navigator → Show Arrow** off hides only its arrow. Confirm the destination/guide still
-  advances. TomTom cannot make its arrow fully transparent through supported settings. Avoid `/wp`: both
-  add-ons register it.
-- **Tirisfal guide:** use WoW-Pro's guide picker and select the guide matching your current progress.
-  `/wow-pro load-guide JiyDk0105` loads **Forsaken: Intro** only when starting that introduction; it
-  need not match an existing Tirisfal quest log.
-- **Collections:** `/btwquests` opens quest chains; `/rarity` opens drop tracking. Keep add-on defaults
-  first and reduce overlapping tooltips/pins only as needed.
-- **Combat:** `/dbm` opens DBM's test/anchor controls; `/gtfo options` and `/gtfo test` check audible
-  warnings; `/mdt` opens dungeon planning. Test in actual content; Midnight limits GTFO's detectable
-  hazards. Keep one visible damage-meter owner.
-- **Bindings:** if available, `/opie` and `/opie rings` configure rings. Choose unused keys in game for
-  rings, LiteMount and fishing; no binding preset is applied.
-- **Voice:** `/clnsettings` → **Playback**: **Auto-Play Voiceovers** is already on; **Quest Playback
-  Mode** and **Gossip Playback Mode** default to queues that continue after closing dialogue. Keep these
-  defaults first; optionally choose **Stop when dialog closes**. Check **Installed Voiceover Packs**,
-  talk to a Tirisfal NPC, and check volume (default audio channel **Master**). Missing recordings mean
-  coverage is incomplete; installing a pack does not prove every quest is voiced.
+This uses the existing profile and slots. Do not rerun the ToxiUI installer. The
+[ElvUI native implementation](https://github.com/tukui-org/ElvUI/tree/main/ElvUI/Game/Shared/Modules/ActionBars)
+owns paging, binding and special-state handling; in-game acceptance is still required.
+
+1. `/ec` → **ActionBars → Player Bars → Bar 1**: enabled, **Mouseover** off,
+   **Inherit Global Fade** off, **Alpha** 1. Keep its existing visibility conditions.
+   `/moveui`: place Bar 1 bottom-center and minimap bottom-right if needed. For ordinary utility bars,
+   keep enabled, **Mouseover** on, **Inherit Global Fade** off, **Alpha** 1. Keep essential cooldowns
+   visible until you have another reliable display. Leave pet, stance, extra and zone bars intact.
+2. Bar 1 → **Action Paging**: privately copy the current class string. **Prepend** this exact text,
+   preserving every original clause after it, and add no final unconditional page number:
+
+   ```text
+   [nomod:alt,mod:shift] 2; [nomod:alt,mod:ctrl] 3;
+   ```
+
+   Shift selects page 2, Ctrl page 3; release restores the original base/form page. Alt suppresses
+   these modifier pages. Native vehicle/override/possess handling still takes priority. Manually
+   selected pages 2–6 also have native priority: return to page 1 before testing. Pages 2/3 share
+   existing slots; **populate them yourself**. Existing custom modifier clauses require inspection.
+3. `/kb`: check base keys `1`–`0` select main-bar slots 1–10. The commands below deliberately replace
+   conflicting numeric modifier bindings. First move pet shortcuts to **Ctrl+Shift+1–0**, preserving
+   accessible pet controls; inspect these chords in Key Bindings first if you already use them:
+
+   ```lua
+   /run if InCombatLockdown() then return end for i=1,10 do SetBinding("CTRL-SHIFT-"..(i%10),"BONUSACTIONBUTTON"..i) end SaveBindings(GetCurrentBindingSet())
+   ```
+
+   Then route Shift/Ctrl numeric keys through the visible main-bar buttons:
+
+   ```lua
+   /run if InCombatLockdown() then return end for i=1,10 do for _,m in ipairs({"SHIFT-","CTRL-"}) do SetBinding(m..(i%10),"ACTIONBUTTON"..i) end end SaveBindings(GetCurrentBindingSet())
+   ```
+
+   Both commands fit the native chat-command limit. They save the current account/character binding
+   set, preserve base/Alt/movement keys and do not fill action slots. **Ctrl+Shift** intentionally
+   activates pet abilities, although Shift's page may be displayed. Minus/equals bindings are unchanged.
+4. Verify hold/release and casts, normal page, Shift/Ctrl pages, Alt, each Druid form/stealth, pet
+   shortcuts, vehicles and special buttons when available. Use `/reload` yourself only if requested by
+   the UI, after updates finish. These behaviors have **not** been tested in game.
+
+## Optional refinements — play first
+
+- **Addon management:** **Esc → AddOns** uses Simple Addon Manager. Avoid mass disabling packages or
+  loading arbitrary profiles; retain required dependencies. WindTools already owns moving Blizzard
+  windows; BlizzMove was omitted to avoid a second mover.
+- **Layout:** `/tx settings`, `/ec`, `/moveui`; **UnitFrames → Group Units → Party/Raid** for group sizes.
+  Keep native 4K scaling initially. Do not import a competing complete UI preset.
+- **Gathering:** GatherMate2 settings → **Import** → installed GatherMate2_Data; `/routes` plans routes.
+- **Navigation:** Waypoint UI → **Appearance → Navigator → Show Arrow** off avoids a duplicate arrow
+  while retaining TomTom's functional arrow. Hiding TomTom can clear the adopted destination. Avoid
+  `/wp` (two addons register it); use `/wow-pro` and `/waypoint`.
+- **Camera:** F1 during Dialogue UI interaction → **Camera → Camera Movement → Off** if unwanted.
+- **Voices:** `/clnsettings` → **Installed Voiceover Packs**; test a Tirisfal NPC and volume. Auto-play
+  defaults on, queued speech continues after dialogue closes. Missing recordings can mean incomplete coverage.
+- **Combat:** `/dbm`, `/gtfo test`, `/mdt`; validate actual encounters. Details remains unavailable.
 
 ## Package maintenance
 
 ```sh
+wow-addons search quest
 wow-addons list --format detailed
+wow-addons install SOURCE
+wow-addons remove SOURCE
+wow-addons sync
 wow-addons update
 systemctl --user list-timers wow-addons-update.timer
-journalctl --user -u wow-addons-update.service
+journalctl --user -u wow-addons-update.service -u wow-addons-update-notify.service
 ```
 
-The timer updates managed packages daily at **09:00 Europe/Berlin** and catches a missed run when the
-user manager returns. It never imports profiles. The desired set lives in
-[`wow-addons.json`](wow-addons.json); changes require deployment before `wow-addons sync` uses the new
-manifest. Removing an entry does not uninstall it. See [technical notes](docs.md) for source decisions,
-blocked packages, installation paths, authentication, backup and portable settings.
+Close WoW before interactive package changes. `wow-addons` selects `phoenix-retail` and serializes
+operations. Edit [wow-addons.json](wow-addons.json) and deploy before `sync` uses a changed desired set.
+Removing a manifest entry never automatically deletes installed packages.
+
+The timer runs at **05:00 Europe/Berlin**, with persistent catch-up when the user manager returns.
+It skips successfully if WoW is detected before sync/update or a retry; a skip waits until the next
+scheduled run (or a manual run after closing WoW). Failures retry after **1, 5 and 15 minutes** following
+previous failures, then stop and send one local desktop notification. Success and skips are silent.
+Logs remain in the journal; there are no configuration imports or success notifications.
+
+Do not launch WoW while a package update is already writing files: preflight detection cannot lock
+an independent Lutris launcher. Loaded Lua is not hot-patched; new addons can require reopening WoW.
+Large voice-package checks can take minutes and several GB RAM. See [source access](docs.md#provider-access-and-recovery-options)
+for missing packages; no new credentials are needed for the working installed collection.

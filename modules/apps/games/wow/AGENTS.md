@@ -8,12 +8,17 @@
   an already authenticated installation or print tokens/debug credential payloads.
 - `README.md` owns first-play workflows; `docs.md` owns technical sources, resolved
   paths, status, and settings decisions. `wow.nix` owns integration, `default.nix`
-  is the directory import, and `wow-addons.json` owns desired packages.
-  Keep the 09:00 Europe/Berlin timer dedicated to package updates, never settings.
+  is the directory import, and `wow-addons.json` owns desired packages. `VISION.md` describes future direction,
+  not current implementation.
+  Keep the 05:00 Europe/Berlin timer dedicated to package updates, never settings.
+  Scheduled runs must skip successfully when WoW is running, retain bounded retries
+  and notify only on terminal failure. Preserve the single shared update lock.
 - After package/source changes, test the actual current catalogue (`quest` search),
   official release resolution, isolated installation, and managed sync/list/update.
   An enum-only release fix does not establish catalogue compatibility. Prefer a
   supported upstream release to accumulating metadata compatibility patches.
+  Search official publisher pages/TOCs too: catalogue absence does not establish
+  source exclusivity (Wago projects may be missing from the catalogue).
 - Keep the scheduled network updater restricted to its AddOns and tool data paths.
   `ProtectSystem` alone limits writes but still permits reading unrelated home data;
   retain home masking and verify both updater success and unrelated-path denial.
@@ -40,3 +45,8 @@
   WTF files and credentials never belong in Git. Inspect exports for identifiers,
   social/chat data and secrets and test sanitization before describing them as
   shareable. Keep personal backups outside the repository with restricted access.
+
+- Before adding a second utility, check the installed ToxiUI/WindTools integration:
+  their frame movement already overlaps BlizzMove. Preserve native ElvUI special-state
+  paging before modifier clauses; bindings and action pages are separate contracts.
+  Static binding declarations cannot establish effective in-game bindings.
