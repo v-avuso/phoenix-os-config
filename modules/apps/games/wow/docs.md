@@ -3,16 +3,15 @@
 ## Intentions and status
 
 Preserve the existing Retail installation, private settings and instawow ownership. Two explicit
-updaters now have different responsibilities: instawow owns the **58 installed packages** in
-[`wow-addons.json`](wow-addons.json), including the original 46 plus twelve Retail BtWQuests modules.
+updaters now have different responsibilities: instawow owns the **68 installed packages** in
+[`wow-addons.json`](wow-addons.json), including the original 58 plus ten official English expansion voice packs.
 WowUp-CF is installed from locked Nixpkgs **2.22.0**, with only `wowup-cf` added to the existing
 unfree allowlist. No custom AppImage wrapper or lock update was added.
 
 **WowUp-CF owns fifteen packages** installed by the operator. Its `addons.json` and actual folders
 were audited read-only: existing instawow rows are ignored with auto-update off; all fifteen CF rows
-also have auto-update off. No CF package was reinstalled or adopted. There are **140 addon folders**.
-The twelve new BtWQuests folders are not registered in WowUp yet; ignore them when a later scan finds
-them, as described in [README.md](README.md#maintenance). No application state was rewritten.
+also have auto-update off. No CF package was reinstalled or adopted. There are **150 addon folders**.
+The newer BtWQuests and English voice-pack records require Ignore reconciliation when discovered, as described in [README.md](README.md#maintenance). No application state was rewritten.
 
 ## Package catalogue
 
@@ -102,13 +101,59 @@ by instawow, in which case cancel replacement and resolve the collision. Snapsho
 | BtWQuests TWW Prologue | [github:Breeni/BtWQuestsTheWarWithinPrologue](https://github.com/Breeni/BtWQuestsTheWarWithinPrologue/releases) | Installed v1.13 release; packaged TOC says 1.2 |
 | OPie: ElvUI Skin | [wowi:26446](https://www.wowinterface.com/downloads/info26446.html) / [official GitHub](https://github.com/AcidWeb/OPie_ElvUI/releases) | Skipped v1.5.1: incompatible with installed OPie's Midnight API |
 
+## English voice pack coverage
+
+All ten requested additions use official `mantaskazlauskas` public GitHub release ZIPs through native
+instawow; no custom downloader, duplicate pack, new credentials or WowUp-only installation was used.
+The exact package name is the repository component after `github:mantaskazlauskas/` below.
+All ten release and installed TOCs declare Retail 120105 and depend on the existing Chatty core.
+Vanilla v3.3.4, Midnight v1.2.11 and base v3.5.3 remain unchanged. The existing ToxiUI profile and
+all other installed packages are preserved.
+
+| Exact package name / instawow source | Release | New AddOns folder |
+|---|---|---|
+| `github:mantaskazlauskas/ChattyLittleNPC-Cataclysm-english-voiceover-pack` | v3.2.6 | `ChattyLittleNpc_Cataclysm_voiceovers` |
+| `github:mantaskazlauskas/ChattyLittleNPC-Battle-for-Azeroth-English-voiceover-pack` | v3.2.5 | `ChattyLittleNpc_Battle_for_Azeroth_voiceovers` |
+| `github:mantaskazlauskas/ChattyLittleNPC-Dragonflight-English-voiceover-pack` | v3.2.5 | `ChattyLittleNpc_Dragonflight_voiceovers` |
+| `github:mantaskazlauskas/ChattyLittleNPC-Legion-english-voiceover-pack` | v3.1.6 | `ChattyLittleNpc_Legion_voiceovers` |
+| `github:mantaskazlauskas/ChattyLittleNPC-Mists-of-Pandaria-english-voiceover-pack` | v3.1.6 | `ChattyLittleNpc_Mists_of_Pandaria_voiceovers` |
+| `github:mantaskazlauskas/ChattyLittleNPC-Shadowlands-English-voiceover-pack` | v3.2.6 | `ChattyLittleNpc_Shadowlands_voiceovers` |
+| `github:mantaskazlauskas/ChattyLittleNPC-The-Burning-Crusade-english-voiceover-pack` | v3.2.8 | `ChattyLittleNpc_The_Burning_Crusade_voiceovers` |
+| `github:mantaskazlauskas/ChattyLittleNPC-The-War-Within-English-voiceover-pack` | v3.2.6 | `ChattyLittleNpc_The_War_Within_voiceovers` |
+| `github:mantaskazlauskas/ChattyLittleNPC-Warlords-of-Draenor-english-voiceover-pack` | v3.2.5 | `ChattyLittleNpc_Warlords_of_Draenor_voiceovers` |
+| `github:mantaskazlauskas/ChattyLittleNPC-Wrath-Of-The-Lich-King-english-voiceover-pack` | v3.2.5 | `ChattyLittleNpc_Wrath_of_the_Lich_King_voiceovers` |
+
+The release assets total **4,870,232,186 bytes compressed** (4.87 GB). About 3.1 TB was free before
+and after installation. Native installs ran in two-pack batches; Cataclysm was prioritized. Its first
+attempt hit a transient GitHub socket timeout; the normal native retry and every batch succeeded.
+No source or downloader patch was introduced. The built 68-package manifest sync and NixOS build
+pass. A representative Cataclysm dry-run update reports up to date (native targeted no-change
+exit 1); no installed files were modified by that check.
+
+The file audit checked every indexed entry: **179,548 audio references**, none missing, all with
+recognized Ogg/MPEG headers. Some author-supplied `.ogg` files carry MPEG rather than Ogg headers;
+bytes were retained exactly as published. Playback/coverage remain in-game checks, not a source-only
+guarantee. `/clnsettings` exposes the installed packs; no voice preferences were reset or applied.
+
+Each new folder above is instawow-owned. Set its package record to Ignore / Auto Update off when
+WowUp discovers it. Keep Chatty core, Vanilla and Midnight ignored; the fifteen existing CF packages
+stay WowUp-owned. The final ownership audit found no active overlap. No private WowUp state was edited.
+All packs installed successfully, so no fallback WowUp package names are needed.
+
+Voice-work backup: `~/.local/state/phoenix-wow/backups/first-play-20261026T210252Z` contains the pre-change 58-package
+AddOns tree, consistent database, manifest and **current customized WTF**. All **221 WTF file hashes**
+and GitHub credential configuration match that snapshot after installation. No in-game launch,
+ToxiUI installer/profile change, bindings, action bars or other interface settings were touched.
+For voice-only rollback, close WoW and both writers, remove only the ten new source URIs above through
+instawow, restore/deploy the pre-change manifest and leave unchanged WTF alone. Preserve the backup.
+
 ## Updater ownership and safe use
 
 The original 46 instawow package records are ignored with auto-updates off. The twelve additions
 from `b7f39af` are still absent from WowUp's records and may need a rescan, then Ignore / Auto Update
 off. The fifteen CurseForge package records must remain WowUp-managed. See the README's
 [exact new-package lookup list](README.md#new-btwquests-packages--wowup-ignore-checklist).
-Records and folders differ: 58 instawow + 15 WowUp packages account for 140 folders; core and Midnight
+Records and folders differ: 68 instawow + 15 WowUp packages account for 150 folders; core and Midnight
 are one package with two folders. Recheck original protection after rescanning; do not bulk-ignore
 the mixed-manager collection. In packaged v2.22.0, `onClickIgnoreAddons` sets
 `autoUpdateEnabled=false` when ignoring. Its mixed-selection toggle can first clear flags; verify
@@ -162,7 +207,8 @@ HandyNotes pins, GatherMate2 gathering data; DBM owns boss warnings. Details/WQT
 automation disabled and select other optional modules individually. Dialogue UI owns NPC dialogue;
 if adding DynamicCam, the README's conservative first-play choice disables Dialogue camera motion.
 
-No addon-specific configuration overrides, new ToxiUI profiles, action assignments, bindings, CVars
+The operator has now completed ToxiUI's installer and customized the UI in game. No Phoenix
+addon-specific configuration overrides, new ToxiUI profiles, action assignments, bindings, CVars
 or SavedVariables have been programmatically applied. All README setup steps remain manual. Advanced native
 paging and remapping are deferred until the working baseline is accepted. Existing Press and Hold
 Casting is preserved; its native `ActionButtonUseKeyHeldSpell` checkbox is documented only as an
@@ -227,9 +273,9 @@ and the [long-term UI vision](VISION.md) remain separate concerns.
 
 ## Validation and limits
 
-Actual native installation and targeted updates pass for all twelve modules; current versions report
-up to date (native targeted no-change exit 1, not an ignored generic error). All 58 manifest entries
-match managed identities; all prior 46 identities/versions remain unchanged. The folder/TOC audit finds
+The previous BtWQuests work verified actual installation and targeted updates for all twelve modules; current versions reported
+up to date (native targeted no-change exit 1, not an ignored generic error). That audit matched all 58 manifest entries and preserved the prior 46 identities/versions.
+The voice-pack additions now bring the manifest/database to 68, preserving every prior 58 package. The folder/TOC audit finds
 no duplicate native ownership, missing required Retail dependencies or missing package folders.
 DBM-Party-Forever is correctly excluded from Retail. Fifteen CF-owned rows cover their separate folders,
 with no overlap with active instawow ownership. New BtW modules remain unregistered in WowUp until scan.

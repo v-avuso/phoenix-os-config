@@ -2,8 +2,9 @@
 
 ## Current setup
 
-**58 instawow packages + 15 WowUp-CF packages; 140 addon folders.** The original ElvUI/ToxiUI profile,
-bindings, casting settings and private WTF files are preserved. WoW has not been launched for testing.
+**68 instawow packages + 15 WowUp-CF packages; 150 addon folders.** The original ElvUI/ToxiUI profile,
+bindings, casting settings and private WTF files are preserved. The user has completed ToxiUI's in-game installer and customization;
+this voice-pack work preserves those current settings and does not launch WoW.
 **No addon-specific configuration overrides, new ToxiUI profiles or action-bar bindings have been
 programmatically applied.** The checklist below is manual guidance, not an installed preset.
 
@@ -15,10 +16,11 @@ No deprecated Classic-client package or duplicate Midnight package was added.
 WowUp owns Details!, RareScanner, World Quest Tracker, TSM, Leatrix Plus/Maps, OPie, DynamicCam,
 Ultimate Mouse Cursor, Better Fishing, Home Bound, BugGrabber/BugSack, Syndicator and GuildFinder+.
 The original **46 instawow package records** are protected by Ignore / Auto Update off in WowUp.
-The **12 newer BtWQuests package records** still need discovery and Ignore reconciliation; the
+The **12 newer BtWQuests package records** may need discovery and Ignore reconciliation; the
 **15 CurseForge installations remain WowUp-managed**, with auto-update off. Package records are not
-individual folders: the 73 packages supply 140 AddOns folders, including bundled modules. Do not
-reinstall or adopt either manager's packages in the other.
+individual folders: the 83 packages supply 150 AddOns folders, including bundled modules. Do not
+reinstall or adopt either manager's packages in the other. The ten new English voice packs below
+are also instawow-owned and must be ignored if WowUp discovers them.
 
 ## New BtWQuests packages — WowUp Ignore checklist
 
@@ -45,6 +47,36 @@ row count alone. The final GitHub package's actual WowUp label is unconfirmed.
 `BtWQuestsMidnight`; Dragonflight (`github:Breeni/BtWQuestsDragonflight`) and TWW
 (`github:Breeni/BtWQuestsTheWarWithin`) were already present. Those three package records supply
 four BtWQuests folders. Keep them ignored too; do not add a second Midnight package.
+
+## Complete English expansion voice packs
+
+Vanilla and Midnight were retained; the ten additional official packs are now installed. Cataclysm
+was installed first for current Tirisfal questing. No playback settings, profiles, action bars or WTF
+files were changed. `/clnsettings` → **Installed Voiceover Packs** should show all twelve expansion
+packs after your next game start; verify a current quest and your existing audio volume in game.
+If a pack is missing from that list, check it is enabled in the character-select **AddOns** menu.
+No ToxiUI/profile import or installer reset is needed.
+Recordings still depend on upstream quest/gossip coverage, not merely pack installation.
+
+**WowUp Ignore:** after a scan, ignore the ten new package records below and keep Auto Update off.
+Match their folder names if WowUp's provider labels differ. Chatty core, Vanilla and Midnight remain
+ignored too. Do not adopt these packs into WowUp or reinstall them from CurseForge. Exact source
+URIs/releases are in [technical notes](docs.md#english-voice-pack-coverage).
+
+| Expansion | New folder — instawow-owned; ignore in WowUp |
+|---|---|
+| Cataclysm | `ChattyLittleNpc_Cataclysm_voiceovers` |
+| Battle for Azeroth | `ChattyLittleNpc_Battle_for_Azeroth_voiceovers` |
+| Dragonflight | `ChattyLittleNpc_Dragonflight_voiceovers` |
+| Legion | `ChattyLittleNpc_Legion_voiceovers` |
+| Mists of Pandaria | `ChattyLittleNpc_Mists_of_Pandaria_voiceovers` |
+| Shadowlands | `ChattyLittleNpc_Shadowlands_voiceovers` |
+| The Burning Crusade | `ChattyLittleNpc_The_Burning_Crusade_voiceovers` |
+| The War Within | `ChattyLittleNpc_The_War_Within_voiceovers` |
+| Warlords of Draenor | `ChattyLittleNpc_Warlords_of_Draenor_voiceovers` |
+| Wrath of the Lich King | `ChattyLittleNpc_Wrath_of_the_Lich_King_voiceovers` |
+
+All ten were managed through instawow; no WowUp-only fallback is required.
 
 ## Manual configuration — first in-game test
 
@@ -123,7 +155,8 @@ Instawow owns [wow-addons.json](wow-addons.json); deploy edits before `sync` use
 Its **05:00 Europe/Berlin** persistent timer, 1/5/15-minute retries, terminal-only notification and
 WoW-running skips are unchanged. Close WoW before interactive writes; do not launch during updates.
 
-**Next WowUp scan:** reconcile only the twelve new package records listed above. When discovered,
+**Next WowUp scan:** reconcile the twelve BtWQuests records and ten voice-pack records listed above.
+For BtWQuests, when discovered,
 filter **My Addons → BtWQuests**, select those rows and set **Ignore** fully checked / **Auto Update**
 off. A mixed selection may need a second Ignore toggle. Do not select the entire mixed-manager
 collection and ignore it wholesale. Verify the original 46 packages remain ignored after a full rescan,
