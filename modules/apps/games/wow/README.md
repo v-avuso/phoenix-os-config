@@ -1,140 +1,96 @@
-# World of Warcraft Retail (metal-4tb)
+# World of Warcraft Retail
 
-### Intentions
+## Intentions
 
-Manage release archives in the existing Lutris/Battle.net Retail AddOns directory,
-without moving the installation, writing WTF, adopting unrelated add-ons, or
-controlling the game. `wow.nix` owns the package, dedicated `phoenix-retail`
-profile and user `v`'s daily 09:00 Europe/Berlin timer. `Persistent=true` catches
-missed runs when the user manager returns; it does not wake the computer.
+Keep the existing Lutris installation and ToxiUI setup; add maintained Midnight add-ons for stories,
+exploration, collecting and group play. Package updates never apply settings, write WTF, launch the game
+or reload its UI.
 
-Edit [`wow-addons.json`](wow-addons.json) to declare desired source URIs. The
-small `wow-addons sync` adapter queries instawow's native JSON list and installs
-missing entries. Edit the manifest, then deploy the configuration to publish
-its new immutable copy; `sync` uses that deployed copy. Each timer run syncs then executes `instawow update`. Removing
-an entry never deletes an add-on: removal remains an explicit operator action.
-Instawow's SQLite database, cache, profile and rollback history remain mutable;
-the manifest is an additive desired set, not a mirror of all installed add-ons.
+**Applied configuration:** upstream add-on defaults only. Existing ElvUI/ToxiUI profiles remain
+untouched. The main collection and Chatty Little NPC base are installed with Vanilla and Midnight
+English voice packs (43 managed packages). Native update and manifest/database checks passed.
+In-game acceptance is separate; see the [package status and technical notes](docs.md).
+
+## Manual configuration — first play
+
+Allow a few minutes after opening WoW yourself. Wait for any add-on update to finish before a manual
+reload; newly installed add-ons may require reopening the game.
+
+- [ ] **Keep the existing interface:** dismiss any optional ElvUI/ToxiUI installer reset. Applying a
+  ToxiUI installer profile overwrites the current profile.
+- [ ] **Place the minimap if needed:** `/moveui` → drag the minimap mover to the bottom-right → finish
+  moving. Keep the rest of the existing layout.
+- [ ] **Read quests deliberately:** right-click the **WoW-Pro minimap button** (or **Esc → Settings →
+  AddOns → WoW-Pro**). Under **Main → Automation**, turn **Auto Select**, **Auto Accept**, and **Auto
+  Turnin** off. These default to on and overlap story interaction through Dialogue UI.
+- [ ] **Check navigation:** **Esc → Settings → AddOns → Waypoint UI → Extensions → TomTom**: leave
+  **Track TomTom Waypoints** on (default). Turn **Auto-Replace Waypoint** off if you want to preserve a
+  manually selected destination; leave it on for guide-led navigation. Right-click a TomTom world-map
+  waypoint → **Set as waypoint arrow** and check the Waypoint UI destination. If two arrows are
+  distracting, use the optional display setting below.
+- [ ] **Check usability:** talk to an NPC, follow a guide waypoint, read text at normal viewing
+  distance, and confirm current unit/group frames are readable. No automatic layout, scaling or
+  keybinding changes have been applied.
+
+## Optional refinements
+
+- **Layout:** `/tx settings` opens ToxiUI; `/ec` opens ElvUI; `/moveui` moves frames, including the
+  minimap. `/ec` → **UnitFrames → Group Units → Party/Raid** adjusts group-frame sizes. Keep stock 4K
+  scaling initially; choose changes by readability. ToxiUI offers horizontal/vertical layouts, without a
+  verified named healer preset.
+- **Action bars:** after exporting the current profile, `/ec` → **ActionBars → Player Bars → Bar 1**:
+  **Mouseover** off, **Inherit Global Fade** off, **Alpha** 1. For utility bars, enable **Mouseover**,
+  disable **Inherit Global Fade**, and keep the bars enabled/populated. Hide only genuine utility
+  bars; keep any bar showing essential combat cooldowns visible until native cooldown views are verified. `/moveui` places them at the
+  bottom. Preserve special bars, existing actions and bindings. Nothing is applied automatically.
+- **Shift/Ctrl paging (optional, out of combat):** export the current profile, then `/ec` →
+  **ActionBars → Player Bars → Bar 1 → Action Paging**. Privately copy the actual class-specific
+  string; preserve every existing native clause in its original order. Only if there is **no custom
+  unconditional catch-all**, append `[nomod:alt,mod:shift] 2; [nomod:alt,mod:ctrl] 3;` with no final
+  unconditional page number. Stop if unsure about the current string. Shift selects page 2, Ctrl page 3;
+  Alt suppresses both, and Shift wins together. Keep pages 7–10 reserved for forms. Retained Druid
+  clauses take priority, so this example affects only the base/humanoid bar. Pages 2/3 use existing
+  shared slots; populate deliberately. Inspect `/kb` and game Key Bindings first: ten Shift+number
+  CLICK bindings were observed, while effective Ctrl bindings remain unknown. Do not clear bindings;
+  paging does not remap modified keys, so same-slot casts may conflict. Check hold/release, casts,
+  cooldowns, forms and vehicle/special bars before relying on it. See [technical limits](docs.md#optional-native-action-bars).
+- **Dialogue camera:** press **F1 during NPC interaction** → **Camera → Camera Movement**; choose
+  **Off** only if you dislike motion. Dialogue UI owns NPC camera; optional DynamicCam owns general
+  world camera and is not currently configured.
+- **Gathering data:** open GatherMate2 in WoW's add-on settings → **Import** and choose the installed
+  GatherMate2_Data dataset. Installing the dataset alone does not populate nodes. `/routes` opens route
+  planning after selecting desired nodes.
+- **One navigation arrow:** keep TomTom's arrow and Waypoint UI tracking active; Waypoint UI →
+  **Appearance → Navigator → Show Arrow** off hides only its arrow. Confirm the destination/guide still
+  advances. TomTom cannot make its arrow fully transparent through supported settings. Avoid `/wp`: both
+  add-ons register it.
+- **Tirisfal guide:** use WoW-Pro's guide picker and select the guide matching your current progress.
+  `/wow-pro load-guide JiyDk0105` loads **Forsaken: Intro** only when starting that introduction; it
+  need not match an existing Tirisfal quest log.
+- **Collections:** `/btwquests` opens quest chains; `/rarity` opens drop tracking. Keep add-on defaults
+  first and reduce overlapping tooltips/pins only as needed.
+- **Combat:** `/dbm` opens DBM's test/anchor controls; `/gtfo options` and `/gtfo test` check audible
+  warnings; `/mdt` opens dungeon planning. Test in actual content; Midnight limits GTFO's detectable
+  hazards. Keep one visible damage-meter owner.
+- **Bindings:** if available, `/opie` and `/opie rings` configure rings. Choose unused keys in game for
+  rings, LiteMount and fishing; no binding preset is applied.
+- **Voice:** `/clnsettings` → **Playback**: **Auto-Play Voiceovers** is already on; **Quest Playback
+  Mode** and **Gossip Playback Mode** default to queues that continue after closing dialogue. Keep these
+  defaults first; optionally choose **Stop when dialog closes**. Check **Installed Voiceover Packs**,
+  talk to a Tirisfal NPC, and check volume (default audio channel **Master**). Missing recordings mean
+  coverage is incomplete; installing a pack does not prove every quest is voiced.
+
+## Package maintenance
 
 ```sh
-wow-addons search "quest"              # interactive selection; cancel to avoid installing
-wow-addons sync                         # apply deployed manifest additions
-wow-addons install github:owner/repo    # immediate addition; also edit manifest
 wow-addons list --format detailed
 wow-addons update
-wow-addons remove github:owner/repo     # remove from manifest first
-wow-addons rollback github:owner/repo
-systemctl --user start wow-addons-update.service
 systemctl --user list-timers wow-addons-update.timer
 journalctl --user -u wow-addons-update.service
 ```
 
-CLI and timer operations share a one-hour-wait flock; the oneshot cannot overlap
-itself. Use `wow-addons` for this profile to retain that lock. Errors propagate
-from instawow to systemd; stdout/stderr go to the journal under the host's journal
-retention policy. The service hides the rest of home (including WTF) and binds only AddOns
-and instawow config/cache/state plus the shared lock directory. There is no game-process check, signal, restart or reload.
-Existing unmanaged folders cause an installation conflict rather than replacement;
-back them up and explicitly select `wow-addons install --replace SOURCE` only
-when adoption is intended. Never use automatic whole-directory reconciliation.
-
-Sources: [ElvUI via Tukui](https://github.com/tukui-org/ElvUI),
-[ToxiUI releases](https://github.com/Toxicom/toxiui/releases), and
-[WindTools releases](https://github.com/wind-addons/ElvUI_WindTools/releases).
-The locked and current Nixpkgs recipes still provide 7.0.0.post1, whose catalogue
-parser rejects `forever_classic`. `wow.nix` pins the complete upstream 7.3.0
-source and checksum instead of carrying compatibility patches or updating the
-system lockfile. The override adds upstream's versioningit build backend and
-wcwidth dependency. Click 8.4.1 is pinned because the locked Click lacks a required API. Three
-dependency lower bounds (aiohttp, rapidfuzz, yarl) are relaxed to reuse the locked Python packages; focused upstream tests
-and live catalogue/release checks validate this combination. Revisit these
-relaxations on package updates; remove the override once the locked Nixpkgs
-package supplies a verified release. Source/version stamping is build metadata,
-not a runtime compatibility patch.
-[Instawow](https://github.com/layday/instawow) supports native profiles, rollback
-and GitHub ZIP release assets. CurseForge resolution was tested and reports
-`access token missing`; author distribution restrictions can further prevent
-downloads. Search may still display CurseForge catalogue entries when downloads
-are disabled. These three sources require no CurseForge key. Do not commit tokens.
-
-Updates may write files while WoW is running. Already loaded Lua remains in memory;
-this is not hot patching. Manually reloading during an update can read a mixed
-version; wait for the service to finish. A later manual `/reload` may reload
-existing add-ons, while newly installed add-ons or changed file discovery may
-require exiting and reopening WoW. No in-game reload/restart is automated.
-Actual in-game behaviour and UI compatibility require player acceptance; successful
-archive installation/update and unchanged WTF hashes do not prove those outcomes.
-
-
-## Installation and profile
-
-Retail is installed at:
-
-```text
-/home/v/Games/battlenet/drive_c/Program Files (x86)/World of Warcraft/_retail_
-/home/v/Games/battlenet/drive_c/Program Files (x86)/World of Warcraft/_retail_/Interface/AddOns
-```
-
-`wow-addons` selects `phoenix-retail` automatically. Native commands need the
-explicit profile: `instawow -p phoenix-retail list` and
-`instawow -p phoenix-retail search "quest"`. The native default profile is separate;
-listing it does not show this profile's managed add-ons. The declarative profile
-file is `~/.config/instawow/profiles/phoenix-retail/config.json`; its SQLite database
-is `db.sqlite` beside it. Home Manager deploys a writable profile baseline using
-Phoenix's existing JSON writer, so native OAuth configuration can rewrite it.
-Home Manager activation reasserts the declared profile/path; keep lasting path
-changes in Nix. Global configuration, credentials and database remain app-owned.
-
-## GitHub authentication
-
-GitHub OAuth is already configured on this installation. Do not repeat onboarding
-or replace its token during deployment. For a **new installation only**, use:
-
-```sh
-umask 077
-instawow -p phoenix-retail profile configure global_config.access_tokens.github
-```
-
-Accept GitHub authentication, open <https://github.com/login/device>, enter the
-generated device code, approve the instawow application, and wait for completion.
-Do not paste access tokens into command arguments, chat, Git or logs. The OAuth
-request asks for no additional scopes: expected access is read-only public data,
-not permission to modify repositories or read private repositories. Review the
-actual GitHub consent screen before approval. Authenticated GitHub API requests
-normally allow 5,000 requests/hour instead of the unauthenticated 60/hour;
-secondary limits can still apply. See [GitHub rate limits](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api)
-and [OAuth scopes](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps).
-
-On Linux, credentials are plaintext under `$XDG_CONFIG_HOME/instawow` (default
-`~/.config/instawow`). The existing credentials and native configuration writes use `config.json`;
-7.3 preserves this format. It can also read an optional separate
-`config.access_tokens.json` override if one has been provisioned. Preserve both
-files if present. They are global,
-shared across profiles, and must never be managed by Nix or copied into Git/the
-Nix store. Keep the instawow config directory mode **0700** and credential files
-**0600**, owned by `v`; `umask 077` protects newly created files. Do not publish
-`instawow debug` output without inspecting its redaction behaviour.
-
-## Future settings and recovery outputs
-
-The manifest manages packages only. The timer never imports profiles or reapplies
-settings. Future configuration work must first research each add-on's supported
-interfaces and assign overlapping responsibilities (unit frames, nameplates,
-quest tracking, etc.) to an explicit owner. Follow [scoped agent guidance](AGENTS.md).
-
-**Personal backup:** Once the concrete add-ons are chosen, document a quiescent
-backup of complete WTF settings, the manifest/repository revision, add-on versions
-and any required per-add-on exports. Keep private account/realm/character mappings
-and credentials outside Git, in restricted private storage. Back up instawow state
-with the process stopped or SQLite's backup API, not an inconsistent live database
-copy. Restore into a backed-up destination while WoW and add-on writers are stopped;
-map installation/account paths deliberately and verify in game. Credentials are a
-separate secret backup or fresh onboarding step, not part of a shareable preset.
-
-**Shareable preset:** Prefer supported portable exports per add-on, accompanied by
-the manifest, compatible versions, feature-ownership decisions, import order and
-manual steps. Sanitize account, character, realm, chat/friend information, tokens
-and other private fields; review actual export contents and test in a disposable
-profile/installation before sharing. Do not publish an entire WTF directory.
-No generic importer/exporter or speculative preset scripts are provided. Add
-concrete files only when the selected add-ons offer a reliable, tested mechanism.
+The timer updates managed packages daily at **09:00 Europe/Berlin** and catches a missed run when the
+user manager returns. It never imports profiles. The desired set lives in
+[`wow-addons.json`](wow-addons.json); changes require deployment before `wow-addons sync` uses the new
+manifest. Removing an entry does not uninstall it. See [technical notes](docs.md) for source decisions,
+blocked packages, installation paths, authentication, backup and portable settings.

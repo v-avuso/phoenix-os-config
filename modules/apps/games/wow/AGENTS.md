@@ -6,8 +6,9 @@
   Keep game files in the existing Lutris installation and preserve unrelated add-ons,
   WTF, profiles and global GitHub authentication. Never start a new OAuth flow for
   an already authenticated installation or print tokens/debug credential payloads.
-- `README.md` owns user workflows and resolved paths; `wow.nix` owns integration,
-  `default.nix` is the directory import, and `wow-addons.json` owns desired packages.
+- `README.md` owns first-play workflows; `docs.md` owns technical sources, resolved
+  paths, status, and settings decisions. `wow.nix` owns integration, `default.nix`
+  is the directory import, and `wow-addons.json` owns desired packages.
   Keep the 09:00 Europe/Berlin timer dedicated to package updates, never settings.
 - After package/source changes, test the actual current catalogue (`quest` search),
   official release resolution, isolated installation, and managed sync/list/update.
