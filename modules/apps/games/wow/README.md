@@ -32,8 +32,8 @@ journalctl --user -u wow-addons-update.service
 CLI and timer operations share a one-hour-wait flock; the oneshot cannot overlap
 itself. Use `wow-addons` for this profile to retain that lock. Errors propagate
 from instawow to systemd; stdout/stderr go to the journal under the host's journal
-retention policy. The service limits writes to AddOns and tool state/cache and
-makes WTF read-only. There is no game-process check, signal, restart or reload.
+retention policy. The service hides the rest of home (including WTF) and binds only AddOns
+and instawow config/cache/state plus the shared lock directory. There is no game-process check, signal, restart or reload.
 Existing unmanaged folders cause an installation conflict rather than replacement;
 back them up and explicitly select `wow-addons install --replace SOURCE` only
 when adoption is intended. Never use automatic whole-directory reconciliation.

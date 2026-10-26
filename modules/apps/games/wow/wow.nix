@@ -112,14 +112,24 @@ lib.mkIf (config.phoenix.target == "metal-4tb") {
         NoNewPrivileges = true;
         PrivateTmp = true;
         ProtectSystem = "strict";
+        ProtectHome = "tmpfs";
+        CacheDirectory = "instawow";
+        CacheDirectoryMode = "0700";
+        StateDirectory = "instawow phoenix-wow";
+        StateDirectoryMode = "0700";
+        BindPaths = [
+          "\"${addonDir}\""
+          "%h/.config/instawow"
+          "%h/.cache/instawow"
+          "%h/.local/state/instawow"
+          "%h/.local/state/phoenix-wow"
+        ];
         ReadWritePaths = [
           "\"${addonDir}\""
           "%h/.config/instawow"
-          "%h/.cache"
-          "%h/.local/state"
-        ];
-        ReadOnlyPaths = [
-          "\"${user.homeDirectory}/Games/battlenet/drive_c/Program Files (x86)/World of Warcraft/_retail_/WTF\""
+          "%h/.cache/instawow"
+          "%h/.local/state/instawow"
+          "%h/.local/state/phoenix-wow"
         ];
       };
     };

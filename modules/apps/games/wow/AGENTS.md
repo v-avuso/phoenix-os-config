@@ -13,6 +13,9 @@
   official release resolution, isolated installation, and managed sync/list/update.
   An enum-only release fix does not establish catalogue compatibility. Prefer a
   supported upstream release to accumulating metadata compatibility patches.
+- Keep the scheduled network updater restricted to its AddOns and tool data paths.
+  `ProtectSystem` alone limits writes but still permits reading unrelated home data;
+  retain home masking and verify both updater success and unrelated-path denial.
 
 ## Future add-on configuration
 
