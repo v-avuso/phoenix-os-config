@@ -1,0 +1,10 @@
+<!doctype html><meta charset="utf-8"><title>Hue edge isolation test</title>
+<style>*{box-sizing:border-box}body{margin:0;background:#111;color:white;font:22px system-ui}#left,#right{position:fixed;top:0;bottom:0;width:8vw}#left{left:0;background:red}#right{right:0;background:blue}#interior{position:fixed;inset:0 8vw;background:#00ff00;display:grid;place-content:center;text-align:center}button{font:inherit;padding:12px;margin:8px}p{max-width:65vw}</style>
+<div id="interior"><h1>Hue edge isolation test</h1><p id="status">Left red · Right blue · Interior green</p><p>Place this window on HDMI-A-2, then enter fullscreen.<br>Both lamps should ignore all interior changes.</p><div><button onclick="document.documentElement.requestFullscreen()">Fullscreen</button><button onclick="swap()">Swap edges</button><button onclick="inside()">Change interior only</button><button onclick="auto=!auto;this.textContent=auto?'Stop edge animation':'Animate edges at 20 FPS'">Animate edges at 20 FPS</button></div><p id="counter"></p></div><div id="left"></div><div id="right"></div>
+<script>
+let swapped=false,auto=false,phase=0,n=0,last=performance.now();
+const left=document.querySelector('#left'),right=document.querySelector('#right'),interior=document.querySelector('#interior'),status=document.querySelector('#status');
+function swap(){swapped=!swapped;left.style.background=swapped?'blue':'red';right.style.background=swapped?'red':'blue';status.textContent=swapped?'Left blue · Right red':'Left red · Right blue'}
+function inside(){phase=(phase+1)%3;interior.style.background=['#00ff00','#ffffff','#000000'][phase];interior.style.color=phase===2?'white':'black'}
+setInterval(()=>{if(auto){swap();n++}let now=performance.now();if(now-last>=1000){document.querySelector('#counter').textContent=auto?'Pattern timer: '+(n*1000/(now-last)).toFixed(1)+' updates/s (not measured lamp FPS)':'';n=0;last=now}},50);
+</script>

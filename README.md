@@ -34,6 +34,9 @@ for one workstation, not a general-purpose distribution.
 | `commands/`, `home/commands.nix` | Packaged executables and user PATH registration |
 | `patches/` | Targeted compatibility fixes; keep their removal conditions nearby |
 
+[Hue edge lighting](home/hue-lighting/README.md) provides an on-demand sync toggle
+and linked glow control for the center monitor; no autostart is configured.
+
 The [architecture guide](docs/ARCHITECTURE.md) describes reusable module boundaries
 and colocated tests. Keep modules small enough to understand; introduce abstractions
 when actual repetition warrants them. Comments and commit bodies preserve local rationale;
