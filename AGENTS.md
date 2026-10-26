@@ -11,6 +11,8 @@
   import and minimal configuration; single-file modules may remain flat.
   See [module boundaries](docs/ARCHITECTURE.md) for repository layout.
 - Keep agent policy and adapters under `modules/development/ai/agent`.
+- For WoW add-on work, explicitly read `modules/apps/games/wow/AGENTS.md`;
+  root-started sessions must load its scoped guidance before edits.
 - For media pipeline work, explicitly read `modules/apps/media/AGENTS.md`;
   root-started sessions must not assume subtree guidance was loaded.
 - For Typst publishing work, read [Typst guidance](modules/apps/documents/typst/AGENTS.md)

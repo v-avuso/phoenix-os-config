@@ -117,3 +117,13 @@ application state into the baseline registry.
 Caelestia shell process ownership belongs to its upstream user service on
 `hyprland-session.target`; package changes restart it to keep IPC and the
 running configuration path aligned.
+
+
+## WoW Retail profile
+
+The [WoW module](../modules/apps/games/wow/README.md) reuses the JSON baseline
+writer for `~/.config/instawow/profiles/phoenix-retail/config.json` on Home Manager
+activation. It migrates the former store symlink to a writable profile because
+native OAuth configuration rewrites that file. Only the profile name and AddOns
+path are declarative; global credentials and SQLite package state remain private
+app-owned state. The package-update timer never reapplies in-game settings/WTF.

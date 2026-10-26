@@ -4,7 +4,7 @@ let
   nmsFrameGenerationFix = import ./nms-frame-generation { inherit pkgs; };
 in
 {
-  imports = [ ./wow.nix ];
+  imports = [ ./wow ];
   nixpkgs.config.allowUnfreePackages = [
     "steam"
     "steam-unwrapped"
