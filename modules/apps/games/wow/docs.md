@@ -104,8 +104,13 @@ by instawow, in which case cancel replacement and resolve the collision. Snapsho
 
 ## Updater ownership and safe use
 
-Existing protection is verified. On future scans, set Ignore and Auto Update off only for
-instawow-owned rows (including bundled modules); do not bulk-ignore the mixed-manager collection. In packaged v2.22.0, `onClickIgnoreAddons` sets
+The original 46 instawow package records are ignored with auto-updates off. The twelve additions
+from `b7f39af` are still absent from WowUp's records and may need a rescan, then Ignore / Auto Update
+off. The fifteen CurseForge package records must remain WowUp-managed. See the README's
+[exact new-package lookup list](README.md#new-btwquests-packages--wowup-ignore-checklist).
+Records and folders differ: 58 instawow + 15 WowUp packages account for 140 folders; core and Midnight
+are one package with two folders. Recheck original protection after rescanning; do not bulk-ignore
+the mixed-manager collection. In packaged v2.22.0, `onClickIgnoreAddons` sets
 `autoUpdateEnabled=false` when ignoring. Its mixed-selection toggle can first clear flags; verify
 fully checked Ignore and repeat if necessary. Do not use unrestricted Update All, adoption,
 reinstallation or provider switching. Do not rescan casually: the [official guide](https://wowup.io/guide/my-addons/overview)
@@ -126,9 +131,18 @@ skips. It updates only its database/manifest packages. No service logic, auth or
 this workstream. Preflight checks do not lock the independent game launcher; do not launch during
 writes. New addons can require reopening the game; never force a reload during writes.
 
+### WowUp close preference
+
+Packaged v2.22.0's [close handler](https://github.com/WowUp/WowUp.CF/blob/v2.22.0/wowup-electron/app/main.ts)
+hides the window only when the stored collapse-to-tray preference is true; otherwise its final window
+close leads to `app.quit()`. The supported persistent control is **Options → Application → Minimize
+on Close → Off**, per the [official guide](https://wowup.io/guide/options/application). The local setting
+was observed enabled. No external configuration interface was verified and the application's private
+preference store was left untouched; the README records this remaining manual step.
+
 ## TSM and configuration ownership
 
-The main TSM addon can be installed through WowUp-CF for today, without live desktop price data.
+The main TSM addon is installed and WowUp-owned, without refreshed desktop companion price data.
 The [official companion](https://support.tradeskillmaster.com/tsm-desktop-application/how-do-i-set-up-the-tsm-desktop-application)
 normally owns both TSM and AppHelper and writes price data. Before a future companion takeover,
 ignore **both** in other updaters, per [official guidance](https://support.tradeskillmaster.com/how-do-i-fix-an-error-about-appdatalua-being-empty).
@@ -148,7 +162,8 @@ HandyNotes pins, GatherMate2 gathering data; DBM owns boss warnings. Details/WQT
 automation disabled and select other optional modules individually. Dialogue UI owns NPC dialogue;
 if adding DynamicCam, the README's conservative first-play choice disables Dialogue camera motion.
 
-No UI profiles, action assignments, bindings, CVars or SavedVariables were changed. Advanced native
+No addon-specific configuration overrides, new ToxiUI profiles, action assignments, bindings, CVars
+or SavedVariables have been programmatically applied. All README setup steps remain manual. Advanced native
 paging and remapping are deferred until the working baseline is accepted. Existing Press and Hold
 Casting is preserved; its native `ActionButtonUseKeyHeldSpell` checkbox is documented only as an
 optional check. The [ElvUI installer framework](https://github.com/tukui-org/ElvUI/wiki/layout-installer-template)
