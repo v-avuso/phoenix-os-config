@@ -96,7 +96,9 @@ let
   };
 in
 lib.mkIf (config.phoenix.target == "metal-4tb") {
+  nixpkgs.config.allowUnfreePackages = [ "wowup-cf" ];
   environment.systemPackages = [
+    pkgs.wowup-cf
     instawow
     wowAddons
   ];

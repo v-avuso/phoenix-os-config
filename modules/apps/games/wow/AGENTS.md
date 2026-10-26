@@ -46,7 +46,11 @@
   social/chat data and secrets and test sanitization before describing them as
   shareable. Keep personal backups outside the repository with restricted access.
 
-- Before adding a second utility, check the installed ToxiUI/WindTools integration:
-  their frame movement already overlaps BlizzMove. Preserve native ElvUI special-state
-  paging before modifier clauses; bindings and action pages are separate contracts.
-  Static binding declarations cannot establish effective in-game bindings.
+- Preserve the boundary between instawow and WowUp-CF: existing instawow packages,
+  including bundled modules, must be ignored with auto-updates off in WowUp before
+  any package writes. Rescans/new instawow installs require verifying that protection
+  again. Never claim GUI flags/downloads are configured from installing the app alone.
+- Check upstream integration before removing an apparent overlap: installed WindTools
+  MoveFrames detects BlizzMove and defers to it. Keep native ElvUI special-state
+  priority and distinguish paging from bindings; baseline play takes priority over
+  an untested preset. No automatic keybinding remapping without a concrete later task.
