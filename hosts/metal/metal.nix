@@ -140,6 +140,9 @@ in
   ];
 
   home-manager.users.${user.name} = {
-    imports = [ ../../home/caelestia.nix ];
+    imports = [
+      ../../home/caelestia.nix
+      ../../home/hue-lighting
+    ];
   };
 }
