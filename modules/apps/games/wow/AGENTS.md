@@ -13,6 +13,9 @@
   Keep the 05:00 Europe/Berlin timer dedicated to package updates, never settings.
   Scheduled runs must skip successfully when WoW is running, retain bounded retries
   and notify only on terminal failure. Preserve the single shared update lock.
+- Addon-manifest tasks include deployment through the normal Phoenix workflow and
+  post-deployment verification of the installed manifest, unless explicitly requested
+  otherwise. A repository edit or successful sync alone does not update the deployed manifest.
 - After package/source changes, test the actual current catalogue (`quest` search),
   official release resolution, isolated installation, and managed sync/list/update.
   An enum-only release fix does not establish catalogue compatibility. Prefer a
