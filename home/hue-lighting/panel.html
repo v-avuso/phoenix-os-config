@@ -1,14 +1,70 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Hue Sync</title>
-<style>:root{color-scheme:dark;font:18px system-ui}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#10111b;color:#f4f3ff}main{width:min(480px,85vw);padding:32px;border:1px solid #454260;border-radius:22px;background:#1c1c2d;box-shadow:0 0 90px #6655cc22}h1{font-size:1.7rem;margin-top:0}.switch{display:flex;align-items:center;justify-content:space-between;font-size:1.3rem}input[type=checkbox]{width:28px;height:28px;accent-color:#b7a1ff}input[type=range]{width:100%;margin:24px 0 8px;accent-color:#b7a1ff}#status{min-height:3em;color:#c4bddb;font-size:.9rem}.ends{position:relative;display:flex;justify-content:space-between;color:#c4bddb;font-size:.8rem}.ends span:nth-child(2){position:absolute;left:25%;transform:translateX(-50%)}button{font:inherit;color:inherit;background:#34304c;border:1px solid #756a9a;border-radius:10px;padding:10px 14px;cursor:pointer}button:disabled{opacity:.5;cursor:default}small{display:block;color:#c4bddb;line-height:1.6;margin-top:20px}a{color:#cbbaff}.links{display:flex;gap:12px;margin-top:24px;flex-wrap:wrap}.links a{display:inline-block;padding:10px 14px;border:1px solid #756a9a;border-radius:10px;text-decoration:none}label[for=level]{display:block;margin-top:24px}output{float:right}label{cursor:pointer}</style>
-<main><h1>Hue Sync</h1><label class="switch" for="sync">Sync <input id="sync" type="checkbox"></label><p id="status" role="status">Connecting…</p><button id="screen" type="button" disabled>Choose screen…</button><small>Select the middle screen (HDMI-A-2) and enable “Allow restore token” in the system picker to remember it for next time.</small><label for="level">Glow boost <output id="value"></output></label><input id="level" type="range" min="0" max="100" step="1" disabled><div class="ends"><span>Dimmer</span><span>Neutral</span><span>Brighter</span></div><small>One level for both lamps and all their segments. Changes save automatically.<br>This adjusts gamma, so dark scenes brighten differently from a normal brightness dimmer. Black stays black.</small><small>Only the selected display’s left/right 8% strips.</small><nav class="links" aria-label="Related pages"><a href="http://127.0.0.1:8215/" target="_blank" rel="noopener">Huenicorn settings</a><a href="/edge-test" target="_blank" rel="noopener">Edge color test</a></nav></main>
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hue Sync</title>
+<style>
+:root{color-scheme:dark;font:18px system-ui}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#10111b;color:#f4f3ff}main{width:min(480px,85vw);padding:32px;border:1px solid #454260;border-radius:22px;background:#1c1c2d;box-shadow:0 0 90px #6655cc22}h1{font-size:1.7rem;margin-top:0}.switch{display:flex;align-items:center;justify-content:space-between;font-size:1.3rem}input[type=checkbox]{width:28px;height:28px;accent-color:#b7a1ff}input[type=range]{width:100%;margin:24px 0 8px;accent-color:#b7a1ff}#status{min-height:3em;color:#c4bddb;font-size:.9rem}.ends{position:relative;display:flex;justify-content:space-between;color:#c4bddb;font-size:.8rem}.ends span:nth-child(2){position:absolute;left:25%;transform:translateX(-50%)}button,select{font:inherit;color:inherit;background:#34304c;border:1px solid #756a9a;border-radius:10px;padding:10px 14px}button{cursor:pointer}button:disabled,select:disabled{opacity:.5;cursor:default}select{width:100%;margin-top:10px}small{display:block;color:#c4bddb;line-height:1.6;margin-top:20px}a{color:#cbbaff}.links{display:flex;gap:12px;margin-top:24px;flex-wrap:wrap}.links a{display:inline-block;padding:10px 14px;border:1px solid #756a9a;border-radius:10px;text-decoration:none}.test-link{flex-basis:100%}label[for=level]{display:block;margin-top:24px}output{float:right}label{cursor:pointer}
+</style>
+<main>
+  <h1>Hue Sync</h1>
+  <label class="switch" for="sync">Sync <input id="sync" type="checkbox"></label>
+  <p id="status" role="status">Connecting…</p>
+  <label for="source">Source display</label>
+  <select id="source" disabled aria-describedby="source-help"></select>
+  <small id="source-help">Displays are numbered from left to right.</small>
+  <label for="level">Glow boost <output id="value"></output></label>
+  <input id="level" type="range" min="0" max="100" step="1" disabled>
+  <div class="ends"><span>Dimmer</span><span>Neutral</span><span>Brighter</span></div>
+  <small>One level for both lamps and all their segments. Changes save automatically.<br>This adjusts gamma, so dark scenes brighten differently from a normal brightness dimmer. Black stays black.</small>
+  <small>Only the selected source’s left/right 8% strips.</small>
+  <nav class="links" aria-label="Related pages">
+    <button id="screen" type="button" disabled title="Choose a display, window, or region">Lighting source settings…</button>
+    <a href="http://127.0.0.1:8215/" target="_blank" rel="noopener">Huenicorn settings</a>
+    <div class="test-link"><a href="/edge-test" target="_blank" rel="noopener">Edge color test</a></div>
+  </nav>
+</main>
 <script>
-const screen=document.querySelector('#screen');
+const sync=document.querySelector('#sync'),source=document.querySelector('#source'),screen=document.querySelector('#screen'),level=document.querySelector('#level'),status=document.querySelector('#status'),value=document.querySelector('#value');
+let busy=false,editing=false,error='',sourceOptions='';
 // Neutral sits at 25%; retain the full native gamma range on either side.
 function toGlow(position){return position<=25?position/25-1:(position-25)/75}
 function toPosition(glow){return glow<=0?(glow+1)*25:25+glow*75}
-const sync=document.querySelector('#sync'),level=document.querySelector('#level'),status=document.querySelector('#status'),value=document.querySelector('#value');let busy=false,editing=false,error='';
-function show(s){sync.checked=s.enabled;screen.disabled=busy||!s.enabled;level.disabled=busy||!s.ready;if(!editing){if(s.level!==null){level.value=toPosition(s.level);value.textContent=Number(s.level).toFixed(2);level.setAttribute('aria-valuetext',Number(s.level).toFixed(2)+' glow')}else{value.textContent=s.enabled?'Mixed':'—'}}status.textContent=error||s.message}
-async function refresh(){if(busy)return;try{const r=await fetch('/api/state');if(!r.ok)throw Error('Panel unavailable');show(await r.json())}catch(e){status.textContent='Control panel unavailable — relaunch Hue edge lighting.';sync.disabled=true;screen.disabled=true;level.disabled=true}}
-async function change(path,data){busy=true;sync.disabled=true;screen.disabled=true;level.disabled=true;error='';try{const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}),s=await r.json();if(!r.ok)throw Error(s.error);show(s)}catch(e){error=e.message;status.textContent=error}finally{busy=false;sync.disabled=false;await refresh()}}
-screen.addEventListener('click',()=>change('/api/screen',{}));sync.addEventListener('change',()=>change('/api/sync',{enabled:sync.checked}));level.addEventListener('input',()=>{editing=true;value.textContent=toGlow(Number(level.value)).toFixed(2);level.setAttribute('aria-valuetext',value.textContent+' glow')});level.addEventListener('change',async()=>{await change('/api/level',{level:toGlow(Number(level.value))});editing=false});refresh();setInterval(refresh,2000);
-</script></html>
+function show(s){
+  sync.checked=s.enabled;
+  screen.disabled=busy||!s.enabled;
+  level.disabled=busy||!s.ready;
+  const choices=[...(s.screens||[])];
+  if(s.selected_screen==='manual')choices.push({name:'manual',label:'System picker selection'});
+  const signature=JSON.stringify(choices);
+  if(signature!==sourceOptions){
+    source.replaceChildren(...choices.map(item=>{const option=document.createElement('option');option.value=item.name;option.textContent=item.label;option.disabled=item.name==='manual';return option}));
+    sourceOptions=signature;
+  }
+  source.disabled=busy||!choices.length;
+  source.value=s.selected_screen||'';
+  if(!editing){
+    if(s.level!==null){level.value=toPosition(s.level);value.textContent=Number(s.level).toFixed(2);level.setAttribute('aria-valuetext',value.textContent+' glow')}
+    else value.textContent=s.enabled?'Mixed':'—';
+  }
+  status.textContent=error||s.source_error||s.message;
+}
+async function refresh(){
+  if(busy)return;
+  try{const r=await fetch('/api/state');if(!r.ok)throw Error('Panel unavailable');const s=await r.json();if(!busy)show(s)}
+  catch(e){status.textContent='Control panel unavailable — relaunch Hue edge lighting.';sync.disabled=true;source.disabled=true;screen.disabled=true;level.disabled=true}
+}
+async function change(path,data){
+  busy=true;sync.disabled=true;source.disabled=true;screen.disabled=true;level.disabled=true;error='';
+  try{const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}),s=await r.json();if(!r.ok)throw Error(s.error);show(s)}
+  catch(e){error=e.message;status.textContent=error}
+  finally{busy=false;sync.disabled=false;await refresh()}
+}
+screen.addEventListener('click',()=>change('/api/screen',{}));
+source.addEventListener('change',()=>change('/api/source',{screen:source.value}));
+sync.addEventListener('change',()=>change('/api/sync',{enabled:sync.checked}));
+level.addEventListener('input',()=>{editing=true;value.textContent=toGlow(Number(level.value)).toFixed(2);level.setAttribute('aria-valuetext',value.textContent+' glow')});
+level.addEventListener('change',async()=>{await change('/api/level',{level:toGlow(Number(level.value))});editing=false});
+refresh();setInterval(refresh,2000);
+</script>
+</html>

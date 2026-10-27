@@ -10,7 +10,9 @@ import subprocess
 import tempfile
 import urllib.error
 import urllib.request
+import uuid
 from http.server import BaseHTTPRequestHandler, HTTPServer
+import sources
 
 NATIVE = "http://127.0.0.1:8215"
 PANEL = "127.0.0.1:8217"
@@ -26,10 +28,39 @@ def native(path, data=None, method="GET"):
 
 
 class Controller:
-    def __init__(self, executable):
+    def __init__(self, executable, default_screen=2, hyprctl="hyprctl", systemd_run="systemd-run"):
         self.executable = executable
+        self.default_screen = default_screen
+        self.hyprctl = hyprctl
+        self.systemd_run = systemd_run
+        self.source_mode = "screen"
+        self.screen = None
         self.process = None
         self.level = None
+
+    def source_state(self):
+        displays = []
+        selected, error = None, ""
+        try:
+            displays = sources.monitors(self.hyprctl)
+            selected = (self.screen or sources.default_monitor(displays, self.default_screen)) if self.source_mode == "screen" else "manual"
+            if selected != "manual" and selected not in {m['name'] for m in displays}:
+                selected, error = None, "Selected display disconnected. Select a connected display."
+        except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+            error = "Display list unavailable or default display missing"
+        return {"screens": [{"name": m["name"], "label": f"Display {i + 1} · {m.get('description', m['name'])}"}
+                            for i, m in enumerate(displays)], "selected_screen": selected,
+                "source_error": error}
+
+    def set_screen(self, value):
+        if not isinstance(value, str) or value not in {m['name'] for m in sources.monitors(self.hyprctl)}:
+            raise ValueError("Select a connected display.")
+        restart = self.running()
+        if restart:
+            self.stop()
+        self.source_mode, self.screen = "screen", value
+        if restart:
+            self.start()
 
     def running(self):
         return self.process is not None and self.process.poll() is None
@@ -43,12 +74,26 @@ class Controller:
         with socket.socket() as probe:
             if probe.connect_ex(("127.0.0.1", 8215)) == 0:
                 raise ValueError("Another Huenicorn instance is running. Stop it in its control page first.")
+        if self.source_mode == "screen":
+            displays = sources.monitors(self.hyprctl)
+            output = self.screen or sources.default_monitor(displays, self.default_screen)
+            if output not in {m['name'] for m in displays}:
+                raise ValueError("Selected display disconnected. Select a connected display.")
+            self.clear_restore_token()
+            preference = {"mode": "screen", "output": output}
+        else:
+            preference = {"mode": "manual"}
+        sources.write_preference(preference)
         environment = os.environ.copy()
         environment.update(OPENCV_FOR_THREADS_NUM="1", OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
         directory = Path.home() / ".local/state/phoenix-hue-control"
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         with (directory / "huenicorn.log").open("ab") as log:
-            self.process = subprocess.Popen([self.executable], stdout=log, stderr=log,
+            # A standard desktop app scope gives the portal a Hue-only identity.
+            # --scope execs the workload in this child; process ownership stays here.
+            command = [self.systemd_run, "--user", "--scope", "--quiet", "--unit",
+                       "app-" + sources.APP_ID + "-" + uuid.uuid4().hex, "--", self.executable]
+            self.process = subprocess.Popen(command, stdout=log, stderr=log,
                                             env=environment, start_new_session=True)
 
     def stop(self):
@@ -75,8 +120,15 @@ class Controller:
         # Upstream's documented Wayland reset: stop, remove only restoreToken,
         # restart. Never rewrite a config while its owner can still save it.
         self.stop()
+        self.clear_restore_token()
+        self.source_mode, self.screen = "manual", None
+        self.start()
+
+    def clear_restore_token(self):
         path = Path.home() / ".config/huenicorn/config.json"
         config = json.loads(path.read_text())
+        if "restoreToken" not in config:
+            return
         config.pop("restoreToken", None)
         temporary = None
         try:
@@ -88,7 +140,6 @@ class Controller:
         finally:
             if temporary is not None:
                 temporary.unlink(missing_ok=True)
-        self.start()
 
     def set_level(self, value):
         if isinstance(value, bool) or not isinstance(value, (float, int)) or not math.isfinite(value) or not -1 <= value <= 1:
@@ -105,6 +156,9 @@ class Controller:
         self.level = value
 
     def state(self):
+        return dict(self.sync_state(), **self.source_state())
+
+    def sync_state(self):
         if not self.running():
             return {"enabled": False, "ready": False, "level": self.level, "message": "Sync off"}
         try:
@@ -165,10 +219,12 @@ def handler_for(controller):
                     controller.set_level(data.get("level"))
                 elif self.path == "/api/screen" and data == {}:
                     controller.choose_screen()
+                elif self.path == "/api/source" and set(data) == {"screen"}:
+                    controller.set_screen(data["screen"])
                 else:
                     raise ValueError("Unknown control")
                 self.reply(200, controller.state())
-            except (ValueError, OSError, KeyError) as error:
+            except (ValueError, OSError, KeyError, subprocess.SubprocessError) as error:
                 # Do not expose native responses/config contents or credentials.
                 message = str(error) if isinstance(error, ValueError) else "Huenicorn is unavailable; check its local setup or try again."
                 self.reply(400, {"error": message})
@@ -179,9 +235,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--huenicorn", required=True)
     parser.add_argument("--open-browser", action="store_true")
+    parser.add_argument("--default-screen", type=int, default=2)
+    parser.add_argument("--hyprctl", default="hyprctl")
+    parser.add_argument("--systemd-run", default="systemd-run")
     args = parser.parse_args()
     os.umask(0o077)
-    controller = Controller(args.huenicorn)
+    if args.default_screen < 1:
+        parser.error("default screen must be a positive position from the left")
+    controller = Controller(args.huenicorn, args.default_screen, args.hyprctl, args.systemd_run)
     server = HTTPServer(("127.0.0.1", 8217), handler_for(controller))
     # Signal handlers unwind the server rather than calling shutdown from its own thread.
     def shutdown(*_args):

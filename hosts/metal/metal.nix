@@ -53,7 +53,9 @@ in
     # UWSM yet, so filter only its unsupported login choice. Remove this when
     # Phoenix adopts UWSM.
     package = hyprlandPhoenix;
-    portalPackage = hyprlandPackages.xdg-desktop-portal-hyprland;
+    portalPackage = import ../../home/hue-lighting/portal.nix {
+      portal = hyprlandPackages.xdg-desktop-portal-hyprland;
+    };
     xwayland.enable = true;
     withUWSM = false;
   };
@@ -140,6 +142,7 @@ in
   ];
 
   home-manager.users.${user.name} = {
+    phoenix.hue.defaultScreen = 2;
     imports = [
       ../../home/caelestia.nix
       ../../home/hue-lighting

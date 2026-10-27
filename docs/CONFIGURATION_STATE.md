@@ -17,6 +17,11 @@ fan profiles. Its safety boundary and firmware fallback take precedence over
 convenient settings experiments; preserve unrelated daemon state. Do not
 replace this mechanism with generic file copying.
 
+[Hue sync](../home/hue-lighting/README.md) declares its default display position
+and app-specific portal picker hook in Nix. Dropdown/source-picker choices are
+runtime overrides for the panel process. Bridge credentials, profiles and manual
+capture restore tokens remain private Huenicorn state, outside reconciliation.
+
 ## Writable baseline lifecycle
 
 Caelestia's isolated `shell.json` on metal and VSCodium's `User/settings.json`
