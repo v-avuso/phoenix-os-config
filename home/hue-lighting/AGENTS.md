@@ -1,12 +1,10 @@
-# Hue source selection
+# Hue source consent
 
-- Keep the declarative default independent of connector names and the system
-  picker's zero-based numbering; the panel uses spatial order from one.
-- The portal picker hook serves all desktop applications. Only the explicit Hue
-  app ID may use automatic source preferences; empty/other IDs and manual mode
-  must retain the original Screen/Window/Region picker. App IDs route UX, not auth.
-- Trace both portal hooks and native application identity before treating the
-  upstream HTTP API as the capability limit. Verify automatic selection with
-  `tests/portal-runtime.py` on an isolated bus and private state; a build or mock
-  does not establish actual source selection. Do not restart the shared portal
-  merely to test changes.
+- Always retain the native Screen/Window/Region picker for a new capture grant.
+  App IDs are forgeable UX hints: use them only to default the remember checkbox,
+  never to emit a selection or bypass initial source consent.
+- Normal starts preserve Huenicorn's restore token. Clear it only for an explicit
+  source-change action after stopping its owner; let upstream save the replacement.
+- Verify portal routing with `tests/portal-runtime.py` on an isolated bus and
+  private state. Confirm both Hue and unrelated apps still need native consent;
+  do not restart shared desktop services merely to test changes.

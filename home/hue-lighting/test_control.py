@@ -1,6 +1,5 @@
 import http.client
 import json
-import os
 from pathlib import Path
 import tempfile
 import threading
@@ -11,7 +10,7 @@ import control
 
 
 class Controls(unittest.TestCase):
-    def test_start_publishes_live_default_and_owns_named_app_scope(self):
+    def test_start_preserves_remembered_source_and_owns_named_app_scope(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             path = root/'.config/huenicorn/config.json'
@@ -20,39 +19,25 @@ class Controls(unittest.TestCase):
                                         'restoreToken': 'old-connector', 'credentials': {'key': 'private'}}))
             c = control.Controller('/fixed/huenicorn')
             with patch.object(control.Path, 'home', return_value=root), \
-                    patch.dict(os.environ, XDG_RUNTIME_DIR=directory), \
-                    patch.object(control.sources, 'monitors', return_value=[{'name': 'DP-1'}, {'name': 'DP-3'}]), \
                     patch.object(control.socket, 'socket') as socket, \
                     patch.object(control.subprocess, 'Popen') as launch:
                 socket.return_value.__enter__.return_value.connect_ex.return_value = 1
                 c.start()
-            self.assertEqual(json.loads((root/'phoenix-hue-control/source.json').read_text()),
-                             {'mode': 'screen', 'output': 'DP-3'})
+                self.assertEqual(json.loads(path.read_text())['restoreToken'], 'old-connector')
+                # Upstream saves a newly approved source; later starts must retain it.
+                c.stop()
+                replaced = json.loads(path.read_text())
+                replaced['restoreToken'] = 'replacement-source'
+                path.write_text(json.dumps(replaced))
+                launch.return_value.poll.return_value = 1
+                c.start()
             config = json.loads(path.read_text())
-            self.assertNotIn('restoreToken', config)
+            self.assertEqual(config['restoreToken'], 'replacement-source')
             self.assertEqual(config['credentials'], {'key': 'private'})
             argv = launch.call_args.args[0]
             self.assertEqual(argv[:4], ['systemd-run', '--user', '--scope', '--quiet'])
             self.assertTrue(argv[5].startswith('app-org.phoenix.HueSync-'))
             self.assertEqual(argv[-2:], ['--', '/fixed/huenicorn'])
-
-    def test_declarative_default_and_explicit_selection_without_starting_sync(self):
-        c = control.Controller('/unused', default_screen=2)
-        displays = [{'name': 'DP-1', 'description': 'Left'},
-                    {'name': 'DP-3', 'description': 'Center'}]
-        with patch.object(control.sources, 'monitors', return_value=displays), patch.object(c, 'start') as start:
-            self.assertEqual(c.source_state()['selected_screen'], 'DP-3')
-            c.set_screen('DP-1')
-            self.assertEqual(c.source_state()['selected_screen'], 'DP-1')
-            start.assert_not_called()
-            with self.assertRaises(ValueError):
-                c.set_screen('missing-output')
-        with patch.object(control.sources, 'monitors', return_value=displays[:1]):
-            c = control.Controller('/unused', default_screen=2)
-            state = c.source_state()
-            self.assertEqual(len(state['screens']), 1)
-            self.assertIsNone(state['selected_screen'])
-            self.assertTrue(state['source_error'])
 
     def test_choose_screen_stops_before_resetting_only_restore_token(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -159,10 +144,6 @@ class Controls(unittest.TestCase):
             self.assertEqual(request('http://'+control.PANEL, control.PANEL, '/api/screen', {}), 200)
             c.choose_screen.assert_called_once()
             self.assertEqual(request('http://'+control.PANEL, control.PANEL, '/api/screen', {'path': '/tmp/other'}), 400)
-            self.assertEqual(request('https://example.org', control.PANEL, '/api/source', {'screen': 'DP-1'}), 403)
-            c.set_screen.assert_not_called()
-            self.assertEqual(request('http://'+control.PANEL, control.PANEL, '/api/source', {'screen': 'DP-1'}), 200)
-            c.set_screen.assert_called_once_with('DP-1')
         finally:
             server.shutdown();server.server_close();thread.join()
 

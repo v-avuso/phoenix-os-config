@@ -1,6 +1,4 @@
 {
-  config,
-  lib,
   osConfig,
   pkgs,
   ...
@@ -17,8 +15,7 @@ let
   '';
   picker = pkgs.writeShellScript "phoenix-hue-source-picker" ''
     exec ${pkgs.python3}/bin/python3 -B ${sources}/portal-picker.py \
-      --picker ${osConfig.programs.hyprland.portalPackage}/bin/hyprland-share-picker \
-      --hyprctl ${osConfig.programs.hyprland.package}/bin/hyprctl "$@"
+      --picker ${osConfig.programs.hyprland.portalPackage}/bin/hyprland-share-picker "$@"
   '';
   launcher = pkgs.writeShellApplication {
     name = "phoenix-hue-control";
@@ -32,18 +29,11 @@ let
         exec xdg-open http://127.0.0.1:8217/
       fi
       exec python3 -B ${sources}/control.py --huenicorn ${huenicorn}/bin/huenicorn \
-        --default-screen ${toString config.phoenix.hue.defaultScreen} \
-        --hyprctl ${osConfig.programs.hyprland.package}/bin/hyprctl \
         --systemd-run ${pkgs.systemd}/bin/systemd-run --open-browser
     '';
   };
 in
 {
-  options.phoenix.hue.defaultScreen = lib.mkOption {
-    type = lib.types.ints.positive;
-    default = 2;
-    description = "Default Hue display position, numbered from one in left-to-right desktop order.";
-  };
   config = {
     home.packages = [ launcher ];
     xdg.configFile."hypr/xdph.conf".text = ''

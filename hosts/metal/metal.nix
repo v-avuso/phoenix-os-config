@@ -142,7 +142,6 @@ in
   ];
 
   home-manager.users.${user.name} = {
-    phoenix.hue.defaultScreen = 2;
     imports = [
       ../../home/caelestia.nix
       ../../home/hue-lighting

@@ -2,42 +2,34 @@
 
 ## Intentions
 
-- Synchronize the configured default display's narrow left/right edges to the
-  corresponding lamps, with one on/off control and one linked glow adjustment.
-  Start on the second display from the left without a source-selection dialog;
-  keep live display changes and the full system source picker accessible.
-- Keep Huenicorn unpatched, credentials/profile state private and writable, and all
+- Synchronize the selected source's narrow left/right edges to the corresponding
+  lamps, with one on/off control and one linked glow adjustment.
+- Require initial native source consent, remember that choice across starts, and
+  keep the full source picker accessible for replacements.
+- Keep Huenicorn unpatched, credentials/profile state private and writable, and
   control traffic on localhost. Start only on demand; no login/system service.
 
 ## Use
 
 Launch **Hue Sync** from the application menu, or `phoenix-hue-control`.
-The panel is at <http://127.0.0.1:8217>. Sync starts off. Check **Sync** to launch
-Huenicorn. The default is declared by `phoenix.hue.defaultScreen = 2` in the host's
-Home Manager configuration. Displays are numbered **from one, left to right** by
-current desktop position, not by connector name, compositor ID, or the system
-picker's zero-based labels. The second display is selected automatically. Moving
-from HDMI to DisplayPort keeps the default position; rearranging the desktop can
-change which physical display occupies it. If the configured position is missing,
-sync refuses to start until you choose a connected display.
+The panel is at <http://127.0.0.1:8217>. Sync starts off. Enable **Sync**, then
+select your preferred screen, window or region in the system picker. **Allow a
+restore token** is checked by default for Hue; leave it checked to remember the
+source. Later starts reuse the saved choice while the portal considers it valid.
+Unchecking it intentionally asks again next time. Disconnected/changed displays
+or revoked permissions may require a new selection.
 
-The **Source display** dropdown lists live display descriptions and switches
-capture directly, restarting only the owned Huenicorn process when sync is on.
-You can also choose a display before enabling sync. This override lasts for the
-panel process; reopening the browser tab reuses it. Relaunching the panel reasserts
-the declarative default.
+**Lighting source settings…**, before Huenicorn settings at the bottom of the
+card, stops the owned capture, forgets only its saved source token, and opens the
+full Screen/Window/Region picker again. The replacement is remembered by the same
+native flow. Edge color test has its own row. No monitor connector is hardcoded.
+A direct dropdown is omitted because Huenicorn exposes no monitor-list/switch API
+and the accepted remembered-source workflow retains system consent.
 
-**Lighting source settings…** opens Hyprland's full sharing picker, including
-Screen, Window and Region. Its selection remains in use until you select a display
-in the dropdown or relaunch the panel. In that manual mode, **Allow restore token**
-can remember the chosen source across sync toggles. Automatic display mode resolves
-the current connector on every start and does not rely on connector-bound tokens.
-Uncheck it to stop the owned process and release Entertainment streaming. This
-stops synchronization; it does not promise to turn the lamps off or restore a scene.
-Closing the browser tab leaves the panel/sync running. Reopen the launcher to
-return to the same controls. The bottom controls provide lighting-source selection, Huenicorn settings, and
-the bundled edge-color test on a separate row; settings require sync to be enabled.
-Terminating the panel process also stops its child.
+Disable **Sync** to stop the owned process and release Entertainment streaming.
+This does not promise to turn lamps off or restore a scene. Closing the browser
+tab leaves the panel/sync running; reopening the launcher returns to it.
+Terminating the panel process stops its child.
 
 **Glow boost** links gamma correction across every active channel in the selected
 Entertainment profile and saves it through Huenicorn's API. `0` is neutral,
@@ -64,11 +56,8 @@ use `(0.92,0)`–`(1,1)`. Profile membership and IDs remain private runtime stat
 At 3840×2160, native `subsampleWidth=3840` avoids downscaling across strip
 boundaries; fractional pixel endpoints are rounded by upstream. `refreshRate=25`
 sets the requested rate, not a measured delivery guarantee. Capture permission
-uses the app-specific automatic selector in display mode, or the normal portal
-permission/restore-token flow in manual mode. An isolated private-bus trial selected
-the configured output without a click and returned a 3840×2160 capture source.
-Shared-desktop workflow and lamp-response acceptance remain separate live checks.
-
+uses the native portal approval and restore-token flow. Builds and isolated portal
+checks do not establish saved-source restoration on the shared desktop.
 The launcher limits OpenCV/OpenBLAS/OpenMP worker counts to one per library.
 An initial 10-second native-resolution trial used 573% CPU; the combined limits
 reduced a later sample to 42.6% (one CPU core = 100%), about 227 MiB RSS. These
@@ -91,13 +80,11 @@ unverified; do not infer them from a successful build or handshake.
 - `panel.html` presents sync, screen selection and glow controls and saves completed slider
   changes. The native UI remains available for setup while sync is running; `edge-test.html`
   supplies the isolated red/blue test from the same panel server.
-- `sources.py` owns live display ordering, default resolution and the runtime
-  preference format; `portal-picker.py` adapts that preference to the native picker
-  protocol and otherwise executes the original Screen/Window/Region UI.
-- `default.nix` supplies the on-demand launcher, default-screen option, desktop
-  entry, and `hypr/xdph.conf` custom-picker wiring. `portal.nix` and
-  `portal-app-id.patch` expose request application identity to that existing hook
-  in the exact pinned Hyprland portal; the metal host selects this package.
+- `sources.py` supplies the native remember-checkbox default; `portal-picker.py`
+  always executes the original native picker, preserving other applications' args.
+- `default.nix` supplies the on-demand launcher, desktop entry and custom-picker
+  wiring. `portal.nix` and `portal-app-id.patch` forward app identity to that hook
+  in the pinned Hyprland portal; the metal host selects this package.
 
 Lumux's Entertainment path mixes top/bottom zones into lamp outputs. Lumen's
 normal settings sample wider strips. Huenicorn's native rectangles passed the
@@ -117,16 +104,13 @@ extracts that identity. `systemd-run --scope` executes the workload in the owned
 child process, preserving the controller's stop semantics. No login service or
 capture-engine fork is added.
 
-Only that nonempty Hue app ID and a connected output in its explicit runtime
-preference can return an automatic selection. Other IDs, absent/broken preferences,
-missing outputs, and manual mode retain the original picker. Preferences live in
-`$XDG_RUNTIME_DIR/phoenix-hue-control/source.json`; bridge credentials/profile state
-stay separate. Automatic mode removes Huenicorn's old restore token after stopping
-its owner, so a saved window/connector cannot take precedence over the default.
-Application IDs are UX routing, not an authentication boundary: unsandboxed
-same-user applications can impersonate them. The adapter grants no root/LAN access.
-The hook is global, so its unchanged fallback for unrelated apps is an essential
-contract. Revisit the patch on portal upgrades; its version assertion is deliberate.
+Application IDs are forgeable UX hints, not authentication. Matching Hue only
+checks the native picker's **Allow a restore token** checkbox; it never returns a
+selection or grants capture. Every initial request still needs the user to select
+and approve a source. Other applications retain the original picker arguments.
+The native portal validates token restoration and Huenicorn saves replacement
+tokens in its private config. Normal starts never remove them. Revisit the small
+patch on portal upgrades; its version assertion is deliberate.
 
 The upstream web UI has no authentication and bridge HTTPS verification is disabled
 upstream. Loopback binding prevents LAN exposure, not control by other local
@@ -140,18 +124,13 @@ node home/hue-lighting/test_panel.mjs
 ```
 
 Tests exercise linked updates/save, input bounds, owned-child stopping, unsafe
-binding rejection, capture reset/preservation, spatial defaults, Hue-only picker
-routing, slider mapping and cross-origin/rebinding rejection using a disposable
-local server. Build the metal Home Manager package/evaluate the host without activation.
+binding rejection, token preservation and explicit reset, native picker routing,
+slider mapping and cross-origin/rebinding rejection with a disposable local server.
 
-`tests/portal-runtime.py` exercises real source selection on a separate session bus
-with private configuration, data and runtime preferences. It launches the built
-portal/frontend, scopes a probe as Hue, checks the selected output and closes the
-capture. Its native-picker fallback deliberately fails instead of opening a dialog,
-so success requires the automatic route. It does not change the live portal,
-Huenicorn config or lamps. Pass the built patched portal package, the native
-frontend executable, built `xdg.configFile."hypr/xdph.conf".source`, and a Python
-executable providing `gi.repository.Gio`:
+`tests/portal-runtime.py` uses a private session bus and disposable configuration.
+Its native-picker stand-in records arguments and declines selection. Both Hue and
+an unrelated app must fail capture; only Hue receives the remember-checkbox flag.
+It never changes live desktop services, Huenicorn state or lamps:
 
 ```sh
 python3 -B home/hue-lighting/tests/portal-runtime.py \
@@ -159,15 +138,13 @@ python3 -B home/hue-lighting/tests/portal-runtime.py \
   --picker-config "$picker_config" --probe-python "$gio_python"
 ```
 
-A live check should enable sync without a picker, confirm the configured display,
-switch displays through the dropdown, toggle off/on, and use **Lighting source
-settings…** to select a window/region and return to display mode. Confirm unrelated
-applications still open the original picker. Then move the single slider (neutral at 25%),
-verify all active channels and the saved profile agree, then exercise edge isolation,
-fullscreen content and ordinary blank/wake. Never force hibernation or restart
-shared capture services to perform these checks.
+After deployment, select your preferred source once, toggle sync off/on, and
+confirm no picker appears. Change **Lighting source settings…**, select a
+replacement and repeat. Confirm the checkbox can still be unchecked and other
+applications retain their native picker. These are operator desktop acceptance
+checks, separate from build/isolated fixture results.
 
-Home Manager owns the launcher/desktop entry. After an authorized deployment,
-relaunch the panel and apply the portal package/configuration through the normal
-desktop service lifecycle. Existing captures still belong to the portal instance
-that created them; do not assume refreshing the web page replaces that instance.
+Home Manager owns the launcher/desktop entry. Apply the new portal package and
+configuration through its normal desktop service lifecycle. Existing captures
+belong to the portal instance that created them; refreshing the panel alone does
+not replace it. Never restart shared capture services merely for validation.
