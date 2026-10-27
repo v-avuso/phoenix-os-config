@@ -2,9 +2,9 @@
 
 ## Current setup
 
-**68 instawow packages + 15 WowUp-CF packages; 150 addon folders.** The original ElvUI/ToxiUI profile,
+**69 instawow packages + 15 WowUp-CF packages; 151 addon folders.** The original ElvUI/ToxiUI profile,
 bindings, casting settings and private WTF files are preserved. The user has completed ToxiUI's in-game installer and customization;
-this voice-pack work preserves those current settings and does not launch WoW.
+this addon batch preserves those current settings and does not launch WoW.
 **No addon-specific configuration overrides, new ToxiUI profiles or action-bar bindings have been
 programmatically applied.** The checklist below is manual guidance, not an installed preset.
 
@@ -18,9 +18,55 @@ Ultimate Mouse Cursor, Better Fishing, Home Bound, BugGrabber/BugSack, Syndicato
 The original **46 instawow package records** are protected by Ignore / Auto Update off in WowUp.
 The **12 newer BtWQuests package records** may need discovery and Ignore reconciliation; the
 **15 CurseForge installations remain WowUp-managed**, with auto-update off. Package records are not
-individual folders: the 83 packages supply 150 AddOns folders, including bundled modules. Do not
+individual folders: the 84 packages supply 151 AddOns folders, including bundled modules. Do not
 reinstall or adopt either manager's packages in the other. The ten new English voice packs below
 are also instawow-owned and must be ignored if WowUp discovers them.
+
+## Small utility batch — 2026-10-27
+
+**Installed:** experimental **Hide Vendor Sell Price 12.1.0**, instawow provider **GitHub**,
+source `github:delulunia/HideVendorSellPrice`, folder `Interface/AddOns/HideVendorSellPrice`.
+[Official releases](https://github.com/delulunia/HideVendorSellPrice/releases).
+Its TOC declares Retail 120100; the installed UI targets 120105. It has no addon dependencies,
+bindings, settings or SavedVariables. Test before keeping it: hover a sellable bag item without Alt,
+then with Alt; confirm the default price disappears, TSM information still appears with Alt,
+and the tooltip skin/layout remains correct. Repeat at a vendor and with a comparison tooltip.
+ElvUI processes the same sell-price line and can insert its own text; this experiment may therefore
+leave a price visible or behave differently by tooltip/load order. It does not rewrite comparisons.
+If ineffective or errors appear in `/bugsack`, disable **Hide Vendor Sell Price** in the AddOns menu.
+For permanent removal, remove its source from `wow-addons.json`, deploy that manifest before the
+next sync, and run `instawow -p phoenix-retail remove github:delulunia/HideVendorSellPrice` with WoW
+closed. Leave WTF untouched. Keep this package **Ignore / Auto Update off in WowUp** if discovered.
+
+**Manual WowUp-CF fallback — not installed by this batch:** instawow's CurseForge resolver requires
+an unavailable access token. No suitable public GitHub/WoWInterface release was found in the bounded
+search. Native desktop GUI control is unavailable in this session. Use the existing WowUp-CF client;
+do not add these to instawow's manifest or supply a paid provider token.
+
+| Exact package / author | Actual public provider and source URI | Installed folder |
+|---|---|---|
+| ObjectiveBarManager / M05final | CurseForge: [curse:1109979](https://www.curseforge.com/wow/addons/objectivebarmanager) | **Not installed**; verify WowUp's installed-folder details after installation |
+| DamageMeterKeybind / CanadianFteev | CurseForge: [curse:1492150](https://www.curseforge.com/wow/addons/damagemeterkeybind) | **Not installed**; verify WowUp's installed-folder details after installation |
+
+1. With WoW closed, open WowUp-CF → **Get Addons** for the existing Retail client. Search the exact
+   names above (or use the linked project URL), verify author/provider and choose a Retail release.
+   Publisher pages list 12.1.0 support; exact current archive TOCs/dependencies are **not yet audited**.
+   Review any dependency prompt; cancel replacement of an existing instawow-owned addon.
+2. Install only those two packages, keep their **Auto Update off**, and retain WowUp ownership.
+   Recheck that existing instawow records remain **Ignore / Auto Update off**; do not use Update All.
+3. ObjectiveBarManager includes appearance and automatic visibility features, beyond a simple keybind.
+   Before relying on it, inspect its settings via the minimap button's right-click. Leave ToxiUI/WindTools
+   as the styling owner; disable any OBM appearance overrides and unwanted auto-hide/instance behavior
+   through its own UI. Defaults/source compatibility with the current skin remain **unverified**.
+   Test `/obm` twice out of combat: tracker must return with the same font, position and styling.
+   If styling changes, disable OBM and retain the current tracker. Only after this passes, assign
+   **Shift+L** manually in Settings → Keybindings to its tracker toggle; inspect any binding conflict.
+4. Settings → Keybindings → **Damage Meter Keybind** → toggle show/hide all windows: choose a key
+   manually. Test twice with Blizzard's native meter and confirm the ToxiUI skin stays intact.
+   Avoid the separate reset-all-combat-sessions binding. This addon targets the native meter, not Details!.
+   Source-level skin compatibility remains unverified until its archive is available for inspection.
+5. Check `/bugsack`. Disable only the failing new addon if needed; do not reset ToxiUI or import profiles.
+   No keybinding or existing profile was changed by this batch.
 
 ## New BtWQuests packages — WowUp Ignore checklist
 

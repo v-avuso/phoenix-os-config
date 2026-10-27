@@ -3,15 +3,49 @@
 ## Intentions and status
 
 Preserve the existing Retail installation, private settings and instawow ownership. Two explicit
-updaters now have different responsibilities: instawow owns the **68 installed packages** in
-[`wow-addons.json`](wow-addons.json), including the original 58 plus ten official English expansion voice packs.
+updaters now have different responsibilities: instawow owns the **69 installed packages** in
+[`wow-addons.json`](wow-addons.json), including the original 58, ten official English expansion voice packs and experimental Hide Vendor Sell Price.
 WowUp-CF is installed from locked Nixpkgs **2.22.0**, with only `wowup-cf` added to the existing
 unfree allowlist. No custom AppImage wrapper or lock update was added.
 
 **WowUp-CF owns fifteen packages** installed by the operator. Its `addons.json` and actual folders
 were audited read-only: existing instawow rows are ignored with auto-update off; all fifteen CF rows
-also have auto-update off. No CF package was reinstalled or adopted. There are **150 addon folders**.
+also have auto-update off. No CF package was reinstalled or adopted. There are **151 addon folders**.
 The newer BtWQuests and English voice-pack records require Ignore reconciliation when discovered, as described in [README.md](README.md#maintenance). No application state was rewritten.
+
+## Small utility batch audit — 2026-10-27
+
+Hide Vendor Sell Price **12.1.0** is installed through instawow from
+`github:delulunia/HideVendorSellPrice` (official GitHub release asset `HideVendorSellPrice.zip`),
+folder `Interface/AddOns/HideVendorSellPrice`. The publisher links this repository from
+[CurseForge](https://www.curseforge.com/wow/addons/hide-vendor-sell-price).
+Retail TOC **120100**, no dependencies or SavedVariables. The Lua registers only
+`TooltipDataProcessor.AddLinePreCall(Enum.TooltipDataLineType.SellPrice, ...)`: hides existing money
+frames, resets their type to STATIC, clears `shownMoneyFrames`, and returns true to suppress the line.
+It neither changes economic data nor searches/removes TSM text. Installed TSM's
+`LibTSMUI/Source/Tooltip/Tooltip.lua` adds separate text lines. Installed ElvUI's
+`Game/Shared/Modules/Tooltip/Tooltip.lua` registers `TT.AddMoneyInfo` for the same SellPrice type;
+when moneyLines is enabled it can add formatted text, so removal is not guaranteed.
+No changes to ElvUI/ToxiUI code/settings were made. Treat compatibility as experimental;
+[README](README.md#small-utility-batch--2026-10-27) owns the player test and rollback.
+
+ObjectiveBarManager (`curse:1109979`) and DamageMeterKeybind (`curse:1492150`) remain **uninstalled**.
+Both resolve in the current instawow catalogue, but native dry-run resolution reports
+“package source is disabled: access token missing”. Bounded publisher/GitHub searches found no
+usable alternative public release for these two; this is not proof of source exclusivity.
+Their publisher pages advertise Retail 12.1.0 support. Exact release source, TOCs, dependencies,
+installed folders and skin compatibility remain unaudited pending WowUp installation; no folder name
+is asserted as an installed result. Keep them exclusively WowUp-owned if installed manually.
+
+Private pre-install backup: `~/.local/state/phoenix-wow/backups/small-addons-20261027/`,
+containing current customized WTF and a consistent instawow database. All 221 WTF files, 138,794
+existing addon files, authentication configuration and WowUp state were fingerprinted and verified
+unchanged after installation; only the three new addon files were added. Eight updater tests pass;
+the opt-in native systemd fixture was skipped. Isolated native install, managed list and targeted
+dry-run update pass (the native up-to-date result exits 1). The metal-4tb wrapper builds and its 69-package sync passes; no system
+activation was performed, so its deployed manifest remains the previous set until a future deployment.
+No authentication is copied
+into Git. No WoW launch, profile changes, key assignment or service activation is part of this batch.
 
 ## Package catalogue
 
