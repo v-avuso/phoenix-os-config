@@ -44,6 +44,25 @@ class DeploymentFailure(ValueError):
         super().__init__(stage + ': ' + code)
 
 
+def policy_check(update, operation, callback, *args):
+    """Retain actionable policy failures, never arbitrary exception text or stderr."""
+    try:
+        return callback(*args)
+    except DeploymentFailure:
+        raise
+    except Exception as error:
+        if isinstance(error, update.PolicyError):
+            code, summary = error.code, error.summary
+        else:
+            category = ('timeout' if isinstance(error, (TimeoutError, subprocess.TimeoutExpired)) else
+                        'invalid-json' if isinstance(error, json.JSONDecodeError) else
+                        'io-failed' if isinstance(error, OSError) else 'command-or-validation-failed')
+            code, summary = category, 'Check failed without native output; inspect publisher availability and metadata'
+        failure = DeploymentFailure('routine-policy', code)
+        failure.summary = (operation + ': ' + summary)[:1000]
+        raise failure from None
+
+
 class DeploymentDenied(DeploymentFailure):
     def __init__(self, summary):
         super().__init__('review', 'model-denied')
@@ -394,11 +413,18 @@ def process_inner(config, request, uid, pid, state):
             update = importlib.util.module_from_spec(update_spec)
             update_spec.loader.exec_module(update)
 
+            def policy_run(argv, **kwargs):
+                try:
+                    return review.run(argv, **kwargs)
+                except review.CommandError as error:
+                    raise update.PolicyError('publisher lookup command failed', str(error)) from None
+
             def evaluate_package(alias, revision, attribute, system):
                 del alias  # The lock validator has already bound the selected root alias.
                 ref = 'github:NixOS/nixpkgs/%s#legacyPackages.%s.%s.version' % (revision, system, attribute)
-                return as_user(config, config['builderUser'], [config['nix'], 'eval', '--raw',
-                    '--no-write-lock-file', ref], review.run, env=env, timeout=900).decode().strip()
+                return policy_check(update, 'package-version ' + attribute + ' revision=' + revision,
+                    lambda: as_user(config, config['builderUser'], [config['nix'], 'eval', '--raw',
+                    '--no-write-lock-file', ref], policy_run, env=env, timeout=900).decode().strip())
 
             def verify_current_source(alias, node):
                 original, locked = node.get('original', {}), node.get('locked', {})
@@ -412,7 +438,7 @@ def process_inner(config, request, uid, pid, state):
                     branch = branches[alias]
                 else:
                     if original.get('type') != 'github':
-                        raise ValueError('changed dependency source type requires manual review')
+                        raise update.PolicyError('changed dependency source type requires manual review')
                     branch = original.get('rev') or original.get('ref')
                 owner, repo = original.get('owner'), original.get('repo')
                 if (original.get('type') != 'github' or not isinstance(owner, str) or
@@ -420,18 +446,18 @@ def process_inner(config, request, uid, pid, state):
                         not re.fullmatch(r'[A-Za-z0-9_.-]+', owner) or
                         not re.fullmatch(r'[A-Za-z0-9_.-]+', repo) or
                         (branch is not None and not re.fullmatch(r'[A-Za-z0-9_./-]+', branch))):
-                    raise ValueError('changed input has no supported frozen GitHub source')
+                    raise update.PolicyError('changed input has no supported frozen GitHub source')
                 reference = frozen_github_reference(owner, repo, branch, original.get('dir'))
-                metadata = json.loads(as_user(config, config['builderUser'],
+                metadata = policy_check(update, 'publisher-head ' + str(alias) + ' revision=' + locked['rev'], lambda: json.loads(as_user(config, config['builderUser'],
                     [config['nix'], 'flake', 'metadata', '--json', '--no-write-lock-file', reference],
-                    review.run, env=env, timeout=600))
+                    policy_run, env=env, timeout=600)))
                 exact = metadata.get('locked', {})
                 if any(exact.get(key) != locked.get(key) for key in ('owner', 'repo', 'rev', 'narHash')):
-                    raise ValueError('candidate input is not the current declared publisher head')
+                    raise update.PolicyError('candidate input is not the current declared publisher head', 'input=%s candidate=%s observed=%s; prepare a fresh candidate' % (alias, locked.get('rev'), exact.get('rev')))
                 store_path(metadata['path'], 'source')
                 if alias in {'codex-desktop-linux', 'codex-desktop-sandbox'}:
-                    update.validate_community_payload(metadata['path'])
-                    update.validate_community_checks(locked['rev'])
+                    policy_check(update, 'community-payload revision=' + locked['rev'], update.validate_community_payload, metadata['path'])
+                    policy_check(update, 'community-checks revision=' + locked['rev'], update.validate_community_checks, locked['rev'])
 
             def desktop_package_version(candidate_lock):
                 node = update._node(candidate_lock, 'codex-desktop-linux')
@@ -440,20 +466,20 @@ def process_inner(config, request, uid, pid, state):
                     locked['owner'], locked['repo'], locked['rev'], locked['narHash'])
                 metadata = json.loads(as_user(config, config['builderUser'],
                     [config['nix'], 'flake', 'metadata', '--json', '--no-write-lock-file', reference],
-                    review.run, env=env, timeout=600))
+                    policy_run, env=env, timeout=600))
                 exact = metadata.get('locked', {})
                 if any(exact.get(key) != locked.get(key) for key in ('owner', 'repo', 'rev', 'narHash')):
-                    raise ValueError('community version source differs from candidate lock')
+                    raise update.PolicyError('community version source differs from candidate lock')
                 store_path(metadata['path'], 'source')
                 payload = json.loads((Path(metadata['path']) / 'nix/upstream-linux-packages.json').read_text())
                 version = payload.get('version') if isinstance(payload, dict) else None
                 if not isinstance(version, str) or not update.VERSION.fullmatch(version):
-                    raise ValueError('community source has no stable version')
+                    raise update.PolicyError('community source has no stable version')
                 return version
 
             def compare_versions(left, right):
                 if not update.VERSION.fullmatch(left) or not update.VERSION.fullmatch(right):
-                    raise ValueError('invalid stable version comparison')
+                    raise update.PolicyError('invalid stable version comparison')
                 a, b = [int(part) for part in left.split('.')], [int(part) for part in right.split('.')]
                 width = max(len(a), len(b))
                 a.extend([0] * (width - len(a)))
@@ -461,7 +487,7 @@ def process_inner(config, request, uid, pid, state):
                 return (a > b) - (a < b)
 
             previous_modes = review.source_modes(Path(profile_source), previous_dependencies)
-            update.validate_source(previous_dependencies, previous_modes, request['files'], request['modes'],
+            policy_check(update, 'source-policy', update.validate_source, previous_dependencies, previous_modes, request['files'], request['modes'],
                                    config['system'], compare_versions, evaluate_package, desktop_package_version,
                                    verify_current_source)
         state['stage'] = 'build'
@@ -1062,8 +1088,11 @@ def serve(config):
             stage = error.stage if isinstance(error, DeploymentFailure) else 'protocol'
             code = error.code if isinstance(error, DeploymentFailure) else 'invalid-or-denied'
             authorization.audit('rejected', secrets.token_hex(16), uid, pid, category='invalid-or-denied')
-            print(json.dumps(dict(event='failed', uid=uid, pid=pid, stage=stage, code=code)), flush=True)
+            summary = getattr(error, 'summary', '') if isinstance(error, DeploymentFailure) and stage == 'routine-policy' else ''
+            print(json.dumps(dict(event='failed', uid=uid, pid=pid, stage=stage, code=code, **({'summary': summary} if summary else {}))), flush=True)
             result = dict(ok=False, stage=stage, code=code, error='Deployment failed at ' + stage + ' (' + code + ').')
+            if summary:
+                result['summary'] = summary
             if isinstance(error, DeploymentFailure) and stage == 'build' and getattr(error, 'diagnostics', None):
                 result['diagnostics'] = error.diagnostics[-16384:]
             if getattr(error, 'pending_nonce', None):

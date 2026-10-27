@@ -46,6 +46,28 @@ _source_spec = importlib.util.spec_from_file_location('phoenix_source_manifest',
 source_manifest = importlib.util.module_from_spec(_source_spec)
 _source_spec.loader.exec_module(source_manifest)
 
+
+class CommandError(ValueError):
+    """Bounded public diagnosis; stderr and command arguments remain private."""
+    def __init__(self, code, status=None):
+        self.code, self.status = code, status
+        super().__init__(code + (' exit=' + str(status) if status is not None else ''))
+
+
+def command_error(stderr, status):
+    lowered = stderr.lower()
+    categories = (
+        ('dns-failed-suspected', (b'could not resolve', b'name or service not known', b'temporary failure in name resolution')),
+        ('network-failed-suspected', (b'connection refused', b'network is unreachable', b'could not connect', b'connection timed out')),
+        ('http-rate-limit-suspected', (b'rate limit', b'http error 429', b'http error 403')),
+        ('http-not-found-suspected', (b'http error 404', b'404 not found')),
+        ('tls-failed-suspected', (b'certificate verify failed', b'ssl peer certificate', b'certificate has expired')),
+        ('nix-evaluation-failed-suspected', (b'error: attribute', b'error: undefined variable', b'error: syntax error')),
+    )
+    return CommandError(next((code for code, markers in categories if any(marker in lowered for marker in markers)),
+                             'command-failed'), status)
+
+
 def run(argv, *, cwd=None, env=None, data=None, timeout=60, fail_on_compaction=False, pass_fds=()):
     """Bound both execution and output; terminate the whole child process group."""
     with tempfile.TemporaryFile() as output, tempfile.TemporaryFile() as errors, tempfile.TemporaryFile() as input_file:
@@ -59,10 +81,10 @@ def run(argv, *, cwd=None, env=None, data=None, timeout=60, fail_on_compaction=F
         try:
             while process.poll() is None:
                 if time.monotonic() > deadline or (os.fstat(output.fileno()).st_size + os.fstat(errors.fileno()).st_size) > OUTPUT_LIMIT:
-                    raise ReviewVerdictError("review-timeout" if time.monotonic() > deadline else "review-output-limit") if fail_on_compaction else ValueError("command exceeded time/output limit")
+                    raise ReviewVerdictError("review-timeout" if time.monotonic() > deadline else "review-output-limit") if fail_on_compaction else CommandError("command-timeout" if time.monotonic() > deadline else "command-output-limit")
                 time.sleep(0.05)
             if (os.fstat(output.fileno()).st_size + os.fstat(errors.fileno()).st_size) > OUTPUT_LIMIT:
-                raise ReviewVerdictError("review-output-limit") if fail_on_compaction else ValueError("command exceeded output limit")
+                raise ReviewVerdictError("review-output-limit") if fail_on_compaction else CommandError("command-output-limit")
             errors.seek(0)
             error_output = errors.read()
             # Pinned Codex 0.159 non-JSON exec prints this standalone marker for
@@ -88,7 +110,7 @@ def run(argv, *, cwd=None, env=None, data=None, timeout=60, fail_on_compaction=F
                     code = next((category for category, markers in categories
                                  if any(marker in lowered for marker in markers)), "review-invocation-failed")
                     raise ReviewVerdictError(code)
-                raise ValueError("command failed")
+                raise command_error(error_output, process.returncode)
             return result
         finally:
             if process.poll() is None:

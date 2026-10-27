@@ -615,6 +615,26 @@ class DeploymentTests(unittest.TestCase):
             routine.validate_source(before, before_modes, after, after_modes, 'x86_64-linux',
                                     compare, lambda *_args: '2.9.0', lambda _lock: '1.0.0')
 
+    def test_policy_command_diagnosis_does_not_expose_stderr(self):
+        review = deploy.load_review({'reviewScript': str(Path(__file__).resolve().parents[1] / 'deploy-review.py')})
+        with self.assertRaises(review.CommandError) as command:
+            review.run([sys.executable, '-c', 'import sys; print("could not resolve host SECRET", file=sys.stderr); sys.exit(7)'])
+        self.assertEqual(str(command.exception), 'dns-failed-suspected exit=7')
+        with self.assertRaises(deploy.DeploymentFailure) as failure:
+            deploy.policy_check(routine, 'publisher-head nixpkgs', lambda: (_ for _ in ()).throw(ValueError('SECRET')))
+        self.assertNotIn('SECRET', failure.exception.summary)
+        self.assertIn('publisher-head nixpkgs', failure.exception.summary)
+
+    def test_policy_failure_identifies_missing_check_without_echoing_payload(self):
+        revision = 'a' * 40
+        checks = [dict(name=name, head_sha=revision, status='completed', conclusion='success', app={'slug': 'github-actions'}) for name in sorted(routine.COMMUNITY_CHECKS) if name != 'official-linux-gate']
+        response = dict(total_count=len(checks), check_runs=checks)
+        with self.assertRaises(routine.PolicyError) as failure:
+            routine.validate_community_checks(revision, lambda url: response)
+        self.assertIn('required-community-check-failed-or-is-missing', failure.exception.code)
+        self.assertIn('official-linux-gate', failure.exception.summary)
+        self.assertIn(revision, failure.exception.summary)
+
     def test_routine_community_gate_binds_required_checks_and_payload_hashes(self):
         revision = 'a' * 40
         checks = [dict(name=name, head_sha=revision, status='completed', conclusion='success',
@@ -676,6 +696,7 @@ class DeploymentTests(unittest.TestCase):
                 run = mock.Mock(return_value=b'')
                 run_build = staticmethod(native_review.run_build)
                 BuildError = native_review.BuildError
+                CommandError = native_review.CommandError
                 baseline_files = staticmethod(native_review.baseline_files)
                 source_modes = staticmethod(native_review.source_modes)
             account = mock.Mock(pw_uid=os.getuid(), pw_gid=os.getgid())
@@ -744,7 +765,7 @@ class DeploymentTests(unittest.TestCase):
                 else:
                     self.assertEqual(len(messages), 1)
                 return json.loads(connection.sendall.call_args.args[0])
-            with contextlib.redirect_stdout(io.StringIO()), mock.patch.object(Path, 'resolve', resolve), \
+            with contextlib.redirect_stdout(io.StringIO()) as journal, mock.patch.object(Path, 'resolve', resolve), \
                  mock.patch.object(deploy, 'load_review', return_value=Review), \
                  mock.patch.object(deploy, 'as_user', side_effect=as_user), \
                  mock.patch.object(deploy, 'store_path'), mock.patch.object(deploy, 'activation_executable'), mock.patch.object(deploy, 'store_file', side_effect=lambda path: path), \
@@ -767,6 +788,11 @@ class DeploymentTests(unittest.TestCase):
             if malicious or retarget:
                 self.assertFalse(result['ok'])
                 self.assertEqual(result['stage'], 'routine-policy')
+                self.assertNotEqual(result['code'], 'rejected-or-failed')
+                self.assertIn('routine update changed an undeclared source file', result['summary'])
+                self.assertIn('unapproved.nix' if malicious else 'alias', result['summary'])
+                logged = [json.loads(line) for line in journal.getvalue().splitlines() if line.startswith('{')]
+                self.assertTrue(any(record.get('summary') == result['summary'] for record in logged))
                 self.assertFalse(any(call.args[0][0] == 'systemd-run' for call in Review.run.call_args_list))
                 return
             self.assertTrue(result['ok'], result)

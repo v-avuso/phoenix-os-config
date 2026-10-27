@@ -486,6 +486,18 @@ else:
         self.assertTrue(failure.exception.diagnostics.endswith('final failure\n'))
         self.assertLessEqual(len(failure.exception.diagnostics), 16384)
 
+    def test_policy_summary_survives_failed_candidate_retention(self):
+        self.setup_pipeline()
+        summary = 'community-checks revision=' + 'a' * 40 + ': required check nix failed'
+        error = runner.UpdateDenied(dict(stage='routine-policy', code='community-check-failed', summary=summary))
+        with patch.object(runner,'revision',return_value='2'*40), patch.object(runner,'community',return_value='26.930.31730'), \
+             patch.object(runner,'fetch',side_effect=self.public_fetch), patch.object(runner,'controller',side_effect=error):
+            with self.assertRaises(runner.UpdateDenied):
+                runner.run(self.config, candidate)
+        retained = json.loads((Path(self.config['state'])/'failed-candidate.json').read_text())
+        self.assertIn(summary, retained['reason'])
+        self.assertIn(summary, runner.format_result(dict(status='failed', reason=str(error))))
+
     def test_failed_staging_keeps_hold_and_current_pins(self):
         self.setup_pipeline(hold=True)
         original=(self.repo/'flake.lock').read_bytes()

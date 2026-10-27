@@ -178,6 +178,8 @@
   stderr. Stream output separately from authority audit records, retain the actual
   failure stage/tail, and test a real failing subprocess through the socket path;
   static generic errors otherwise erase the evidence needed to repair updates.
+  Policy failures must retain a bounded typed reason and check/input identity through
+  the socket, controller journal and updater result; do not relay arbitrary exception text.
 - For bundled GUI adapters, prefer upstream semantic events and unique action keys
   over generated minifier names. Check old and updated bundles and preserve handler
   bodies to avoid unnecessary failures from harmless build-symbol changes. Keep

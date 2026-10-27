@@ -37,6 +37,14 @@ selects machine-readable stdout (progress remains on stderr). Each run retains a
 log in the updater state directory: the latest five logs, at most 5MiB each (compacted to the latest 4MiB), with
 the final result pointing to its log. Build failures retain their stage, code and
 bounded diagnostic tail in `last-result.json`.
+Policy failures also journal one bounded JSON summary (at most 1000 characters)
+and retain it in the updater result and failed candidate's reason. It identifies
+the failed check, relevant input/revision or up to five unexpected source paths.
+Publisher lookup errors include exit status and a safe failure category; suspected
+DNS/network/TLS/HTTP categories are hints, not proof. Raw command output and
+credentials stay out of the controller audit log. Build output remains in the
+bounded updater log with its retained diagnostic tail. Unknown exceptions retain
+the check name and a static category rather than echoing arbitrary exception text.
 
 The latest failed committed candidate remains until the next run under `codex/updates/` with its
 commit, branch and failure details in `failed-candidate.json`. Temporary worktrees
