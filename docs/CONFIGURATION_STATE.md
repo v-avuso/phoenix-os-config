@@ -85,10 +85,13 @@ Hover mode enables final actions without a click.
 Timewall on metal reads an external HEIC at runtime and owns only its generated
 frame cache/session PID state. The asset never enters Git or the Nix store.
 Caelestia remains the wallpaper/theme owner: a narrow adapter writes through its
-CLI, with light mode from 07:00 to 20:00 local time independent of frame colours.
+CLI and applies dark mode at session start, independent of frame colours. No
+time-based theme changes are scheduled; manual Caelestia changes remain possible
+until the next session start.
 Missing/broken assets fall back to generated black without repeated restarts;
 restore the asset and restart the wallpaper service to resume. Manual Caelestia
-changes remain possible; scheduled updates reassert the declared mode/frame.
+changes remain possible; the wallpaper service continues selecting frames on its
+own schedule.
 
 On metal, Thunar preferences use managed xfconf keys and its custom actions use
 one immutable `Thunar/uca.xml`; bookmarks, history and session state stay app-owned.

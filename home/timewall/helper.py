@@ -2,7 +2,6 @@
 """Small, fixed-command adapters for Phoenix's Timewall/Caelestia session."""
 
 from contextlib import contextmanager
-from datetime import datetime
 import fcntl
 import os
 from pathlib import Path
@@ -138,26 +137,12 @@ def set_wallpaper(caelestia, fallback, image, runner=subprocess.run):
         return 1
 
 
-def _minutes(value):
-    hour, minute = (int(part) for part in value.split(":"))
-    if not (0 <= hour < 24 and 0 <= minute < 60):
-        raise ValueError("theme boundaries must use valid local HH:MM times")
-    return hour * 60 + minute
-
-
-def theme_mode(local_time=None, light_at="07:00", dark_at="20:00"):
-    local_time = local_time or datetime.now().astimezone().time()
-    current = local_time.hour * 60 + local_time.minute
-    return "light" if _minutes(light_at) <= current < _minutes(dark_at) else "dark"
-
-
-def sync_theme(caelestia, light_at="07:00", dark_at="20:00", runner=subprocess.run, local_time=None):
-    mode = theme_mode(local_time, light_at, dark_at)
+def sync_theme(caelestia, runner=subprocess.run):
     try:
         with wallpaper_theme_lock():
-            if run_short_command([caelestia, "scheme", "set", "-m", mode], runner):
+            if run_short_command([caelestia, "scheme", "set", "-m", "dark"], runner):
                 return 0
-            log(f"Caelestia could not apply the {mode} theme mode")
+            log("Caelestia could not apply the dark theme mode")
             return 1
     except (OSError, RuntimeError) as error:
         log(f"Theme update could not acquire its session lock: {error}")
@@ -170,8 +155,8 @@ def main(argv=None):
         return start_timewall(*args[1:])
     if args and args[0] == "set-wallpaper" and len(args) == 4:
         return set_wallpaper(*args[1:])
-    if args and args[0] == "sync-theme" and len(args) == 4:
-        return sync_theme(args[1], args[2], args[3])
+    if args and args[0] == "sync-theme" and len(args) == 2:
+        return sync_theme(args[1])
     log("Invalid Phoenix Timewall helper invocation")
     return 2
 

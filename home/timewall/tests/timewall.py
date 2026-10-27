@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Isolated Timewall/Caelestia adapter tests; all commands are mocked."""
 
-from datetime import time
 import importlib.util
 import os
 from pathlib import Path
@@ -46,12 +45,6 @@ class TimewallAdapter(unittest.TestCase):
             return SimpleNamespace(returncode=status)
 
         return calls, run
-
-    def test_local_theme_boundaries_are_half_open(self):
-        self.assertEqual(helper.theme_mode(time(6, 59)), "dark")
-        self.assertEqual(helper.theme_mode(time(7, 0)), "light")
-        self.assertEqual(helper.theme_mode(time(19, 59)), "light")
-        self.assertEqual(helper.theme_mode(time(20, 0)), "dark")
 
     def test_external_wallpaper_path_is_one_argument_and_daemon_selects_now(self):
         image = self.root / "city image.heic"
@@ -102,16 +95,15 @@ class TimewallAdapter(unittest.TestCase):
         self.assertEqual(calls[0][0], [CAELESTIA, "wallpaper", "-f", str(frame), "--no-smart"])
         self.assertEqual(calls[1][0], [CAELESTIA, "wallpaper", "-f", FALLBACK, "--no-smart"])
 
-    def test_theme_command_preserves_current_scheme_name(self):
-        for local_time, mode in ((time(7, 0), "light"), (time(20, 0), "dark")):
-            calls, run = self.runner([0])
-            self.assertEqual(helper.sync_theme(CAELESTIA, runner=run, local_time=local_time), 0)
-            self.assertEqual(calls[0][0], [CAELESTIA, "scheme", "set", "-m", mode])
+    def test_theme_command_always_applies_dark_mode(self):
+        calls, run = self.runner([0])
+        self.assertEqual(helper.sync_theme(CAELESTIA, runner=run), 0)
+        self.assertEqual(calls[0][0], [CAELESTIA, "scheme", "set", "-m", "dark"])
 
-    def test_unsupported_light_mode_logs_without_forcing_palette(self):
+    def test_unsupported_dark_mode_logs_without_forcing_palette(self):
         calls, run = self.runner([1])
-        self.assertEqual(helper.sync_theme(CAELESTIA, runner=run, local_time=time(12, 0)), 1)
-        self.assertEqual(calls[0][0], [CAELESTIA, "scheme", "set", "-m", "light"])
+        self.assertEqual(helper.sync_theme(CAELESTIA, runner=run), 1)
+        self.assertEqual(calls[0][0], [CAELESTIA, "scheme", "set", "-m", "dark"])
 
     def test_setter_and_theme_writes_share_one_exclusive_lock(self):
         active = 0
@@ -131,7 +123,7 @@ class TimewallAdapter(unittest.TestCase):
         frame = self.root / "frame.heic"
         threads = [
             threading.Thread(target=helper.set_wallpaper, args=(CAELESTIA, FALLBACK, str(frame), run)),
-            threading.Thread(target=helper.sync_theme, args=(CAELESTIA,), kwargs={"runner": run, "local_time": time(12, 0)}),
+            threading.Thread(target=helper.sync_theme, args=(CAELESTIA,), kwargs={"runner": run}),
         ]
         for thread in threads:
             thread.start()

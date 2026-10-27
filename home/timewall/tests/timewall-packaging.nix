@@ -17,8 +17,8 @@ assert service.Service.RuntimeDirectoryMode == "0700";
 assert builtins.elem "TIMEWALL_RUNTIME_DIR=%t/phoenix-timewall" service.Service.Environment;
 assert service.Service.Restart == "no";
 assert theme.Service.Type == "oneshot";
-assert home.systemd.user.timers.phoenix-timewall-theme-light.Timer.OnCalendar == "*-*-* 07:00:00";
-assert home.systemd.user.timers.phoenix-timewall-theme-dark.Timer.OnCalendar == "*-*-* 20:00:00";
+assert !(home.systemd.user.timers ? phoenix-timewall-theme-light);
+assert !(home.systemd.user.timers ? phoenix-timewall-theme-dark);
 pkgs.runCommand "phoenix-timewall-check"
   {
     nativeBuildInputs = [ pkgs.python3 ];

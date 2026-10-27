@@ -19,8 +19,6 @@ let
   # a missing or unreadable file uses the generated black fallback below.
   wallpaperPath = "${config.home.homeDirectory}/Pictures/Wallpapers/futuristic-city.heic";
 
-  lightAt = "07:00";
-  darkAt = "20:00";
   helper = pkgs.writeText "phoenix-timewall-helper.py" (builtins.readFile ./helper.py);
 
   blackFallback =
@@ -80,8 +78,6 @@ let
     exec ${python} ${helper} sync-theme \
       ${lib.escapeShellArgs [
         caelestiaCli
-        lightAt
-        darkAt
       ]}
   '';
 
@@ -122,38 +118,12 @@ in
 
   systemd.user.services.phoenix-timewall-theme = {
     Unit = sessionBoundUnit // {
-      Description = "Synchronize Caelestia light/dark mode with local time";
+      Description = "Apply Caelestia dark mode at session start";
     };
     Service = {
       Type = "oneshot";
       ExecStart = "${themeSync}";
       Restart = "no";
-    };
-    Install.WantedBy = [ sessionTarget ];
-  };
-
-  systemd.user.timers.phoenix-timewall-theme-light = {
-    Unit = sessionBoundUnit // {
-      Description = "Set Caelestia light mode at 07:00 local time";
-    };
-    Timer = {
-      OnCalendar = "*-*-* ${lightAt}:00";
-      AccuracySec = "1s";
-      Persistent = false;
-      Unit = themeService;
-    };
-    Install.WantedBy = [ sessionTarget ];
-  };
-
-  systemd.user.timers.phoenix-timewall-theme-dark = {
-    Unit = sessionBoundUnit // {
-      Description = "Set Caelestia dark mode at 20:00 local time";
-    };
-    Timer = {
-      OnCalendar = "*-*-* ${darkAt}:00";
-      AccuracySec = "1s";
-      Persistent = false;
-      Unit = themeService;
     };
     Install.WantedBy = [ sessionTarget ];
   };

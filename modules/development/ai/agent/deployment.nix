@@ -186,7 +186,7 @@ let
       disruptionGuard = {
         enable = cfg.disruptionGuard.enable;
         systemUnits = [ "display-manager.service" "systemd-logind.service" "systemd-user-sessions.service" "user@${toString config.users.users.${user.name}.uid}.service" ];
-        userUnits = [ "hyprland-session.target" "graphical-session.target" "hypr-persist.service" "kando.service" "phoenix-timewall.service" "phoenix-timewall-theme.service" "phoenix-timewall-theme-light.timer" "phoenix-timewall-theme-dark.timer" "phoenix-openshell-podman.service" "phoenix-openshell-gateway.service" "phoenix-agent-gui.socket" "phoenix-agent-gui-http.socket" "opensnitch-ui.service" ];
+        userUnits = [ "hyprland-session.target" "graphical-session.target" "hypr-persist.service" "kando.service" "phoenix-timewall.service" "phoenix-timewall-theme.service" "phoenix-openshell-podman.service" "phoenix-openshell-gateway.service" "phoenix-agent-gui.socket" "phoenix-agent-gui-http.socket" "opensnitch-ui.service" ];
       };
       clientUid = if config.phoenix.agent.identity.enable then config.phoenix.agent.identity.uid else config.users.users.${user.name}.uid;
       operatorUid = config.users.users.${user.name}.uid;
