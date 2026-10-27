@@ -7,6 +7,7 @@ from pathlib import Path
 import signal
 import socket
 import subprocess
+import tempfile
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -68,6 +69,27 @@ class Controller:
             raise ValueError("No active channels. Configure an edge profile in Huenicorn first.")
         return active
 
+    def choose_screen(self):
+        if not self.running():
+            raise ValueError("Enable sync before choosing a screen.")
+        # Upstream's documented Wayland reset: stop, remove only restoreToken,
+        # restart. Never rewrite a config while its owner can still save it.
+        self.stop()
+        path = Path.home() / ".config/huenicorn/config.json"
+        config = json.loads(path.read_text())
+        config.pop("restoreToken", None)
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as output:
+                temporary = Path(output.name)
+                json.dump(config, output, indent=2)
+                output.write("\n")
+            temporary.replace(path)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+        self.start()
+
     def set_level(self, value):
         if isinstance(value, bool) or not isinstance(value, (float, int)) or not math.isfinite(value) or not -1 <= value <= 1:
             raise ValueError("Glow level must be between -1 and 1.")
@@ -93,7 +115,7 @@ class Controller:
                     "message": "Sync on" if self.level is not None else "Sync on — segments have different levels; move slider to link them"}
         except (OSError, ValueError, KeyError):
             return {"enabled": True, "ready": False, "level": self.level,
-                    "message": "Starting — approve center-monitor sharing if prompted"}
+                    "message": "Starting — choose a screen if prompted; allow a restore token to remember it"}
 
 
 def handler_for(controller):
@@ -141,6 +163,8 @@ def handler_for(controller):
                     controller.start() if data["enabled"] else controller.stop()
                 elif self.path == "/api/level":
                     controller.set_level(data.get("level"))
+                elif self.path == "/api/screen" and data == {}:
+                    controller.choose_screen()
                 else:
                     raise ValueError("Unknown control")
                 self.reply(200, controller.state())

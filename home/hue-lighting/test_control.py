@@ -10,6 +10,37 @@ import control
 
 
 class Controls(unittest.TestCase):
+    def test_choose_screen_stops_before_resetting_only_restore_token(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config_path = root/'.config/huenicorn/config.json'
+            config_path.parent.mkdir(parents=True)
+            config = {'restoreToken': 'private-token', 'credentials': {'key': 'private'},
+                      'boundBackendIP': '127.0.0.1', 'restServerPort': 8215}
+            config_path.write_text(json.dumps(config))
+            c = control.Controller('/unused')
+            c.process = Mock()
+            c.process.poll.return_value = None
+            def stopped():
+                self.assertEqual(json.loads(config_path.read_text()), config)
+                c.process = None
+            with patch.object(control.Path, 'home', return_value=root), \
+                    patch.object(c, 'stop', side_effect=stopped) as stop, \
+                    patch.object(c, 'start') as start:
+                c.choose_screen()
+            stop.assert_called_once()
+            start.assert_called_once()
+            self.assertEqual(json.loads(config_path.read_text()),
+                             {k: v for k, v in config.items() if k != 'restoreToken'})
+            self.assertEqual(config_path.stat().st_mode & 0o777, 0o600)
+
+    def test_off_cannot_reset_capture_permission(self):
+        c = control.Controller('/unused')
+        with patch.object(control.Path, 'home') as home:
+            with self.assertRaises(ValueError):
+                c.choose_screen()
+            home.assert_not_called()
+
     def test_level_updates_all_active_channels_and_saves(self):
         c = control.Controller('/unused')
         c.process = Mock()
@@ -66,11 +97,11 @@ class Controls(unittest.TestCase):
         server = HTTPServer(('127.0.0.1', 0), control.handler_for(c))
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
-        def request(origin, host):
+        def request(origin, host, path='/api/sync', data=None):
             conn = http.client.HTTPConnection('127.0.0.1', server.server_port)
             headers = {'Host':host,'Content-Type':'application/json'}
             if origin: headers['Origin'] = origin
-            conn.request('POST','/api/sync',json.dumps({'enabled':True}),headers)
+            conn.request('POST',path,json.dumps({'enabled':True} if data is None else data),headers)
             reply = conn.getresponse();status = reply.status;reply.read();conn.close();return status
         try:
             self.assertEqual(request(None, control.PANEL), 403)
@@ -79,6 +110,11 @@ class Controls(unittest.TestCase):
             c.start.assert_not_called()
             self.assertEqual(request('http://'+control.PANEL, control.PANEL), 200)
             c.start.assert_called_once()
+            self.assertEqual(request('https://example.org', control.PANEL, '/api/screen', {}), 403)
+            c.choose_screen.assert_not_called()
+            self.assertEqual(request('http://'+control.PANEL, control.PANEL, '/api/screen', {}), 200)
+            c.choose_screen.assert_called_once()
+            self.assertEqual(request('http://'+control.PANEL, control.PANEL, '/api/screen', {'path': '/tmp/other'}), 400)
         finally:
             server.shutdown();server.server_close();thread.join()
 

@@ -5,6 +5,7 @@ index. Run from the repository root:
 
 ```sh
 python3 -B -m unittest discover -s home/hue-lighting -p 'test_*.py'
+node home/hue-lighting/test_panel.mjs
 python3 home/mutable-json-settings/tests/mutable-json-settings.py
 python3 modules/tests/mutable-settings-activation.py
 python3 commands/tests/commands.py
