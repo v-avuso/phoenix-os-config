@@ -2,7 +2,7 @@
 
 ## Current setup
 
-**69 instawow packages + 15 WowUp-CF packages; 151 addon folders.** The original ElvUI/ToxiUI profile,
+**68 desired instawow packages + 16 WowUp-CF packages; 151 addon folders after cleanup.** The original ElvUI/ToxiUI profile,
 bindings, casting settings and private WTF files are preserved. The user has completed ToxiUI's in-game installer and customization;
 this addon batch preserves those current settings and does not launch WoW.
 **No addon-specific configuration overrides, new ToxiUI profiles or action-bar bindings have been
@@ -17,26 +17,49 @@ WowUp owns Details!, RareScanner, World Quest Tracker, TSM, Leatrix Plus/Maps, O
 Ultimate Mouse Cursor, Better Fishing, Home Bound, BugGrabber/BugSack, Syndicator and GuildFinder+.
 The original **46 instawow package records** are protected by Ignore / Auto Update off in WowUp.
 The **12 newer BtWQuests package records** may need discovery and Ignore reconciliation; the
-**15 CurseForge installations remain WowUp-managed**, with auto-update off. Package records are not
-individual folders: the 84 packages supply 151 AddOns folders, including bundled modules. Do not
+**16 CurseForge installations remain WowUp-managed**, with auto-update off. Package records are not
+individual folders: after cleanup, 84 packages supply 151 AddOns folders, including bundled modules. Do not
 reinstall or adopt either manager's packages in the other. The ten new English voice packs below
 are also instawow-owned and must be ignored if WowUp discovers them.
 
 ## Small utility batch — 2026-10-27
 
-**Installed:** experimental **Hide Vendor Sell Price 12.1.0**, instawow provider **GitHub**,
-source `github:delulunia/HideVendorSellPrice`, folder `Interface/AddOns/HideVendorSellPrice`.
-[Official releases](https://github.com/delulunia/HideVendorSellPrice/releases).
-Its TOC declares Retail 120100; the installed UI targets 120105. It has no addon dependencies,
-bindings, settings or SavedVariables. Test before keeping it: hover a sellable bag item without Alt,
-then with Alt; confirm the default price disappears, TSM information still appears with Alt,
-and the tooltip skin/layout remains correct. Repeat at a vendor and with a comparison tooltip.
-ElvUI processes the same sell-price line and can insert its own text; this experiment may therefore
-leave a price visible or behave differently by tooltip/load order. It does not rewrite comparisons.
-If ineffective or errors appear in `/bugsack`, disable **Hide Vendor Sell Price** in the AddOns menu.
-For permanent removal, remove its source from `wow-addons.json`, deploy that manifest before the
-next sync, and run `instawow -p phoenix-retail remove github:delulunia/HideVendorSellPrice` with WoW
-closed. Leave WTF untouched. Keep this package **Ignore / Auto Update off in WowUp** if discovered.
+**Hide Vendor Sell Price rejected:** the player confirmed it does not remove the vendor price
+in this ElvUI/ToxiUI setup. `github:delulunia/HideVendorSellPrice` has been removed from the desired
+manifest. Remove its installed record and `Interface/AddOns/HideVendorSellPrice` only with
+WoW closed, using the workflow below. No replacement addon or tooltip/profile changes are requested.
+
+### Post-game removal
+
+Close WoW and WowUp first, and keep them closed throughout. In a terminal, run each step only after
+the preceding step succeeds. Stop the timer to prevent an automatic race; let any already-running
+updater finish by waiting for the existing shared lock. Do not run sync against the old deployed
+69-entry manifest: it would reinstall the removed addon.
+
+```sh
+cd /home/v/repos/code/phoenix-os-config
+systemctl --user stop wow-addons-update.timer
+flock -w 3600 "$HOME/.local/state/phoenix-wow/lock" true
+phoenix-switch --worktree /home/v/repos/code/phoenix-os-config
+systemctl --user stop wow-addons-update.timer
+jq -e 'length == 68 and index("github:delulunia/HideVendorSellPrice") == null' \
+  /etc/phoenix-agent/activated-source/modules/apps/games/wow/wow-addons.json
+wow-addons remove github:delulunia/HideVendorSellPrice
+wow-addons sync
+wow-addons list --format json github:delulunia/HideVendorSellPrice | jq -e 'length == 0'
+test ! -e '/home/v/Games/battlenet/drive_c/Program Files (x86)/World of Warcraft/_retail_/Interface/AddOns/HideVendorSellPrice'
+systemctl --user start wow-addons-update.timer
+systemctl --user list-timers wow-addons-update.timer
+```
+
+`phoenix-switch` above is the human terminal route; an agent resuming this cleanup must use the
+repository's `ai-broker --task wow-addon-removal --reason 'Deploy the requested addon removal' --
+phoenix-switch --worktree /home/v/repos/code/phoenix-os-config` route instead.
+If deployment or verification fails, stop before removal/sync and leave the timer stopped until
+resolved. Check the source comparison before deploying if other repository changes have accumulated.
+The managed `wow-addons remove` uses the shared lock and removes only this instawow package's
+record/files. Do not delete its directory manually or edit WTF. After successful cleanup, additive
+sync will neither restore it nor remove unrelated packages; updates follow the remaining database.
 
 **Manual WowUp-CF fallback — not installed by this batch:** instawow's CurseForge resolver requires
 an unavailable access token. No suitable public GitHub/WoWInterface release was found in the bounded

@@ -3,31 +3,31 @@
 ## Intentions and status
 
 Preserve the existing Retail installation, private settings and instawow ownership. Two explicit
-updaters now have different responsibilities: instawow owns the **69 installed packages** in
-[`wow-addons.json`](wow-addons.json), including the original 58, ten official English expansion voice packs and experimental Hide Vendor Sell Price.
+updaters now have different responsibilities: the desired instawow set is **68 packages** in
+[`wow-addons.json`](wow-addons.json), including the original 58 and ten official English expansion voice packs.
+The post-game removal workflow reduces the installed set from 69 to 68.
 WowUp-CF is installed from locked Nixpkgs **2.22.0**, with only `wowup-cf` added to the existing
 unfree allowlist. No custom AppImage wrapper or lock update was added.
 
-**WowUp-CF owns fifteen packages** installed by the operator. Its `addons.json` and actual folders
-were audited read-only: existing instawow rows are ignored with auto-update off; all fifteen CF rows
-also have auto-update off. No CF package was reinstalled or adopted. There are **151 addon folders**.
+**WowUp-CF owns sixteen packages** installed by the operator. Its `addons.json` and actual folders
+were audited read-only: existing instawow rows are ignored with auto-update off; all sixteen CF rows
+also have auto-update off. No CF package was reinstalled or adopted. The post-removal folder count is **151**.
 The newer BtWQuests and English voice-pack records require Ignore reconciliation when discovered, as described in [README.md](README.md#maintenance). No application state was rewritten.
 
 ## Small utility batch audit — 2026-10-27
 
-Hide Vendor Sell Price **12.1.0** is installed through instawow from
-`github:delulunia/HideVendorSellPrice` (official GitHub release asset `HideVendorSellPrice.zip`),
-folder `Interface/AddOns/HideVendorSellPrice`. The publisher links this repository from
-[CurseForge](https://www.curseforge.com/wow/addons/hide-vendor-sell-price).
-Retail TOC **120100**, no dependencies or SavedVariables. The Lua registers only
-`TooltipDataProcessor.AddLinePreCall(Enum.TooltipDataLineType.SellPrice, ...)`: hides existing money
-frames, resets their type to STATIC, clears `shownMoneyFrames`, and returns true to suppress the line.
-It neither changes economic data nor searches/removes TSM text. Installed TSM's
-`LibTSMUI/Source/Tooltip/Tooltip.lua` adds separate text lines. Installed ElvUI's
-`Game/Shared/Modules/Tooltip/Tooltip.lua` registers `TT.AddMoneyInfo` for the same SellPrice type;
-when moneyLines is enabled it can add formatted text, so removal is not guaranteed.
-No changes to ElvUI/ToxiUI code/settings were made. Treat compatibility as experimental;
-[README](README.md#small-utility-batch--2026-10-27) owns the player test and rollback.
+Hide Vendor Sell Price **12.1.0** (`github:delulunia/HideVendorSellPrice`, GitHub release,
+folder `Interface/AddOns/HideVendorSellPrice`) failed the player's ElvUI/ToxiUI acceptance test:
+the vendor price remains visible. Its source is removed from the 68-entry desired manifest.
+The installed addon and database record must be removed only with WoW closed, after deploying
+the 68-entry manifest. An old 69-entry deployed manifest would otherwise reinstall it.
+Follow the [post-game cleanup](README.md#post-game-removal)
+to deploy first, remove the managed record/files, and verify sync does not restore it.
+
+Source inspection found the addon suppresses `TooltipDataLineType.SellPrice` and existing money
+frames; ElvUI's `TT.AddMoneyInfo` handles the same line type and can add its own formatted text.
+This explains a plausible overlap, not a proven runtime cause. No further tooltip rewrite,
+replacement addon, settings change or authentication change is part of removal.
 
 ObjectiveBarManager (`curse:1109979`) and DamageMeterKeybind (`curse:1492150`) remain **uninstalled**.
 Both resolve in the current instawow catalogue, but native dry-run resolution reports
@@ -42,8 +42,7 @@ containing current customized WTF and a consistent instawow database. All 221 WT
 existing addon files, authentication configuration and WowUp state were fingerprinted and verified
 unchanged after installation; only the three new addon files were added. Eight updater tests pass;
 the opt-in native systemd fixture was skipped. Isolated native install, managed list and targeted
-dry-run update pass (the native up-to-date result exits 1). The metal-4tb wrapper builds and its 69-package sync passes; no system
-activation was performed, so its deployed manifest remains the previous set until a future deployment.
+dry-run update pass (the native up-to-date result exits 1). The original 69-package manifest was subsequently deployed and verified. Removal uses the same normal deployment workflow, with WoW closed.
 No authentication is copied
 into Git. No WoW launch, profile changes, key assignment or service activation is part of this batch.
 
