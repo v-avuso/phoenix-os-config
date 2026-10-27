@@ -138,8 +138,8 @@ class Controller:
             return {"enabled": False, "ready": False, "level": self.level, "message": "Sync off"}
         try:
             channels = self.channels()
-            values = {round(gamma_to_boost(c["gammaFactor"]), 4) for c in channels}
-            self.level = next(iter(values)) if len(values) == 1 else None
+            values = {round(c["gammaFactor"], 4) for c in channels}
+            self.level = gamma_to_boost(next(iter(values))) if len(values) == 1 else None
             return {"enabled": True, "ready": True, "level": self.level,
                     "message": "Sync on" if self.level is not None else "Sync on — segments have different levels; move slider to link them"}
         except (OSError, ValueError, KeyError):

@@ -107,6 +107,8 @@ class Controls(unittest.TestCase):
             return {'succeeded': True}
         with patch.object(control, 'native', side_effect=api):
             self.assertEqual(c.state()['level'], .75, 'old maximum keeps its physical brightness')
+            channel['gammaFactor'] = 8
+            self.assertLess(c.state()['level'], 1, 'reserve 100% for full-brightness endpoint')
             c.set_level(1)
             self.assertEqual(channel['gammaFactor'], 16)
             self.assertEqual(c.state()['level'], 1)

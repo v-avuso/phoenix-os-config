@@ -4,15 +4,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hue Sync</title>
 <style>
-:root{color-scheme:dark;font:18px system-ui}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#10111b;color:#f4f3ff}main{width:min(480px,85vw);padding:32px;border:1px solid #454260;border-radius:22px;background:#1c1c2d;box-shadow:0 0 90px #6655cc22}h1{font-size:1.7rem;margin-top:0}.switch{display:flex;align-items:center;justify-content:space-between;font-size:1.3rem}input[type=checkbox]{width:28px;height:28px;accent-color:#b7a1ff}input[type=range]{width:100%;margin:24px 0 8px;accent-color:#b7a1ff}#status{min-height:3em;color:#c4bddb;font-size:.9rem}.ends{position:relative;display:flex;justify-content:space-between;color:#c4bddb;font-size:.8rem}.ends span:nth-child(2){position:absolute;left:25%;transform:translateX(-50%)}button{font:inherit;color:inherit;background:#34304c;border:1px solid #756a9a;border-radius:10px;padding:10px 14px}button{cursor:pointer}button:disabled{opacity:.5;cursor:default}small{display:block;color:#c4bddb;line-height:1.6;margin-top:20px}a{color:#cbbaff}.links{display:flex;gap:12px;margin-top:24px;flex-wrap:wrap}.links a{display:inline-block;padding:10px 14px;border:1px solid #756a9a;border-radius:10px;text-decoration:none}.test-link{flex-basis:100%}label[for=level]{display:block;margin-top:24px}output{float:right}label{cursor:pointer}
+:root{color-scheme:dark;font:18px system-ui}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#10111b;color:#f4f3ff}main{width:min(480px,85vw);padding:32px;border:1px solid #454260;border-radius:22px;background:#1c1c2d;box-shadow:0 0 90px #6655cc22}h1{font-size:1.7rem;margin-top:0}.switch{display:flex;align-items:center;justify-content:space-between;font-size:1.3rem}input[type=checkbox]{width:28px;height:28px;accent-color:#b7a1ff}input[type=range]{width:100%;margin:24px 0 8px;accent-color:#b7a1ff}#status{min-height:3em;color:#c4bddb;font-size:.9rem}.ends{position:relative;display:flex;justify-content:space-between;color:#c4bddb;font-size:.8rem}button{font:inherit;color:inherit;background:#34304c;border:1px solid #756a9a;border-radius:10px;padding:10px 14px}button{cursor:pointer}button:disabled{opacity:.5;cursor:default}small{display:block;color:#c4bddb;line-height:1.6;margin-top:20px}a{color:#cbbaff}.links{display:flex;gap:12px;margin-top:24px;flex-wrap:wrap}.links a{display:inline-block;padding:10px 14px;border:1px solid #756a9a;border-radius:10px;text-decoration:none}.test-link{flex-basis:100%}label[for=level]{display:block;margin-top:24px}output{float:right}label{cursor:pointer}
 </style>
 <main>
   <h1>Hue Sync</h1>
   <label class="switch" for="sync">Sync <input id="sync" type="checkbox"></label>
   <p id="status" role="status">Connecting…</p>
-  <label for="level">Glow boost <output id="value"></output></label>
+  <label for="level">Brightness <output id="value"></output></label>
   <input id="level" type="range" min="0" max="100" step="1" disabled>
-  <div class="ends"><span>Dimmer</span><span>Neutral</span><span>Brighter</span></div>
+  <div class="ends"><span>Dimmer</span><span>Brighter</span></div>
   <small>One level for both lamps and all their segments. Changes save automatically.<br>0% is neutral. 100% sends full brightness for non-black samples; black stays black. Strong boost reduces brightness differences in the image.</small>
   <small>Only the selected source’s left/right 8% strips.<br>Choose a source once; remembering it is enabled by default. Use Lighting source settings to change it.</small>
   <nav class="links" aria-label="Related pages">
@@ -24,16 +24,16 @@
 <script>
 const sync=document.querySelector('#sync'),screen=document.querySelector('#screen'),level=document.querySelector('#level'),status=document.querySelector('#status'),value=document.querySelector('#value');
 let busy=false,editing=false,error='';
-// Neutral sits at 25%; retain the full native gamma range on either side.
+// Neutral sits at 25%; the remaining three quarters control positive boost.
 function toGlow(position){return position<=25?position/25-1:(position-25)/75}
 function toPosition(glow){return glow<=0?(glow+1)*25:25+glow*75}
-function glowLabel(glow){return (glow<0?'−':'')+Math.round(Math.abs(glow)*100)+'%'}
+function glowLabel(glow){const percent=Math.round(Math.abs(glow)*100);return (glow<0?'−':'')+(glow>0&&glow<1?Math.min(99,percent):percent)+'%'}
 function show(s){
   sync.checked=s.enabled;
   screen.disabled=busy||!s.enabled;
   level.disabled=busy||!s.ready;
   if(!editing){
-    if(s.level!==null){level.value=toPosition(s.level);value.textContent=glowLabel(s.level);level.setAttribute('aria-valuetext',value.textContent+' glow')}
+    if(s.level!==null){level.value=toPosition(s.level);value.textContent=glowLabel(s.level);level.setAttribute('aria-valuetext',value.textContent+' brightness')}
     else value.textContent=s.enabled?'Mixed':'—';
   }
   status.textContent=error||s.message;
@@ -51,7 +51,7 @@ async function change(path,data){
 }
 screen.addEventListener('click',()=>change('/api/screen',{}));
 sync.addEventListener('change',()=>change('/api/sync',{enabled:sync.checked}));
-level.addEventListener('input',()=>{editing=true;value.textContent=glowLabel(toGlow(Number(level.value)));level.setAttribute('aria-valuetext',value.textContent+' glow')});
+level.addEventListener('input',()=>{editing=true;value.textContent=glowLabel(toGlow(Number(level.value)));level.setAttribute('aria-valuetext',value.textContent+' brightness')});
 level.addEventListener('change',async()=>{await change('/api/level',{level:toGlow(Number(level.value))});editing=false});
 refresh();setInterval(refresh,2000);
 </script>

@@ -31,7 +31,7 @@ This does not promise to turn lamps off or restore a scene. Closing the browser
 tab leaves the panel/sync running; reopening the launcher returns to it.
 Terminating the panel process stops its child.
 
-**Glow boost** links gamma correction across every active channel in the selected
+**Brightness** links gamma correction across every active channel in the selected
 Entertainment profile and saves it through Huenicorn's API. **0%** is neutral,
 negative values darken and positive values brighten. **100%** sends maximum
 streamed brightness for every non-black sample; black remains black. This is a

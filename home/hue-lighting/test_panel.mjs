@@ -27,11 +27,11 @@ await new Promise(resolve => setImmediate(resolve));
 assert.equal(elements.level.value, 25, 'neutral must appear a quarter along the slider');
 assert.equal(elements.screen.disabled, false);
 assert.equal(elements.value.textContent, '0%');
-for (const [glow, expected] of [[-1, '−100%'], [1, '100%']]) {
+for (const [glow, expected] of [[-1, '−100%'], [.9999, '99%'], [1, '100%']]) {
   state.level = glow;
   await context.refresh();
   assert.equal(elements.value.textContent, expected);
-  assert.equal(elements.level.attributes['aria-valuetext'], expected + ' glow');
+  assert.equal(elements.level.attributes['aria-valuetext'], expected + ' brightness');
 }
 state.level = 0;
 for (const [position, glow] of [[0, -1], [25, 0], [100, 1], [62.5, .5]]) {
