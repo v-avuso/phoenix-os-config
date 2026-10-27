@@ -132,12 +132,13 @@ class RunnerTests(unittest.TestCase):
         connection.recv.return_value = b'{"ok":true,"action":"update"}\n'
         with patch.object(runner.socket, 'socket', return_value=connection):
             runner.controller(dict(self.config, target='metal', controllerSocket='/fixture'), candidate,
-                              self.home, self.repo, commit, '/base', '/profile')
+                              self.home, self.repo, commit, '/base', '/profile', '/selected-source')
         sent = connection.sendall.call_args.args[0]
         self.assertLessEqual(len(sent), deploy.LIMIT)
         received = json.loads(sent)
         self.assertEqual(received['files'], files)
         self.assertEqual(received['action'], 'update')
+        self.assertEqual(received['updateBase'], '/selected-source')
         with tempfile.TemporaryDirectory() as directory:
             for name, content in files.items():
                 path = Path(directory) / name
@@ -312,7 +313,8 @@ else:
     def test_complete_update_releases_hold_only_in_successful_update_commit(self):
         self.setup_pipeline(hold=True)
         (self.repo/'user-note').write_text('keep staged work');self.git('add','user-note')
-        def approved(config,c,home,tree,commit,base,profile):
+        def approved(config,c,home,tree,commit,base,profile,source_base):
+            self.assertEqual(source_base, str(Path(config["baseline"]).resolve()))
             policy=json.loads((tree/runner.POLICY).read_text())
             self.assertNotIn('codex-cli',policy['holds'])
             self.assertEqual(self.git('rev-parse','HEAD').strip(),self.head)

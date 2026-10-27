@@ -661,7 +661,7 @@ class DeploymentTests(unittest.TestCase):
             (source / 'upstream-linux-packages.json').write_text(json.dumps(payload))
             self.assertEqual(routine.validate_community_payload(directory), '1.2.3')
 
-    def non_model_deployment(self, action='update', operator=False, updater_socket=False, malicious=False, progress=False, build_failure=False, stalled_reader=False, symlinks=False, retarget=False):
+    def non_model_deployment(self, action='update', operator=False, updater_socket=False, malicious=False, progress=False, build_failure=False, stalled_reader=False, symlinks=False, retarget=False, update_base=None):
         before, _modes, candidate, modes = self.routine_sources()
         if symlinks:
             before.update({'canonical': 'source', 'other': 'other source', 'alias': 'canonical'})
@@ -678,6 +678,10 @@ class DeploymentTests(unittest.TestCase):
             marker.mkdir(parents=True)
             for target in (baseline, profile_source):
                 deploy.source_manifest.materialize(target, before, modes)
+            if update_base == 'active':
+                (profile_source / 'older-config.nix').write_text('older approved config')
+            elif update_base == 'staged':
+                (baseline / 'runtime-only.nix').write_text('different active config')
             (marker / 'activated-source').symlink_to(profile_source)
             frozen, closure, old_runtime = root / 'frozen', root / 'closure', root / 'old-runtime'
             (closure / 'etc/phoenix-agent').mkdir(parents=True)
@@ -725,6 +729,8 @@ class DeploymentTests(unittest.TestCase):
                            reason='Stage deterministic stable package updates',
                            expectedBase=str(baseline), expectedProfile=str(profile))
             request['action'] = action
+            if update_base:
+                request['updateBase'] = str(baseline if update_base == 'active' else profile_source if update_base == 'staged' else root / 'untrusted')
             if progress:
                 request['progress'] = True
             if action not in {'boot', 'update'}:
@@ -773,6 +779,11 @@ class DeploymentTests(unittest.TestCase):
                  mock.patch.object(deploy, 'request_valid', wraps=deploy.request_valid), \
                  mock.patch.object(deploy.os, 'geteuid', return_value=0 if operator else os.getuid()):
                 result = socket_workflow() if updater_socket else deploy.process(config, request, os.getuid(), 42, operator=operator)
+            if update_base == 'untrusted':
+                self.assertFalse(result['ok'])
+                self.assertEqual(result['code'], 'update-base-not-installed')
+                self.assertFalse(any(argv[:2] == ['nix', 'build'] for _, argv in as_user_calls))
+                return
             if build_failure:
                 self.assertFalse(result['ok'])
                 self.assertEqual((result['stage'], result['code']), ('build', 'build-failed'))
@@ -805,6 +816,12 @@ class DeploymentTests(unittest.TestCase):
             self.assertFalse(any(user == 'reviewer' for user, _argv in as_user_calls))
             self.assertFalse(any("pkexec" in str(call.args[0]) or "polkit" in str(call.args[0])
                                  for call in Review.run.call_args_list))
+
+    def test_routine_update_binds_explicit_active_or_staged_source(self):
+        for source in ('active', 'staged', 'untrusted'):
+            with self.subTest(source=source):
+                self.non_model_deployment(updater_socket=True, update_base=source)
+        self.non_model_deployment(updater_socket=True, update_base='active', malicious=True)
 
     def test_distinct_updater_socket_uses_production_validator_and_boot_only(self):
         self.non_model_deployment(updater_socket=True)

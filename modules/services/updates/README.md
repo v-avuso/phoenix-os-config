@@ -10,6 +10,12 @@ The runner prepares committed `main` dependency updates from the supported fixed
 publishers. It defers when the branch/source baseline or owned local files diverge.
 The protected controller validates publisher policy and immutable baseline/profile,
 builds the submitted source and binds the resulting closure before boot staging.
+The runner sends the exact matching installed source as `updateBase`; the
+controller accepts only its current active or next-boot source and validates the
+entire candidate against that source. This handles human `test` deployments that
+advance runtime while leaving an older next-boot profile. Legacy clients without
+the selector retain next-boot validation. Both installed identities are rechecked
+before staging; a caller-supplied arbitrary store source is never an update base.
 Routine updates invoke neither AI review nor graphical operator authentication.
 
 `phoenix.target` binds the updater, installed deployment policy and controller to

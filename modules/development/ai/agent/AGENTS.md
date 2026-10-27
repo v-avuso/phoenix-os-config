@@ -24,6 +24,8 @@
   content with the activated/staged approved source: new documentation commits also
   change that boundary. Report the final binding in the journal/operator handoff;
   do not start a new tracked receipt edit merely to refresh its own source hash.
+  Routine runner/controller checks must select the same exact installed source;
+  exercise different active and next-boot configurations, since test leaves boot unchanged.
 - When changing the review boundary, exercise controller → worker → adapter →
   checkpoint together in `tests/agent-deployment.py`, not only mocked worker
   envelopes. Keep fixture ownership/store/build/model/activation stubs explicit;

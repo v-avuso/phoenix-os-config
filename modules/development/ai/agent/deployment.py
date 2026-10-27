@@ -78,6 +78,11 @@ def request_valid(request, target, reservations=False):
     if not isinstance(request, dict):
         raise ValueError('unsupported request fields')
     expected = FIELDS | ({'preflightId'} if 'preflightId' in request else set()) | ({'task'} if 'task' in request else set()) | ({'reservation'} if reservations and request.get('action') != 'update' else set()) | ({'branch'} if 'branch' in request else set()) | ({'expectedBase', 'expectedProfile'} if request.get('action') in {'boot', 'update'} else set())
+    if 'updateBase' in request:
+        if request.get('action') != 'update':
+            raise ValueError('update source selector requires update action')
+        store_path(request['updateBase'], 'source')
+        expected |= {'updateBase'}
     if 'progress' in request:
         if request.get('action') != 'update' or request['progress'] is not True:
             raise ValueError('unsupported progress request')
@@ -403,10 +408,6 @@ def process_inner(config, request, uid, pid, state):
         store_path(profile, 'closure')
         profile_source = str((Path(profile) / 'etc/phoenix-agent/activated-source').resolve(strict=True))
         store_path(profile_source, 'source')
-        # Boot staging may advance several times before reboot. Its root-owned
-        # immutable source is the preceding approved dependency baseline; do not
-        # repeatedly spend reviews on the same already-staged upstream changes.
-        previous_dependencies = review.baseline_files(Path(profile_source))
         if request['action'] == 'update':
             state['stage'] = 'routine-policy'
             update_spec = importlib.util.spec_from_file_location('routine_update', config['routineUpdateScript'])
@@ -486,7 +487,14 @@ def process_inner(config, request, uid, pid, state):
                 b.extend([0] * (width - len(b)))
                 return (a > b) - (a < b)
 
-            previous_modes = review.source_modes(Path(profile_source), previous_dependencies)
+            # Match the runner's exact source choice: test deployments can advance
+            # runtime beyond next boot. Legacy clients retain the staged baseline.
+            update_base = request.get('updateBase', profile_source)
+            if update_base not in {baseline, profile_source}:
+                raise DeploymentFailure('baseline', 'update-base-not-installed')
+            previous_dependencies = review.baseline_files(Path(update_base))
+            previous_modes = review.source_modes(Path(update_base), previous_dependencies)
+            print(json.dumps(dict(event='update-base', source=update_base, runtime=baseline, profileSource=profile_source)), flush=True)
             policy_check(update, 'source-policy', update.validate_source, previous_dependencies, previous_modes, request['files'], request['modes'],
                                    config['system'], compare_versions, evaluate_package, desktop_package_version,
                                    verify_current_source)
