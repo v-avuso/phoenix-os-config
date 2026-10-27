@@ -43,8 +43,10 @@ def inspect(descriptor):
     old = json.loads(immutable(descriptor['installedConfig']).read_text())
     new = json.loads(immutable(descriptor['candidateConfig']).read_text())
     new['configPath'] = descriptor['candidateConfig']
+    old['configPath'] = descriptor['installedConfig']
+    predecessor = json.loads(immutable(descriptor.get('predecessorConfig', descriptor['installedConfig'])).read_text())
     for key in ('modelReviewEnabled', 'target', 'operatorUid', 'clientUid', 'reviewerUser', 'builderUser',
-                'reviewHome', 'work', 'securityReviewState', 'activationLock', 'codex', 'model', 'effort',
+                'reviewHome', 'work', 'securityReviewState', 'activationLock',
                 'reservations', 'disruptionGuard', 'commands'):
         if old.get(key) != new.get(key):
             raise ValueError('recovery-cannot-change-authority-or-review-identity')
@@ -58,11 +60,19 @@ def inspect(descriptor):
         if str((Path(descriptor[prefix + 'Closure']) / 'etc/phoenix-agent/activated-source').resolve(strict=True)) != descriptor[prefix + 'Source']:
             raise ValueError('closure-source-binding-mismatch')
     service_binding(descriptor['candidateClosure'], descriptor['candidateConfig'], new)
-    deploy = load(new['controller'])
-    security = deploy.load_security(new)
+    service_binding(descriptor['approvedClosure'], descriptor.get('predecessorConfig', descriptor['installedConfig']), predecessor)
+    # Until the exact verdict passes, execute only the installed controller and
+    # its fingerprint implementation; candidate modules are data, not code.
+    deploy = load(old['controller'])
+    security = deploy.load_security(old)
+    for prefix in ('approved', 'candidate'):
+        deploy.store_path(descriptor[prefix + 'Source'], 'source')
+        deploy.store_path(descriptor[prefix + 'Closure'], 'closure')
     if (security.policy_digest(old) != descriptor['installedPolicy'] or
             security.policy_digest(new) != descriptor['candidatePolicy']):
         raise ValueError('recovery-policy-binding-mismatch')
+    if security.policy_digest(predecessor) != descriptor.get('predecessorPolicy', descriptor['installedPolicy']):
+        raise ValueError('recovery-predecessor-policy-binding-mismatch')
     return old, new, deploy, security
 
 
@@ -79,7 +89,7 @@ def recheck(descriptor, old, new, deploy, security):
 
 
 def approved_baseline(descriptor, old, security):
-    match = any(record.get('policy') == descriptor['installedPolicy'] and
+    match = any(record.get('policy') == descriptor.get('predecessorPolicy', descriptor['installedPolicy']) and
                 record.get('target') == old['target'] and
                 record.get('source') == descriptor['approvedSource'] and
                 record.get('closure') == descriptor['approvedClosure']
@@ -104,6 +114,13 @@ def verify_completion(descriptor, new, deploy, security, review):
                record.get('closure') == descriptor['candidateClosure']
                for _, record in security.records(new, 'approved')):
         raise ValueError('recovery-checkpoint-publication-missing')
+    # Verify the receipt with the successor's own selector, then ensure history
+    # was not silently relabelled.
+    exact, _, _ = security.choose_checkpoint(new, new['target'], descriptor['candidateSource'],
+        descriptor['candidateClosure'], 'transition-completion', descriptor['candidateSource'],
+        review.baseline_files(Path(descriptor['candidateSource'])), review, deploy.store_path)
+    if not exact:
+        raise ValueError('recovery-transition-receipt-not-accepted')
     # An old-policy source is not silently approved under the new policy.
     exact, _, _ = security.choose_checkpoint(new, new['target'], descriptor['approvedSource'],
         descriptor['approvedClosure'], 'recovery-enforcement-check', descriptor['candidateSource'],
@@ -115,7 +132,8 @@ def verify_completion(descriptor, new, deploy, security, review):
 def recover(descriptor, old, new, deploy, security, uid):
     if os.geteuid() != 0 or uid != old['operatorUid']:
         raise ValueError('native-operator-authentication-required')
-    review = deploy.load_review(new)
+    # Review replacement code with the already installed trusted reviewer.
+    review = deploy.load_review(old)
     lock = Path(old['work']).parent / 'deployment.lock'
     with lock.open('a') as stream:
         fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -127,9 +145,9 @@ def recover(descriptor, old, new, deploy, security, uid):
         binding = dict(source=descriptor['candidateSource'], closure=descriptor['candidateClosure'],
                        base=descriptor['baseline'], profile=descriptor['profile'],
                        profileSource=str((Path(descriptor['profile']) / 'etc/phoenix-agent/activated-source').resolve(strict=True)),
-                       reviewBase=descriptor['approvedSource'], oldPolicy=descriptor['installedPolicy'],
+                       reviewBase=descriptor['approvedSource'], oldPolicy=descriptor.get('predecessorPolicy', descriptor['installedPolicy']),
                        newPolicy=descriptor['candidatePolicy'], target=new['target'], action='switch',
-                       reason='Restore safe symlink updates with explicit reviewed checkpoint transition',
+                       reason='Security administrator authorized exact review-policy handover with independent security review',
                        commit=descriptor['commit'], nonce=secrets.token_hex(32))
         payload = dict(binding=binding, files=files, baseline=baseline,
                        diff=review.source_diff(baseline, files,
@@ -139,34 +157,45 @@ def recover(descriptor, old, new, deploy, security, uid):
         # credential copying, caller verdicts or automatic human override.
         with tempfile.TemporaryDirectory(prefix='source-recovery-', dir=new['work']) as directory:
             temporary = Path(directory)
-            account = pwd.getpwnam(new['reviewerUser'])
+            for field in ('candidateSource', 'candidateClosure'):
+                review.run([old['nixStore'], '--add-root', str(temporary / field), '--indirect', '--realise', descriptor[field]])
+            account = pwd.getpwnam(old['reviewerUser'])
             temporary.chmod(0o755)
             review_work = temporary / 'review'
             review_work.mkdir(mode=0o700)
             os.chown(review_work, account.pw_uid, account.pw_gid)
-            output = deploy.as_user(new, new['reviewerUser'],
-                [new['python'], '-I', new['controller'], new['configPath'], 'worker', str(review_work)],
+            output = deploy.as_user(old, old['reviewerUser'],
+                [old['python'], '-I', old['controller'], old['configPath'], 'worker', str(review_work)],
                 review.run, data=json.dumps(payload).encode(), timeout=1400,
-                env={'HOME': new['reviewHome'], 'PATH': '/nonexistent'})
+                env={'HOME': old['reviewHome'], 'PATH': '/nonexistent'})
             verdict = json.loads(output)
             if not isinstance(verdict, dict) or set(verdict) != {'status', 'verdict'} or verdict['status'] != 'verdict':
                 raise ValueError('protected-review-failed')
             try:
                 review.validate_verdict(verdict['verdict'], binding)
             except review.ReviewDenied:
-                security.pending(new, binding, uid, 'reviewed-source-recovery', 'model-denied',
+                security.pending(old, binding, uid, 'reviewed-source-recovery', 'model-denied',
                                  'Protected security review denied source recovery.', review.run)
                 raise ValueError('model-denied') from None
+            successor = load(new['controller'])
+            successor_security = successor.load_security(new)
+            if successor_security.policy_digest(new) != descriptor['candidatePolicy']:
+                raise ValueError('unsupported-successor-fingerprint-scheme')
             # The old-policy checkpoint supplies context only. Publish new-policy
             # authority only after a fresh exact bound verdict and locked recheck.
             with deploy.activation_guard(new):
                 recheck(descriptor, old, new, deploy, security)
                 approved_baseline(descriptor, old, security)
-                security.approve(new, binding, 'reviewed-source-recovery', review.run)
-            result = deploy.activate_bound(new, binding, temporary, review, {}, uid, os.getpid())
-            verify_completion(descriptor, new, deploy, security, review)
+                successor_security.approve_transition(new, binding, 'administrator-policy-transition', review.run,
+                    predecessor_policy=descriptor.get('predecessorPolicy', descriptor['installedPolicy']),
+                    predecessor_source=descriptor['approvedSource'], predecessor_closure=descriptor['approvedClosure'],
+                    uid=uid, verify_source=deploy.store_path)
+            result = successor.activate_bound(new, binding, temporary, review, {}, uid, os.getpid())
+            verify_completion(descriptor, new, successor, successor_security, review)
             return dict(result, checkpointPublished=True, previousCheckpointVerified=True,
-                        installedBindingsVerified=True, unapprovedSourceRequiresReview=True)
+                        installedBindingsVerified=True, unapprovedSourceRequiresReview=True, policyHandover=True, administratorUid=uid,
+                        predecessorPolicy=descriptor.get('predecessorPolicy', descriptor['installedPolicy']),
+                        successorPolicy=descriptor['candidatePolicy'])
 
 
 def main(descriptor_path, dry_run=False):

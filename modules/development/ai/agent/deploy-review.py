@@ -511,7 +511,7 @@ def warn_deployment_diff(config, files, modes):
 
 
 FAILURE_STAGES = frozenset("request freeze baseline routine-policy build closure-binding review verdict baseline-recheck activation authentication source-transport protocol reservation disruption override".split())
-FAILURE_CODES = frozenset("source-capacity-exceeded wire-capacity-exceeded review-adapter-unsupported review-cli-incompatible-suspected review-model-unavailable-suspected review-rate-limit-suspected review-transport-failed-suspected invalid-or-denied rejected-or-failed timeout invalid-json io-failed operator-authentication-required rollback-incomplete unsafe-execution-guard mutation-still-running missing-binding baseline-changed profile-changed source-mismatch spool-recovery-required invalid-capability routine-resource-busy model-denied reviewer-invocation-failed review-invocation-failed review-authentication-failed review-authentication-missing review-startup-failed review-timeout review-output-limit review-context-oversized context-compacted context-request-invalid context-request-oversized schema-invalid binding-mismatch worker-envelope-invalid security-policy-changed security-approval-required approved-checkpoint-required approval-state-changed inspection-required pending-capacity pending-binding-invalid pending-caller-invalid pending-state-changed".split())
+FAILURE_CODES = frozenset("policy-transition-required successor-controller-binding-invalid source-capacity-exceeded wire-capacity-exceeded review-adapter-unsupported review-cli-incompatible-suspected review-model-unavailable-suspected review-rate-limit-suspected review-transport-failed-suspected invalid-or-denied rejected-or-failed timeout invalid-json io-failed operator-authentication-required rollback-incomplete unsafe-execution-guard mutation-still-running missing-binding baseline-changed profile-changed source-mismatch spool-recovery-required invalid-capability routine-resource-busy model-denied reviewer-invocation-failed review-invocation-failed review-authentication-failed review-authentication-missing review-startup-failed review-timeout review-output-limit review-context-oversized context-compacted context-request-invalid context-request-oversized schema-invalid binding-mismatch worker-envelope-invalid security-policy-changed security-approval-required approved-checkpoint-required approval-state-changed inspection-required pending-capacity pending-binding-invalid pending-caller-invalid pending-state-changed".split())
 
 
 def reviewer_explanation(summary):
@@ -549,6 +549,11 @@ def deployment_failure(result, config=None):
     if (isinstance(findings, list) and len(findings) <= 64 and all(
             isinstance(item, str) and re.fullmatch(r"[A-Za-z0-9_.:@-]{1,256}", item) for item in findings)):
         display["findings"] = findings
+    if code == 'policy-transition-required':
+        summary = result.get('summary', '')
+        if isinstance(summary, str):
+            summary = ''.join(c for c in summary[:1000] if not unicodedata.category(c).startswith('C'))
+            print(summary, file=sys.stderr)
     if stage == "review" and code == "model-denied":
         # Model text is advisory, never protocol metadata or authorization.
         reviewer_explanation(result.get("summary"))

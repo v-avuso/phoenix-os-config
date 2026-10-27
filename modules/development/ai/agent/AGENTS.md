@@ -1,5 +1,15 @@
 # Agent containment and deployment
 
+- Changes to the security-review fingerprint require an explicit handover authorized
+  by the security administrator (the operator), not by the reviewer. Prepare the
+  implementation, checks and a report explaining why the change is warranted,
+  alternatives, exact policy/source/closure bindings and remaining validation.
+  Put **Authorization: security-policy handover** in Open tasks and wait for the
+  operator to read and authorize it. Implementation permission is not handover
+  permission: do not start authentication, deploy, seed trust, or create/request a
+  PR before that separate authorization. Do not avoid a warranted architectural
+  change merely to avoid this gate. See [policy handovers](policy-transitions.md).
+
 - Deployment security review is optional; its reusable option defaults OFF. Keep all review
   authority, prompts, cache and override UI behind `securityReview.enable`.
   Authenticated deployment, immutable source/closure binding and rollback are

@@ -143,6 +143,27 @@ def store_file(path):
     return resolved
 
 
+def successor_config(config, closure):
+    try:
+        return load_security(config).closure_config(closure)
+    except (ValueError, OSError, KeyError):
+        raise DeploymentFailure('closure-binding', 'successor-controller-binding-invalid') from None
+
+
+def require_policy_continuity(config, closure):
+    if not config.get('modelReviewEnabled', True) or not config.get('securityReviewState'):
+        return
+    security = load_security(config)
+    before = security.policy_digest(config)
+    after = security.policy_digest(successor_config(config, closure))
+    if before != after:
+        failure = DeploymentFailure('closure-binding', 'policy-transition-required')
+        failure.summary = ('Security administrator approval required for review-policy handover; '
+                           'installed=' + before + ' successor=' + after +
+                           '. Prepare the exact bound transition report; ordinary review cannot authorize it.')
+        raise failure
+
+
 def active_provenance(closure, source, target):
     path = Path(closure) / 'etc/phoenix-agent/active-provenance.json'
     try:
@@ -521,6 +542,7 @@ def process_inner(config, request, uid, pid, state):
                     '--indirect', '--realise', closure])
         if str((Path(closure) / 'etc/phoenix-agent/activated-source').resolve(strict=True)) != source_store:
             raise ValueError('closure does not record exact reviewed source')
+        require_policy_continuity(config, closure)
         binding = {key: request[key] for key in ('commit', 'target', 'action', 'reason')}
         if config.get('reservations') and request['action'] != 'update':
             binding.update(reservation=request['reservation'], reservationUid=uid)
@@ -869,6 +891,7 @@ def override(config, nonce, uid, pid, reservation=None):
         if str((Path(binding['closure']) / 'etc/phoenix-agent/activated-source').resolve(strict=True)) != binding['source']:
             raise DeploymentFailure('override', 'source-mismatch')
         recheck_bound(config, binding)
+        require_policy_continuity(config, binding['closure'])
         # Authentication approves this exact frozen source/closure independently
         # of activation success. Preserve that approval if activation later fails.
         security.approve(config, binding, binding['branch'], review.run)
@@ -1096,7 +1119,7 @@ def serve(config):
             stage = error.stage if isinstance(error, DeploymentFailure) else 'protocol'
             code = error.code if isinstance(error, DeploymentFailure) else 'invalid-or-denied'
             authorization.audit('rejected', secrets.token_hex(16), uid, pid, category='invalid-or-denied')
-            summary = getattr(error, 'summary', '') if isinstance(error, DeploymentFailure) and stage == 'routine-policy' else ''
+            summary = getattr(error, 'summary', '') if isinstance(error, DeploymentFailure) and (stage == 'routine-policy' or code == 'policy-transition-required') else ''
             print(json.dumps(dict(event='failed', uid=uid, pid=pid, stage=stage, code=code, **({'summary': summary} if summary else {}))), flush=True)
             result = dict(ok=False, stage=stage, code=code, error='Deployment failed at ' + stage + ' (' + code + ').')
             if summary:

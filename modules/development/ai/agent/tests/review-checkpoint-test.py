@@ -106,9 +106,25 @@ class CheckpointTrialTests(unittest.TestCase):
                  mock.patch.object(os, 'fstat', side_effect=lambda fd: root_info(original_fstat(fd))), \
                  mock.patch.object(Path, 'resolve', resolve), \
                  mock.patch.object(deploy, 'store_path', side_effect=lambda value, kind: value), \
+                 mock.patch.object(deploy, 'successor_config', return_value=config), \
                  mock.patch.object(deploy, 'activation_executable'), \
                  mock.patch.object(deploy, 'load_review', return_value=review), \
                  mock.patch.object(deploy, 'load_security', return_value=security):
+                nonce = 'b' * 64
+                binding = dict(source=str(source), closure=str(closure), target='metal', action='test',
+                    base=str(source), profile=str(closure), profileSource=str(source), nonce=nonce,
+                    reason='Explicit override cannot authorize a policy handover', commit='0' * 40)
+                security.pending(config, binding, 2000, 'policy-gate', 'schema-invalid', 'fixture', review.run)
+                with mock.patch.object(deploy, 'successor_config', return_value=dict(config, model='replacement-model')), \
+                     mock.patch.object(deploy, 'activate_bound') as blocked_activation:
+                    with self.assertRaises(deploy.DeploymentFailure) as failure:
+                        deploy.override(config, nonce, 1000, os.getpid())
+                    self.assertEqual(failure.exception.code, 'policy-transition-required')
+                    blocked_activation.assert_not_called()
+                    self.assertEqual(security.records(config, 'approved'), [])
+                    self.assertTrue((state / (nonce + '.pending.json')).exists())
+                security.consume_pending(config, nonce)
+                review.run.reset_mock()
                 receipt = trial.pending_override(deploy, review, security, config, str(source), str(closure), str(closure))
                 with self.assertRaisesRegex(ValueError, 'override-cache-not-empty'):
                     trial.pending_override(deploy, review, security, config, str(source), str(closure), str(closure))

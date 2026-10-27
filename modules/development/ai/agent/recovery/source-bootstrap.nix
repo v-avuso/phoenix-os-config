@@ -1,5 +1,5 @@
 # On-demand factory only; no installed grant, daemon, policy or activation.
-{ pkgs, descriptor }:
+{ pkgs, descriptor, name ? "phoenix-source-recovery" }:
 let
   settings = pkgs.writeText "phoenix-source-recovery.json" (builtins.toJSON descriptor);
   entry = name: suffix: pkgs.writeShellScriptBin name ''
@@ -7,9 +7,9 @@ let
     exec ${pkgs.python3}/bin/python3 -I ${./source-bootstrap.py} ${settings} ${suffix}
   '';
 in pkgs.symlinkJoin {
-  name = "phoenix-source-recovery";
+  inherit name;
   paths = [
-    (entry "phoenix-source-recovery" "")
-    (entry "phoenix-source-recovery-inspect" "--inspect")
+    (entry name "")
+    (entry "${name}-inspect" "--inspect")
   ];
 }

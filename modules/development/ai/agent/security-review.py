@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import stat
 import time
 import tempfile
@@ -39,6 +40,100 @@ def policy_digest(config):
     elif authority is not None:
         digest.update(b'authorizationPolicy\0' + json.dumps(authority, sort_keys=True).encode())
     return digest.hexdigest()
+
+
+def immutable_file(path):
+    if not isinstance(path, (str, Path)):
+        raise ValueError('transition-immutable-metadata-required')
+    path = Path(path).resolve(strict=True)
+    info = path.stat()
+    if not str(path).startswith('/nix/store/') or not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+        raise ValueError('transition-immutable-metadata-required')
+    return path
+
+
+def closure_config(closure):
+    unit = immutable_file(Path(closure) / 'etc/systemd/system/phoenix-deploy.service')
+    starts = [line.split('=', 1)[1] for line in unit.read_text().splitlines() if line.startswith('ExecStart=')]
+    if len(starts) != 1:
+        raise ValueError('transition-controller-binding-invalid')
+    argv = shlex.split(starts[0])
+    if len(argv) != 5 or argv[1] != '-I' or argv[4] != 'serve':
+        raise ValueError('transition-controller-binding-invalid')
+    config = json.loads(immutable_file(argv[3]).read_text())
+    if not isinstance(config, dict):
+        raise ValueError('transition-controller-binding-invalid')
+    if argv != [config['python'], '-I', config['controller'], argv[3], 'serve']:
+        raise ValueError('transition-controller-binding-invalid')
+    for key in ('policy', 'reviewScript', 'securityReviewScript', 'controller',
+                'authorizationLibrary', 'deploymentTransportPolicy', 'sourceManifestLibrary', 'authorizationPolicy',
+                'python', 'nix', 'nixStore', 'setpriv', 'bwrap', 'codex', 'caBundle'):
+        if config.get(key):
+            immutable_file(config[key])
+    return dict(config, configPath=argv[3])
+
+
+def validate_transition(config, record, verify_source):
+    """Verify a root-published, human-authorized receipt without relabelling history.
+
+    The predecessor approval is embedded because ordinary retention can prune its
+    separate record. Root-only publication supplies provenance; no caller receipt
+    or reviewer verdict can enter this path through the deployment socket.
+    """
+    if record.get('origin') != 'administrator-reviewed-transition':
+        if 'transition' in record:
+            raise ValueError('transition-origin-invalid')
+        return
+    proof = record.get('transition')
+    if not isinstance(proof, dict) or set(proof) != {'version', 'administratorUid', 'predecessorPolicy', 'predecessorCheckpoint', 'successorPolicy', 'source', 'closure', 'target'}:
+        raise ValueError('transition-receipt-invalid')
+    if type(proof['version']) is not int or proof['version'] != 1 or type(proof['administratorUid']) is not int or proof['administratorUid'] != config['operatorUid']:
+        raise ValueError('transition-administrator-invalid')
+    for field in ('source', 'closure', 'target'):
+        if proof[field] != record[field]:
+            raise ValueError('transition-successor-binding-invalid')
+    if proof['successorPolicy'] != record['policy'] or record['policy'] != policy_digest(config) or proof['predecessorPolicy'] == record['policy']:
+        raise ValueError('transition-policy-binding-invalid')
+    previous = proof['predecessorCheckpoint']
+    if not isinstance(previous, dict) or any(previous.get(key) != value for key, value in
+            (('policy', proof['predecessorPolicy']), ('target', record['target']),
+             ('source', record.get('predecessorSource')), ('closure', record.get('predecessorClosure')))):
+        raise ValueError('transition-predecessor-binding-invalid')
+    for prefix in ('', 'predecessor'):
+        source = record['source' if not prefix else 'predecessorSource']
+        closure = record['closure' if not prefix else 'predecessorClosure']
+        verify_source(source, 'source')
+        verify_source(closure, 'closure')
+        if str((Path(closure) / 'etc/phoenix-agent/activated-source').resolve(strict=True)) != source:
+            raise ValueError('transition-closure-source-invalid')
+    if policy_digest(closure_config(record['predecessorClosure'])) != proof['predecessorPolicy']:
+        raise ValueError('transition-predecessor-policy-invalid')
+    if policy_digest(closure_config(record['closure'])) != proof['successorPolicy']:
+        raise ValueError('transition-successor-policy-invalid')
+
+
+def approve_transition(config, binding, branch, run, *, predecessor_policy, predecessor_source,
+                       predecessor_closure, uid, verify_source):
+    if os.geteuid() != 0 or uid != config['operatorUid'] or not config.get('modelReviewEnabled'):
+        raise ValueError('transition-native-administrator-required')
+    previous = next((record for _, record in records(config, 'approved')
+                     if all(record.get(key) == value for key, value in
+                            (('policy', predecessor_policy), ('target', config['target']),
+                             ('source', predecessor_source), ('closure', predecessor_closure)))), None)
+    if previous is None:
+        raise ValueError('transition-predecessor-approval-required')
+    validate_transition(closure_config(predecessor_closure), previous, verify_source)
+    # Retain only exact predecessor evidence, not a recursive chain of receipts.
+    previous = {key: previous[key] for key in ('policy', 'target', 'source', 'closure')}
+    record = {key: binding[key] for key in ('source', 'closure', 'target')}
+    record.update(policy=policy_digest(config), branch=branch_key(branch),
+                  origin='administrator-reviewed-transition', predecessorSource=predecessor_source,
+                  predecessorClosure=predecessor_closure)
+    record['transition'] = dict(version=1, administratorUid=uid, predecessorPolicy=predecessor_policy,
+        predecessorCheckpoint=previous, successorPolicy=record['policy'], **{key: record[key] for key in ('source', 'closure', 'target')})
+    validate_transition(config, record, verify_source)
+    identifier = hashlib.sha256(json.dumps(record, sort_keys=True).encode()).hexdigest()
+    retain(config, 'approved', identifier, record, run)
 
 
 def state_directory(config):
@@ -100,6 +195,7 @@ def choose_checkpoint(config, target, source, closure, branch, baseline, files, 
     for _, record in records(config, 'approved'):
         if record.get('policy') != policy or record.get('target') != target:
             continue
+        validate_transition(config, record, verify_source)
         approved_source = record.get('source')
         verify_source(approved_source, 'source')
         approved_closure = record.get('closure')
@@ -123,7 +219,7 @@ def choose_checkpoint(config, target, source, closure, branch, baseline, files, 
 def prune_orphan_roots(directory):
     # Crash leftovers never authorize and must not create unbounded GC retention.
     for path in directory.iterdir():
-        match = re.fullmatch(r'([a-f0-9]{64})\.(approved|pending)\.(source|closure)', path.name)
+        match = re.fullmatch(r'([a-f0-9]{64})\.(approved|pending)\.(source|closure|predecessorSource|predecessorClosure)', path.name)
         if match and not (directory / (match[1] + '.' + match[2] + '.json')).exists():
             path.unlink()
 
@@ -134,7 +230,9 @@ def retain(config, kind, identifier, record, run, before_publish=None):
     if kind not in {'approved', 'pending'} or not re.fullmatch('[a-f0-9]{64}', identifier):
         raise ValueError('invalid security record identity')
     # Retain exact immutable source and closure before publishing authorization.
-    for field in ('source', 'closure'):
+    for field in ('source', 'closure', 'predecessorSource', 'predecessorClosure'):
+        if field not in record:
+            continue
         root_path = directory / (identifier + '.' + kind + '.' + field)
         if root_path.is_symlink():
             if root_path.resolve(strict=True) != Path(record[field]):
@@ -151,7 +249,7 @@ def retain(config, kind, identifier, record, run, before_publish=None):
     for path, old in sorted(entries, key=lambda item: item[1]['timestamp'], reverse=True)[RETENTION:]:
         path.unlink()
         prefix = path.name[:-5]
-        for field in ('source', 'closure'):
+        for field in ('source', 'closure', 'predecessorSource', 'predecessorClosure'):
             (directory / (prefix + '.' + field)).unlink(missing_ok=True)
 
 

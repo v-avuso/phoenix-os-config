@@ -22,6 +22,21 @@ routine_spec.loader.exec_module(routine)
 
 
 class DeploymentTests(unittest.TestCase):
+    def test_policy_transition_requires_administrator_before_activation(self):
+        config = dict(modelReviewEnabled=True, securityReviewState='/protected', target='metal')
+        security = mock.Mock()
+        security.policy_digest.side_effect = lambda cfg: cfg.get('fingerprint', 'old')
+        with mock.patch.object(deploy, 'load_security', return_value=security), \
+             mock.patch.object(deploy, 'successor_config', return_value=dict(config, fingerprint='new')):
+            with self.assertRaises(deploy.DeploymentFailure) as failure:
+                deploy.require_policy_continuity(config, '/bound/closure')
+        self.assertEqual(failure.exception.code, 'policy-transition-required')
+        self.assertIn('administrator', failure.exception.summary)
+        self.assertIn('old', failure.exception.summary)
+        self.assertIn('new', failure.exception.summary)
+        security.approve.assert_not_called()
+        security.pending.assert_not_called()
+
     def test_root_guard_rejects_before_freeze_and_before_profile_mutation(self):
         config = dict(target='metal', targetGuard='/nix/store/fixed-target/bin/phoenix-target')
         error = deploy.subprocess.CalledProcessError(2, 'guard')
@@ -137,7 +152,7 @@ class DeploymentTests(unittest.TestCase):
     def test_unsupported_capabilities_and_forged_verdict(self):
         good = self.request()
         deploy.request_valid(good, 'metal')
-        for mutation in [dict(approved=True), dict(closure='/nix/store/evil'),
+        for mutation in [dict(approved=True), dict(transition={}), dict(closure='/nix/store/evil'),
                          dict(argv=['sh']), dict(action='boot'), dict(action='update'), dict(action='sh'),
                          dict(target='vm'), dict(reason=''), dict(reason='line\nbreak'), dict(reason='x'*2001), dict(commit='HEAD')]:
             with self.subTest(mutation=mutation), self.assertRaises(ValueError):
@@ -661,7 +676,7 @@ class DeploymentTests(unittest.TestCase):
             (source / 'upstream-linux-packages.json').write_text(json.dumps(payload))
             self.assertEqual(routine.validate_community_payload(directory), '1.2.3')
 
-    def non_model_deployment(self, action='update', operator=False, updater_socket=False, malicious=False, progress=False, build_failure=False, stalled_reader=False, symlinks=False, retarget=False, update_base=None):
+    def non_model_deployment(self, action='update', operator=False, updater_socket=False, malicious=False, progress=False, build_failure=False, stalled_reader=False, symlinks=False, retarget=False, update_base=None, policy_transition=False):
         before, _modes, candidate, modes = self.routine_sources()
         if symlinks:
             before.update({'canonical': 'source', 'other': 'other source', 'alias': 'canonical'})
@@ -725,6 +740,11 @@ class DeploymentTests(unittest.TestCase):
                           routineUpdateScript=str(Path(__file__).resolve().parents[5] / 'modules/development/ai/agent/routine-update.py'),
                           system='x86_64-linux', systemdRun='systemd-run', configPath='config', controller='controller',
                           python='python', activationEnvironment={}, modelReviewEnabled=symlinks, operatorUid=os.getuid(), clientUid=os.getuid())
+            if policy_transition:
+                owner = Path(__file__).resolve().parents[1]
+                config.update(modelReviewEnabled=True, securityReviewState='/protected', policy=str(owner / 'review-policy.md'),
+                              reviewScript=str(owner / 'deploy-review.py'), securityReviewScript=str(owner / 'security-review.py'),
+                              controller=str(owner / 'deployment.py'))
             request = dict(files=candidate, modes=modes, commit='a' * 40, action='update', target='metal',
                            reason='Stage deterministic stable package updates',
                            expectedBase=str(baseline), expectedProfile=str(profile))
@@ -737,7 +757,7 @@ class DeploymentTests(unittest.TestCase):
                 del request['expectedBase'], request['expectedProfile']
             if updater_socket:
                 config.update(clientUid=2000, operatorUid=1000,
-                              authorizationPolicy=dict(deploy.authorization.default_policy(symlinks, 2000, 1000), updaterUid=1000))
+                              authorizationPolicy=dict(deploy.authorization.default_policy(symlinks or policy_transition, 2000, 1000), updaterUid=1000))
             if malicious:
                 # A valid source manifest containing an unauthorized source change.
                 request['files']['unapproved.nix'] = 'malicious = true;'
@@ -776,9 +796,22 @@ class DeploymentTests(unittest.TestCase):
                  mock.patch.object(deploy, 'as_user', side_effect=as_user), \
                  mock.patch.object(deploy, 'store_path'), mock.patch.object(deploy, 'activation_executable'), mock.patch.object(deploy, 'store_file', side_effect=lambda path: path), \
                  mock.patch.object(deploy.pwd, 'getpwnam', return_value=account), \
+                 mock.patch.object(deploy, 'successor_config', side_effect=lambda cfg, closure: dict(cfg, model='replacement-model')), \
                  mock.patch.object(deploy, 'request_valid', wraps=deploy.request_valid), \
                  mock.patch.object(deploy.os, 'geteuid', return_value=0 if operator else os.getuid()):
+                if policy_transition and not updater_socket:
+                    with self.assertRaises(deploy.DeploymentFailure) as failure:
+                        deploy.process(config, request, os.getuid(), 42, operator=operator)
+                    self.assertEqual(failure.exception.code, 'policy-transition-required')
+                    self.assertFalse(any(user == 'reviewer' for user, _argv in as_user_calls))
+                    self.assertFalse(any(call.args[0][0] == 'systemd-run' for call in Review.run.call_args_list))
+                    return
                 result = socket_workflow() if updater_socket else deploy.process(config, request, os.getuid(), 42, operator=operator)
+            if policy_transition:
+                self.assertEqual(result['code'], 'policy-transition-required')
+                self.assertIn('administrator', result['summary'])
+                self.assertFalse(any(call.args[0][0] == 'systemd-run' for call in Review.run.call_args_list))
+                return
             if update_base == 'untrusted':
                 self.assertFalse(result['ok'])
                 self.assertEqual(result['code'], 'update-base-not-installed')
@@ -816,6 +849,11 @@ class DeploymentTests(unittest.TestCase):
             self.assertFalse(any(user == 'reviewer' for user, _argv in as_user_calls))
             self.assertFalse(any("pkexec" in str(call.args[0]) or "polkit" in str(call.args[0])
                                  for call in Review.run.call_args_list))
+
+    def test_changed_policy_blocks_automatic_and_reviewed_deployments(self):
+        self.non_model_deployment(updater_socket=True, policy_transition=True)
+        for action in ('test', 'switch', 'boot'):
+            self.non_model_deployment(action=action, policy_transition=True)
 
     def test_routine_update_binds_explicit_active_or_staged_source(self):
         for source in ('active', 'staged', 'untrusted'):
@@ -1136,6 +1174,7 @@ class DeploymentTests(unittest.TestCase):
                                 for name in request['files']}
             account = mock.Mock(pw_uid=os.getuid(), pw_gid=os.getgid())
             with mock.patch.object(deploy, 'load_review', return_value=review), mock.patch.object(deploy, 'load_security', return_value=security), \
+                 mock.patch.object(deploy, 'successor_config', return_value=config), \
                  mock.patch.object(review, 'run', side_effect=command), mock.patch.object(deploy, 'as_user', side_effect=user_command), \
                  mock.patch.object(deploy, 'store_path'), mock.patch.object(deploy, 'activation_executable'), mock.patch.object(deploy, 'store_file', side_effect=lambda path: path), \
                  mock.patch.object(deploy.pwd, 'getpwnam', return_value=account), mock.patch.object(Path, 'resolve', resolve), \

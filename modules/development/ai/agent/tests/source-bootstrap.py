@@ -57,9 +57,10 @@ class RecoveryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             work = root / 'requests'; work.mkdir()
-            old = dict(work=str(work), operatorUid=1000, target='metal')
+            old = dict(work=str(work), operatorUid=1000, target='metal', reviewerUser='reviewer',
+                       python='installed-python', controller='installed-controller', configPath='installed-config', reviewHome='/protected/auth', nixStore='installed-nix-store')
             new = dict(old, reviewerUser='reviewer', python='python', controller='fixed-controller',
-                       configPath='fixed-config', reviewHome='/protected/auth')
+                       configPath='fixed-config', reviewHome='/protected/auth', nixStore='nix-store')
             d = self.descriptor()
             active = root / 'active'; active.mkdir()
             marker = root / 'profile/etc/phoenix-agent'; marker.mkdir(parents=True)
@@ -68,16 +69,21 @@ class RecoveryTests(unittest.TestCase):
             review = deploy.load_review({'reviewScript': str(OWNER / 'deploy-review.py')})
             review.baseline_files = mock.Mock(side_effect=lambda path: {'flake.nix': str(path)})
             review.source_modes = mock.Mock(return_value={'flake.nix': '100644'})
+            review.run = mock.Mock(return_value=b'')
             security = mock.Mock()
             security.records.side_effect = lambda config, suffix: [(None, dict(policy='old-policy', target='metal', source='old-source', closure='old-closure'))] if suffix == 'approved' else []
             controller = mock.Mock()
             controller.load_review.return_value = review
+            controller.load_security.return_value = security
+            security.policy_digest.return_value = 'unsupported-scheme' if mode == 'unsupported-scheme' else d['candidatePolicy']
             controller.activation_guard.side_effect = lambda config: contextlib.nullcontext(42)
             events = []
             def worker(config, user, argv, runner, **kwargs):
                 events.append('review')
                 payload = json.loads(kwargs['data'])
                 self.assertEqual(payload['binding']['reviewBase'], 'old-source')
+                self.assertEqual(argv[:4], ['installed-python', '-I', 'installed-controller', 'installed-config'])
+                self.assertEqual(config['controller'], 'installed-controller')
                 self.assertEqual(payload['baseline']['flake.nix'], 'old-source')
                 self.assertIn('+new-source', payload['diff'])
                 self.assertEqual(Path(argv[-1]).name, 'review')
@@ -87,7 +93,7 @@ class RecoveryTests(unittest.TestCase):
                 if mode == 'worker-error': return json.dumps(dict(status='error', code='review-timeout')).encode()
                 return json.dumps(dict(status='verdict', verdict=verdict)).encode()
             controller.as_user.side_effect = worker
-            security.approve.side_effect = lambda *_args: events.append('checkpoint')
+            security.approve_transition.side_effect = lambda *_args, **_kwargs: events.append('checkpoint')
             def activate(config, binding, temporary, *_args):
                 self.assertEqual(binding['source'], 'new-source')
                 self.assertEqual(binding['closure'], 'new-closure')
@@ -100,6 +106,7 @@ class RecoveryTests(unittest.TestCase):
             with mock.patch.object(bootstrap.os, 'geteuid', return_value=0), \
                  mock.patch.object(bootstrap.os, 'chown'), \
                  mock.patch.object(bootstrap.pwd, 'getpwnam', return_value=mock.Mock(pw_uid=os.getuid(), pw_gid=os.getgid())), \
+                 mock.patch.object(bootstrap, 'load', side_effect=lambda path: controller if events == ['review'] else self.fail('candidate code loaded before verdict')), \
                  mock.patch.object(bootstrap, 'verify_completion') as complete, \
                  mock.patch.object(bootstrap, 'recheck', checked):
                 if mode == 'pass':
@@ -110,7 +117,7 @@ class RecoveryTests(unittest.TestCase):
                     with self.assertRaises(ValueError):
                         bootstrap.recover(d, old, new, controller, security, 1000)
                     self.assertEqual(events, ['review'])
-                    security.approve.assert_not_called(); controller.activate_bound.assert_not_called()
+                    security.approve_transition.assert_not_called(); controller.activate_bound.assert_not_called()
                     complete.assert_not_called()
                     if mode == 'deny': security.pending.assert_called_once()
 
@@ -118,7 +125,7 @@ class RecoveryTests(unittest.TestCase):
         self.trial('pass')
 
     def test_denied_forged_failed_or_stale_review_never_authorizes_activation(self):
-        for mode in ('deny', 'forged', 'worker-error', 'changed-state'):
+        for mode in ('deny', 'forged', 'worker-error', 'changed-state', 'unsupported-scheme'):
             with self.subTest(mode=mode): self.trial(mode)
 
     def test_wrong_identity_cannot_read_checkpoints_or_review(self):

@@ -266,6 +266,9 @@ containment, decision and execution responsibilities.
   admin broker and fixed authenticated operator helpers, deployment lifetime gating
   and runtime ownership; complete live acceptance remains pending.
 
+- [Policy handovers](policy-transitions.md): explicit administrator authorization
+  and independently reviewed continuity across security-policy fingerprints.
+
 Source transport uses [transport.json](transport.json): at most 4MiB UTF-8 file
 content and 32MiB serialized JSON, including escaping and metadata. Deployment
 clients, controller and routine updater share these bounds. Capacity failures

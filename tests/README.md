@@ -28,6 +28,7 @@ python3 -B modules/development/ai/agent/tests/agent-gui-lifecycle.py
 python3 -B modules/development/ai/agent/tests/agent-deployment.py
 python3 -B modules/development/ai/agent/tests/source-manifest.py
 python3 -B modules/development/ai/agent/tests/source-bootstrap.py
+python3 -B modules/development/ai/agent/tests/policy-transition.py
 python3 -B modules/services/updates/tests/update-runner.py
 python3 -B modules/development/ai/agent/tests/upstream-review.py
 python3 -B modules/development/ai/agent/tests/agent-gui-http.py
