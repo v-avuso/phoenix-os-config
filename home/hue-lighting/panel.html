@@ -13,7 +13,7 @@
   <label for="level">Glow boost <output id="value"></output></label>
   <input id="level" type="range" min="0" max="100" step="1" disabled>
   <div class="ends"><span>Dimmer</span><span>Neutral</span><span>Brighter</span></div>
-  <small>One level for both lamps and all their segments. Changes save automatically.<br>This adjusts gamma, so dark scenes brighten differently from a normal brightness dimmer. Black stays black.</small>
+  <small>One level for both lamps and all their segments. Changes save automatically.<br>0% is neutral. 100% sends full brightness for non-black samples; black stays black. Strong boost reduces brightness differences in the image.</small>
   <small>Only the selected source’s left/right 8% strips.<br>Choose a source once; remembering it is enabled by default. Use Lighting source settings to change it.</small>
   <nav class="links" aria-label="Related pages">
     <button id="screen" type="button" disabled title="Choose a display, window, or region">Lighting source settings…</button>
@@ -27,12 +27,13 @@ let busy=false,editing=false,error='';
 // Neutral sits at 25%; retain the full native gamma range on either side.
 function toGlow(position){return position<=25?position/25-1:(position-25)/75}
 function toPosition(glow){return glow<=0?(glow+1)*25:25+glow*75}
+function glowLabel(glow){return (glow<0?'−':'')+Math.round(Math.abs(glow)*100)+'%'}
 function show(s){
   sync.checked=s.enabled;
   screen.disabled=busy||!s.enabled;
   level.disabled=busy||!s.ready;
   if(!editing){
-    if(s.level!==null){level.value=toPosition(s.level);value.textContent=Number(s.level).toFixed(2);level.setAttribute('aria-valuetext',value.textContent+' glow')}
+    if(s.level!==null){level.value=toPosition(s.level);value.textContent=glowLabel(s.level);level.setAttribute('aria-valuetext',value.textContent+' glow')}
     else value.textContent=s.enabled?'Mixed':'—';
   }
   status.textContent=error||s.message;
@@ -50,7 +51,7 @@ async function change(path,data){
 }
 screen.addEventListener('click',()=>change('/api/screen',{}));
 sync.addEventListener('change',()=>change('/api/sync',{enabled:sync.checked}));
-level.addEventListener('input',()=>{editing=true;value.textContent=toGlow(Number(level.value)).toFixed(2);level.setAttribute('aria-valuetext',value.textContent+' glow')});
+level.addEventListener('input',()=>{editing=true;value.textContent=glowLabel(toGlow(Number(level.value)));level.setAttribute('aria-valuetext',value.textContent+' glow')});
 level.addEventListener('change',async()=>{await change('/api/level',{level:toGlow(Number(level.value))});editing=false});
 refresh();setInterval(refresh,2000);
 </script>

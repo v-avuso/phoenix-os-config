@@ -26,6 +26,14 @@ vm.runInContext(html.match(/<script>([\s\S]*?)<\/script>/)[1], context);
 await new Promise(resolve => setImmediate(resolve));
 assert.equal(elements.level.value, 25, 'neutral must appear a quarter along the slider');
 assert.equal(elements.screen.disabled, false);
+assert.equal(elements.value.textContent, '0%');
+for (const [glow, expected] of [[-1, '−100%'], [1, '100%']]) {
+  state.level = glow;
+  await context.refresh();
+  assert.equal(elements.value.textContent, expected);
+  assert.equal(elements.level.attributes['aria-valuetext'], expected + ' glow');
+}
+state.level = 0;
 for (const [position, glow] of [[0, -1], [25, 0], [100, 1], [62.5, .5]]) {
   assert.equal(context.toGlow(position), glow);
   assert.equal(context.toPosition(glow), position);
@@ -35,7 +43,7 @@ for (let position = 1; position <= 100; position++) {
 }
 elements.level.value = '70';
 elements.level.events.input();
-assert.equal(elements.value.textContent, '0.60');
+assert.equal(elements.value.textContent, '60%');
 await elements.level.events.change();
 assert.deepEqual(mutations.pop(), {path: '/api/level', body: {level: .6}});
 await elements.screen.events.click();

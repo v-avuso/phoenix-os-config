@@ -32,14 +32,24 @@ tab leaves the panel/sync running; reopening the launcher returns to it.
 Terminating the panel process stops its child.
 
 **Glow boost** links gamma correction across every active channel in the selected
-Entertainment profile and saves it through Huenicorn's API. `0` is neutral,
-positive values brighten dim colors, negative values darken them, and black stays
-black. This is not a linear brightness percentage. The three gradient channels of
-each Signe lamp all follow the same edge; six channels do not mean six screen zones.
-Neutral is at 25% of the slider: the dimming range occupies the first quarter,
-and the brightening range occupies the remaining three quarters. Stored gamma
-values and endpoints are unchanged; only slider spacing and precision change.
-Avoid editing channel levels in Huenicorn's setup page simultaneously.
+Entertainment profile and saves it through Huenicorn's API. **0%** is neutral,
+negative values darken and positive values brighten. **100%** sends maximum
+streamed brightness for every non-black sample; black remains black. This is a
+boost setting, not a lamp-output percentage at intermediate positions. Saturated
+colors still have their own physical light output; an image whose sampled edge
+averages to black stays dark. High boost flattens brightness differences.
+
+Neutral remains at 25% of the slider: dimming occupies the first quarter and
+brightening the remaining three quarters. Saved profiles are preserved: the old
+native maximum `gammaFactor=1` now displays **75%**, with identical light output
+until adjusted. The original native slider's range was not the API's limit.
+The adapter maps positive boost `b` to `gammaFactor=-log2(1-b)/2`, so the native
+brightness exponent is `1-b`. At 100%, finite gamma 16 makes every positive
+32-bit float brightness round to 1 while keeping `0 ** exponent = 0`. This uses
+the existing API without patching the capture engine. Dimming retains native
+factors -1 to 0. The six gradient channels still follow their configured edges;
+they do not become six separate sampling zones. Avoid editing channel gamma in
+the native setup page simultaneously; its slider only presents the older range.
 
 ## Private setup
 

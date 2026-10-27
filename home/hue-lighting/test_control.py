@@ -1,5 +1,6 @@
 import http.client
 import json
+import struct
 from pathlib import Path
 import tempfile
 import threading
@@ -85,6 +86,30 @@ class Controls(unittest.TestCase):
         self.assertEqual(len(updates), 6)
         self.assertTrue(all(x[1] == {'gammaFactor': .5} for x in updates))
         self.assertEqual(calls[-1][0], '/api/saveProfile')
+
+    def test_boost_reaches_full_native_brightness_without_lighting_black(self):
+        # Native Huenicorn uses float brightness ** (2 ** (-2 * gamma)).
+        for level, gamma in [(-1, -1), (0, 0), (.5, .5), (.75, 1), (1, 16)]:
+            self.assertAlmostEqual(control.boost_to_gamma(level), gamma)
+            self.assertAlmostEqual(control.gamma_to_boost(gamma), level)
+        exponent = 2 ** (-2 * control.boost_to_gamma(1))
+        for brightness in (2 ** -149, .0001, .01, .5, 1):
+            native_float = struct.unpack('f', struct.pack('f', brightness ** exponent))[0]
+            self.assertEqual(native_float, 1.0)
+        self.assertEqual(0 ** exponent, 0)
+        c = control.Controller('/unused')
+        c.process = Mock()
+        c.process.poll.return_value = None
+        channel = {'channelId': 0, 'active': True, 'gammaFactor': 1}
+        def api(path, data=None, method='GET'):
+            if path == '/api/channels': return [channel]
+            if path == '/api/setChannelGammaFactor/0': channel['gammaFactor'] = data['gammaFactor']
+            return {'succeeded': True}
+        with patch.object(control, 'native', side_effect=api):
+            self.assertEqual(c.state()['level'], .75, 'old maximum keeps its physical brightness')
+            c.set_level(1)
+            self.assertEqual(channel['gammaFactor'], 16)
+            self.assertEqual(c.state()['level'], 1)
 
     def test_invalid_levels_never_reach_native_api(self):
         c = control.Controller('/unused')

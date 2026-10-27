@@ -18,6 +18,23 @@ NATIVE = "http://127.0.0.1:8215"
 PANEL = "127.0.0.1:8217"
 
 
+# Huenicorn applies float brightness ** (2 ** (-2 * gammaFactor)).
+# At 16, every positive float brightness rounds to 1; zero remains zero.
+MAX_GAMMA = 16
+
+
+def boost_to_gamma(level):
+    if level <= 0:
+        return level
+    return MAX_GAMMA if level == 1 else min(MAX_GAMMA, -math.log2(1 - level) / 2)
+
+
+def gamma_to_boost(gamma):
+    if gamma <= 0:
+        return gamma
+    return 1 if gamma >= MAX_GAMMA else 1 - 2 ** (-2 * gamma)
+
+
 def native(path, data=None, method="GET"):
     body = None if method == "GET" else json.dumps(data).encode()
     request = urllib.request.Request(NATIVE + path, data=body, method=method,
@@ -110,7 +127,7 @@ class Controller:
         # Read the current area each time; channel IDs are not hardcoded to this bridge.
         for channel in self.channels():
             result = native("/api/setChannelGammaFactor/" + str(channel["channelId"]),
-                            {"gammaFactor": value}, "PUT")
+                            {"gammaFactor": boost_to_gamma(value)}, "PUT")
             if not result.get("succeeded"):
                 raise ValueError("Huenicorn rejected a channel update. Retry to apply to all segments.")
         native("/api/saveProfile", None, "POST")
@@ -121,7 +138,7 @@ class Controller:
             return {"enabled": False, "ready": False, "level": self.level, "message": "Sync off"}
         try:
             channels = self.channels()
-            values = {round(c["gammaFactor"], 4) for c in channels}
+            values = {round(gamma_to_boost(c["gammaFactor"]), 4) for c in channels}
             self.level = next(iter(values)) if len(values) == 1 else None
             return {"enabled": True, "ready": True, "level": self.level,
                     "message": "Sync on" if self.level is not None else "Sync on — segments have different levels; move slider to link them"}
