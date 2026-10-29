@@ -676,7 +676,7 @@ class DeploymentTests(unittest.TestCase):
             (source / 'upstream-linux-packages.json').write_text(json.dumps(payload))
             self.assertEqual(routine.validate_community_payload(directory), '1.2.3')
 
-    def non_model_deployment(self, action='update', operator=False, updater_socket=False, malicious=False, progress=False, build_failure=False, stalled_reader=False, symlinks=False, retarget=False, update_base=None, policy_transition=False):
+    def non_model_deployment(self, action='update', operator=False, updater_socket=False, malicious=False, progress=False, build_failure=False, stalled_reader=False, symlinks=False, retarget=False, update_base=None, policy_transition=False, toolchain_update=False, missing_approval=False):
         before, _modes, candidate, modes = self.routine_sources()
         if symlinks:
             before.update({'canonical': 'source', 'other': 'other source', 'alias': 'canonical'})
@@ -701,6 +701,10 @@ class DeploymentTests(unittest.TestCase):
             frozen, closure, old_runtime = root / 'frozen', root / 'closure', root / 'old-runtime'
             (closure / 'etc/phoenix-agent').mkdir(parents=True)
             (closure / 'etc/phoenix-agent/activated-source').symlink_to(frozen)
+            if toolchain_update:
+                runtime_marker = old_runtime / 'etc/phoenix-agent'
+                runtime_marker.mkdir(parents=True)
+                (runtime_marker / 'activated-source').symlink_to(baseline)
             original_resolve = Path.resolve
             def resolve(path, *args, **kwargs):
                 if path == Path('/etc/phoenix-agent/activated-source'):
@@ -740,11 +744,27 @@ class DeploymentTests(unittest.TestCase):
                           routineUpdateScript=str(Path(__file__).resolve().parents[5] / 'modules/development/ai/agent/routine-update.py'),
                           system='x86_64-linux', systemdRun='systemd-run', configPath='config', controller='controller',
                           python='python', activationEnvironment={}, modelReviewEnabled=symlinks, operatorUid=os.getuid(), clientUid=os.getuid())
-            if policy_transition:
+            if policy_transition or toolchain_update:
                 owner = Path(__file__).resolve().parents[1]
                 config.update(modelReviewEnabled=True, securityReviewState='/protected', policy=str(owner / 'review-policy.md'),
                               reviewScript=str(owner / 'deploy-review.py'), securityReviewScript=str(owner / 'security-review.py'),
                               controller=str(owner / 'deployment.py'))
+            checks = contextlib.ExitStack()
+            if toolchain_update:
+                state = root / 'security'; state.mkdir(mode=0o700)
+                config.update(securityIdentityVersion=2, securityReviewState=str(state))
+                security = deploy.load_security(config)
+                checks.enter_context(mock.patch.object(security, 'state_directory', return_value=state))
+                checks.enter_context(mock.patch.object(security, 'read_record', side_effect=lambda path: json.loads(path.read_text())))
+                checks.enter_context(mock.patch.object(security, 'closure_config', side_effect=lambda path: successor if path == str(closure) else config))
+                checks.enter_context(mock.patch.object(security, 'RETENTION', 1))
+                checks.enter_context(mock.patch.object(deploy, 'load_security', return_value=security))
+                def register(argv, **kwargs):
+                    if '--add-root' in argv:
+                        path = Path(argv[argv.index('--add-root') + 1])
+                        if not path.is_symlink(): path.symlink_to(argv[-1])
+                    return b''
+                Review.run.side_effect = register
             request = dict(files=candidate, modes=modes, commit='a' * 40, action='update', target='metal',
                            reason='Stage deterministic stable package updates',
                            expectedBase=str(baseline), expectedProfile=str(profile))
@@ -757,7 +777,7 @@ class DeploymentTests(unittest.TestCase):
                 del request['expectedBase'], request['expectedProfile']
             if updater_socket:
                 config.update(clientUid=2000, operatorUid=1000,
-                              authorizationPolicy=dict(deploy.authorization.default_policy(symlinks or policy_transition, 2000, 1000), updaterUid=1000))
+                              authorizationPolicy=dict(deploy.authorization.default_policy(symlinks or policy_transition or toolchain_update, 2000, 1000), updaterUid=1000))
             if malicious:
                 # A valid source manifest containing an unauthorized source change.
                 request['files']['unapproved.nix'] = 'malicious = true;'
@@ -791,14 +811,21 @@ class DeploymentTests(unittest.TestCase):
                 else:
                     self.assertEqual(len(messages), 1)
                 return json.loads(connection.sendall.call_args.args[0])
-            with contextlib.redirect_stdout(io.StringIO()) as journal, mock.patch.object(Path, 'resolve', resolve), \
+            if toolchain_update:
+                successor = dict(config, python='updated-python')
+            with checks, contextlib.redirect_stdout(io.StringIO()) as journal, mock.patch.object(Path, 'resolve', resolve), \
                  mock.patch.object(deploy, 'load_review', return_value=Review), \
                  mock.patch.object(deploy, 'as_user', side_effect=as_user), \
                  mock.patch.object(deploy, 'store_path'), mock.patch.object(deploy, 'activation_executable'), mock.patch.object(deploy, 'store_file', side_effect=lambda path: path), \
                  mock.patch.object(deploy.pwd, 'getpwnam', return_value=account), \
-                 mock.patch.object(deploy, 'successor_config', side_effect=lambda cfg, closure: dict(cfg, model='replacement-model')), \
+                 mock.patch.object(deploy, 'successor_config', side_effect=lambda cfg, closure: successor if toolchain_update else dict(cfg, model='replacement-model')), \
                  mock.patch.object(deploy, 'request_valid', wraps=deploy.request_valid), \
-                 mock.patch.object(deploy.os, 'geteuid', return_value=0 if operator else os.getuid()):
+                 mock.patch.object(deploy.os, 'geteuid', return_value=0 if operator or toolchain_update else os.getuid()):
+                if toolchain_update and not missing_approval:
+                    predecessor = dict(config, source=str(baseline if update_base == 'active' else profile_source),
+                                       closure=str(old_runtime if update_base == 'active' else profile))
+                    security.approve(config, predecessor, 'main', Review.run)
+                    Review.run.reset_mock()
                 if policy_transition and not updater_socket:
                     with self.assertRaises(deploy.DeploymentFailure) as failure:
                         deploy.process(config, request, os.getuid(), 42, operator=operator)
@@ -807,6 +834,10 @@ class DeploymentTests(unittest.TestCase):
                     self.assertFalse(any(call.args[0][0] == 'systemd-run' for call in Review.run.call_args_list))
                     return
                 result = socket_workflow() if updater_socket else deploy.process(config, request, os.getuid(), 42, operator=operator)
+            if toolchain_update and missing_approval:
+                self.assertEqual(result['code'], 'approved-checkpoint-required')
+                self.assertFalse(any(argv[:2] == ['nix', 'build'] for _, argv in as_user_calls))
+                return
             if policy_transition:
                 self.assertEqual(result['code'], 'policy-transition-required')
                 self.assertIn('administrator', result['summary'])
@@ -842,13 +873,27 @@ class DeploymentTests(unittest.TestCase):
             self.assertTrue(result['ok'], result)
             self.assertEqual(result['action'], action)
             self.assertEqual([user for user, _argv in as_user_calls], ['builder'] * (3 if action == 'update' else 2))
-            self.assertEqual(Review.run.call_count, 4)  # realize source/closure/runtime, then transient activation
+            self.assertEqual(Review.run.call_count, 8 if toolchain_update else 4)
+            if toolchain_update:
+                saved = list(state.glob('*.approved.json'))
+                self.assertEqual(len(saved), 1)  # Predecessor pruned before activation recheck.
+                receipt = json.loads(saved[0].read_text())
+                self.assertEqual(receipt['origin'], 'distributor-update')
+                self.assertEqual(receipt['source'], str(frozen))
+                self.assertEqual(receipt['toolchain'], security.toolchain_digest(successor))
             activation = next(call.args[0] for call in Review.run.call_args_list
                               if call.args[0][0] == 'systemd-run')
             self.assertEqual(activation[activation.index('activate') + 2], action)
             self.assertFalse(any(user == 'reviewer' for user, _argv in as_user_calls))
             self.assertFalse(any("pkexec" in str(call.args[0]) or "polkit" in str(call.args[0])
                                  for call in Review.run.call_args_list))
+
+    def test_distributor_tools_validate_publish_and_activate_without_model_or_human(self):
+        for source in ('active', 'staged'):
+            with self.subTest(source=source):
+                self.non_model_deployment(updater_socket=True, update_base=source, toolchain_update=True)
+        self.non_model_deployment(updater_socket=True, toolchain_update=True, malicious=True)
+        self.non_model_deployment(updater_socket=True, toolchain_update=True, missing_approval=True)
 
     def test_changed_policy_blocks_automatic_and_reviewed_deployments(self):
         self.non_model_deployment(updater_socket=True, policy_transition=True)
@@ -1049,7 +1094,10 @@ class DeploymentTests(unittest.TestCase):
                 deploy.authorization.policy({})
             self.test_controller_worker_adapter_and_checkpoints_as_one_disposable_workflow()
 
-    def test_controller_worker_adapter_and_checkpoints_as_one_disposable_workflow(self):
+    def test_v2_controller_worker_adapter_and_checkpoints(self):
+        self.test_controller_worker_adapter_and_checkpoints_as_one_disposable_workflow(identity_version=2)
+
+    def test_controller_worker_adapter_and_checkpoints_as_one_disposable_workflow(self, identity_version=1):
         """Exercise production integration; OS/store/model/activation are explicit stubs."""
         self.live_stage = "fixture-setup"
         self.fixture_lock_paths = []
@@ -1082,6 +1130,7 @@ class DeploymentTests(unittest.TestCase):
                 securityReviewState=str(state), policy=str(owner / 'review-policy.md'), codex='codex', bwrap='bwrap',
                 caBundle='/fixture/cert', model='gpt-6.1-sol', effort='medium', modelReviewEnabled=True, operatorUid=1000, clientUid=1000,
                 authorizationPolicy=deploy.authorization.default_policy(True, 1000, 1000))
+            config['securityIdentityVersion'] = identity_version
             frozen_sources, closures, prompts = {}, {}, []
             decision = 'context'
             live = getattr(self, 'live_review', None)
@@ -1175,6 +1224,7 @@ class DeploymentTests(unittest.TestCase):
             account = mock.Mock(pw_uid=os.getuid(), pw_gid=os.getgid())
             with mock.patch.object(deploy, 'load_review', return_value=review), mock.patch.object(deploy, 'load_security', return_value=security), \
                  mock.patch.object(deploy, 'successor_config', return_value=config), \
+                 mock.patch.object(security, 'closure_config', return_value=config), \
                  mock.patch.object(review, 'run', side_effect=command), mock.patch.object(deploy, 'as_user', side_effect=user_command), \
                  mock.patch.object(deploy, 'store_path'), mock.patch.object(deploy, 'activation_executable'), mock.patch.object(deploy, 'store_file', side_effect=lambda path: path), \
                  mock.patch.object(deploy.pwd, 'getpwnam', return_value=account), mock.patch.object(Path, 'resolve', resolve), \

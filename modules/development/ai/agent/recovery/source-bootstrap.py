@@ -39,6 +39,20 @@ def service_binding(closure, config_path, config):
         raise ValueError('recovery-controller-config-binding-mismatch')
 
 
+
+def installed_candidate_policy(descriptor, old, new):
+    # Explicit one-time v1 -> v2 bridge: installed code authenticates the exact
+    # legacy candidate identity before review; successor code checks v2 only
+    # after that bound review. Never accept an arbitrary choice of algorithms.
+    if 'candidateLegacyPolicy' in descriptor:
+        if (old.get('securityIdentityVersion', 1) != 1 or new.get('securityIdentityVersion') != 2
+                or descriptor.get('identityMigration') != 'authority-v1-to-v2'):
+            raise ValueError('unsupported-identity-migration')
+        return descriptor['candidateLegacyPolicy']
+    if old.get('securityIdentityVersion', 1) != new.get('securityIdentityVersion', 1):
+        raise ValueError('explicit-identity-migration-required')
+    return descriptor['candidatePolicy']
+
 def inspect(descriptor):
     old = json.loads(immutable(descriptor['installedConfig']).read_text())
     new = json.loads(immutable(descriptor['candidateConfig']).read_text())
@@ -69,7 +83,7 @@ def inspect(descriptor):
         deploy.store_path(descriptor[prefix + 'Source'], 'source')
         deploy.store_path(descriptor[prefix + 'Closure'], 'closure')
     if (security.policy_digest(old) != descriptor['installedPolicy'] or
-            security.policy_digest(new) != descriptor['candidatePolicy']):
+            security.policy_digest(new) != installed_candidate_policy(descriptor, old, new)):
         raise ValueError('recovery-policy-binding-mismatch')
     if security.policy_digest(predecessor) != descriptor.get('predecessorPolicy', descriptor['installedPolicy']):
         raise ValueError('recovery-predecessor-policy-binding-mismatch')
@@ -83,7 +97,7 @@ def recheck(descriptor, old, new, deploy, security):
             raise ValueError('recovery-active-state-changed')
     service_binding(descriptor['runtime'], descriptor['installedConfig'], old)
     if (security.policy_digest(old) != descriptor['installedPolicy'] or
-            security.policy_digest(new) != descriptor['candidatePolicy']):
+            security.policy_digest(new) != installed_candidate_policy(descriptor, old, new)):
         raise ValueError('recovery-policy-binding-mismatch')
     deploy.activation_executable(descriptor['candidateClosure'])
 

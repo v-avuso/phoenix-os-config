@@ -96,7 +96,7 @@ class Guard(unittest.TestCase):
         binding = dict(nonce=nonce, target='metal', action='test', closure=str(self.candidate), source='source', branch='main')
         proof = dict(digest='exact', findings=['protected-unit-change'])
         approved, pending = [], [dict(binding, policy='security')]
-        security = types.SimpleNamespace(policy_digest=lambda config: 'security', load_pending=lambda *args: binding,
+        security = types.SimpleNamespace(identity_version=lambda config: 1, validate_transition=lambda *args: None, policy_digest=lambda config: 'security', load_pending=lambda *args: binding,
             records=lambda config, kind: [(None, record) for record in (approved if kind == 'approved' else pending)],
             approve=lambda config, value, branch, run: approved.append(dict(value, policy='security')),
             consume_pending=lambda config, nonce: pending.clear())
@@ -167,12 +167,12 @@ class Guard(unittest.TestCase):
                 deploy.disruption_check(self.config, dict(action=action)); module.assert_not_called()
     def test_security_denial_cannot_be_disruption_override(self):
         config = dict(modelReviewEnabled=True)
-        security = types.SimpleNamespace(policy_digest=lambda config: 'policy', records=lambda config, kind: [])
+        security = types.SimpleNamespace(identity_version=lambda config: 1, validate_transition=lambda *args: None, policy_digest=lambda config: 'policy', records=lambda config, kind: [])
         with mock.patch.object(deploy, 'load_security', return_value=security):
             with self.assertRaises(deploy.DeploymentFailure):
                 deploy.disruption_security_recheck(config, dict(disruptionSecurityPolicy='policy'))
     def test_security_policy_change(self):
-        security = types.SimpleNamespace(policy_digest=lambda config: 'new-policy')
+        security = types.SimpleNamespace(identity_version=lambda config: 1, validate_transition=lambda *args: None, policy_digest=lambda config: 'new-policy')
         with mock.patch.object(deploy, 'load_security', return_value=security):
             with self.assertRaises(deploy.DeploymentFailure):
                 deploy.disruption_security_recheck(dict(modelReviewEnabled=True), dict(disruptionSecurityPolicy='old-policy'))

@@ -10,20 +10,57 @@
 
 ## Boundary and ordinary operation
 
-The fingerprint covers policy, controller/reviewer code, helper bytes, execution
-identities and tools. Even a diagnostic change in those files changes it; toolchain
-updates can also change it. The digest algorithm remains unchanged. A change to
-that algorithm itself needs an explicit versioned migration, not normalization or
-removal of security-relevant inputs.
+Version 2 separates two identities:
 
-After a candidate build, the controller reads the exact controller/configuration
-selected by the candidate's immutable systemd unit. If its fingerprint differs,
-`policy-transition-required` stops before model review, checkpoint publication or
-activation. The response and compact journal summary identify both fingerprints.
-This applies to explicit deployments, unattended updates and critical overrides.
-Same-policy deployment/checkpoint reuse retains its existing behavior. Review-OFF
-systems retain native operator deployment; a root administrator remains able to
-replace system code/state outside this mechanism.
+- **Security authority**: policy text, controller/reviewer/security/source-validator
+  code, helper contents, caller/reviewer/builder identities, model settings,
+  deployment guards, fixed activation environment, authorization policy, and
+  declared execution roles. Changing these still needs administrator authorization.
+- **Execution toolchain**: exact immutable package paths for Python, Nix, systemd,
+  sandbox tools, the reviewer executable, CA bundle, target guard and locale data.
+  Every version-2 checkpoint binds these paths along with its exact source/closure.
+
+Packaging relocates the same helper bytes when the Git source changes. The
+fingerprint canonicalizes only the verified one-line helper path assignments in
+controller/reviewer code, hashing every referenced helper separately. Missing,
+duplicate or mismatched declarations fail closed. It never strips arbitrary store
+paths or excludes controller/validator logic. Fixed activation environment values
+remain authority; separately declared package-backed values may change only in
+the toolchain identity, with their variable names retained in authority.
+
+After a candidate build, the controller reads the exact immutable systemd unit and
+its controller configuration. `policy-transition-required` rejects changed
+security authority before review, publication or activation. Changed tools alone
+require `toolchain-transition-required`, unless the exact candidate already has a
+protected receipt or the controller is processing a validated distribution update.
+Review-OFF systems retain their existing native operator deployment behavior.
+
+### Distribution updates
+
+The existing deterministic source validator remains the sole automatic path. It
+allows only its established publisher/lock changes and satisfied hold removals;
+custom configuration, helper, policy or controller changes remain rejected. It
+checks against the same exact installed active or staged source selected by the
+runner. With review enabled, version 2 additionally requires protected approval of
+that predecessor source/closure; an activation marker alone never grants trust.
+
+After source validation and a build with unchanged security authority, the root
+controller publishes a `distributor-update` receipt binding successor policy,
+toolchain, target, source and closure to compact protected predecessor evidence.
+Publication rechecks installed bindings. Activation rechecks them again, including
+inside the durable activation helper. Existing root-only storage, deployment locks,
+GC roots and bounded retention are reused. The compact evidence survives pruning
+without recursive history or wholesale adoption of another policy's records.
+Ordinary review and pending/disruption decisions retain exact toolchain bindings.
+No receipt, verdict, permission flag or tool selector is accepted from the socket.
+
+This deliberately trusts the already approved distribution publishers to supply
+new executable implementations. It does not independently audit package contents
+or protect against a compromised publisher/compiler/runtime. Pinning all tools
+would avoid that trust but prevent ordinary security/package upgrades; prompting
+for each path change adds friction without reviewing package behavior. The
+restricted validator plus exact root receipts makes that existing distribution
+trust explicit without adding model calls, services or recurring approval work.
 
 ## Human decision, then a bound transition
 
@@ -31,13 +68,21 @@ replace system code/state outside this mechanism.
    why review authority changes, why this design is preferable, old/new fingerprints,
    approved predecessor source/closure, exact candidate source/closure, full diff
    scope and actual validation limits. Explain any unrelated intervening changes.
-2. Leave **Authorization: security-policy handover** in Open tasks. Do not open a PR,
-   invoke an authentication dialog or interpret implementation permission as approval.
+2. Leave **Authorization: security-policy handover** in Open tasks. An explicitly
+   requested PR may carry the implementation for administrator approval. Creating
+   or approving that PR does not itself authenticate or activate an exact closure;
+   do not invoke authentication or interpret implementation permission as handover approval.
 3. After explicit authorization, prepare the on-demand immutable helper from
    `recovery/policy-transition.nix`. Its fixed descriptor contains `installedConfig`,
    `installedPolicy`, `runtime`, `profile`, `baseline`, `predecessorConfig`,
    `predecessorPolicy`, `approvedSource`, `approvedClosure`, `candidateConfig`,
    `candidatePolicy`, `candidateSource`, `candidateClosure`, and informational `commit`.
+   Version-1 → version-2 migration also requires `identityMigration` exactly
+   `authority-v1-to-v2` and a separate `candidateLegacyPolicy`: the installed legacy
+   implementation authenticates that exact candidate before review, then the
+   successor verifies `candidatePolicy` with version 2 only after the bound verdict.
+   Other algorithm transitions or missing migration fields fail closed. Legacy
+   policy computation remains unchanged for predecessor evidence.
    The inspect executable reads bindings without model use, approval or activation;
    it explicitly does not establish protected-checkpoint acceptance.
 4. Use the supported native administrator Polkit flow for that **exact immutable
@@ -79,11 +124,15 @@ its gate and the current host has already lost same-policy checkpoint continuity
 
 ## Validation and limits
 
-`tests/policy-transition.py` exercises real digests, persisted receipt publication,
+`tests/toolchain-policy.py` covers versioned identity stability, helper binding,
+exact receipts, two updates across pruning, stale pending decisions and a real
+legacy-to-v2 receipt. `tests/policy-transition.py` exercises real legacy digests, persisted receipt publication,
 checkpoint selection and retention with explicit OS/store ownership stubs.
 `tests/source-bootstrap.py` covers native-identity admission, installed-reviewer
 selection, denial/forgery/error/state-change rejection and review → publication →
 activation ordering. `tests/agent-deployment.py` covers the gate through production
-automatic and explicit deployment paths. These offline fixtures do not establish
+automatic and explicit deployment paths, including source validator → toolchain
+receipt → activation recheck with distinct caller/updater UIDs, active/staged
+predecessors and retention of one record. No model calls are added to updates. These offline fixtures do not establish
 native Polkit UX, protected live reviewer access or real activation continuity;
 those require the separately authorized installation/acceptance run.

@@ -101,6 +101,7 @@ let
       authorizationLibrary = authorizationLibrary;
       deploymentTransportPolicy = toString transportPolicy;
       inherit sourceManifestLibrary;
+      securityIdentityVersion = 2;
       modelReviewEnabled = cfg.securityReview.enable;
       operatorCommand = lib.optionals (!cfg.securityReview.enable) operatorCommand;
       inherit overrideCommand disruptionOverrideCommand;
@@ -134,6 +135,7 @@ let
       authorizationLibrary = authorizationLibrary;
       deploymentTransportPolicy = toString transportPolicy;
       inherit sourceManifestLibrary;
+      securityIdentityVersion = 2;
       modelReviewEnabled = cfg.securityReview.enable;
       operatorCommand = lib.optionals (!cfg.securityReview.enable) operatorCommand;
       inherit overrideCommand disruptionOverrideCommand;
@@ -177,6 +179,7 @@ let
       authorizationLibrary = authorizationLibrary;
       deploymentTransportPolicy = toString transportPolicy;
       inherit sourceManifestLibrary;
+      securityIdentityVersion = 2;
       modelReviewEnabled = cfg.securityReview.enable;
       operatorName = user.name;
       disruptionScript = toString (pkgs.writeText "phoenix-disruption.py" (builtins.readFile ./disruption.py));
@@ -221,6 +224,8 @@ let
       activationEnvironment = {
         PATH = "/run/current-system/sw/bin:/run/current-system/sw/sbin";
         HOME = "/root";
+      };
+      activationEnvironmentTools = {
         LOCALE_ARCHIVE = "${pkgs.glibcLocales}/lib/locale/locale-archive";
       };
     } // lib.optionalAttrs config.phoenix.agent.reservations.enable { reservations = phoenixReservationSettings; })

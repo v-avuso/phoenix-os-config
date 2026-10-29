@@ -6,9 +6,17 @@
   alternatives, exact policy/source/closure bindings and remaining validation.
   Put **Authorization: security-policy handover** in Open tasks and wait for the
   operator to read and authorize it. Implementation permission is not handover
-  permission: do not start authentication, deploy, seed trust, or create/request a
-  PR before that separate authorization. Do not avoid a warranted architectural
+  permission: do not start authentication, deploy, or seed trust before that
+  separate authorization. An explicitly requested PR may present the change for
+  authorization; PR creation is not permission to activate it. Do not avoid a warranted architectural
   change merely to avoid this gate. See [policy handovers](policy-transitions.md).
+
+- Keep security authority and exact execution-tool identities versioned separately.
+  Tool-path changes may continue automatically only through the existing distribution
+  source validator with an exact protected installed predecessor and root-issued
+  successor receipt. Test publication through activation recheck under pruning, and
+  reject stale security/disruption decisions after tool changes. See
+  [identity and receipt boundaries](policy-transitions.md).
 
 - Deployment security review is optional; its reusable option defaults OFF. Keep all review
   authority, prompts, cache and override UI behind `securityReview.enable`.

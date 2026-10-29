@@ -232,9 +232,12 @@ The next protected deployment still selects protected approved context and
 includes any remaining manually introduced candidate changes. Reverting to an
 already approved exact source/closure needs no repeated review. A changed review
 policy invalidates old-policy reuse and requires an explicit trusted transition.
-The [administrator-approved policy handover](policy-transitions.md) retains the
-fingerprint and binds predecessor evidence to one exact successor. Normal
-deployment, routine update and critical override cannot approve that handover.
+The [versioned policy and toolchain identities](policy-transitions.md) separate
+security authority from immutable distribution package paths. Restricted routine
+updates can advance exact toolchain receipts from an approved installed predecessor
+without new policy authorization or AI calls. Authority changes still require an
+administrator-approved, independently reviewed exact handover. Normal deployment,
+routine update and critical override cannot authorize that handover.
 
 There are deliberate human authorities: `phoenix-review-trust-active` seeds an
 exact runtime checkpoint without model review, and a critical override approves

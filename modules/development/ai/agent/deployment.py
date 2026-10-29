@@ -150,18 +150,35 @@ def successor_config(config, closure):
         raise DeploymentFailure('closure-binding', 'successor-controller-binding-invalid') from None
 
 
-def require_policy_continuity(config, closure):
+def require_policy_continuity(config, closure, *, validated_update=False):
     if not config.get('modelReviewEnabled', True) or not config.get('securityReviewState'):
         return
     security = load_security(config)
     before = security.policy_digest(config)
-    after = security.policy_digest(successor_config(config, closure))
+    successor = successor_config(config, closure)
+    after = security.policy_digest(successor)
     if before != after:
         failure = DeploymentFailure('closure-binding', 'policy-transition-required')
         failure.summary = ('Security administrator approval required for review-policy handover; '
                            'installed=' + before + ' successor=' + after +
                            '. Prepare the exact bound transition report; ordinary review cannot authorize it.')
         raise failure
+    if (security.identity_version(config) == 2 and
+            security.toolchain_digest(config) != security.toolchain_digest(successor) and not validated_update):
+        # An exact root-owned receipt may already approve a staged distribution
+        # successor. A matching policy alone never authorizes a new toolchain.
+        source = str((Path(closure) / 'etc/phoenix-agent/activated-source').resolve(strict=True))
+        try:
+            security.approved_predecessor(config, dict(source=source, closure=closure), store_path)
+        except ValueError:
+            raise DeploymentFailure('closure-binding', 'toolchain-transition-required') from None
+
+
+def activation_environment(config):
+    fixed, tools = config['activationEnvironment'], config.get('activationEnvironmentTools', {})
+    if set(fixed) & set(tools):
+        raise ValueError('activation-environment-overlap')
+    return dict(fixed, **tools)
 
 
 def active_provenance(closure, source, target):
@@ -235,11 +252,11 @@ def activate(config, closure, action, run):
     if action == 'test':
         previous = str(Path('/run/current-system').resolve(strict=True))
         try:
-            run(command, timeout=600, env=config['activationEnvironment'])
+            run(command, timeout=600, env=activation_environment(config))
         except Exception:
             try:
                 run([previous + '/bin/switch-to-configuration', 'test'], timeout=600,
-                    env=config['activationEnvironment'])
+                    env=activation_environment(config))
             except Exception:
                 raise DeploymentFailure('activation', 'rollback-incomplete') from None
             raise
@@ -249,20 +266,20 @@ def activate(config, closure, action, run):
     previous_runtime = str(Path('/run/current-system').resolve(strict=True))
     try:
         run([config['nixEnv'], '--profile', profile, '--set', closure], timeout=60)
-        run(command, timeout=600, env=config['activationEnvironment'])
+        run(command, timeout=600, env=activation_environment(config))
     except Exception:
         # Profile update can time out after changing the symlink. Recovery
         # therefore also covers that operation, and attempts every restore step.
         failures = []
         recovery = [
             ([config['nixEnv'], '--profile', profile, '--set', previous], 60, None),
-            ([previous + '/bin/switch-to-configuration', 'boot'], 600, config['activationEnvironment']),
+            ([previous + '/bin/switch-to-configuration', 'boot'], 600, activation_environment(config)),
         ]
         # Boot staging never touched the running system or mutable desktop
         # baselines, including on failure. Do not turn rollback into activation.
         if action == 'switch':
             recovery.append(([previous_runtime + '/bin/switch-to-configuration', 'test'],
-                             600, config['activationEnvironment']))
+                             600, activation_environment(config)))
         for argv, timeout, env in recovery:
             try:
                 run(argv, timeout=timeout, **({'env': env} if env is not None else {}))
@@ -519,6 +536,22 @@ def process_inner(config, request, uid, pid, state):
             policy_check(update, 'source-policy', update.validate_source, previous_dependencies, previous_modes, request['files'], request['modes'],
                                    config['system'], compare_versions, evaluate_package, desktop_package_version,
                                    verify_current_source)
+        update_security = None
+        update_predecessor = None
+        if (request['action'] == 'update' and config.get('modelReviewEnabled', True)
+                and config.get('securityReviewState')):
+            candidate_security = load_security(config)
+            if candidate_security.identity_version(config) == 2:
+                update_security = candidate_security
+                # The source validator just checked against update_base. Require
+                # independent protected approval for that exact installed pair.
+                predecessor_closure = (profile if update_base == profile_source else
+                                       str(Path('/run/current-system').resolve(strict=True)))
+                update_predecessor = dict(source=update_base, closure=predecessor_closure)
+                try:
+                    update_security.approved_predecessor(config, update_predecessor, store_path)
+                except ValueError:
+                    raise DeploymentFailure('baseline', 'approved-checkpoint-required') from None
         state['stage'] = 'build'
         print(json.dumps(dict(event='building', uid=uid, pid=pid, source=source_store)), flush=True)
         build_runner = review.run
@@ -542,12 +575,14 @@ def process_inner(config, request, uid, pid, state):
                     '--indirect', '--realise', closure])
         if str((Path(closure) / 'etc/phoenix-agent/activated-source').resolve(strict=True)) != source_store:
             raise ValueError('closure does not record exact reviewed source')
-        require_policy_continuity(config, closure)
+        require_policy_continuity(config, closure, validated_update=update_security is not None)
         binding = {key: request[key] for key in ('commit', 'target', 'action', 'reason')}
         if config.get('reservations') and request['action'] != 'update':
             binding.update(reservation=request['reservation'], reservationUid=uid)
         binding.update(source=source_store, base=baseline, profile=profile,
                        profileSource=profile_source, closure=closure, nonce=secrets.token_hex(32))
+        if update_predecessor is not None:
+            binding['updatePredecessor'] = update_predecessor
         security = load_security(config) if review_required and config.get('securityReviewState') else None
         branch = request.get('branch', 'detached-' + request['commit'])
         checkpoint, context_base, context_old = False, baseline, old
@@ -620,6 +655,9 @@ def process_inner(config, request, uid, pid, state):
         if security:
             # A checkpoint represents approved source; activated baseline is separate.
             security.approve(config, binding, branch, review.run)
+        if update_security is not None:
+            update_security.approve_update(config, binding, update_predecessor, branch, review.run, store_path,
+                                          before_publish=lambda: recheck_bound(config, binding))
         return activate_bound(config, binding, temporary, review, state, uid, pid)
 
 
@@ -630,6 +668,13 @@ def recheck_bound(config, binding):
         raise ValueError('boot profile changed during review')
     if str((Path(binding['profile']) / 'etc/phoenix-agent/activated-source').resolve(strict=True)) != binding['profileSource']:
         raise ValueError('approved profile source changed during review')
+    if 'updatePredecessor' in binding:
+        predecessor = binding['updatePredecessor']
+        installed = {(binding['profileSource'], binding['profile']),
+                     (binding['base'], str(Path('/run/current-system').resolve(strict=True)))}
+        if (predecessor['source'], predecessor['closure']) not in installed:
+            raise ValueError('update-predecessor-no-longer-installed')
+        load_security(config).approved_predecessor(config, predecessor, store_path)
 
 
 def guarded_child(argv, *, timeout, guard_fd, **kwargs):
@@ -655,6 +700,11 @@ def disruption_security_recheck(config, binding):
     current = security.policy_digest(config)
     if binding.get('disruptionSecurityPolicy') != current:
         raise DeploymentFailure('disruption', 'security-policy-changed')
+    if security.identity_version(config) == 2 and binding.get('disruptionSecurityToolchain') != security.toolchain_digest(config):
+        raise DeploymentFailure('disruption', 'security-toolchain-changed')
+    for _, record in security.records(config, 'approved'):
+        if record.get('policy') == current and all(record.get(key) == binding[key] for key in ('source', 'closure', 'target')):
+            security.validate_transition(config, record, store_path)
     approved = any(record.get('policy') == current and all(record.get(key) == binding[key] for key in ('source', 'closure', 'target'))
                    for _, record in security.records(config, 'approved'))
     outstanding = any(record.get('policy') == current and all(record.get(key) == binding[key] for key in ('source', 'closure', 'target'))
@@ -687,7 +737,10 @@ def disruption_check(config, binding, review=None, uid=None, pending=False):
         if pending:
             record = dict(binding, disruptionProof=proof, disruptionUid=uid)
             if config.get('modelReviewEnabled', True):
-                record['disruptionSecurityPolicy'] = load_security(config).policy_digest(config)
+                security = load_security(config)
+                record['disruptionSecurityPolicy'] = security.policy_digest(config)
+                if security.identity_version(config) == 2:
+                    record['disruptionSecurityToolchain'] = security.toolchain_digest(config)
             record.pop('reservation', None)
             state = module.state_directory(config)
             if len(list(state.glob('*.json'))) >= 32:

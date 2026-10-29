@@ -22,6 +22,19 @@ class RecoveryTests(unittest.TestCase):
                     candidateSource='new-source', candidateClosure='new-closure',
                     baseline='active-source', profile='profile', commit='a' * 40)
 
+    def test_identity_migration_requires_explicit_constrained_legacy_binding(self):
+        d = self.descriptor()
+        old, new = {}, dict(securityIdentityVersion=2)
+        with self.assertRaisesRegex(ValueError, 'explicit-identity-migration'):
+            bootstrap.installed_candidate_policy(d, old, new)
+        d.update(candidateLegacyPolicy='exact-legacy-candidate', identityMigration='authority-v1-to-v2')
+        self.assertEqual(bootstrap.installed_candidate_policy(d, old, new), 'exact-legacy-candidate')
+        for changed_old, changed_new, migration in ((dict(securityIdentityVersion=2), new, 'authority-v1-to-v2'),
+                (old, dict(securityIdentityVersion=3), 'authority-v1-to-v2'), (old, new, 'accept-any')):
+            with self.subTest(old=changed_old, new=changed_new, migration=migration), self.assertRaisesRegex(ValueError, 'unsupported-identity-migration'):
+                bootstrap.installed_candidate_policy(dict(d, identityMigration=migration), changed_old, changed_new)
+        self.assertEqual(bootstrap.installed_candidate_policy(self.descriptor(), {}, {}), 'new-policy')
+
     def test_root_record_must_match_source_closure_policy_and_target(self):
         d = self.descriptor()
         record = dict(policy='old-policy', target='metal', source='old-source', closure='old-closure')

@@ -4,6 +4,7 @@
 Call only while holding the deployment lock. Caller branch is metadata only,
 never approval. Exact source identity, target and installed policy authorize reuse.
 """
+import ast
 import hashlib
 import json
 import os
@@ -21,7 +22,7 @@ class ApprovalBaselineRequired(ValueError):
     """Activation markers are not protected security approval records."""
 
 
-def policy_digest(config):
+def legacy_policy_digest(config):
     digest = hashlib.sha256()
     for key in ('policy', 'reviewScript', 'securityReviewScript', 'controller'):
         digest.update(key.encode() + b'\0' + Path(config[key]).read_bytes() + b'\0')
@@ -40,6 +41,149 @@ def policy_digest(config):
     elif authority is not None:
         digest.update(b'authorizationPolicy\0' + json.dumps(authority, sort_keys=True).encode())
     return digest.hexdigest()
+
+
+TOOL_KEYS = ('python', 'nix', 'nixStore', 'nixEnv', 'bwrap', 'setpriv',
+             'systemdRun', 'systemctl', 'codex', 'caBundle', 'targetGuard')
+HELPER_BINDINGS = {'AUTHORIZATION_PATH': 'authorizationLibrary',
+                   'TRANSPORT_PATH': 'deploymentTransportPolicy',
+                   'SOURCE_MANIFEST_PATH': 'sourceManifestLibrary'}
+
+
+def identity_version(config):
+    version = config.get('securityIdentityVersion', 1)
+    if type(version) is not int or version not in (1, 2):
+        raise ValueError('security-identity-version-unsupported')
+    return version
+
+
+def authority_bytes(config, key):
+    data = Path(config[key]).read_bytes()
+    if key not in ('controller', 'reviewScript'):
+        return data
+    # Canonicalize only standalone, declared helper assignments. All surrounding
+    # code and the referenced helpers' bytes remain part of authority.
+    text = data.decode()
+    tree = ast.parse(text)
+    replacements = []
+    lines = text.splitlines(keepends=True)
+    for name, field in HELPER_BINDINGS.items():
+        if not config.get(field):
+            continue  # Repository-only legacy fixtures have no packaged helpers.
+        matches = [node for node in tree.body if isinstance(node, ast.Assign)
+                   and any(isinstance(target, ast.Name) and target.id == name for target in node.targets)]
+        if len(matches) != 1:
+            raise ValueError('authority-helper-binding-invalid')
+        node = matches[0]
+        if (len(node.targets) != 1 or not isinstance(node.value, ast.Constant)
+                or node.value.value != config[field] or node.lineno != node.end_lineno):
+            raise ValueError('authority-helper-binding-invalid')
+        line = lines[node.lineno - 1]
+        # AST columns count UTF-8 bytes. Rewrite only the literal, not the line.
+        raw = line.encode()
+        replacements.append((node.lineno - 1, raw[:node.value.col_offset] +
+                             json.dumps('@' + field + '@').encode() + raw[node.value.end_col_offset:]))
+    lines = text.splitlines(keepends=True)
+    for index, replacement in replacements:
+        lines[index] = replacement.decode()
+    return ''.join(lines).encode()
+
+
+def policy_digest(config):
+    if identity_version(config) == 1:
+        return legacy_policy_digest(config)
+    digest = hashlib.sha256(b'phoenix-security-authority-v2\0')
+    for key in ('policy', 'reviewScript', 'securityReviewScript', 'controller', 'routineUpdateScript',
+                'authorizationLibrary', 'deploymentTransportPolicy', 'sourceManifestLibrary',
+                'disruptionScript', 'commandLibrary', 'commandReviewPolicy', 'commandExec'):
+        if config.get(key):
+            digest.update(key.encode() + b'\0' + authority_bytes(config, key) + b'\0')
+    keys = ('adapter', 'clientUid', 'operatorUid', 'updaterUid', 'modelReviewEnabled',
+            'reservations', 'disruptionGuard', 'activationEnvironment', 'model', 'effort',
+            'reviewerUser', 'builderUser', 'target', 'system', 'commands', 'commandCurrentAuthority',
+            'securityReviewState', 'reviewHome', 'work', 'baseline', 'activationLock', 'activationSpool',
+            'commandState', 'disruptionState', 'disruptionInfo')
+    settings = {key: config.get(key) for key in keys}
+    if config.get('reservations'):
+        settings['reservations'] = dict(config['reservations'])
+        for key in ('engine', 'adapter'):
+            digest.update(('reservations.' + key).encode() + b'\0' +
+                          Path(settings['reservations'][key]).read_bytes() + b'\0')
+            settings['reservations'][key] = '@' + key + '@'
+    digest.update(json.dumps(settings, sort_keys=True).encode())
+    # Roles and environment variable names are authority; their immutable package
+    # paths are execution identity. A distributor update cannot add a new role.
+    digest.update(json.dumps({key: bool(config.get(key)) for key in TOOL_KEYS}, sort_keys=True).encode())
+    digest.update(json.dumps(sorted(config.get('activationEnvironmentTools', {}))).encode())
+    if set(config.get('activationEnvironmentTools', {})) & set(config.get('activationEnvironment', {})):
+        raise ValueError('activation-environment-overlap')
+    authority = config.get('authorizationPolicy')
+    if isinstance(authority, str):
+        digest.update(b'authorizationPolicy\0' + Path(authority).read_bytes())
+    elif authority is not None:
+        digest.update(b'authorizationPolicy\0' + json.dumps(authority, sort_keys=True).encode())
+    return digest.hexdigest()
+
+
+def toolchain_digest(config):
+    if identity_version(config) != 2:
+        raise ValueError('toolchain-identity-version-required')
+    value = {key: config.get(key) for key in TOOL_KEYS}
+    value['activationEnvironmentTools'] = config.get('activationEnvironmentTools', {})
+    return hashlib.sha256(b'phoenix-execution-v2\0' + json.dumps(value, sort_keys=True).encode()).hexdigest()
+
+
+def record_identity(config):
+    return dict(identityVersion=2, toolchain=toolchain_digest(config)) if identity_version(config) == 2 else {}
+
+
+def bound_config(record, verify_source):
+    source, closure = record['source'], record['closure']
+    verify_source(source, 'source')
+    verify_source(closure, 'closure')
+    if str((Path(closure) / 'etc/phoenix-agent/activated-source').resolve(strict=True)) != source:
+        raise ValueError('approval-closure-source-invalid')
+    actual = closure_config(closure)
+    if (identity_version(actual) != 2 or record.get('identityVersion') != 2
+            or record.get('policy') != policy_digest(actual)
+            or record.get('toolchain') != toolchain_digest(actual)
+            or record.get('target') != actual['target']):
+        raise ValueError('approval-identity-binding-invalid')
+    return actual
+
+
+def approved_predecessor(config, predecessor, verify_source):
+    for _, record in records(config, 'approved'):
+        if record.get('policy') != policy_digest(config) or record.get('target') != config['target']:
+            continue
+        choices = [record]
+        if record.get('origin') == 'distributor-update':
+            choices.append(record.get('predecessorApproval', {}))
+        match = next((value for value in choices if all(value.get(key) == predecessor[key]
+                                                      for key in ('source', 'closure'))), None)
+        if match is not None:
+            validate_transition(config, record, verify_source)
+            # Root-issued compact evidence also survives pruning of the original
+            # record. Validate its containing receipt before using that evidence.
+            return {key: match[key] for key in ('identityVersion', 'policy', 'toolchain', 'target', 'source', 'closure')}
+    raise ValueError('approved-predecessor-required')
+
+
+def approve_update(config, binding, predecessor, branch, run, verify_source, before_publish=None):
+    if os.geteuid() != 0 or identity_version(config) != 2 or binding.get('action') != 'update':
+        raise ValueError('validated-update-root-entry-required')
+    previous = approved_predecessor(config, predecessor, verify_source)
+    successor = closure_config(binding['closure'])
+    if policy_digest(successor) != policy_digest(config):
+        raise ValueError('update-policy-changed')
+    record = {key: binding[key] for key in ('source', 'closure', 'target')}
+    record.update(record_identity(successor), policy=policy_digest(config), branch=branch_key(branch),
+                  origin='distributor-update', predecessorSource=previous['source'],
+                  predecessorClosure=previous['closure'], predecessorToolchain=previous['toolchain'],
+                  predecessorApproval=previous)
+    validate_transition(config, record, verify_source)
+    identifier = hashlib.sha256(json.dumps(record, sort_keys=True).encode()).hexdigest()
+    retain(config, 'approved', identifier, record, run, before_publish)
 
 
 def immutable_file(path):
@@ -67,9 +211,15 @@ def closure_config(closure):
         raise ValueError('transition-controller-binding-invalid')
     for key in ('policy', 'reviewScript', 'securityReviewScript', 'controller',
                 'authorizationLibrary', 'deploymentTransportPolicy', 'sourceManifestLibrary', 'authorizationPolicy',
-                'python', 'nix', 'nixStore', 'setpriv', 'bwrap', 'codex', 'caBundle'):
+                'routineUpdateScript', 'disruptionScript', 'commandLibrary', 'commandReviewPolicy', 'commandExec',
+                *TOOL_KEYS):
         if config.get(key):
             immutable_file(config[key])
+    if config.get('reservations'):
+        for key in ('engine', 'adapter'):
+            immutable_file(config['reservations'][key])
+    for value in config.get('activationEnvironmentTools', {}).values():
+        immutable_file(value)
     return dict(config, configPath=argv[3])
 
 
@@ -80,6 +230,24 @@ def validate_transition(config, record, verify_source):
     separate record. Root-only publication supplies provenance; no caller receipt
     or reviewer verdict can enter this path through the deployment socket.
     """
+    if identity_version(config) == 2:
+        if record.get('policy') != policy_digest(config) or record.get('target') != config['target']:
+            raise ValueError('approval-policy-binding-invalid')
+        bound_config(record, verify_source)
+        if record.get('origin') == 'distributor-update':
+            previous = record.get('predecessorApproval')
+            expected = {'identityVersion', 'policy', 'toolchain', 'target', 'source', 'closure'}
+            if (not isinstance(previous, dict) or set(previous) != expected or
+                    previous.get('source') != record.get('predecessorSource') or
+                    previous.get('closure') != record.get('predecessorClosure') or
+                    previous.get('toolchain') != record.get('predecessorToolchain') or
+                    previous.get('policy') != record['policy'] or previous.get('target') != record['target'] or
+                    'transition' in record):
+                raise ValueError('update-predecessor-binding-invalid')
+            bound_config(previous, verify_source)
+            return
+    elif 'identityVersion' in record or record.get('origin') == 'distributor-update':
+        raise ValueError('approval-identity-version-invalid')
     if record.get('origin') != 'administrator-reviewed-transition':
         if 'transition' in record:
             raise ValueError('transition-origin-invalid')
@@ -92,7 +260,7 @@ def validate_transition(config, record, verify_source):
     for field in ('source', 'closure', 'target'):
         if proof[field] != record[field]:
             raise ValueError('transition-successor-binding-invalid')
-    if proof['successorPolicy'] != record['policy'] or record['policy'] != policy_digest(config) or proof['predecessorPolicy'] == record['policy']:
+    if proof['successorPolicy'] != record['policy'] or record['policy'] != policy_digest(config) or (proof['predecessorPolicy'] == record['policy'] and identity_version(config) == 1):
         raise ValueError('transition-policy-binding-invalid')
     previous = proof['predecessorCheckpoint']
     if not isinstance(previous, dict) or any(previous.get(key) != value for key, value in
@@ -106,7 +274,11 @@ def validate_transition(config, record, verify_source):
         verify_source(closure, 'closure')
         if str((Path(closure) / 'etc/phoenix-agent/activated-source').resolve(strict=True)) != source:
             raise ValueError('transition-closure-source-invalid')
-    if policy_digest(closure_config(record['predecessorClosure'])) != proof['predecessorPolicy']:
+    predecessor_config = closure_config(record['predecessorClosure'])
+    if (proof['predecessorPolicy'] == record['policy'] and
+            toolchain_digest(predecessor_config) == record['toolchain']):
+        raise ValueError('transition-unchanged-identity')
+    if policy_digest(predecessor_config) != proof['predecessorPolicy']:
         raise ValueError('transition-predecessor-policy-invalid')
     if policy_digest(closure_config(record['closure'])) != proof['successorPolicy']:
         raise ValueError('transition-successor-policy-invalid')
@@ -129,6 +301,7 @@ def approve_transition(config, binding, branch, run, *, predecessor_policy, pred
     record.update(policy=policy_digest(config), branch=branch_key(branch),
                   origin='administrator-reviewed-transition', predecessorSource=predecessor_source,
                   predecessorClosure=predecessor_closure)
+    record.update(record_identity(config))
     record['transition'] = dict(version=1, administratorUid=uid, predecessorPolicy=predecessor_policy,
         predecessorCheckpoint=previous, successorPolicy=record['policy'], **{key: record[key] for key in ('source', 'closure', 'target')})
     validate_transition(config, record, verify_source)
@@ -255,13 +428,19 @@ def retain(config, kind, identifier, record, run, before_publish=None):
 
 def approve(config, binding, branch, run, before_publish=None):
     record = {key: binding[key] for key in ('source', 'closure', 'target')}
-    record.update(policy=policy_digest(config), branch=branch_key(branch))
+    identity = {}
+    if identity_version(config) == 2:
+        successor = closure_config(binding['closure'])
+        if policy_digest(successor) != policy_digest(config):
+            raise ValueError('approval-policy-binding-invalid')
+        identity = record_identity(successor)
+    record.update(policy=policy_digest(config), branch=branch_key(branch), **identity)
     identifier = hashlib.sha256((record['policy'] + record['target'] + record['source'] + record['closure'] + record['branch']).encode()).hexdigest()
     retain(config, 'approved', identifier, record, run, before_publish)
 
 
 def pending(config, binding, uid, branch, code, summary, run):
-    record = dict(binding, policy=policy_digest(config), uid=uid, branch=branch,
+    record = dict(binding, policy=policy_digest(config), **record_identity(config), uid=uid, branch=branch,
                   code=code, summary=summary[:1000])
     retain(config, 'pending', binding['nonce'], record, run)
     return binding['nonce']
@@ -273,6 +452,8 @@ def load_pending(config, nonce, uid, verify_source):
     record = read_record(state_directory(config) / (nonce + '.pending.json'))
     if record.get('nonce') != nonce or record.get('uid') != uid or record.get('policy') != policy_digest(config) or record.get('target') != config['target']:
         raise ValueError('pending decision identity/policy changed')
+    if identity_version(config) == 2 and any(record.get(key) != value for key, value in record_identity(config).items()):
+        raise ValueError('pending-toolchain-identity-changed')
     if record.get('action') not in {'test', 'switch', 'boot'}:
         raise ValueError('pending decision action invalid')
     for field, kind in (('source', 'source'), ('closure', 'closure'), ('base', 'source'), ('profile', 'closure')):
