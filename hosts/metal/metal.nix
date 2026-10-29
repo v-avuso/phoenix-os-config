@@ -41,6 +41,10 @@ in
 
   # Bare-metal desktop options belong here.
 
+  # Favor desktop connection reliability while investigating recurring WCN7850
+  # stalls. Power saving is a candidate trigger, not a confirmed root cause.
+  networking.networkmanager.wifi.powersave = false;
+
   services.xserver.videoDrivers = [ "nvidia" ];
 
   # AusweisApp discovers a paired smartphone card reader through UDP broadcast
