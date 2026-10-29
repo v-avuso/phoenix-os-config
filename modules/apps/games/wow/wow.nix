@@ -153,6 +153,9 @@ lib.mkIf (config.phoenix.target == "metal-4tb") {
     battleNet
   ];
   home-manager.users.${user.name} = { lib, ... }: {
+    home.activation.tsmNotifications = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      ${pkgs.python3}/bin/python3 ${./disable-tsm-notifications.py} "${user.homeDirectory}/.config/tsm-app/config.toml"
+    '';
     # Preserve the existing Lutris entry and its ID; HM backs up the old file.
     xdg.dataFile."applications/net.lutris.battlenet-1.desktop".source =
       "${battleNetDesktop}/share/applications/net.lutris.battlenet-1.desktop";

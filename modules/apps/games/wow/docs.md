@@ -257,6 +257,14 @@ There is no recurring AI work: the idle watcher sleeps two seconds between local
 process checks. Native companion sync stays at its upstream five-minute interval.
 The service has no autostart target and is triggered only by this Battle.net entry.
 
+Desktop notifications are disabled with native `notifications_enabled = false` in
+`~/.config/tsm-app/config.toml`. The app's central notification method checks this
+master switch before sending tray/OS notifications, including periodic data updates.
+Home Manager's `tsmNotifications` activation uses `disable-tsm-notifications.py` to
+change only this key, validate preserved TOML values, and retain a private one-time
+`.before-notifications` backup. The config stays writable for native settings.
+The current process caches settings; the preference takes effect on its next launch.
+
 Polling is deliberate: two-second local process checks keep the watcher simple
 across Battle.net's indirect Wine launch and independent exit. An exit notifier
 could avoid repeated queries, but would need to discover and track the relevant

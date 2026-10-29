@@ -30,6 +30,9 @@ use TSM prices; no crafting settings or WTF files were changed. If WowUp discove
 **CraftSim**, set **Ignore / Auto Update off** before allowing it to update packages.
 
 **TSM Desktop App** opens the pinned community Linux companion in the foreground.
+Desktop notifications are disabled through its native `notifications_enabled` setting;
+Home Manager reasserts this preference while preserving other TSM settings. A running
+instance picks up the change on its next launch.
 Before first companion sync, set **TradeSkillMaster** and **TSM_AppHelper** to
 **Ignore / Auto Update off** in WowUp. The companion updates these addons itself and
 writes price data; it must be their only updater. Sign in through the app (never send
