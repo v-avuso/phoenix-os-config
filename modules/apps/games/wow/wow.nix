@@ -7,6 +7,45 @@
 }:
 let
   addonDir = "${user.homeDirectory}/Games/battlenet/drive_c/Program Files (x86)/World of Warcraft/_retail_/Interface/AddOns";
+  tsmApp = import ./tsm-app.nix { inherit pkgs; };
+  tsmForeground = pkgs.writeShellApplication {
+    name = "wow-tsm";
+    runtimeInputs = [
+      tsmApp
+      pkgs.util-linux
+      pkgs.libnotify
+    ];
+    text = ''
+      exec 8>"$XDG_RUNTIME_DIR/phoenix-tsm.lock"
+      if ! flock -n 8; then
+        notify-send --app-name="TSM" "TSM is already running" "Open TSM from its system tray icon."
+        exit 0
+      fi
+      export PHOENIX_TSM_START_MINIMIZED=0
+      exec tsm-app "$@"
+    '';
+  };
+  tsmSession = pkgs.writeShellApplication {
+    name = "wow-tsm-session";
+    runtimeInputs = [
+      tsmApp
+      pkgs.util-linux
+      pkgs.procps
+      pkgs.coreutils
+    ];
+    text = builtins.readFile ./tsm-session.sh;
+  };
+  battleNet = pkgs.writeShellApplication {
+    name = "wow-battlenet";
+    runtimeInputs = [
+      pkgs.systemd
+      pkgs.lutris-free
+    ];
+    text = ''
+      systemctl --user start --no-block wow-tsm-session.service
+      exec env LUTRIS_SKIP_INIT=1 lutris lutris:rungameid/1
+    '';
+  };
   profileBaseline = pkgs.writeText "instawow-retail-profile.json" (
     builtins.toJSON {
       profile = "phoenix-retail";
@@ -101,8 +140,27 @@ lib.mkIf (config.phoenix.target == "metal-4tb") {
     pkgs.wowup-cf
     instawow
     wowAddons
+    tsmApp
+    tsmForeground
+    battleNet
   ];
   home-manager.users.${user.name} = { lib, ... }: {
+    # Preserve the existing Lutris entry and its ID; HM backs up the old file.
+    xdg.desktopEntries."net.lutris.battlenet-1" = {
+      name = "Battle.net";
+      icon = "lutris_battlenet";
+      exec = "${battleNet}/bin/wow-battlenet";
+      categories = [ "Game" ];
+      terminal = false;
+    };
+    systemd.user.services.wow-tsm-session = {
+      Unit.Description = "TSM companion for the Battle.net / WoW session";
+      Service = {
+        ExecStart = "${tsmSession}/bin/wow-tsm-session";
+        KillMode = "control-group";
+        TimeoutStopSec = 15;
+      };
+    };
     # Native OAuth configuration also rewrites the selected profile. Reuse the
     # existing writer to migrate the old store symlink without touching its DB.
     home.activation.wowProfile = lib.hm.dag.entryAfter [ "writeBoundary" ] ''

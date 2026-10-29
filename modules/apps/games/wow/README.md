@@ -2,7 +2,7 @@
 
 ## Current setup
 
-**68 desired instawow packages + 16 WowUp-CF packages; 151 addon folders after cleanup.** The original ElvUI/ToxiUI profile,
+**69 desired instawow packages + 16 WowUp-CF packages.** The original ElvUI/ToxiUI profile,
 bindings, casting settings and private WTF files are preserved. The user has completed ToxiUI's in-game installer and customization;
 this addon batch preserves those current settings and does not launch WoW.
 **No addon-specific configuration overrides, new ToxiUI profiles or action-bar bindings have been
@@ -22,6 +22,54 @@ individual folders: after cleanup, 84 packages supply 151 AddOns folders, includ
 reinstall or adopt either manager's packages in the other. The ten new English voice packs below
 are also instawow-owned and must be ignored if WowUp discovers them.
 
+## Crafting and TSM companion
+
+CraftSim **27.0.7** is installed as `github:derfloh205/CraftSim`, including the existing
+05:00 Berlin instawow update flow. It uses the built-in Blizzard professions UI and can
+use TSM prices; no crafting settings or WTF files were changed. If WowUp discovers
+**CraftSim**, set **Ignore / Auto Update off** before allowing it to update packages.
+
+**TSM Desktop App** opens the pinned community Linux companion in the foreground.
+Before first companion sync, set **TradeSkillMaster** and **TSM_AppHelper** to
+**Ignore / Auto Update off** in WowUp. The companion updates these addons itself and
+writes price data; it must be their only updater. Sign in through the app (never send
+credentials to an agent), select the WoW base directory:
+
+```text
+/home/v/Games/battlenet/drive_c/Program Files (x86)/World of Warcraft
+```
+
+Select your realms and install **TSM_AppHelper** from the companion's **Addon Versions**
+tab, or use your addon manager and then ignore it. instawow's exact CurseForge source
+requires an unavailable access token; the catalogue search found no exact alternative.
+AppHelper is therefore **not installed by this task** and is absent from the manifest.
+
+The existing **Battle.net** launcher also starts `wow-tsm-session.service`. After the
+initial login/setup, its TSM instance starts in the tray and continues after Battle.net
+closes. A small watcher checks every two seconds and sends TSM a graceful termination
+signal after all current-user WoW clients close. It permits two minutes for Battle.net
+to appear, waits while Battle.net is open, and permits one minute for the game handoff
+after Battle.net exits. Cancelling a launch therefore cleans up TSM too. Other games
+launched from Battle.net do not extend the session. Starting Lutris through another
+entry point does not start the watcher.
+
+A manually started TSM instance is never stopped by the watcher. Both routes share a
+runtime lock; if already running, the standalone launcher asks you to use the tray
+icon to inspect it. First-time authentication can still display a login dialog during
+automatic startup. The standalone launch overrides the saved tray-start preference
+for that invocation only. Manage the automatic session with:
+
+```sh
+systemctl --user status wow-tsm-session.service
+systemctl --user stop wow-tsm-session.service
+journalctl --user -u wow-tsm-session.service
+```
+
+Verify on your next play session: TSM remains running after Battle.net exits, receives
+price data after account setup, and closes shortly after WoW exits. A manual TSM launch
+must remain running when WoW closes. The app is community maintained, not officially
+supported by TradeSkillMaster on Linux. Technical packaging rationale is in [docs.md](docs.md#tsm-and-configuration-ownership).
+
 ## Small utility batch — 2026-10-27
 
 **Hide Vendor Sell Price rejected:** the player confirmed it does not remove the vendor price
@@ -34,7 +82,7 @@ WoW closed, using the workflow below. No replacement addon or tooltip/profile ch
 Close WoW and WowUp first, and keep them closed throughout. In a terminal, run each step only after
 the preceding step succeeds. Stop the timer to prevent an automatic race; let any already-running
 updater finish by waiting for the existing shared lock. Do not run sync against the old deployed
-69-entry manifest: it would reinstall the removed addon.
+old manifest containing that addon: it would reinstall the removed addon.
 
 ```sh
 cd /home/v/repos/code/phoenix-os-config
@@ -42,7 +90,7 @@ systemctl --user stop wow-addons-update.timer
 flock -w 3600 "$HOME/.local/state/phoenix-wow/lock" true
 phoenix-switch --worktree /home/v/repos/code/phoenix-os-config
 systemctl --user stop wow-addons-update.timer
-jq -e 'length == 68 and index("github:delulunia/HideVendorSellPrice") == null' \
+jq -e 'length == 69 and index("github:delulunia/HideVendorSellPrice") == null' \
   /etc/phoenix-agent/activated-source/modules/apps/games/wow/wow-addons.json
 wow-addons remove github:delulunia/HideVendorSellPrice
 wow-addons sync

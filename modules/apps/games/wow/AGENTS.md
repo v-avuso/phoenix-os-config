@@ -16,6 +16,9 @@
 - Addon-manifest tasks include deployment through the normal Phoenix workflow and
   post-deployment verification of the installed manifest, unless explicitly requested
   otherwise. A repository edit or successful sync alone does not update the deployed manifest.
+- Build/check `nixosConfigurations.metal-4tb` for WoW integration: the generic
+  `metal` target succeeds with this module disabled. Confirm the expected package
+  and user units are present before treating a system build as WoW validation.
 - After package/source changes, test the actual current catalogue (`quest` search),
   official release resolution, isolated installation, and managed sync/list/update.
   An enum-only release fix does not establish catalogue compatibility. Prefer a

@@ -220,13 +220,55 @@ preference store was left untouched; the README records this remaining manual st
 
 ## TSM and configuration ownership
 
-The main TSM addon is installed and WowUp-owned, without refreshed desktop companion price data.
+The main TSM addon is installed; WowUp currently has Auto Update off but **Ignore is
+not yet enabled**. Before the first companion sync, transfer update ownership by
+ignoring both TSM and AppHelper in WowUp. No account setup or price-data sync has
+been performed by this task.
 The [official companion](https://support.tradeskillmaster.com/tsm-desktop-application/how-do-i-set-up-the-tsm-desktop-application)
-normally owns both TSM and AppHelper and writes price data. Before a future companion takeover,
+normally owns both TSM and AppHelper and writes price data. Before companion takeover,
 ignore **both** in other updaters, per [official guidance](https://support.tradeskillmaster.com/how-do-i-fix-an-error-about-appdatalua-being-empty).
 Do not update AppHelper's mutable `AppData.lua` independently. Linux is
 [officially unsupported](https://support.tradeskillmaster.com/en_US/tsm-desktop-application/can-i-run-the-tsm-desktop-application-on-linux);
-no community client, account setup or TSM authorization was attempted.
+the community client below is provided with that limitation.
+
+`tsm-app.nix` pins [exceptionptr/tsm-app-linux](https://github.com/exceptionptr/tsm-app-linux/tree/60ad454b7187c3d2f1e4df36352b2af0fade02a6)
+1.1.16 by revision and archive hash, reusing its official additive overlay against
+our locked Nixpkgs. This avoids a second Qt/Python closure and changes no flake lock.
+The overlay supplies APScheduler 4 because the app needs its prerelease API.
+`tsm-startup.patch` adds only a per-launch tray override, preserving native config;
+upstream's hardcoded `/usr/bin` desktop command is corrected to `wow-tsm`.
+The native app already implements single-instance protection, tray operation and
+SIGTERM cleanup. It offers AppHelper installation and automatically updates installed
+TSM addons from its API; instawow must not manage either TSM addon once it owns them.
+The direct instawow `curse:tradeskill-master_apphelper` dry-run failed with
+**access token missing**; catalogue fuzzy matches were unrelated helpers.
+
+`wow.nix` retains the existing Lutris desktop ID and game URI; Home Manager backs up
+the previous user-created desktop entry. A user service keeps the watcher independent
+of launcher exit and constrains cleanup to its own child/cgroup. `tsm-session.sh`
+uses the existing updater's WoW executable-name pattern, restricted to the current
+UID, and observes all that user's Retail/Classic clients. It does not distinguish
+Wine prefixes. A shared runtime flock preserves foreground process ownership;
+native single-instance protection also handles a direct `tsm-app` invocation.
+There is no recurring AI work: the idle watcher sleeps two seconds between local
+process checks. Native companion sync stays at its upstream five-minute interval.
+The service has no autostart target and is triggered only by this Battle.net entry.
+
+CraftSim uses `github:derfloh205/CraftSim` (official release **27.0.7**), supplying
+only `CraftSim`. Its release TOC requires built-in `Blizzard_Professions` and optionally
+integrates with existing TSM/Syndicator. Catalogue, release dry-run and isolated
+installation succeeded before the managed installation. The desired manifest now
+contains **69** packages. Newly discovered WowUp rows must remain Ignore / Auto Update
+off; existing WowUp metadata was not edited. AppHelper installation, TSM account/realm
+setup, first sync and live game lifecycle acceptance remain player steps.
+
+Verification: the `metal-4tb` system build, flake evaluation, all 14 focused fixtures
+(including the isolated user-systemd updater test), and the packaged TSM `--self-test`
+on Wayland passed. The sandbox cannot access the host Wayland socket; the self-test
+was therefore run through supported sandbox escalation. No real game or companion
+account session was started. The upstream full PySide6 closure adds Qt modules and
+Clang/Shiboken dependencies (Clang alone about 864 MiB); using the overlay shares
+existing dependencies but does not eliminate that runtime closure cost.
 
 ElvUI/ToxiUI owns layout, bars, bags, nameplates, repairs/selling and current bindings. Syndicator is
 the preferred inventory backend/search, without replacing bags; Altoholic/DataStore remains omitted.

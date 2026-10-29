@@ -1,0 +1,23 @@
+--- a/tsm/ui/app_window.py
++++ b/tsm/ui/app_window.py
+@@ -3,6 +3,7 @@
+ from __future__ import annotations
+ 
+ import logging
++import os
+ from pathlib import Path
+ from typing import TYPE_CHECKING
+ 
+@@ -450,7 +450,11 @@
+         """Called after successful authentication (login or session restore)."""
+         self._app_vm.on_login_success(session)
+         self._app_vm.set_status("Connected, loading data...")
+-        if not self._settings_vm.config.start_minimized:
++        # Per-launch override; preserve the user's saved startup preference.
++        startup = os.environ.get("PHOENIX_TSM_START_MINIMIZED")
++        minimized = (self._settings_vm.config.start_minimized
++                     if startup is None else startup == "1")
++        if not minimized:
+             self.show()
+         self._realm_vm.load_snapshot()
+         self._realm_vm.refresh_all()
