@@ -28,9 +28,12 @@ are also instawow-owned and must be ignored if WowUp discovers them.
 catalogue lists `curse:worthit`, matching [WorthIt by DalaGG](https://www.curseforge.com/wow/addons/worthit)
 (project 348878). The native install dry-run fails with `package source is disabled:
 access token missing`. No exact alternative source was found in the bounded search.
-WorthIt is **not installed** and is absent from the daily update manifest; adding it
-now would make scheduled sync fail. Installation and inclusion in the 05:00 Berlin
-updates remain pending a supported, accessible InstaWow source. The separate Guides,
+This attempt **did not install WorthIt**; its installation status in WowUp was not
+checked and may change independently. It is absent from the InstaWow daily update
+manifest; adding the blocked source would make scheduled sync fail. Before any later
+InstaWow installation, check existing folders and WowUp ownership to avoid two
+managers updating the same add-on. Inclusion in the 05:00 Berlin InstaWow updates
+requires a supported, accessible source. The separate Guides,
 Gold Tracker and Leveling packages are not substitutes.
 
 CraftSim **27.0.7** is installed as `github:derfloh205/CraftSim`, including the existing
