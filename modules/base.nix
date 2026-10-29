@@ -25,6 +25,11 @@
     "nix-command"
     "flakes"
   ];
+  # Apply at the daemon: untrusted deployment builders cannot override these
+  # settings. Resume transient cache failures without five-minute idle waits on
+  # every attempt; a persistent outage must fail visibly instead of hanging.
+  nix.settings.stalled-download-timeout = 30;
+  nix.settings.download-attempts = 3;
 
   users.users.${user.name} = {
     isNormalUser = true;

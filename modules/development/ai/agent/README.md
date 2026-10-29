@@ -59,11 +59,17 @@ permissions on return; preference isolation alone is not runtime acceptance.
 
 The permission adapter accepts reviewed file-name aliases and resolver variants,
 while checking every preference writer and the associated resume logic before
-writing any bundle. This avoids failures from asset hashes and the known thread-file
-rename without guessing at changed permission behavior. New semantic variants need
+writing any bundle. Caller/reconciliation fragments bind generated identifiers
+consistently across the reviewed expressions; operators, literals and property
+names stay exact, and ambiguous matches or collapsed variable roles are rejected.
+This tolerates minifier renaming without guessing at changed permission behavior
+or introducing a JavaScript rewriting framework. New semantic variants need
 the actual-bundle fixture in `tests/agent-gui-permissions.py` and a system build;
 configuration defaults alone do not replace resume handling or preference isolation.
 The 26.1021.22027 variant preserves upstream inherited defaults for new chats.
+Run `python3 -B modules/development/ai/agent/tests/agent-gui-permission-identifiers.py`
+for renaming/mutation checks; add `--source /path/to/extracted/app.asar` to exercise
+an inherited-default bundle's actual restrictive resume and outgoing permissions.
 
 The worker image and sandbox GUI use `time.timeZone` with pinned Nixpkgs timezone
 data (UTC when unset). The worker's immutable `/etc/localtime` also handles SSH

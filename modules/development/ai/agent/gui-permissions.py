@@ -81,9 +81,68 @@ RECONCILIATION = {
     LATEST_CALL: (LATEST_SEAMS, ',le,ce)'),
 }
 
+IDENTIFIER = r'[A-Za-z_$][\w$]*'
+TOKENS = re.compile(r'`[^`]*`|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|' + IDENTIFIER)
+FIXED = {'null', 'if', 'return', 'updateThreadPermissions',
+         'threadApprovalsReviewer', 'threadPermissionProfileId', 'threadMode',
+         'threadSandboxPolicy', 'permissionOverrideThreadSettings',
+         'permissionProfileId', 'shouldSendPermissionOverrides'}
+
+
+def fragment(source, template, bindings):
+    """Match exact operators/literals/properties and consistently renamed locals.
+
+    This is deliberately a matcher for reviewed fragments, not a JavaScript
+    parser. Bindings span the call and all reconciliation checks; distinct roles
+    cannot collapse onto one variable. Unknown logic and ambiguous matches fail.
+    """
+    parts, groups, end = [], {}, 0
+    for token in TOKENS.finditer(template):
+        parts.append(re.escape(template[end:token.start()]))
+        value = token[0]
+        if (not re.fullmatch(IDENTIFIER, value) or value in FIXED or
+                template[:token.start()].endswith('.')):
+            parts.append(re.escape(value))
+        elif value in bindings:
+            parts.append(re.escape(bindings[value]))
+        elif value in groups:
+            parts.append('(?P=' + groups[value] + ')')
+        else:
+            group = 'v' + str(len(groups))
+            groups[value] = group
+            parts.append('(?P<' + group + '>' + IDENTIFIER + ')')
+        end = token.end()
+    parts.append(re.escape(template[end:]))
+    matches = list(re.finditer(r'(?<![\w$])' + ''.join(parts) + r'(?![\w$])', source))
+    if len(matches) != 1:
+        raise ValueError('Pinned resumed-thread permission reconciliation changed')
+    match = matches[0]
+    updated = bindings | {name: match[group] for name, group in groups.items()}
+    if len(set(updated.values())) != len(updated):
+        raise ValueError('Permission reconciliation variable roles changed')
+    return match[0], updated
+
+
+def reconciliation(source, name):
+    # Prefer the most specific reviewed contract. Earlier variants remain for
+    # older pinned bundles; all operators and property names stay literal.
+    for template, (seams, extra) in reversed(RECONCILIATION.items()):
+        bindings = {'rSo': name}
+        try:
+            call, bindings = fragment(source, template, bindings)
+            actual = []
+            for seam in seams:
+                matched, bindings = fragment(source, seam, bindings)
+                actual.append(matched)
+            mode, profile = extra.strip(',)').split(',')
+            return call, actual, ',' + bindings[mode] + ',' + bindings[profile] + ')'
+        except ValueError:
+            continue
+    raise ValueError('Pinned resumed-thread permission reconciliation changed')
+
 
 def resolver(source):
-    """Capture only the generated identifier; reviewed resolver bodies stay exact."""
+    """Keep resolver bodies exact and bind their caller by reviewed structure."""
     for lookup, replacement, call, new in ((LOOKUP, REPLACEMENT, CALL, False),
                                            (NEW_LOOKUP, NEW_REPLACEMENT, NEW_CALL, True)):
         canonical = lookup.split('(', 1)[0].removeprefix('function ')
@@ -92,12 +151,7 @@ def resolver(source):
         if len(matches) == 1:
             name = matches[0].group(1)
             if new:
-                calls = [candidate.replace(canonical + '(', name + '(')
-                         for candidate in RECONCILIATION]
-                present = [candidate for candidate in calls if candidate in source]
-                if len(present) != 1:
-                    raise ValueError("Pinned permission preference/default seam changed")
-                call = present[0]
+                call, _, _ = reconciliation(source, name)
             else:
                 call = call.replace(canonical + '(', name + '(')
             return matches[0].group(), replacement.replace(canonical + '(', name + '('), call, new
@@ -149,7 +203,7 @@ def patch(root):
     # Guard both reconciliation and the preserved profile/override result.
     if new:
         name = lookup.split('(', 1)[0].removeprefix('function ')
-        seams, extra = RECONCILIATION[call.replace(name + '(', 'rSo(')]
+        _, seams, extra = reconciliation(source, name)
     else:
         seams = (
             "Ce=n!=null&&oe!=null&&(ae==null||ae.startsWith(`:`))&&(M!=null||pe!=null&&Sci(pe,P))&&oe!==_e",

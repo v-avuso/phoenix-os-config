@@ -80,6 +80,9 @@
   root UID, socket, activation and rollback semantics; see [VM fixtures](modules/development/ai/agent/tests/activation-runtime.nix)
   and [acceptance limits](modules/development/ai/agent/security-review.md). Prefer isolated trials to disruptive host experiments;
   VM passes do not establish host desktop, biometric or reboot acceptance.
+- Nix download timeout/retry settings are daemon-restricted: untrusted builders'
+  `--option` overrides are ignored. Configure the daemon and verify its installed
+  settings; a boot-only deployment does not update the running daemon.
 - Metal hardware configuration is tracked. VM hardware is a tracked
   placeholder; VM deployment requires a real reviewed snapshot.
   Evaluation does not establish bootability.

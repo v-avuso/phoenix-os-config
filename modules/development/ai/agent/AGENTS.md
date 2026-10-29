@@ -225,6 +225,9 @@
   resolver result alone does not prove that fallback preserves restrictions.
   Characterize the mode decoder through outgoing permissions: Approve for me is guardian-approvals,
   not auto. Verify Native return.
+  For minifier-only updates, bind generated caller identifiers consistently across
+  the reviewed reconciliation expressions instead of adding release-specific names;
+  retain literal operators/properties and mutation/ambiguity rejection checks.
 
 - Sandbox revision replacement must hold the setup lock and a separate exclusive
   instance-use lock before stopping an old instance; retain shared use locks for
