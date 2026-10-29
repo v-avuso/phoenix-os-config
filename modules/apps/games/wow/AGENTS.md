@@ -19,6 +19,9 @@
 - Build/check `nixosConfigurations.metal-4tb` for WoW integration: the generic
   `metal` target succeeds with this module disabled. Confirm the expected package
   and user units are present before treating a system build as WoW validation.
+- When replacing a Lutris launcher, manage its existing `xdg.dataFile` path:
+  `xdg.desktopEntries` alone installs a package entry that the local file shadows.
+  Verify the installed desktop file's Exec after activation, not just the package.
 - After package/source changes, test the actual current catalogue (`quest` search),
   official release resolution, isolated installation, and managed sync/list/update.
   An enum-only release fix does not establish catalogue compatibility. Prefer a

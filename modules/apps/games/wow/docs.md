@@ -245,7 +245,10 @@ The direct instawow `curse:tradeskill-master_apphelper` dry-run failed with
 
 `wow.nix` retains the existing Lutris desktop ID and game URI; Home Manager backs up
 the previous user-created desktop entry. A user service keeps the watcher independent
-of launcher exit and constrains cleanup to its own child/cgroup. `tsm-session.sh`
+of launcher exit. The desktop item is linked through `xdg.dataFile` at the original
+local path: a profile-only `xdg.desktopEntries` item would be shadowed by Lutris's
+existing user file. The service constrains cleanup to its own child/cgroup, independent
+of the launcher. `tsm-session.sh`
 uses the existing updater's WoW executable-name pattern, restricted to the current
 UID, and observes all that user's Retail/Classic clients. It does not distinguish
 Wine prefixes. A shared runtime flock preserves foreground process ownership;
@@ -254,13 +257,25 @@ There is no recurring AI work: the idle watcher sleeps two seconds between local
 process checks. Native companion sync stays at its upstream five-minute interval.
 The service has no autostart target and is triggered only by this Battle.net entry.
 
+Polling is deliberate: two-second local process checks keep the watcher simple
+across Battle.net's indirect Wine launch and independent exit. An exit notifier
+could avoid repeated queries, but would need to discover and track the relevant
+game processes across that handoff; the added lifecycle complexity is not justified
+by the accepted delay. The watcher sleeps between checks and sends SIGTERM once
+all matching WoW processes disappear. Polling contributes up to roughly two seconds
+to detection, not a fixed five-to-ten-second shutdown timer. A game process can
+outlive its visible window, and TSM then needs its own graceful cleanup time.
+The player confirmed automatic startup and shutdown, observing about five to ten
+seconds after closing WoW; the individual contributions have not been measured.
+
 CraftSim uses `github:derfloh205/CraftSim` (official release **27.0.7**), supplying
 only `CraftSim`. Its release TOC requires built-in `Blizzard_Professions` and optionally
 integrates with existing TSM/Syndicator. Catalogue, release dry-run and isolated
 installation succeeded before the managed installation. The desired manifest now
 contains **69** packages. Newly discovered WowUp rows must remain Ignore / Auto Update
 off; existing WowUp metadata was not edited. AppHelper installation, TSM account/realm
-setup, first sync and live game lifecycle acceptance remain player steps.
+setup and first sync are player steps; automatic game lifecycle behavior has been
+confirmed by the player as described above.
 
 Verification: the `metal-4tb` system build, flake evaluation, all 14 focused fixtures
 (including the isolated user-systemd updater test), and the packaged TSM `--self-test`

@@ -46,6 +46,14 @@ let
       exec env LUTRIS_SKIP_INIT=1 lutris lutris:rungameid/1
     '';
   };
+  battleNetDesktop = pkgs.makeDesktopItem {
+    name = "net.lutris.battlenet-1";
+    desktopName = "Battle.net";
+    icon = "lutris_battlenet";
+    exec = "${battleNet}/bin/wow-battlenet";
+    categories = [ "Game" ];
+    terminal = false;
+  };
   profileBaseline = pkgs.writeText "instawow-retail-profile.json" (
     builtins.toJSON {
       profile = "phoenix-retail";
@@ -146,13 +154,8 @@ lib.mkIf (config.phoenix.target == "metal-4tb") {
   ];
   home-manager.users.${user.name} = { lib, ... }: {
     # Preserve the existing Lutris entry and its ID; HM backs up the old file.
-    xdg.desktopEntries."net.lutris.battlenet-1" = {
-      name = "Battle.net";
-      icon = "lutris_battlenet";
-      exec = "${battleNet}/bin/wow-battlenet";
-      categories = [ "Game" ];
-      terminal = false;
-    };
+    xdg.dataFile."applications/net.lutris.battlenet-1.desktop".source =
+      "${battleNetDesktop}/share/applications/net.lutris.battlenet-1.desktop";
     systemd.user.services.wow-tsm-session = {
       Unit.Description = "TSM companion for the Battle.net / WoW session";
       Service = {
