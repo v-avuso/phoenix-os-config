@@ -68,10 +68,10 @@ trust explicit without adding model calls, services or recurring approval work.
    why review authority changes, why this design is preferable, old/new fingerprints,
    approved predecessor source/closure, exact candidate source/closure, full diff
    scope and actual validation limits. Explain any unrelated intervening changes.
-2. Leave **Authorization: security-policy handover** in Open tasks. An explicitly
-   requested PR may carry the implementation for administrator approval. Creating
-   or approving that PR does not itself authenticate or activate an exact closure;
-   do not invoke authentication or interpret implementation permission as handover approval.
+2. Present the local change/report and leave **Authorization: security-policy
+   handover** in Open tasks. Local merge permission does not itself authenticate
+   or activate an exact closure; do not invoke authentication or interpret
+   implementation permission as handover approval.
 3. After explicit authorization, prepare the on-demand immutable helper from
    `recovery/policy-transition.nix`. Its fixed descriptor contains `installedConfig`,
    `installedPolicy`, `runtime`, `profile`, `baseline`, `predecessorConfig`,

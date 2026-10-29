@@ -7,8 +7,8 @@
   Put **Authorization: security-policy handover** in Open tasks and wait for the
   operator to read and authorize it. Implementation permission is not handover
   permission: do not start authentication, deploy, or seed trust before that
-  separate authorization. An explicitly requested PR may present the change for
-  authorization; PR creation is not permission to activate it. Do not avoid a warranted architectural
+  separate authorization. Present the report for local operator review; local
+  merge permission is not permission to activate a policy handover. Do not avoid a warranted architectural
   change merely to avoid this gate. See [policy handovers](policy-transitions.md).
 
 - Keep security authority and exact execution-tool identities versioned separately.

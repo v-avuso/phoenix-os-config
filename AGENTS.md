@@ -26,6 +26,13 @@
 - Agents may run inside OpenShell; use named broker diagnostics for
   containment issues.
 
+## Local review and integration
+
+- This solo-maintainer project reviews and merges local branches into `main`.
+  A request for a PR/change proposal means a local review unless the operator
+  explicitly requests GitHub publication. Do not create GitHub PRs or push task
+  branches without explicit remote-publication authorization.
+
 ## Configuration review and sources
 
 - Review changes against the last activated source and resulting closure,
