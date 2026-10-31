@@ -78,7 +78,7 @@ class SystemdRuntimeTests(unittest.TestCase):
                 deadline = time.monotonic() + 5
                 while not marker.exists() and time.monotonic() < deadline:
                     time.sleep(0.05)
-                self.assertEqual(attempts.read_text().splitlines(), ["attempt"] * 4)
+                self.assertEqual(attempts.read_text().splitlines(), ["attempt"] * 2)
                 self.assertEqual(marker.read_text().splitlines(), ["notification"])
                 self.assertEqual(ctl("show", "-p", "ExecMainStatus", "--value", names[0]).stdout.strip(), "23")
                 ctl("start", names[3])

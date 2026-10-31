@@ -1,0 +1,119 @@
+--- a/src/instawow/_sources/github.py
++++ b/src/instawow/_sources/github.py
+@@ -56,6 +56,7 @@
+     name: str  # filename
+     content_type: str  # mime type
+     state: Literal['starter', 'uploaded']
++    size: int
+ 
+ 
+ class _PackagerReleaseJson(TypedDict):
+@@ -181,7 +182,9 @@
+ 
+             # A large enough initial offset that we won't typically have to
+             # resort to extracting the ECD.
+-            directory_offset = str(-25_000)
++            # The assets API rejects suffix ranges with 501, even for large ZIPs.
++            # Explicit bounds avoid the full-archive small-file fallback.
++            directory_offset = f'{max(0, candidate["size"] - 25_000)}-{candidate["size"] - 1}'
+ 
+             for _ in range(2):
+                 logger.debug(f'Fetching {directory_offset} bytes from {candidate["name"]}')
+@@ -229,7 +232,7 @@
+                             if end_rec_data is None:
+                                 break
+ 
+-                            directory_offset = f'{end_rec_data[zipfile_internal._ECD_OFFSET]}-'
++                            directory_offset = f'{end_rec_data[zipfile_internal._ECD_OFFSET]}-{candidate["size"] - 1}'
+                         else:
+                             break
+ 
+@@ -274,7 +277,7 @@
+                 )
+                 # If this is the last file in the list, download to eof. In theory,
+                 # we could detect where the zip directory starts.
+-                following_file_offset = following_file.header_offset if following_file else ''
++                following_file_offset = following_file.header_offset if following_file else candidate['size'] - 1
+ 
+                 logger.debug(f'Fetching {main_toc_filename} from {candidate["name"]}')
+                 async with ctx.http.web_client().get(
+--- a/src/instawow/resolvers.py
++++ b/src/instawow/resolvers.py
+@@ -1,9 +1,11 @@
+ from __future__ import annotations
+ 
++import asyncio
++import os
+ import datetime as dt
+ import enum
+ from collections.abc import AsyncIterator, Sequence
+-from contextlib import AbstractContextManager
++from contextlib import AbstractContextManager, asynccontextmanager
+ from pathlib import Path
+ from typing import Literal, Never, NotRequired, Protocol, Self, overload
+ 
+@@ -134,9 +136,29 @@
+             if extraneous_strategies:
+                 raise PkgStrategiesUnsupported(extraneous_strategies)
+ 
+-            return await old_resolve_one(self, defn, metadata)
++            async with self._network_timeout(defn, start=True):
++                return await old_resolve_one(self, defn, metadata)
+ 
+         cls.resolve_one = new_resolve_one
++
++    @asynccontextmanager
++    async def _network_timeout(self, defn: Defn, *, start: bool = False):
++        from .results import InternalError
++
++        loop = asyncio.get_running_loop()
++        deadlines = self.__dict__.setdefault('_network_deadlines', {})
++        key = defn.id or defn.alias.lower()
++        if start or key not in deadlines:
++            deadline = loop.time() + max(0, min(300, float(os.environ.get('INSTAWOW_NETWORK_TIMEOUT', '300'))))
++            deadlines[key] = deadlines[defn.alias.lower()] = deadline
++        budget = asyncio.timeout_at(deadlines[key])
++        try:
++            async with budget:
++                yield
++        except TimeoutError:
++            if not budget.expired():
++                raise
++            raise InternalError('add-on skipped: five-minute network budget exhausted') from None
+ 
+     def get_disabled_reason(self) -> str | None:
+         if self.access_token:
+@@ -147,9 +169,10 @@
+     async def download_pkg_archive(self, defn: Defn, url: str) -> Path:
+         from .pkg_archives._download import download_pkg_archive
+ 
+-        return await download_pkg_archive(
+-            defn, url, request_headers=self.make_request_headers(HeadersIntent.Download)
+-        )
++        async with self._network_timeout(defn):
++            return await download_pkg_archive(
++                defn, url, request_headers=self.make_request_headers(HeadersIntent.Download)
++            )
+ 
+     def open_pkg_archive(self, archive_path: Path) -> AbstractContextManager[pkg_archives.Archive]:
+         from .pkg_archives import open_zip_archive
+--- a/src/instawow/results.py
++++ b/src/instawow/results.py
+@@ -206,7 +206,7 @@
+             except (ManagerError, InternalError) as exception:
+                 return exception
+ 
+-            except BaseException as error:
++            except Exception as error:
+                 return _handle_internal_error(error)
+ 
+         return async_wrapper
+@@ -221,7 +221,7 @@
+             except (ManagerError, InternalError) as exception:
+                 return exception
+ 
+-            except BaseException as error:
++            except Exception as error:
+                 return _handle_internal_error(error)
+ 
+         return sync_wrapper

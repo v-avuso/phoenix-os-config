@@ -13,6 +13,9 @@
   Keep the 05:00 Europe/Berlin timer dedicated to package updates, never settings.
   Scheduled runs must skip successfully when WoW is running, retain bounded retries
   and notify only on terminal failure. Preserve the single shared update lock.
+  For slow unchanged GitHub releases, inspect HTTP range behavior before adding
+  concurrency: a 501 suffix-range response can trigger full voiceover ZIP downloads.
+  Keep timeout cancellation confined to network work, never native file/DB writes.
 - Addon-manifest tasks include deployment through the normal Phoenix workflow and
   post-deployment verification of the installed manifest, unless explicitly requested
   otherwise. A repository edit or successful sync alone does not update the deployed manifest.

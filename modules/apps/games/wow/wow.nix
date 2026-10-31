@@ -69,7 +69,7 @@ let
       sha256 = "15iyipl8nbs5wn7byz9z9v3na041vvq4niag5p1l2syzxlrmd2wi";
     };
   };
-  # Keep the system lock unchanged; use unpatched upstream until Nixpkgs catches up.
+  # Keep the system lock unchanged; patch bounded ZIP probes in the pinned release.
   instawow = pkgs.instawow.overrideAttrs (old: {
     version = "7.3.0";
     src = pkgs.fetchFromGitHub {
@@ -78,9 +78,18 @@ let
       tag = "v7.3.0";
       hash = "sha256-NJDx1eUj+0Vq61lmR0y8R+H6sV8ajUFIpBrWzw2vATA=";
     };
+    patches = (old.patches or [ ]) ++ [ ./instawow-bounded-ranges.patch ];
     nativeBuildInputs = old.nativeBuildInputs ++ [ pkgs.python3.pkgs.versioningit ];
     # GitHub archives omit Git metadata; versioningit supports an explicit fallback.
     postPatch = ''
+      cp ${./tests/test_instawow_ranges.py} tests/phoenix_ranges_fixture.py
+      cat > tests/test_phoenix_ranges.py <<'EOF'
+      def test_phoenix_regressions():
+          import unittest
+          from . import phoenix_ranges_fixture
+          suite = unittest.defaultTestLoader.loadTestsFromModule(phoenix_ranges_fixture)
+          assert unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful()
+      EOF
       cat >> pyproject.toml <<'EOF'
       [tool.versioningit]
       default-version = "7.3.0"
@@ -107,6 +116,7 @@ let
     pytestFlags = [
       "tests/test_catalogue_search.py"
       "tests/test_source__github.py"
+      "tests/test_phoenix_ranges.py"
       "tests/test_config.py"
       "tests/test_wow_installations.py"
     ];

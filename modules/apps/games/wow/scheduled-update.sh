@@ -29,7 +29,12 @@ wow_check_or_skip() {
 }
 
 status=1
+started=$SECONDS
 for delay in 0 60 300 900; do
+  if (( SECONDS - started + delay >= 300 )); then
+    echo 'Scheduled WoW add-on network budget exhausted; no further batch retry.' >&2
+    break
+  fi
   if (( delay > 0 )); then
     echo "Retrying scheduled WoW add-on update in $delay seconds." >&2
     sleep "$delay"
@@ -39,7 +44,7 @@ for delay in 0 60 300 900; do
     # A launch during sync cannot be made atomic with an external game launcher;
     # recheck before update, and never terminate or restart game processes.
     wow_check_or_skip
-    if instawow -v -p phoenix-retail update; then
+    if INSTAWOW_NETWORK_TIMEOUT=$((300 - (SECONDS - started))) instawow -v -p phoenix-retail update; then
       exit 0
     else
       status=$?

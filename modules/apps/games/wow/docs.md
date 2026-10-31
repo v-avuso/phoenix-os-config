@@ -203,10 +203,31 @@ consent and package availability still apply; no provider request was routed thr
 Keep all WowUp automatic updates and autostart off for today's setup; update only its chosen,
 non-ignored packages individually with WoW closed. Neither manager should touch the other's folders.
 
-The existing instawow user service/timer remains **05:00 Europe/Berlin**, `Persistent=true`, with
-60/300/900-second retry waits, one shared flock, terminal-only notification and safe WoW-running
-skips. It updates only its database/manifest packages. No service logic, auth or schedule changed in
-this workstream. Preflight checks do not lock the independent game launcher; do not launch during
+The instawow user timer remains **05:00 Europe/Berlin**, `Persistent=true`, with a
+single shared flock, terminal-only notification and safe WoW-running skips. It
+updates only its database/manifest packages. Retries share a 300-second network
+budget; the 60-second retry remains when time permits, while 300/900-second waits
+no longer extend a timed-out batch. File extraction/database writes are not killed
+by the network deadline; local sync, lock waits and safe writes can extend runtime.
+
+The pinned `instawow-bounded-ranges.patch` keeps native concurrency and update
+semantics. GitHub's assets API returned 501 for suffix ranges (`bytes=-25000`),
+which upstream treats as a tiny-file signal and replaces with a full ZIP download.
+A 519 MB ChattyLittleNPC ZIP reproduced this even with its current version installed.
+Explicit byte bounds, using the API's asset size, returned 206 in under one second.
+The fix bounds central-directory and final-TOC ranges too. Native compatibility
+checks then confirmed all 69 installed versions current (2026-10-31).
+
+Each native resolver starts a five-minute network deadline, reused by its archive
+download; `INSTAWOW_NETWORK_TIMEOUT` can shorten it for the remaining scheduled
+budget. Timeout errors retain the add-on identity in ordinary InstaWoW output,
+other results continue, and failures still trigger the existing terminal notification.
+The patch also preserves asyncio cancellation rather than swallowing it as a package
+error. There is no separate updater engine or concurrent database writer. Recheck the
+patch and native regression tests when upgrading InstaWoW; remove it when upstream
+provides equivalent behavior. Native read-only comparison: `wow-addons update --dry-run`.
+
+Preflight checks do not lock the independent game launcher; do not launch during
 writes. New addons can require reopening the game; never force a reload during writes.
 
 ### WowUp close preference

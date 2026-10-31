@@ -61,11 +61,10 @@ source "$1"
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(events, ["sync", "sleep:60", "sync", "update"])
 
-    def test_terminal_failure_preserves_status_and_exact_delays(self):
+    def test_terminal_failure_preserves_status_and_bounds_batch_retries(self):
         result, events = self.run_update(update_failures=4)
         self.assertEqual(result.returncode, 23, result.stderr)
-        self.assertEqual(events, ["sync", "update", "sleep:60", "sync", "update",
-                                  "sleep:300", "sync", "update", "sleep:900", "sync", "update"])
+        self.assertEqual(events, ["sync", "update", "sleep:60", "sync", "update"])
 
     def test_running_game_skips_without_mutation(self):
         result, events = self.run_update(guards="0")

@@ -279,13 +279,18 @@ No private application-state file was patched. See the [official application opt
 wow-addons list --format detailed
 wow-addons sync
 wow-addons update
+wow-addons update --dry-run
 systemctl --user list-timers wow-addons-update.timer
 journalctl --user -u wow-addons-update.service
 ```
 
+Native updates keep their existing parallelism. Each add-on gets a five-minute
+network budget; timed-out add-ons are logged, and other results continue. GitHub
+ZIP checks use bounded byte ranges instead of downloading entire voiceover packs.
+
 Instawow owns [wow-addons.json](wow-addons.json); deploy edits before `sync` uses the changed manifest.
-Its **05:00 Europe/Berlin** persistent timer, 1/5/15-minute retries, terminal-only notification and
-WoW-running skips are unchanged. Close WoW before interactive writes; do not launch during updates.
+Its **05:00 Europe/Berlin** persistent timer, terminal-only notification and
+WoW-running skips remain. Retries share the five-minute network budget. Close WoW before interactive writes; do not launch during updates.
 
 **Next WowUp scan:** reconcile the twelve BtWQuests records and ten voice-pack records listed above.
 For BtWQuests, when discovered,
