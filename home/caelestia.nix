@@ -313,6 +313,14 @@ in
     "caelestia/hypr-user.lua".text = hyprUser;
     "caelestia/user-config.fish".text = "# Phoenix Fish extension point; managed by Home Manager.\n";
 
+    # Set an explicit save path so Swappy does not fall back to XDG Desktop.
+    # Swappy 1.8.0 supports PNG output only.
+    "swappy/config".text = ''
+      [Default]
+      save_dir=${config.home.homeDirectory}/Pictures/Screenshots
+      save_filename_format=swappy-%Y%m%d_%H%M%S.png
+    '';
+
     "fish" = {
       source = dots + "/fish";
       recursive = true;
