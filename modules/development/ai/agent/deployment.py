@@ -252,6 +252,11 @@ def activate(config, closure, action, run):
     verify_runtime_target(config)
     activation_action = 'boot' if action == 'update' else action
     command = [closure + '/bin/switch-to-configuration', activation_action]
+    if action in {'test', 'switch'}:
+        # Run native checks before profile changes and before entering rollback:
+        # rejection must not trigger a second, potentially disruptive activation.
+        run([closure + '/bin/switch-to-configuration', 'check'], timeout=60,
+            env=activation_environment(config))
     if action == 'test':
         previous = str(Path('/run/current-system').resolve(strict=True))
         try:

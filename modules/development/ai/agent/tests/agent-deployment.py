@@ -484,7 +484,15 @@ class DeploymentTests(unittest.TestCase):
         with mock.patch.object(Path, 'resolve', return_value=Path('/old')):
             deploy.activate(config, '/nix/store/system', 'test', run)
         self.assertEqual(run.call_args.args[0], ['/nix/store/system/bin/switch-to-configuration', 'test'])
-        self.assertEqual(run.call_count, 1)
+        self.assertEqual(run.call_count, 2)
+        self.assertEqual(run.call_args_list[0].args[0], ['/nix/store/system/bin/switch-to-configuration', 'check'])
+
+    def test_native_precheck_rejection_never_activates_or_changes_profile(self):
+        for action in ('test', 'switch'):
+            run = mock.Mock(side_effect=ValueError('precheck rejected'))
+            with self.assertRaisesRegex(ValueError, 'precheck rejected'):
+                deploy.activate(dict(nixEnv='nix-env', activationEnvironment={}), '/new', action, run)
+            run.assert_called_once_with(['/new/bin/switch-to-configuration', 'check'], timeout=60, env={})
 
     def test_boot_requests_require_observed_base_and_profile(self):
         request = dict(self.request(), action='boot')
@@ -1007,12 +1015,12 @@ class DeploymentTests(unittest.TestCase):
             self.assertFalse(any('test' in call.args[0] or 'switch' in call.args[0] for call in run.call_args_list))
 
     def test_failed_test_restores_runtime_only(self):
-        run = mock.Mock(side_effect=[ValueError('failed'), None])
+        run = mock.Mock(side_effect=[None, ValueError('failed'), None])
         with mock.patch.object(Path, 'resolve', return_value=Path('/old')):
             with self.assertRaises(ValueError):
                 deploy.activate(dict(activationEnvironment={}), '/new', 'test', run)
         self.assertEqual(run.call_args.args[0], ['/old/bin/switch-to-configuration', 'test'])
-        self.assertEqual(run.call_count, 2)
+        self.assertEqual(run.call_count, 3)
 
     def test_failed_switch_restores_profile_and_runtime(self):
         calls = []
@@ -1024,6 +1032,7 @@ class DeploymentTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'activation failure'):
                 deploy.activate(dict(nixEnv='nix-env', activationEnvironment={}), '/new', 'switch', run)
         self.assertEqual(calls, [
+            ['/new/bin/switch-to-configuration', 'check'],
             ['nix-env', '--profile', '/nix/var/nix/profiles/system', '--set', '/new'],
             ['/new/bin/switch-to-configuration', 'switch'],
             ['nix-env', '--profile', '/nix/var/nix/profiles/system', '--set', '/old'],
@@ -1031,15 +1040,15 @@ class DeploymentTests(unittest.TestCase):
             ['/old/bin/switch-to-configuration', 'test']])
 
     def test_profile_update_timeout_also_rolls_back(self):
-        run = mock.Mock(side_effect=[ValueError('timed out after side effect'), None, None, None])
+        run = mock.Mock(side_effect=[None, ValueError('timed out after side effect'), None, None, None])
         with mock.patch.object(Path, 'resolve', return_value=Path('/old')):
             with self.assertRaises(ValueError):
                 deploy.activate(dict(nixEnv='nix-env', activationEnvironment={}), '/new', 'switch', run)
-        self.assertEqual(run.call_count, 4)
+        self.assertEqual(run.call_count, 5)
         self.assertEqual(run.call_args.args[0], ['/old/bin/switch-to-configuration', 'test'])
 
     def test_boot_rollback_failure_still_attempts_runtime(self):
-        run = mock.Mock(side_effect=[None, ValueError('activation'), None, ValueError('boot rollback'), None])
+        run = mock.Mock(side_effect=[None, None, ValueError('activation'), None, ValueError('boot rollback'), None])
         with mock.patch.object(Path, 'resolve', return_value=Path('/old')):
             with self.assertRaises(deploy.DeploymentFailure) as failure:
                 deploy.activate(dict(nixEnv='nix-env', activationEnvironment={}), '/new', 'switch', run)

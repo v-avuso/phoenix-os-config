@@ -237,6 +237,9 @@ containment, decision and execution responsibilities.
   controls stay OFF; these bounded trials do not establish full live readiness.
 - **Explicit source selection:** Shared rebuild commands and the authenticated
   deployment client accept branch/worktree selectors without switching checkouts.
+  Live broker activation runs native NixOS pre-switch checks before profile updates
+  and before rollback can be needed; rejected checks never initiate rollback.
+  See [desktop safety](../../../desktop.md) for the compositor compatibility check.
   Human Phoenix activation retains terminal `nixos-rebuild --sudo` and option
   forwarding. Agents use the [bounded `ai-broker` interface](authorization/README.md#command-interface),
   which directly submits frozen requests to the immutable deployment client. It

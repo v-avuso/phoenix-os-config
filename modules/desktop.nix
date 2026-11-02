@@ -1,6 +1,16 @@
-{ config, lib, ... }:
+{ config, lib, pkgs, ... }:
 
 {
+  # Native pre-switch checks cover both human nixos-rebuild and broker activation.
+  system.preSwitchChecks.phoenixDesktop = lib.mkIf config.programs.hyprland.enable ''
+    case "''${2-}" in
+      test|switch|check)
+        ${pkgs.python3}/bin/python3 -I ${./desktop-live-check.py} \
+          ${config.programs.hyprland.package}/bin/Hyprland
+        ;;
+    esac
+  '';
+
   services.xserver.enable = true;
 
   services.displayManager.sddm.enable = true;

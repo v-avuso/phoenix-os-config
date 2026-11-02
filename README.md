@@ -20,6 +20,9 @@ for one workstation, not a general-purpose distribution.
 - **Home Manager:** integrated into NixOS; owns user packages and selected
   settings. Some settings permit live experiments; see
   [configuration and state](docs/CONFIGURATION_STATE.md).
+- **Desktop activation:** a [native pre-switch check](modules/desktop.md) stops
+  compositor-changing live activations while Hyprland is running. Build success
+  alone does not establish live-session safety; stage those updates for reboot.
 - **Security:** inbound firewall, AppArmor, and ClamAV scanning of Downloads.
   OpenSnitch currently allows outbound connections and records them for review;
   it does **not** enforce an outbound allowlist. Audit/auditd are disabled.

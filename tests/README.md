@@ -52,6 +52,7 @@ nix build --impure --file home/tests/caelestia-cli.nix --no-link
 nix eval --impure --file modules/security/tests/opensnitch-observation.nix
 nix eval --impure --file modules/security/tests/pam-desktop-conditional.nix
 nix eval --impure --file modules/tests/desktop-services.nix
+python3 -B modules/tests/desktop-live-check.py
 python3 -B modules/development/ai/agent/tests/reservation-deployment.py
 ```
 

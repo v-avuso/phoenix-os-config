@@ -15,6 +15,8 @@ in
 assert sharedServices metal;
 assert sharedServices vm;
 assert metal.programs.hyprland.enable;
+assert metal.system.preSwitchChecks ? phoenixDesktop;
+assert !(vm.system.preSwitchChecks ? phoenixDesktop);
 assert !metal.services.desktopManager.plasma6.enable;
 assert !metal.home-manager.users.${user.name}.programs.plasma.enable;
 assert metal.services.displayManager.defaultSession == "hyprland";
