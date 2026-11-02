@@ -105,7 +105,7 @@ adjustment; it has not been installed or runtime-validated here.
 
 On Wayland, Huenicorn 1.2.0 delegates source selection to the portal and exposes
 no monitor-list/switch API. A custom picker alone cannot identify its caller in
-Hyprland portal 1.4.1. The small pinned patch passes the existing request app ID
+Hyprland portal 1.4.1 or 1.5.0. The small patch passes the existing request app ID
 through as `XDPH_APP_ID`. Huenicorn runs in a fresh on-demand
 `app-org.phoenix.HueSync-RANDOM.scope`, following the [desktop application unit
 convention](https://systemd.io/DESKTOP_ENVIRONMENTS/); the [portal frontend's native
@@ -120,7 +120,8 @@ selection or grants capture. Every initial request still needs the user to selec
 and approve a source. Other applications retain the original picker arguments.
 The native portal validates token restoration and Huenicorn saves replacement
 tokens in its private config. Normal starts never remove them. Revisit the small
-patch on portal upgrades; its version assertion is deliberate.
+patch on portal upgrades; its reviewed-version allowlist is deliberate. Its narrow
+patch hunks preserve 1.5.0's custom-picker environment and source-selection changes.
 
 The upstream web UI has no authentication and bridge HTTPS verification is disabled
 upstream. Loopback binding prevents LAN exposure, not control by other local
