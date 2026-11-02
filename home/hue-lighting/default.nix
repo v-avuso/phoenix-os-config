@@ -35,7 +35,7 @@ let
     text = ''
       # The login service owns the panel; reopening never toggles sync.
       ${pkgs.systemd}/bin/systemctl --user start phoenix-hue-control.service
-      for attempt in {1..30}; do
+      for ((attempt = 0; attempt < 30; attempt++)); do
         if python3 -c 'import urllib.request; urllib.request.build_opener(urllib.request.ProxyHandler({})).open("http://127.0.0.1:8217/api/state", timeout=1)' 2>/dev/null; then
           exec xdg-open http://127.0.0.1:8217/
         fi
