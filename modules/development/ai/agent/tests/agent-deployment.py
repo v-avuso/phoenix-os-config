@@ -676,8 +676,11 @@ class DeploymentTests(unittest.TestCase):
             (source / 'upstream-linux-packages.json').write_text(json.dumps(payload))
             self.assertEqual(routine.validate_community_payload(directory), '1.2.3')
 
-    def non_model_deployment(self, action='update', operator=False, updater_socket=False, malicious=False, progress=False, build_failure=False, stalled_reader=False, symlinks=False, retarget=False, update_base=None, policy_transition=False, toolchain_update=False, missing_approval=False):
+    def non_model_deployment(self, action='update', operator=False, updater_socket=False, malicious=False, progress=False, build_failure=False, stalled_reader=False, symlinks=False, retarget=False, update_base=None, policy_transition=False, toolchain_update=False, missing_approval=False, review_history=False):
         before, _modes, candidate, modes = self.routine_sources()
+        if missing_approval:
+            before['manual.nix'] = candidate['manual.nix'] = 'urgent change awaiting security review'
+            modes['manual.nix'] = '100644'
         if symlinks:
             before.update({'canonical': 'source', 'other': 'other source', 'alias': 'canonical'})
             candidate.update({'canonical': 'source', 'other': 'other source', 'alias': 'other' if retarget else 'canonical'})
@@ -722,6 +725,7 @@ class DeploymentTests(unittest.TestCase):
                 CommandError = native_review.CommandError
                 baseline_files = staticmethod(native_review.baseline_files)
                 source_modes = staticmethod(native_review.source_modes)
+                source_diff = staticmethod(native_review.source_diff)
             account = mock.Mock(pw_uid=os.getuid(), pw_gid=os.getgid())
             as_user_calls = []
             def as_user(_config, user, argv, _run, **kwargs):
@@ -813,6 +817,8 @@ class DeploymentTests(unittest.TestCase):
                 return json.loads(connection.sendall.call_args.args[0])
             if toolchain_update:
                 successor = dict(config, python='updated-python')
+                if policy_transition:
+                    successor['model'] = 'replacement-model'
             with checks, contextlib.redirect_stdout(io.StringIO()) as journal, mock.patch.object(Path, 'resolve', resolve), \
                  mock.patch.object(deploy, 'load_review', return_value=Review), \
                  mock.patch.object(deploy, 'as_user', side_effect=as_user), \
@@ -826,6 +832,18 @@ class DeploymentTests(unittest.TestCase):
                                        closure=str(old_runtime if update_base == 'active' else profile))
                     security.approve(config, predecessor, 'main', Review.run)
                     Review.run.reset_mock()
+                if review_history:
+                    reviewed = root / 'last-reviewed'; reviewed.mkdir()
+                    reviewed_files = {name: value for name, value in before.items() if name != 'manual.nix'}
+                    deploy.source_manifest.materialize(reviewed, reviewed_files,
+                        {name: modes[name] for name in reviewed_files})
+                    reviewed_closure = root / 'last-reviewed-closure'
+                    marker = reviewed_closure / 'etc/phoenix-agent'; marker.mkdir(parents=True)
+                    (marker / 'activated-source').symlink_to(reviewed)
+                    security.approve(config, dict(source=str(reviewed), closure=str(reviewed_closure), target='metal'), 'main', Review.run)
+                    Review.run.reset_mock()
+                if toolchain_update:
+                    prior_approvals = {path.name: path.read_bytes() for path in state.glob('*.approved.json')}
                 if policy_transition and not updater_socket:
                     with self.assertRaises(deploy.DeploymentFailure) as failure:
                         deploy.process(config, request, os.getuid(), 42, operator=operator)
@@ -834,10 +852,6 @@ class DeploymentTests(unittest.TestCase):
                     self.assertFalse(any(call.args[0][0] == 'systemd-run' for call in Review.run.call_args_list))
                     return
                 result = socket_workflow() if updater_socket else deploy.process(config, request, os.getuid(), 42, operator=operator)
-            if toolchain_update and missing_approval:
-                self.assertEqual(result['code'], 'approved-checkpoint-required')
-                self.assertFalse(any(argv[:2] == ['nix', 'build'] for _, argv in as_user_calls))
-                return
             if policy_transition:
                 self.assertEqual(result['code'], 'policy-transition-required')
                 self.assertIn('administrator', result['summary'])
@@ -874,7 +888,30 @@ class DeploymentTests(unittest.TestCase):
             self.assertEqual(result['action'], action)
             self.assertEqual([user for user, _argv in as_user_calls], ['builder'] * (3 if action == 'update' else 2))
             self.assertEqual(Review.run.call_count, 8 if toolchain_update else 4)
-            if toolchain_update:
+            if toolchain_update and missing_approval:
+                self.assertEqual({path.name: path.read_bytes() for path in state.glob('*.approved.json')}, prior_approvals)
+                with mock.patch.object(security, 'state_directory', return_value=state), \
+                     mock.patch.object(security, 'read_record', side_effect=lambda path: json.loads(path.read_text())), \
+                     mock.patch.object(security, 'closure_config', side_effect=lambda path: successor if path == str(closure) else config), \
+                     mock.patch.object(deploy, 'load_security', return_value=security), \
+                     mock.patch.object(deploy, 'store_path'), \
+                     mock.patch.object(deploy, 'successor_config', return_value=successor):
+                    # A review before reboot can use the published package tools
+                    # without accepting the manually deployed source as approved.
+                    deploy.require_policy_continuity(config, str(closure))
+                    if review_history:
+                        exact, review_base, review_files = security.choose_checkpoint(successor, 'metal', str(frozen), str(closure),
+                            'main', str(baseline), candidate, Review, lambda *_args: None)
+                        self.assertFalse(exact)
+                        self.assertEqual(review_base, str(reviewed))
+                        self.assertNotIn('manual.nix', review_files)
+                        self.assertIn('urgent change awaiting security review', Review.source_diff(review_files, candidate,
+                            Review.source_modes(reviewed, review_files), modes))
+                    else:
+                        with self.assertRaises(security.ApprovalBaselineRequired):
+                            security.choose_checkpoint(successor, 'metal', str(frozen), str(closure), 'main', str(baseline),
+                                candidate, Review, lambda *_args: None)
+            elif toolchain_update:
                 saved = list(state.glob('*.approved.json'))
                 self.assertEqual(len(saved), 1)  # Predecessor pruned before activation recheck.
                 receipt = json.loads(saved[0].read_text())
@@ -893,7 +930,15 @@ class DeploymentTests(unittest.TestCase):
             with self.subTest(source=source):
                 self.non_model_deployment(updater_socket=True, update_base=source, toolchain_update=True)
         self.non_model_deployment(updater_socket=True, toolchain_update=True, malicious=True)
-        self.non_model_deployment(updater_socket=True, toolchain_update=True, missing_approval=True)
+
+    def test_distributor_updates_preserve_outstanding_review_after_manual_deployment(self):
+        for source in ('active', 'staged'):
+            for history in (False, True):
+                with self.subTest(source=source, history=history):
+                    self.non_model_deployment(updater_socket=True, update_base=source, toolchain_update=True,
+                                              missing_approval=True, review_history=history)
+        self.non_model_deployment(updater_socket=True, toolchain_update=True, missing_approval=True, malicious=True)
+        self.non_model_deployment(updater_socket=True, toolchain_update=True, missing_approval=True, policy_transition=True)
 
     def test_changed_policy_blocks_automatic_and_reviewed_deployments(self):
         self.non_model_deployment(updater_socket=True, policy_transition=True)

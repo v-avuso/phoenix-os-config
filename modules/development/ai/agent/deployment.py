@@ -170,8 +170,11 @@ def require_policy_continuity(config, closure, *, validated_update=False):
         source = str((Path(closure) / 'etc/phoenix-agent/activated-source').resolve(strict=True))
         try:
             security.approved_predecessor(config, dict(source=source, closure=closure), store_path)
-        except ValueError:
-            raise DeploymentFailure('closure-binding', 'toolchain-transition-required') from None
+        except security.ApprovalBaselineRequired:
+            try:
+                security.distributed_toolchain(config, security.toolchain_digest(successor), store_path)
+            except security.ApprovalBaselineRequired:
+                raise DeploymentFailure('closure-binding', 'toolchain-transition-required') from None
 
 
 def activation_environment(config):
@@ -538,20 +541,24 @@ def process_inner(config, request, uid, pid, state):
                                    verify_current_source)
         update_security = None
         update_predecessor = None
+        update_installed_base = None
         if (request['action'] == 'update' and config.get('modelReviewEnabled', True)
                 and config.get('securityReviewState')):
             candidate_security = load_security(config)
             if candidate_security.identity_version(config) == 2:
                 update_security = candidate_security
-                # The source validator just checked against update_base. Require
-                # independent protected approval for that exact installed pair.
+                # Source validation authorizes distributor changes even after a
+                # manual deployment. Installation alone cannot confer approval
+                # on that deployment's outstanding custom changes.
                 predecessor_closure = (profile if update_base == profile_source else
                                        str(Path('/run/current-system').resolve(strict=True)))
-                update_predecessor = dict(source=update_base, closure=predecessor_closure)
+                update_installed_base = dict(source=update_base, closure=predecessor_closure)
                 try:
-                    update_security.approved_predecessor(config, update_predecessor, store_path)
-                except ValueError:
-                    raise DeploymentFailure('baseline', 'approved-checkpoint-required') from None
+                    update_security.approved_predecessor(config, update_installed_base, store_path)
+                except update_security.ApprovalBaselineRequired:
+                    pass  # Preserve the existing review baseline; publish no approval.
+                else:
+                    update_predecessor = update_installed_base
         state['stage'] = 'build'
         print(json.dumps(dict(event='building', uid=uid, pid=pid, source=source_store)), flush=True)
         build_runner = review.run
@@ -583,6 +590,8 @@ def process_inner(config, request, uid, pid, state):
                        profileSource=profile_source, closure=closure, nonce=secrets.token_hex(32))
         if update_predecessor is not None:
             binding['updatePredecessor'] = update_predecessor
+        elif update_installed_base is not None:
+            binding['updateInstalledBase'] = update_installed_base
         security = load_security(config) if review_required and config.get('securityReviewState') else None
         branch = request.get('branch', 'detached-' + request['commit'])
         checkpoint, context_base, context_old = False, baseline, old
@@ -655,9 +664,12 @@ def process_inner(config, request, uid, pid, state):
         if security:
             # A checkpoint represents approved source; activated baseline is separate.
             security.approve(config, binding, branch, review.run)
-        if update_security is not None:
+        if update_predecessor is not None:
             update_security.approve_update(config, binding, update_predecessor, branch, review.run, store_path,
                                           before_publish=lambda: recheck_bound(config, binding))
+        elif update_installed_base is not None:
+            update_security.record_update_tools(config, binding, update_installed_base, review.run, store_path,
+                                               before_publish=lambda: recheck_bound(config, binding))
         return activate_bound(config, binding, temporary, review, state, uid, pid)
 
 
@@ -668,13 +680,16 @@ def recheck_bound(config, binding):
         raise ValueError('boot profile changed during review')
     if str((Path(binding['profile']) / 'etc/phoenix-agent/activated-source').resolve(strict=True)) != binding['profileSource']:
         raise ValueError('approved profile source changed during review')
-    if 'updatePredecessor' in binding:
-        predecessor = binding['updatePredecessor']
+    for field in ('updateInstalledBase', 'updatePredecessor'):
+        if field not in binding:
+            continue
+        predecessor = binding[field]
         installed = {(binding['profileSource'], binding['profile']),
                      (binding['base'], str(Path('/run/current-system').resolve(strict=True)))}
         if (predecessor['source'], predecessor['closure']) not in installed:
             raise ValueError('update-predecessor-no-longer-installed')
-        load_security(config).approved_predecessor(config, predecessor, store_path)
+    if 'updatePredecessor' in binding:
+        load_security(config).approved_predecessor(config, binding['updatePredecessor'], store_path)
 
 
 def guarded_child(argv, *, timeout, guard_fd, **kwargs):

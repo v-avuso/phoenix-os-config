@@ -133,6 +133,32 @@ class ToolchainTests(unittest.TestCase):
             third['source'], review.baseline_files(Path(third['source'])), review, self.verify)
         self.assertTrue(exact)
 
+    def test_distribution_tools_never_approve_or_evict_outstanding_code(self):
+        self.seed(self.before)
+        approved = {path.name: path.read_bytes() for path in self.state.glob('*.approved.json')}
+        third, fourth = self.configuration('third'), self.configuration('fourth')
+        with mock.patch.object(security, 'RETENTION', 1):
+            for before, after in ((self.after, third), (third, fourth)):
+                security.record_update_tools(before, dict(after, action='update'),
+                    {key: before[key] for key in ('source', 'closure')}, self.run_store, self.verify)
+        self.assertEqual({path.name: path.read_bytes() for path in self.state.glob('*.approved.json')}, approved)
+        self.assertEqual(len(security.records(fourth, 'distribution')), 1)
+        record = security.distributed_toolchain(self.before, security.toolchain_digest(fourth), self.verify)
+        with self.assertRaisesRegex(ValueError, 'not-approval'):
+            security.validate_transition(fourth, record, self.verify)
+        exact, source, _ = security.choose_checkpoint(fourth, 'metal', fourth['source'], fourth['closure'], 'main',
+            fourth['source'], review.baseline_files(Path(fourth['source'])), review, self.verify)
+        self.assertFalse(exact)
+        self.assertEqual(source, self.before['source'])
+        invalid = copy.deepcopy(record); invalid['predecessorInstalled']['toolchain'] = 'forged'
+        with self.assertRaisesRegex(ValueError, 'identity-binding'):
+            security.validate_update_tools(fourth, invalid, self.verify)
+        invalid = dict(record, toolchain='forged')
+        with self.assertRaisesRegex(ValueError, 'identity-binding'):
+            security.validate_update_tools(fourth, invalid, self.verify)
+        with self.assertRaises(security.ApprovalBaselineRequired):
+            security.distributed_toolchain(self.before, security.toolchain_digest(self.after), self.verify)
+
     def test_explicit_versioned_administrator_handover_keeps_legacy_evidence(self):
         legacy = dict(self.before, securityIdentityVersion=1)
         self.save(legacy); self.seed(legacy)
@@ -162,15 +188,31 @@ class ToolchainTests(unittest.TestCase):
     def test_recheck_rejects_a_predecessor_that_is_no_longer_installed(self):
         third = self.configuration('third')
         binding = dict(self.before, action='update', base=self.before['source'], profile=third['closure'],
-                       profileSource=third['source'], updatePredecessor={key: self.after[key] for key in ('source', 'closure')})
+                       profileSource=third['source'])
         cfg = dict(self.before, baseline=self.before['source'])
         original = Path.resolve
         def resolve(path, *args, **kwargs):
             if str(path) in ('/run/current-system', '/nix/var/nix/profiles/system'):
                 return Path(third['closure'])
             return original(path, *args, **kwargs)
-        with mock.patch.object(Path, 'resolve', resolve), self.assertRaisesRegex(ValueError, 'no-longer-installed'):
+        for field in ('updatePredecessor', 'updateInstalledBase'):
+            with self.subTest(field=field), mock.patch.object(Path, 'resolve', resolve), \
+                 self.assertRaisesRegex(ValueError, 'no-longer-installed'):
+                deploy.recheck_bound(cfg, dict(binding, **{field: {key: self.after[key] for key in ('source', 'closure')}}))
+
+    def test_unreviewed_installed_base_rechecks_without_adopting_approval(self):
+        binding = dict(self.before, action='update', base=self.before['source'], profile=self.before['closure'],
+                       profileSource=self.before['source'], updateInstalledBase={key: self.before[key] for key in ('source', 'closure')})
+        cfg = dict(self.before, baseline=self.before['source'])
+        original = Path.resolve
+        def resolve(path, *args, **kwargs):
+            if str(path) in ('/run/current-system', '/nix/var/nix/profiles/system'):
+                return Path(self.before['closure'])
+            return original(path, *args, **kwargs)
+        with mock.patch.object(Path, 'resolve', resolve), \
+             mock.patch.object(deploy, 'load_security', side_effect=AssertionError('no approval required')):
             deploy.recheck_bound(cfg, binding)
+        self.assertEqual(security.records(cfg, 'approved'), [])
 
     def test_missing_predecessor_changed_authority_and_forged_receipts_fail(self):
         with self.assertRaisesRegex(ValueError, 'approved-predecessor'):

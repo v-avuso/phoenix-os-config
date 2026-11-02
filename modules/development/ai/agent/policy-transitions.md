@@ -41,12 +41,25 @@ The existing deterministic source validator remains the sole automatic path. It
 allows only its established publisher/lock changes and satisfied hold removals;
 custom configuration, helper, policy or controller changes remain rejected. It
 checks against the same exact installed active or staged source selected by the
-runner. With review enabled, version 2 additionally requires protected approval of
-that predecessor source/closure; an activation marker alone never grants trust.
+runner. Installation authorizes that operational baseline for restricted updates;
+it does not approve the source for future security reviews.
 
 After source validation and a build with unchanged security authority, the root
-controller publishes a `distributor-update` receipt binding successor policy,
+controller can publish a `distributor-update` receipt binding successor policy,
 toolchain, target, source and closure to compact protected predecessor evidence.
+This requires protected approval of the exact installed predecessor source/closure.
+If that predecessor lacks approval, the update still proceeds, with its exact
+installed pair rechecked before staging, but publishes no approval. A separate
+root-owned `distribution` record binds its validated package toolchain and immutable
+installed predecessor. It permits subsequent review to use those distributor tools
+before reboot without selecting the unreviewed source as trusted review context.
+It never enters checkpoint selection, and malformed records fail closed. At most
+32 distribution records retain their exact source/closure roots; their collection
+is independent of approval/pending retention so updates cannot evict outstanding
+review history. Existing review
+checkpoints remain unchanged: subsequent AI review includes the outstanding custom
+changes. An empty or incompatible review history stays empty or incompatible;
+updates never seed trust or repair a security-policy handover.
 Publication rechecks installed bindings. Activation rechecks them again, including
 inside the durable activation helper. Existing root-only storage, deployment locks,
 GC roots and bounded retention are reused. The compact evidence survives pruning
@@ -59,7 +72,7 @@ new executable implementations. It does not independently audit package contents
 or protect against a compromised publisher/compiler/runtime. Pinning all tools
 would avoid that trust but prevent ordinary security/package upgrades; prompting
 for each path change adds friction without reviewing package behavior. The
-restricted validator plus exact root receipts makes that existing distribution
+restricted validator and conditional exact root receipts make that existing distribution
 trust explicit without adding model calls, services or recurring approval work.
 
 ## Human decision, then a bound transition

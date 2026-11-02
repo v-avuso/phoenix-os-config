@@ -17,6 +17,14 @@ advance runtime while leaving an older next-boot profile. Legacy clients without
 the selector retain next-boot validation. Both installed identities are rechecked
 before staging; a caller-supplied arbitrary store source is never an update base.
 Routine updates invoke neither AI review nor graphical operator authentication.
+An installed source may still contain manually deployed changes awaiting review.
+Distribution updates can advance that source without approving those changes:
+the controller preserves existing security checkpoints and publishes no new
+approval unless the exact installed predecessor was already approved. The next
+AI review therefore still covers the accumulated custom changes. The publisher,
+source-diff, unchanged-authority and installed-binding checks remain mandatory.
+Separate bounded distribution records authorize validated package tools for the
+next review before reboot; they neither approve source nor evict review checkpoints.
 
 `phoenix.target` binds the updater, installed deployment policy and controller to
 one flake output. Both updater and deployment controller verify the stable root

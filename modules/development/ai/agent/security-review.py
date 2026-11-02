@@ -166,7 +166,7 @@ def approved_predecessor(config, predecessor, verify_source):
             # Root-issued compact evidence also survives pruning of the original
             # record. Validate its containing receipt before using that evidence.
             return {key: match[key] for key in ('identityVersion', 'policy', 'toolchain', 'target', 'source', 'closure')}
-    raise ValueError('approved-predecessor-required')
+    raise ApprovalBaselineRequired('approved-predecessor-required')
 
 
 def approve_update(config, binding, predecessor, branch, run, verify_source, before_publish=None):
@@ -184,6 +184,54 @@ def approve_update(config, binding, predecessor, branch, run, verify_source, bef
     validate_transition(config, record, verify_source)
     identifier = hashlib.sha256(json.dumps(record, sort_keys=True).encode()).hexdigest()
     retain(config, 'approved', identifier, record, run, before_publish)
+
+
+def record_update_tools(config, binding, predecessor, run, verify_source, before_publish=None):
+    """Publish distributor tool identity, never security approval of custom code."""
+    if os.geteuid() != 0 or identity_version(config) != 2 or binding.get('action') != 'update':
+        raise ValueError('validated-update-root-entry-required')
+    installed = closure_config(predecessor['closure'])
+    previous = dict(predecessor, target=config['target'], policy=policy_digest(config), **record_identity(installed))
+    successor = closure_config(binding['closure'])
+    record = {key: binding[key] for key in ('source', 'closure', 'target')}
+    record.update(record_identity(successor), policy=policy_digest(config), origin='distributor-tools',
+                  predecessorInstalled=previous, predecessorSource=previous['source'],
+                  predecessorClosure=previous['closure'])
+    validate_update_tools(config, record, verify_source)
+    identifier = hashlib.sha256(json.dumps(record, sort_keys=True).encode()).hexdigest()
+    retain(config, 'distribution', identifier, record, run, before_publish)
+
+
+def validate_update_tools(config, record, verify_source):
+    previous = record.get('predecessorInstalled')
+    if (identity_version(config) != 2 or record.get('origin') != 'distributor-tools'
+            or record.get('policy') != policy_digest(config) or record.get('target') != config['target']
+            or not isinstance(previous, dict)
+            or set(previous) != {'source', 'closure', 'target', 'policy', 'identityVersion', 'toolchain'}
+            or previous.get('source') != record.get('predecessorSource')
+            or previous.get('closure') != record.get('predecessorClosure')
+            or previous.get('policy') != record['policy'] or previous.get('target') != record['target']
+            or 'predecessorApproval' in record or 'transition' in record):
+        raise ValueError('distribution-tool-binding-invalid')
+    bound_config(previous, verify_source)
+    bound_config(record, verify_source)
+
+
+def distributed_toolchain(config, toolchain, verify_source):
+    """Accept root-issued package tools without selecting any review baseline."""
+    for kind in ('distribution', 'approved'):
+        for _, record in records(config, kind):
+            if (record.get('policy') != policy_digest(config) or record.get('target') != config['target']
+                    or record.get('toolchain') != toolchain):
+                continue
+            if kind == 'distribution':
+                validate_update_tools(config, record, verify_source)
+            elif record.get('origin') == 'distributor-update':
+                validate_transition(config, record, verify_source)
+            else:
+                continue
+            return record
+    raise ApprovalBaselineRequired('distributed-toolchain-required')
 
 
 def immutable_file(path):
@@ -230,6 +278,8 @@ def validate_transition(config, record, verify_source):
     separate record. Root-only publication supplies provenance; no caller receipt
     or reviewer verdict can enter this path through the deployment socket.
     """
+    if record.get('origin') == 'distributor-tools':
+        raise ValueError('distribution-receipt-is-not-approval')
     if identity_version(config) == 2:
         if record.get('policy') != policy_digest(config) or record.get('target') != config['target']:
             raise ValueError('approval-policy-binding-invalid')
@@ -392,7 +442,7 @@ def choose_checkpoint(config, target, source, closure, branch, baseline, files, 
 def prune_orphan_roots(directory):
     # Crash leftovers never authorize and must not create unbounded GC retention.
     for path in directory.iterdir():
-        match = re.fullmatch(r'([a-f0-9]{64})\.(approved|pending)\.(source|closure|predecessorSource|predecessorClosure)', path.name)
+        match = re.fullmatch(r'([a-f0-9]{64})\.(approved|pending|distribution)\.(source|closure|predecessorSource|predecessorClosure)', path.name)
         if match and not (directory / (match[1] + '.' + match[2] + '.json')).exists():
             path.unlink()
 
@@ -400,7 +450,7 @@ def prune_orphan_roots(directory):
 def retain(config, kind, identifier, record, run, before_publish=None):
     directory = state_directory(config)
     prune_orphan_roots(directory)
-    if kind not in {'approved', 'pending'} or not re.fullmatch('[a-f0-9]{64}', identifier):
+    if kind not in {'approved', 'pending', 'distribution'} or not re.fullmatch('[a-f0-9]{64}', identifier):
         raise ValueError('invalid security record identity')
     # Retain exact immutable source and closure before publishing authorization.
     for field in ('source', 'closure', 'predecessorSource', 'predecessorClosure'):
@@ -418,7 +468,8 @@ def retain(config, kind, identifier, record, run, before_publish=None):
         before_publish()
     record = dict(record, timestamp=time.time())
     write_record(directory / (identifier + '.' + kind + '.json'), record)
-    entries = records(config, 'approved') + records(config, 'pending')
+    # Repeated package updates must not evict the last genuine review baseline.
+    entries = records(config, 'distribution') if kind == 'distribution' else records(config, 'approved') + records(config, 'pending')
     for path, old in sorted(entries, key=lambda item: item[1]['timestamp'], reverse=True)[RETENTION:]:
         path.unlink()
         prefix = path.name[:-5]

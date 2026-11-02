@@ -235,7 +235,11 @@ policy invalidates old-policy reuse and requires an explicit trusted transition.
 The [versioned policy and toolchain identities](policy-transitions.md) separate
 security authority from immutable distribution package paths. Restricted routine
 updates can advance exact toolchain receipts from an approved installed predecessor
-without new policy authorization or AI calls. Authority changes still require an
+without new policy authorization or AI calls. They can also update an installed
+predecessor awaiting security review, but then publish no approval and preserve
+the old review checkpoint. Subsequent review still covers the accumulated custom
+changes; installation and trusted package updates never clear that obligation.
+Authority changes still require an
 administrator-approved, independently reviewed exact handover. Normal deployment,
 routine update and critical override cannot authorize that handover.
 

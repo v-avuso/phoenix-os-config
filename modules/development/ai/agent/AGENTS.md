@@ -35,6 +35,10 @@
 - An activated source marker is provenance, not review approval. Never select it
   as trusted diff context without a matching protected checkpoint; after native
   recovery or policy changes, require an explicit independently reviewed transition.
+- After a manual fallback deployment, preserve outstanding review obligations.
+  Routine publisher updates may use the installed source without approving it;
+  publish successor approval only from an approved exact predecessor. Do not seed
+  trust merely to unblock updates: that would clear the accumulated review diff.
 - For strictly read-only Nix audits, inspect known GC-root links directly.
   Nix 2.34.9 `nix-store --query --roots` can remove stale registration links while
   enumerating roots; a query is not necessarily free of metadata writes.
