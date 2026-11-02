@@ -107,6 +107,11 @@
   `modules/development/ai/agent/AGENTS.md` and the
   [authorization usage](modules/development/ai/agent/authorization/README.md);
   root-started chats do not automatically load subtree guidance.
+- Native Codex workspace-write blocks host broker sockets and can hide the root
+  UUID. Submit the exact authorized broker command (and host target diagnostics)
+  through `exec_command` with `sandbox_permissions="require_escalated"` and a
+  concrete justification. This is command-sandbox approval, not root authority;
+  preserve broker review/authentication. See the authorization usage for diagnosis.
 - Agents deploy through `ai-broker --task TASK --reason PURPOSE -- phoenix-test
   --worktree /absolute/selected-worktree`; use `phoenix-switch` in that mapping
   for authorized persistent deployment. Build/evaluate as the user first. The

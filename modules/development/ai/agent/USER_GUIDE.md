@@ -24,6 +24,11 @@ sign-in or migration is required. See [HANDOFF.md](HANDOFF.md).
 - Open Native through its launcher when needed. Its accepted return mode is
   **Approve for me** with workspace-write/auto_review. Report missing chats,
   unexpected permissions or changed pins without restoring stale databases.
+- Native agents submit broker commands through Codex's approved host-execution
+  route. `Operation not permitted` while connecting to the broker socket is a
+  command-sandbox failure before AI review; it does not require sign-in, trusting
+  the active system, or changing the review baseline. See
+  [Native command-sandbox routing](authorization/README.md#native-codex-command-sandbox).
 
 If starting `codex-desktop-sandboxed` in a terminal, it intentionally stays in the
 foreground until the GUI exits. This waiting is not an unfinished deployment.

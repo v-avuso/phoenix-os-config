@@ -16,6 +16,39 @@ privileged command interface.
   authentication. Its experimental implementation stays off until isolated native
   GUI acceptance; presentation never supplies execution authority.
 
+## Native Codex command sandbox
+
+In Native Codex workspace-write, invoke the exact authorized `phoenix-authorize`
+(or `ai-broker`) command through `exec_command` with
+`sandbox_permissions="require_escalated"` and a concrete task justification.
+Use that same approved host execution route for `phoenix-target --info` when a
+host target diagnostic is needed. OpenShell's separately mounted broker route
+remains distinct.
+
+The command sandbox can reject Unix socket `connect()` with `EPERM` before the
+broker receives a request. That is not a reviewer rejection and produces no AI
+decision. Its mount view can also leave `findmnt --output UUID --target /` empty;
+do not override target selection or treat this as a broken host filesystem.
+First compare one registered read-only diagnostic through the supported host route:
+
+```sh
+ai-broker --task broker-diagnosis --reason 'Check host broker connectivity' -- phoenix-admin service-status NetworkManager.service
+```
+
+Run this using the tool's escalation fields, not by adding sudo or pkexec. A
+successful response establishes broker connectivity, not an AI review verdict.
+Sandbox approval does not grant root authority: fixed command mappings, peer
+checks, installed authorization policy, independent review and native
+authentication still apply. A broker denial after successful connection must be
+handled by that broker's supported flow.
+
+This uses Codex's existing approved execution route rather than changing socket
+permissions, disabling sandboxing or enabling general network access. Upstream
+[permission profiles](https://learn.chatgpt.com/docs/permissions#unix-sockets)
+also document socket allowlists, but introducing a new proxy/profile is a separate
+integration requiring runtime support and peer-identity acceptance; it is not
+needed for this route.
+
 ## Exact registered commands (experimental, OFF)
 
 `phoenix.authorization.commands.enable` explicitly opts into an empty-by-default
