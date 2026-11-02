@@ -17,25 +17,53 @@ let
     exec ${pkgs.python3}/bin/python3 -B ${sources}/portal-picker.py \
       --picker ${osConfig.programs.hyprland.portalPackage}/bin/hyprland-share-picker "$@"
   '';
+  server = pkgs.writeShellApplication {
+    name = "phoenix-hue-server";
+    runtimeInputs = [ pkgs.python3 ];
+    text = ''
+      exec python3 -B ${sources}/control.py --huenicorn ${huenicorn}/bin/huenicorn \
+        --systemd-run ${pkgs.systemd}/bin/systemd-run
+    '';
+  };
   launcher = pkgs.writeShellApplication {
     name = "phoenix-hue-control";
     runtimeInputs = [
       pkgs.python3
       pkgs.xdg-utils
+      pkgs.coreutils
     ];
     text = ''
-      # Reopening the launcher reuses the existing panel, without toggling sync.
-      if python3 -c 'import urllib.request; urllib.request.build_opener(urllib.request.ProxyHandler({})).open("http://127.0.0.1:8217/api/state", timeout=1)' 2>/dev/null; then
-        exec xdg-open http://127.0.0.1:8217/
-      fi
-      exec python3 -B ${sources}/control.py --huenicorn ${huenicorn}/bin/huenicorn \
-        --systemd-run ${pkgs.systemd}/bin/systemd-run --open-browser
+      # The login service owns the panel; reopening never toggles sync.
+      ${pkgs.systemd}/bin/systemctl --user start phoenix-hue-control.service
+      for attempt in {1..30}; do
+        if python3 -c 'import urllib.request; urllib.request.build_opener(urllib.request.ProxyHandler({})).open("http://127.0.0.1:8217/api/state", timeout=1)' 2>/dev/null; then
+          exec xdg-open http://127.0.0.1:8217/
+        fi
+        sleep 0.1
+      done
+      echo "Hue control panel did not become ready; inspect phoenix-hue-control.service" >&2
+      exit 1
     '';
   };
 in
 {
   config = {
     home.packages = [ launcher ];
+    systemd.user.services.phoenix-hue-control = {
+      Unit = {
+        Description = "Phoenix Hue control panel";
+        PartOf = [ "hyprland-session.target" ];
+        After = [ "graphical-session-pre.target" ];
+      };
+      Service = {
+        ExecStart = "${server}/bin/phoenix-hue-server";
+        Restart = "on-failure";
+        RestartSec = 3;
+        TimeoutStopSec = 15;
+        UMask = "0077";
+      };
+      Install.WantedBy = [ "hyprland-session.target" ];
+    };
     xdg.configFile."hypr/xdph.conf".text = ''
       screencopy {
         custom_picker_binary = ${picker}

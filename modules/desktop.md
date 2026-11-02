@@ -17,6 +17,14 @@ version: reproduce a cold login with a recoverable fallback on this NVIDIA
 multi-monitor host before removing them. A successful build or headless fixture
 does not establish physical display initialization.
 
+The operator has accepted the current recovery boot. The exact root cause remains
+unconfirmed because compositor and kernel were restored together. The next useful
+diagnostic is a kernel-only boot trial with Hyprland held at 0.56.2 and the working
+generation retained. A kernel hold also delays subsequent security fixes; future
+agents reviewing updates should surface that tradeoff and offer this trial at an
+operator-approved time. Never silently remove the hold or treat a newer version
+number as physical acceptance. Kernel trial timing is an operator decision.
+
 The kernel hold is conservative recovery of the accepted pair, not a finding
 that kernel 7.3.1 caused the login failures. Upstream reports a 0.57 NVIDIA modeset
 regression ([discussion 16764](https://github.com/hyprwm/Hyprland/discussions/16764));

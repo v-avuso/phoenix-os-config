@@ -7,12 +7,15 @@
 - Require initial native source consent, remember that choice across starts, and
   keep the full source picker accessible for replacements.
 - Keep Huenicorn unpatched, credentials/profile state private and writable, and
-  control traffic on localhost. Start only on demand; no login/system service.
+  control traffic on localhost. Start the panel with the graphical session;
+  screen capture and light streaming remain explicitly enabled on demand.
 
 ## Use
 
 Launch **Hue Sync** from the application menu, or `phoenix-hue-control`.
-The panel is at <http://127.0.0.1:8217>. Sync starts off. Enable **Sync**, then
+The panel starts at login as the user service `phoenix-hue-control.service`, tied
+to `hyprland-session.target`; it opens no browser automatically. The launcher starts
+or reuses that service and opens <http://127.0.0.1:8217>. Sync starts off. Enable **Sync**, then
 select your preferred screen, window or region in the system picker. **Allow a
 restore token** is checked by default for Hue; leave it checked to remember the
 source. Later starts reuse the saved choice while the portal considers it valid.
@@ -29,7 +32,9 @@ and the accepted remembered-source workflow retains system consent.
 Disable **Sync** to stop the owned process and release Entertainment streaming.
 This does not promise to turn lamps off or restore a scene. Closing the browser
 tab leaves the panel/sync running; reopening the launcher returns to it.
-Terminating the panel process stops its child.
+Stopping `phoenix-hue-control.service` stops its owned capture child. Logging out
+stops the panel; the next login starts it with Sync off. Inspect startup failures
+with `journalctl --user -u phoenix-hue-control.service`.
 
 **Brightness** links gamma correction across every active channel in the selected
 Entertainment profile and saves it through Huenicorn's API. **0%** is neutral,
@@ -92,7 +97,7 @@ unverified; do not infer them from a successful build or handshake.
   supplies the isolated red/blue test from the same panel server.
 - `sources.py` supplies the native remember-checkbox default; `portal-picker.py`
   always executes the original native picker, preserving other applications' args.
-- `default.nix` supplies the on-demand launcher, desktop entry and custom-picker
+- `default.nix` supplies the login-owned panel service, launcher, desktop entry and custom-picker
   wiring. `portal.nix` and `portal-app-id.patch` forward app identity to that hook
   in the pinned Hyprland portal; the metal host selects this package.
 
@@ -111,8 +116,8 @@ through as `XDPH_APP_ID`. Huenicorn runs in a fresh on-demand
 convention](https://systemd.io/DESKTOP_ENVIRONMENTS/); the [portal frontend's native
 host-app detection](https://github.com/flatpak/xdg-desktop-portal/blob/1.20.4/src/xdp-app-info-host.c)
 extracts that identity. `systemd-run --scope` executes the workload in the owned
-child process, preserving the controller's stop semantics. No login service or
-capture-engine fork is added.
+child process, preserving the controller's stop semantics. The capture engine
+still starts on demand; only the panel runs as a login service, with no engine fork.
 
 Application IDs are forgeable UX hints, not authentication. Matching Hue only
 checks the native picker's **Allow a restore token** checkbox; it never returns a
