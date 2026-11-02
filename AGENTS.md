@@ -103,6 +103,10 @@
   the task explicitly requests a pause, without reminders to save mutable
   desktop settings. This does not authorize unrelated privileged actions.
   Never activate merely to validate an edit.
+- A broker/review retry can activate all pending package updates. Inspect the
+  running versus candidate desktop/compositor before retrying; prefer existing
+  review journal evidence when sufficient. Coordinate disruptive live changes
+  with the operator and preserve the running compositor/plugin ABI across reloads.
 - Before privileged broker operations, explicitly read
   `modules/development/ai/agent/AGENTS.md` and the
   [authorization usage](modules/development/ai/agent/authorization/README.md);

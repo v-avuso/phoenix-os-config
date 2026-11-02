@@ -16,14 +16,14 @@ let
   }) cfg.monitors;
   ids = lib.concatMap (r: lib.range r.first (r.first + r.count - 1)) ranges;
   lua = ''
-    hl.plugin.load("${overview}/lib/libhyprexpo.so")
-    hl.config({ plugin = { hyprexpo = {
+    local configureOverview = dofile("${./overview.lua}")
+    configureOverview("${hyprPkgs.hyprland.version}", "${overview}/lib/libhyprexpo.so", {
       dynamic_grid = 1, fill_gaps = 0, mru_sort = 0, skip_empty = 0,
       workspace_method = "${
         lib.concatMapStringsSep ", " (r: "${r.monitor} first ${toString r.first}") ranges
       }",
       drag_drop_enable = 1, show_workspace_numbers = 1,
-    } } })
+    })
     ${lib.concatMapStringsSep "\n" (
       r:
       lib.concatMapStringsSep "\n" (id: ''

@@ -19,6 +19,12 @@ compositor's Nixpkgs plugin builder. Recheck compatibility on compositor updates
 other versions fail closed. The [0.57.0 upstream source](https://github.com/sandwichfarm/hyprexpo/tree/3ec4d82e52f0d4765b87f6ef14f1883a44e85e27)
 adapts the renderer and workspace APIs. Its persistent-empty-workspace patch uses
 the new regular-workspace type; 0.56.2 retains its original source and patch.
+The Lua loader checks the live compositor version before declaring the plugin and
+configures its options only after it appears in `hl.get_loaded_plugins()`, following
+the [upstream lifecycle](https://hyprexpo.lol/docs/guides/lua-gestures).
+After a compositor package upgrade, an existing older session skips the overview
+until the next login; workspace rules/navigation remain available. Do not load a
+new-ABI plugin into that session or restart the desktop to apply an update.
 The automatic grid centers partial rows: five workspaces appear as three above
 and two below. A one-line upstream patch includes persistent empty workspaces in
 that grid. Grid previews move windows between workspaces; dropping within the
@@ -33,6 +39,7 @@ IDs in their monitor's new range; do not automatically apply this at every login
 
 ```sh
 nix shell --inputs-from . nixpkgs#lua --command lua home/workspaces/tests/navigation.lua home/workspaces/navigation.lua
+nix shell --inputs-from . nixpkgs#lua --command lua home/workspaces/tests/overview.lua home/workspaces/overview.lua
 ```
 
 This checks navigation without live input. Overview rendering and physical
