@@ -24,6 +24,11 @@
 
 ## Central exceptions
 
+- **Desktop compatibility hold:** Native/Sandbox remain at 26.1021.22027 while the
+  Phoenix lifecycle, shared-control and permission adapters are ported to the
+  26.1027.51404 bootstrap-chunk layout. System, browser and CLI updates continue.
+  Remove the exact paired hold only after both desktop packages build and their
+  scoped adapter/consent checks pass; there is no automatic expiry.
 - **Location:** `config/updates.json` groups `holds` and `patches`; JSON `_comments` explain usage. Temporary bug-fix patch files belong in `config/update-patches/`. Feature patches belong beside their application module.
 - **Identifiers:** Simple top-level Nixpkgs attributes, e.g. `kando`; `codex-cli` maps to `codex`. Firefox/Codex CLI observe `packageSources`; other entries observe stable `nixpkgs`; ordinary entries cannot expire against an unrelated unstable version. Community desktop has its separate two-input hold adapter; arbitrary desktop patch recipes are not supported.
 - **Holds:** `pin` is a full immutable Nixpkgs revision, `reason` explains the regression, `resumeAtVersion` is the first acceptable stable numeric version. Null/omitted means indefinite; never invent a future version. A hold pins the named package, not the entire channel. Kando retains its existing 2.3.0 adapter requirement.

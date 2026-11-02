@@ -22,6 +22,14 @@
       "pin": "c508844df6c28fa6dabc1b6af70f3ccbd65c5201",
       "reason": "The existing Kando schema/gesture adapter explicitly requires 2.3.0. Preserve that compatibility pin during unattended system updates; remove after validating a newer adapter.",
       "resumeAtVersion": null
+    },
+    "codex-desktop": {
+      "pin": {
+        "native": "cc78ec860d9cd66e0595fe51bad541824a273346",
+        "sandbox": "cc78ec860d9cd66e0595fe51bad541824a273346"
+      },
+      "reason": "Desktop 26.1027.51404 moves the main bundle into early-bootstrap chunks; Phoenix lifecycle, shared-control and permission adapters require a reviewed migration. Preserve the working 26.1021.22027 Native/Sandbox pair while other updates continue.",
+      "resumeAtVersion": null
     }
   },
   "patches": {}

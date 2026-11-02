@@ -15,6 +15,10 @@ HyprExpo opens with `hyprctl eval 'hl.plugin.hyprexpo.expo("on all")'`. Click a 
 to switch; drag a window preview into another workspace, including on another
 monitor; Escape cancels. The package pins upstream source and uses the running
 compositor's Nixpkgs plugin builder. Recheck compatibility on compositor updates.
+`overview.nix` selects exact source/patch pairs for Hyprland 0.56.2 and 0.57.0;
+other versions fail closed. The [0.57.0 upstream source](https://github.com/sandwichfarm/hyprexpo/tree/3ec4d82e52f0d4765b87f6ef14f1883a44e85e27)
+adapts the renderer and workspace APIs. Its persistent-empty-workspace patch uses
+the new regular-workspace type; 0.56.2 retains its original source and patch.
 The automatic grid centers partial rows: five workspaces appear as three above
 and two below. A one-line upstream patch includes persistent empty workspaces in
 that grid. Grid previews move windows between workspaces; dropping within the

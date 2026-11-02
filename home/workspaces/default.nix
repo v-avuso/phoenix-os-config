@@ -61,10 +61,6 @@ in
   config = {
     assertions = [
       {
-        assertion = hyprPkgs.hyprland.version == "0.56.2";
-        message = "Recheck pinned HyprExpo compatibility before upgrading Hyprland.";
-      }
-      {
         assertion = builtins.length ids == builtins.length (lib.unique ids);
         message = "Monitor workspace ranges must not overlap.";
       }
