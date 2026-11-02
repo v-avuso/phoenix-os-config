@@ -24,6 +24,11 @@
 
 ## Central exceptions
 
+- **Graphics recovery holds:** `hyprland` retains the accepted 0.56.2 package set
+  for the compositor, portal, overview and IPC clients; `linux_latest` retains
+  kernel 7.3 and its NVIDIA module set on metal. Other application inputs advance
+  normally. These indefinite holds require a recoverable physical cold-login
+  trial before release; see [desktop safety](../modules/desktop.md).
 - **Desktop compatibility hold:** Native/Sandbox remain at 26.1021.22027 while the
   Phoenix lifecycle, shared-control and permission adapters are ported to the
   26.1027.51404 bootstrap-chunk layout. System, browser and CLI updates continue.

@@ -1,7 +1,8 @@
 # Monitor workspaces and overview
 
-Import `default.nix` with the same `nixpkgs-unstable` input as the running
-Hyprland. Set `phoenix.workspaces.monitors.<output>.first` for each output;
+Import `default.nix` with the shared `config/desktop-packages.nix` selection used
+by Hyprland; its accepted-version hold also selects the plugin's build ABI.
+Set `phoenix.workspaces.monitors.<output>.first` for each output;
 `phoenix.workspaces.count` defaults to five. Ranges must not overlap.
 Consume `phoenixWorkspacesHyprLua` in the compositor's Lua configuration.
 

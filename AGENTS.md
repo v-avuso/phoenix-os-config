@@ -107,6 +107,9 @@
   running versus candidate desktop/compositor before retrying; prefer existing
   review journal evidence when sufficient. Coordinate disruptive live changes
   with the operator and preserve the running compositor/plugin ABI across reloads.
+- Builds and headless checks do not prove physical GPU/session startup. Keep a
+  working boot fallback and scoped graphics holds until recoverable cold-login
+  acceptance; do not recommend logout as evidence that an untested upgrade works.
 - Before privileged broker operations, explicitly read
   `modules/development/ai/agent/AGENTS.md` and the
   [authorization usage](modules/development/ai/agent/authorization/README.md);

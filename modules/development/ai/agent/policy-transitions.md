@@ -90,6 +90,10 @@ trust explicit without adding model calls, services or recurring approval work.
    `installedPolicy`, `runtime`, `profile`, `baseline`, `predecessorConfig`,
    `predecessorPolicy`, `approvedSource`, `approvedClosure`, `candidateConfig`,
    `candidatePolicy`, `candidateSource`, `candidateClosure`, and informational `commit`.
+   An immutable `action = "boot"` descriptor stages a reviewed recovery without
+   changing the running system or activated baseline; completion verifies both
+   remain unchanged and the boot profile matches the candidate. Default `switch`
+   retains persistent live activation. Neither mode grants an unreviewed fallback.
    Version-1 → version-2 migration also requires `identityMigration` exactly
    `authority-v1-to-v2` and a separate `candidateLegacyPolicy`: the installed legacy
    implementation authenticates that exact candidate before review, then the

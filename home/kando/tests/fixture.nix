@@ -19,7 +19,8 @@ let
     coreutils = package "coreutils";
     systemd = package "systemd";
     makeWrapper = package "makeWrapper";
-    writeText = name: text: (package name) // { inherit text; };
+    # Synthetic files are parsed directly below, not realised as store outputs.
+    writeText = name: text: (package name) // { text = builtins.unsafeDiscardStringContext text; };
     writeShellScript = name: text: (package name) // { inherit text; };
     symlinkJoin = args: (package args.name) // args;
   };

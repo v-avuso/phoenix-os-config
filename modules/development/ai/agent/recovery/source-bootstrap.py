@@ -53,7 +53,14 @@ def installed_candidate_policy(descriptor, old, new):
         raise ValueError('explicit-identity-migration-required')
     return descriptor['candidatePolicy']
 
+def handover_action(descriptor):
+    action = descriptor.get('action', 'switch')
+    if action not in ('switch', 'boot'):
+        raise ValueError('unsupported-handover-action')
+    return action
+
 def inspect(descriptor):
+    handover_action(descriptor)
     old = json.loads(immutable(descriptor['installedConfig']).read_text())
     new = json.loads(immutable(descriptor['candidateConfig']).read_text())
     new['configPath'] = descriptor['candidateConfig']
@@ -117,9 +124,10 @@ def approved_baseline(descriptor, old, security):
 
 
 def verify_completion(descriptor, new, deploy, security, review):
-    for path, expected in [('/run/current-system', descriptor['candidateClosure']),
+    boot = handover_action(descriptor) == 'boot'
+    for path, expected in [('/run/current-system', descriptor['runtime'] if boot else descriptor['candidateClosure']),
                            ('/nix/var/nix/profiles/system', descriptor['candidateClosure']),
-                           (new['baseline'], descriptor['candidateSource'])]:
+                           (new['baseline'], descriptor['baseline'] if boot else descriptor['candidateSource'])]:
         if str(Path(path).resolve(strict=True)) != expected:
             raise ValueError('recovery-installed-binding-mismatch')
     if not any(record.get('policy') == descriptor['candidatePolicy'] and
@@ -160,7 +168,7 @@ def recover(descriptor, old, new, deploy, security, uid):
                        base=descriptor['baseline'], profile=descriptor['profile'],
                        profileSource=str((Path(descriptor['profile']) / 'etc/phoenix-agent/activated-source').resolve(strict=True)),
                        reviewBase=descriptor['approvedSource'], oldPolicy=descriptor.get('predecessorPolicy', descriptor['installedPolicy']),
-                       newPolicy=descriptor['candidatePolicy'], target=new['target'], action='switch',
+                       newPolicy=descriptor['candidatePolicy'], target=new['target'], action=handover_action(descriptor),
                        reason='Security administrator authorized exact review-policy handover with independent security review',
                        commit=descriptor['commit'], nonce=secrets.token_hex(32))
         payload = dict(binding=binding, files=files, baseline=baseline,

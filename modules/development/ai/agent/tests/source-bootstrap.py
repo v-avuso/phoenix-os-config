@@ -35,6 +35,31 @@ class RecoveryTests(unittest.TestCase):
                 bootstrap.installed_candidate_policy(dict(d, identityMigration=migration), changed_old, changed_new)
         self.assertEqual(bootstrap.installed_candidate_policy(self.descriptor(), {}, {}), 'new-policy')
 
+    def test_only_fixed_switch_or_boot_actions_are_supported(self):
+        self.assertEqual(bootstrap.handover_action({}), 'switch')
+        self.assertEqual(bootstrap.handover_action({'action': 'boot'}), 'boot')
+        for action in ('test', 'update', '', None):
+            with self.assertRaisesRegex(ValueError, 'unsupported-handover-action'):
+                bootstrap.handover_action({'action': action})
+
+    def test_boot_completion_requires_unchanged_runtime_and_baseline(self):
+        d = dict(self.descriptor(), action='boot', runtime='old-runtime')
+        new = dict(baseline='baseline-link', target='metal')
+        paths = {'/run/current-system':'old-runtime', '/nix/var/nix/profiles/system':'new-closure',
+                 'baseline-link':'active-source'}
+        security = mock.Mock()
+        security.records.return_value = [(None, dict(policy='new-policy', target='metal', source='new-source', closure='new-closure'))]
+        security.choose_checkpoint.side_effect = [(True, None, None), (False, None, None)]
+        with mock.patch.object(Path, 'resolve', autospec=True, side_effect=lambda path, **kwargs: Path(paths[str(path)])):
+            bootstrap.verify_completion(d, new, mock.Mock(), security, mock.Mock())
+            paths['/run/current-system'] = 'new-closure'
+            with self.assertRaisesRegex(ValueError, 'installed-binding-mismatch'):
+                bootstrap.verify_completion(d, new, mock.Mock(), security, mock.Mock())
+            paths['/run/current-system'] = 'old-runtime'
+            paths['baseline-link'] = 'new-source'
+            with self.assertRaisesRegex(ValueError, 'installed-binding-mismatch'):
+                bootstrap.verify_completion(d, new, mock.Mock(), security, mock.Mock())
+
     def test_root_record_must_match_source_closure_policy_and_target(self):
         d = self.descriptor()
         record = dict(policy='old-policy', target='metal', source='old-source', closure='old-closure')
@@ -75,6 +100,8 @@ class RecoveryTests(unittest.TestCase):
             new = dict(old, reviewerUser='reviewer', python='python', controller='fixed-controller',
                        configPath='fixed-config', reviewHome='/protected/auth', nixStore='nix-store')
             d = self.descriptor()
+            if mode == 'boot':
+                d['action'] = 'boot'
             active = root / 'active'; active.mkdir()
             marker = root / 'profile/etc/phoenix-agent'; marker.mkdir(parents=True)
             (marker / 'activated-source').symlink_to(active)
@@ -110,7 +137,7 @@ class RecoveryTests(unittest.TestCase):
             def activate(config, binding, temporary, *_args):
                 self.assertEqual(binding['source'], 'new-source')
                 self.assertEqual(binding['closure'], 'new-closure')
-                self.assertEqual(binding['action'], 'switch')
+                self.assertEqual(binding['action'], 'boot' if mode == 'boot' else 'switch')
                 self.assertNotEqual(temporary.name, 'review')
                 events.append('activation')
                 return {'ok': True}
@@ -122,7 +149,7 @@ class RecoveryTests(unittest.TestCase):
                  mock.patch.object(bootstrap, 'load', side_effect=lambda path: controller if events == ['review'] else self.fail('candidate code loaded before verdict')), \
                  mock.patch.object(bootstrap, 'verify_completion') as complete, \
                  mock.patch.object(bootstrap, 'recheck', checked):
-                if mode == 'pass':
+                if mode in ('pass', 'boot'):
                     self.assertTrue(bootstrap.recover(d, old, new, controller, security, 1000)['ok'])
                     self.assertEqual(events, ['review', 'checkpoint', 'activation'])
                     complete.assert_called_once()
@@ -136,6 +163,7 @@ class RecoveryTests(unittest.TestCase):
 
     def test_review_checkpoint_activation_order(self):
         self.trial('pass')
+        self.trial('boot')
 
     def test_denied_forged_failed_or_stale_review_never_authorizes_activation(self):
         for mode in ('deny', 'forged', 'worker-error', 'changed-state', 'unsupported-scheme'):

@@ -14,7 +14,7 @@
 let
   dots = inputs.caelestia-dots;
   system = pkgs.stdenv.hostPlatform.system;
-  hyprlandPackages = inputs.nixpkgs-unstable.legacyPackages.${system};
+  hyprlandPackages = (import ../config/desktop-packages.nix { inherit inputs pkgs; }).hyprland;
   desktopScale = import ../config/desktop-scale.nix;
   idleBlackShader = pkgs.writeText "phoenix-idle-black.frag" (builtins.readFile ./idle/black.frag);
   # The CLI owns palette generation. Its custom patchPhase skips the standard

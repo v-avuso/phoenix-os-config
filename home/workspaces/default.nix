@@ -7,7 +7,7 @@
 }:
 let
   cfg = config.phoenix.workspaces;
-  hyprPkgs = inputs.nixpkgs-unstable.legacyPackages.${pkgs.stdenv.hostPlatform.system};
+  hyprPkgs = (import ../../config/desktop-packages.nix { inherit inputs pkgs; }).hyprland;
   overview = import ./overview.nix { pkgs = hyprPkgs; };
   ranges = lib.mapAttrsToList (monitor: range: {
     inherit monitor;

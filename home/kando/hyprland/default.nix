@@ -2,7 +2,7 @@
 { config, inputs, pkgs }:
 let
   cfg = config.phoenix.kando;
-  hypr = inputs.nixpkgs-unstable.legacyPackages.${pkgs.stdenv.hostPlatform.system}.hyprland;
+  hypr = (import ../../../config/desktop-packages.nix { inherit inputs pkgs; }).hyprland.hyprland;
 in
 {
   sessionTarget = "hyprland-session.target";
