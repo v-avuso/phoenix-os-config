@@ -54,6 +54,8 @@ let
   '';
 
   caelestiaSettings = {
+    # Five percentage points per volume scroll step.
+    services.audioIncrement = 0.05;
     # Five-number groups align with the monitor-owned ranges below. The shell's
     # unoccupied mode displays all slots in the active group, including empty ones.
     bar.workspaces = {
@@ -140,6 +142,8 @@ let
   };
 
   hyprVars = {
+    # Media keys and keyboard knobs use wpctl independently of shell scrolling.
+    volumeStep = 5;
     # Keep the sleep shortcut explicit and suspend-only. Caelestia's launcher
     # action remains upstream-configured independently.
     kbSleep = "SUPER + SHIFT + L";
