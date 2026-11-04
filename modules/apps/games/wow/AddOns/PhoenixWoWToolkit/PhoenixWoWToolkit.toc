@@ -1,0 +1,10 @@
+## Interface: 120105
+## Title: Phoenix WoW Toolkit
+## Notes: Independently configurable Retail quality-of-life features.
+## Author: Phoenix
+## Version: 0.2.0
+## SavedVariables: PhoenixWoWToolkitDB
+## OptionalDeps: OPie
+
+Core.lua
+Options.lua

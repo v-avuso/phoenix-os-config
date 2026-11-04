@@ -6,7 +6,25 @@
   ...
 }:
 let
-  addonDir = "${user.homeDirectory}/Games/battlenet/drive_c/Program Files (x86)/World of Warcraft/_retail_/Interface/AddOns";
+  addonDir = config.phoenix.wow.retailAddonDirectory;
+  toolkit = pkgs.runCommand "phoenix-wow-toolkit" { } ''
+    mkdir -p "$out"
+    cp -r ${./AddOns/PhoenixWoWToolkit} "$out/PhoenixWoWToolkit"
+  '';
+  toolkitDeploy = pkgs.writeShellApplication {
+    name = "phoenix-wow-toolkit-deploy";
+    runtimeInputs = [
+      pkgs.python3
+      pkgs.util-linux
+      pkgs.coreutils
+    ];
+    text = ''
+      mkdir -p "''${XDG_STATE_HOME:-$HOME/.local/state}/phoenix-wow"
+      exec 9>"''${XDG_STATE_HOME:-$HOME/.local/state}/phoenix-wow/lock"
+      flock -w 60 9
+      exec python3 ${./deploy-toolkit.py} "$@"
+    '';
+  };
   tsmApp = import ./tsm-app.nix { inherit pkgs; };
   tsmForeground = pkgs.writeShellApplication {
     name = "wow-tsm";
@@ -152,89 +170,107 @@ let
     '';
   };
 in
-lib.mkIf (config.phoenix.target == "metal-4tb") {
-  nixpkgs.config.allowUnfreePackages = [ "wowup-cf" ];
-  environment.systemPackages = [
-    pkgs.wowup-cf
-    instawow
-    wowAddons
-    tsmApp
-    tsmForeground
-    battleNet
-  ];
-  home-manager.users.${user.name} = { lib, ... }: {
-    home.activation.tsmNotifications = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      ${pkgs.python3}/bin/python3 ${./disable-tsm-notifications.py} "${user.homeDirectory}/.config/tsm-app/config.toml"
-    '';
-    # Preserve the existing Lutris entry and its ID; HM backs up the old file.
-    xdg.dataFile."applications/net.lutris.battlenet-1.desktop".source =
-      "${battleNetDesktop}/share/applications/net.lutris.battlenet-1.desktop";
-    systemd.user.services.wow-tsm-session = {
-      Unit.Description = "TSM companion for the Battle.net / WoW session";
-      Service = {
-        ExecStart = "${tsmSession}/bin/wow-tsm-session";
-        KillMode = "control-group";
-        TimeoutStopSec = 15;
-      };
+{
+  options.phoenix.wow = {
+    retailAddonDirectory = lib.mkOption {
+      type = lib.types.strMatching "/.+";
+      default = "${user.homeDirectory}/Games/battlenet/drive_c/Program Files (x86)/World of Warcraft/_retail_/Interface/AddOns";
+      description = "Existing WoW Retail AddOns directory shared by toolkit deployment and instawow; never created by toolkit activation.";
     };
-    # Native OAuth configuration also rewrites the selected profile. Reuse the
-    # existing writer to migrate the old store symlink without touching its DB.
-    home.activation.wowProfile = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      ${settingsWriter} reassert ${profileBaseline} "${user.homeDirectory}/.config/instawow/profiles/phoenix-retail/config.json" object
-    '';
-    systemd.user.services.wow-addons-update = {
-      Unit = {
-        Description = "Update managed WoW Retail add-ons";
-        OnFailure = [ "wow-addons-update-notify.service" ];
-      };
-      Service = {
-        Type = "oneshot";
-        ExecStart = "${wowAddons}/bin/wow-addons scheduled-update";
-        TimeoutStartSec = "2h";
-        UMask = "0077";
-        StandardOutput = "journal";
-        StandardError = "journal";
-        NoNewPrivileges = true;
-        PrivateTmp = true;
-        ProtectSystem = "strict";
-        ProtectHome = "tmpfs";
-        CacheDirectory = "instawow";
-        CacheDirectoryMode = "0700";
-        StateDirectory = "instawow phoenix-wow";
-        StateDirectoryMode = "0700";
-        BindPaths = [
-          "\"${addonDir}\""
-          "%h/.config/instawow"
-          "%h/.cache/instawow"
-          "%h/.local/state/instawow"
-          "%h/.local/state/phoenix-wow"
-        ];
-        ReadWritePaths = [
-          "\"${addonDir}\""
-          "%h/.config/instawow"
-          "%h/.cache/instawow"
-          "%h/.local/state/instawow"
-          "%h/.local/state/phoenix-wow"
-        ];
-      };
+    toolkit.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Deploy Phoenix WoW Toolkit; disabling removes only its recognized Nix-store symlink on activation.";
     };
-    systemd.user.services.wow-addons-update-notify = {
-      Unit.Description = "Notify about a terminal WoW add-on update failure";
-      Service = {
-        Type = "oneshot";
-        ExecStart = ''${pkgs.libnotify}/bin/notify-send --app-name="WoW add-ons" --urgency=normal "WoW add-on update failed" "See journalctl --user -u wow-addons-update.service for details."'';
-        NoNewPrivileges = true;
-        ProtectSystem = "strict";
+  };
+  config = lib.mkIf (config.phoenix.target == "metal-4tb") {
+    system.build.phoenixWowToolkit = toolkit;
+    nixpkgs.config.allowUnfreePackages = [ "wowup-cf" ];
+    environment.systemPackages = [
+      pkgs.wowup-cf
+      instawow
+      wowAddons
+      tsmApp
+      tsmForeground
+      battleNet
+    ];
+    home-manager.users.${user.name} = { lib, ... }: {
+      home.activation.wowToolkit = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+        run ${toolkitDeploy}/bin/phoenix-wow-toolkit-deploy ${lib.escapeShellArg addonDir} ${lib.optionalString config.phoenix.wow.toolkit.enable "${toolkit}/PhoenixWoWToolkit"}
+      '';
+      home.activation.tsmNotifications = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+        ${pkgs.python3}/bin/python3 ${./disable-tsm-notifications.py} "${user.homeDirectory}/.config/tsm-app/config.toml"
+      '';
+      # Preserve the existing Lutris entry and its ID; HM backs up the old file.
+      xdg.dataFile."applications/net.lutris.battlenet-1.desktop".source =
+        "${battleNetDesktop}/share/applications/net.lutris.battlenet-1.desktop";
+      systemd.user.services.wow-tsm-session = {
+        Unit.Description = "TSM companion for the Battle.net / WoW session";
+        Service = {
+          ExecStart = "${tsmSession}/bin/wow-tsm-session";
+          KillMode = "control-group";
+          TimeoutStopSec = 15;
+        };
       };
-    };
-    systemd.user.timers.wow-addons-update = {
-      Unit.Description = "Daily WoW add-on updates at 05:00 Berlin time";
-      Timer = {
-        OnCalendar = "*-*-* 05:00:00 Europe/Berlin";
-        Persistent = true;
-        AccuracySec = "1min";
+      # Native OAuth configuration also rewrites the selected profile. Reuse the
+      # existing writer to migrate the old store symlink without touching its DB.
+      home.activation.wowProfile = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+        ${settingsWriter} reassert ${profileBaseline} "${user.homeDirectory}/.config/instawow/profiles/phoenix-retail/config.json" object
+      '';
+      systemd.user.services.wow-addons-update = {
+        Unit = {
+          Description = "Update managed WoW Retail add-ons";
+          OnFailure = [ "wow-addons-update-notify.service" ];
+        };
+        Service = {
+          Type = "oneshot";
+          ExecStart = "${wowAddons}/bin/wow-addons scheduled-update";
+          TimeoutStartSec = "2h";
+          UMask = "0077";
+          StandardOutput = "journal";
+          StandardError = "journal";
+          NoNewPrivileges = true;
+          PrivateTmp = true;
+          ProtectSystem = "strict";
+          ProtectHome = "tmpfs";
+          CacheDirectory = "instawow";
+          CacheDirectoryMode = "0700";
+          StateDirectory = "instawow phoenix-wow";
+          StateDirectoryMode = "0700";
+          BindPaths = [
+            "\"${addonDir}\""
+            "%h/.config/instawow"
+            "%h/.cache/instawow"
+            "%h/.local/state/instawow"
+            "%h/.local/state/phoenix-wow"
+          ];
+          ReadWritePaths = [
+            "\"${addonDir}\""
+            "%h/.config/instawow"
+            "%h/.cache/instawow"
+            "%h/.local/state/instawow"
+            "%h/.local/state/phoenix-wow"
+          ];
+        };
       };
-      Install.WantedBy = [ "timers.target" ];
+      systemd.user.services.wow-addons-update-notify = {
+        Unit.Description = "Notify about a terminal WoW add-on update failure";
+        Service = {
+          Type = "oneshot";
+          ExecStart = ''${pkgs.libnotify}/bin/notify-send --app-name="WoW add-ons" --urgency=normal "WoW add-on update failed" "See journalctl --user -u wow-addons-update.service for details."'';
+          NoNewPrivileges = true;
+          ProtectSystem = "strict";
+        };
+      };
+      systemd.user.timers.wow-addons-update = {
+        Unit.Description = "Daily WoW add-on updates at 05:00 Berlin time";
+        Timer = {
+          OnCalendar = "*-*-* 05:00:00 Europe/Berlin";
+          Persistent = true;
+          AccuracySec = "1min";
+        };
+        Install.WantedBy = [ "timers.target" ];
+      };
     };
   };
 }
