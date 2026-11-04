@@ -11,3 +11,6 @@ Options.lua
 Features/ObjectiveTracker/Feature.lua
 Features/OPieVisualDelay/Renderer.lua
 Features/OPieVisualDelay/Feature.lua
+Features/UniversalItemTooltips/Comparison.lua
+Features/UniversalItemTooltips/Preview.lua
+Features/UniversalItemTooltips/Feature.lua

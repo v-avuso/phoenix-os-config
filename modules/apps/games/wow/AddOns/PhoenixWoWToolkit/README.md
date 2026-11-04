@@ -25,6 +25,8 @@ may require a client restart. A restart cannot expose an undeployed package.
 
 - [OPie Visual Delay](Features/OPieVisualDelay/README.md): experimental version-pinned visual delay, without intentional action latency. Local proof passes; client/combat acceptance remains.
 
+- [Item Tooltips](Features/UniversalItemTooltips/README.md): compact native replacement deltas and an adjacent 3D appearance preview; retains the original tooltip and annotations.
+
 ## Architecture and extension
 
 - `Core.lua`: versioned feature registration, saved preferences, lifecycle, dependency
