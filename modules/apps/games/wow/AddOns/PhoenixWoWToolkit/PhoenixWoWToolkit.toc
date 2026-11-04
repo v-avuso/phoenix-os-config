@@ -1,0 +1,17 @@
+## Interface: 120105
+## Title: Phoenix WoW Toolkit
+## Notes: Independently configurable Retail quality-of-life features.
+## Author: Phoenix
+## Version: 0.2.0
+## SavedVariables: PhoenixWoWToolkitDB
+## OptionalDeps: OPie
+
+Core.lua
+Options.lua
+features/objective-tracker/Feature.lua
+features/opie-visual-delay/Renderer.lua
+features/opie-visual-delay/Feature.lua
+features/universal-item-tooltips/Comparison.lua
+features/universal-item-tooltips/Preview.lua
+features/universal-item-tooltips/Feature.lua
+features/comparison-cleanup/Feature.lua

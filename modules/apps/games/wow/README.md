@@ -1,5 +1,22 @@
 # World of Warcraft Retail — first play
 
+## Phoenix WoW Toolkit
+
+[Standalone add-on sources and usage](AddOns/PhoenixWoWToolkit/README.md) live in
+`AddOns/PhoenixWoWToolkit`; code, docs and tests can move together to another repository.
+`/pwt` opens the shared native Settings page. Features own their options and modules.
+
+`phoenix.wow.retailAddonDirectory` in `wow.nix` is the single Retail AddOns path
+setting, shared with instawow. Home Manager installs a single immutable Nix-store
+symlink only when that directory already exists. Existing name collisions and other
+add-ons are preserved; disabling `phoenix.wow.toolkit.enable` removes only its owned
+link. Disable and deploy before removing the whole module or moving the destination.
+
+Editing sources does not update the installed store package. Deploy first; then
+`/reload` can load changes to an already-discovered add-on. A new physical add-on may
+require a client restart. Neither reload nor restart can expose undeployed sources.
+Development and local tests do not modify game files or restart the client.
+
 ## Current setup
 
 **69 desired instawow packages + 16 WowUp-CF packages.** The original ElvUI/ToxiUI profile,

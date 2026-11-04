@@ -35,6 +35,18 @@
   `ProtectSystem` alone limits writes but still permits reading unrelated home data;
   retain home masking and verify both updater success and unrelated-path denial.
 
+## Phoenix WoW Toolkit
+
+- Standalone sources live in `AddOns/PhoenixWoWToolkit`. Read its README and AGENTS
+  before changes; feature code, docs and tests belong inside their feature directory.
+  Keep Nix installation and deployment fixtures here, outside the portable add-on.
+- `wow.nix` owns `phoenix.wow.retailAddonDirectory` and Home Manager deployment.
+  `deploy-toolkit.py` manages only the reserved store symlink, skips missing AddOns
+  directories and preserves collisions. Never write to the real game as a test.
+  Disable and activate the toolkit before removing the whole module or changing paths.
+- The deployed package is immutable: checkout edits require deployment before a
+  client reload/restart sees them. A restart cannot make undeployed code appear.
+
 ## Future add-on configuration
 
 - Before changing settings, research official documentation, version compatibility,
