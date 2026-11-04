@@ -81,7 +81,7 @@ matches or intercept secure input to make a failed structural check pass.
 Run with a separately installed OPie tree; its original code is read, not modified:
 
 ```sh
-lua Features/OPieVisualDelay/tests/test.lua . \
+lua features/opie-visual-delay/tests/test.lua . \
   '/path/to/_retail_/Interface/AddOns/OPie'
 ```
 

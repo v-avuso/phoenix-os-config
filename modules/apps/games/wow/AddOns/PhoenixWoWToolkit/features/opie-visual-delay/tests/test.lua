@@ -158,7 +158,7 @@ local environment = setmetatable({ OR_SecCore = core, ORI = T.OPieUI,
 core.CheckCVars = noop
 assert(load(notification, '@OPieCore.lua:NotifyState', 't', environment))()
 local toolkit = {}
-assert(loadfile(toolkitSource .. '/Features/OPieVisualDelay/Renderer.lua'))('PhoenixWoWToolkit', toolkit)
+assert(loadfile(toolkitSource .. '/features/opie-visual-delay/Renderer.lua'))('PhoenixWoWToolkit', toolkit)
 local view, why = toolkit.OPieDelay.Find()
 assert(view, why)
 local pointer = view.main.regions[1]
@@ -249,7 +249,7 @@ assert(toolkit.OPieDelay.Find())
 assert(loadfile(toolkitSource .. '/Core.lua'))('PhoenixWoWToolkit', toolkit)
 local events = frames[#frames]
 assert(loadfile(toolkitSource .. '/Options.lua'))('PhoenixWoWToolkit', toolkit)
-assert(loadfile(toolkitSource .. '/Features/OPieVisualDelay/Feature.lua'))('PhoenixWoWToolkit', toolkit)
+assert(loadfile(toolkitSource .. '/features/opie-visual-delay/Feature.lua'))('PhoenixWoWToolkit', toolkit)
 local feature = toolkit.features[1]
 feature.gate = gate -- Reuse the already hooked renderer, don't attach a second observer.
 local version = '8.10.2'

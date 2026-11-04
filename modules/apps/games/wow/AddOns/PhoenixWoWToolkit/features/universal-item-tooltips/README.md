@@ -69,7 +69,7 @@ that layer are not claimed supported without a demonstrated adapter need.
 
 ## Validation and player acceptance
 
-`lua Features/UniversalItemTooltips/tests/test.lua .` checks native-delta delegation,
+`lua features/universal-item-tooltips/tests/test.lua .` checks native-delta delegation,
 alternatives/pairs, self/uncached/unknown/secret fallbacks, original annotations,
 preview ownership, duplicate prevention and toggle restoration. It uses API fakes;
 it does not establish real model rendering, source-window coverage or combat taint.

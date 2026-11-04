@@ -77,7 +77,7 @@ function hooksecurefunc(object, key, callback)
     end
 end
 local T = { RegisterFeature = function(self, feature) self.feature = feature end }
-assert(loadfile(root .. '/Features/ComparisonCleanup/Feature.lua'))('PhoenixWoWToolkit', T)
+assert(loadfile(root .. '/features/comparison-cleanup/Feature.lua'))('PhoenixWoWToolkit', T)
 local feature = T.feature
 assert(feature.defaults.enabled and feature:GetAvailability())
 feature:Enable()
@@ -111,7 +111,7 @@ C_Item = { IsEquippableItem = function() return true end, GetItemInfoInstant = f
     GetDetailedItemLevelInfo = function(link) return link == 'candidate' and 100 or 80 end }
 C_TooltipComparison.GetItemComparisonInfo = function() return manager.compareInfo end
 for _, file in ipairs({ 'Comparison', 'Preview', 'Feature' }) do
-    assert(loadfile(root .. '/Features/UniversalItemTooltips/' .. file .. '.lua'))('PhoenixWoWToolkit', T)
+    assert(loadfile(root .. '/features/universal-item-tooltips/' .. file .. '.lua'))('PhoenixWoWToolkit', T)
 end
 local compact = T.feature
 compact:Enable(); feature:Enable()

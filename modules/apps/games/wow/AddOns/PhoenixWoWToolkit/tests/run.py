@@ -13,13 +13,13 @@ if not args.lua:
     parser.error('Lua is required: use --lua /path/to/lua')
 root = Path(__file__).resolve().parents[1]
 subprocess.run([args.lua, str(root / 'tests/core.lua'), str(root)], check=True)
-for fixture in sorted(root.glob('Features/*/tests/test.lua')):
+for fixture in sorted(root.glob('features/*/tests/test.lua')):
     extra = []
-    if fixture.parents[1].name == 'OPieVisualDelay':
+    if fixture.parents[1].name == 'opie-visual-delay':
         if not args.opie:
             print('SKIP OPie real-source proof: supply --opie', flush=True)
             continue
         extra = [args.opie]
-    elif fixture.parents[1].name == 'ComparisonCleanup' and args.comparison_source:
+    elif fixture.parents[1].name == 'comparison-cleanup' and args.comparison_source:
         extra = [args.comparison_source]
     subprocess.run([args.lua, str(fixture), str(root), *extra], check=True)

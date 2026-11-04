@@ -3,8 +3,10 @@
 ## Intentions and boundaries
 
 - Keep this directory portable as its own repository. Feature behavior, docs,
-  dependency research and tests belong in `Features/<Name>/`; core owns only the
+  dependency research and tests belong in `features/<name>/`; core owns only the
   registration/persistence/settings contract and shared test runner.
+- Use lowercase kebab-case for source directories and `phoenix-wow-toolkit` for a
+  future extracted repository. Preserve the installed `PhoenixWoWToolkit` folder/TOC.
 - Preserve feature IDs and SavedVariables keys across file moves. Use the public
   versioned registration API described in README; avoid core feature-name switches.
 - Prefer native APIs and maintained upstream extension points. OPie is a separately

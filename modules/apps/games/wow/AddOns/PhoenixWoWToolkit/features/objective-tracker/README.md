@@ -33,7 +33,7 @@ and [module](https://github.com/Gethe/wow-ui-source/blob/live/Interface/AddOns/B
 
 ## Validation
 
-From the add-on root: `lua Features/ObjectiveTracker/tests/test.lua .`.
+From the add-on root: `lua features/objective-tracker/tests/test.lua .`.
 The fixture covers delayed initialization, independent toggles, clickable transparent
 buttons, absent/replaced controls, skin restoration, cached updates, combat deferral
 and preference reuse. It does not emulate real rendering or taint.

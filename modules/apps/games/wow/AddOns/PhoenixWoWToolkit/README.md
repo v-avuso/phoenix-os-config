@@ -1,5 +1,8 @@
 # Phoenix WoW Toolkit
 
+The extraction repository name is `phoenix-wow-toolkit`. The installed add-on folder
+and TOC retain `PhoenixWoWToolkit`; source feature directories use lowercase kebab-case.
+
 ## Intentions
 
 Small independently configurable Retail features share initialization, account-wide
@@ -21,13 +24,13 @@ may require a client restart. A restart cannot expose an undeployed package.
 
 ## Features
 
-- [Objective Tracker](Features/ObjectiveTracker/README.md): hide the global header and independently make section buttons invisible but clickable.
+- [Objective Tracker](features/objective-tracker/README.md): hide the global header and independently make section buttons invisible but clickable.
 
-- [OPie Visual Delay](Features/OPieVisualDelay/README.md): experimental version-pinned visual delay, without intentional action latency. Local proof passes; client/combat acceptance remains.
+- [OPie Visual Delay](features/opie-visual-delay/README.md): experimental version-pinned visual delay, without intentional action latency. Local proof passes; client/combat acceptance remains.
 
-- [Item Tooltips](Features/UniversalItemTooltips/README.md): compact native replacement deltas and an adjacent 3D appearance preview; retains the original tooltip and annotations.
+- [Item Tooltips](features/universal-item-tooltips/README.md): compact native replacement deltas and an adjacent 3D appearance preview; retains the original tooltip and annotations.
 
-- [Comparison Cleanup](Features/ComparisonCleanup/README.md): independently hide the verified native equipped-item stat footer, with conservative fallbacks.
+- [Comparison Cleanup](features/comparison-cleanup/README.md): independently hide the verified native equipped-item stat footer, with conservative fallbacks.
 
 ## Architecture and extension
 
@@ -37,7 +40,7 @@ may require a client restart. A restart cannot expose an undeployed package.
   contributors with the same section name share it. Checkbox descriptions use a
   smaller indented font beneath their labels. Compatibility/implementation essays
   belong in module docs, not in the player's settings flow.
-- `Features/<Name>/`: the complete feature, including `Feature.lua`, helpers, README
+- `features/<name>/`: the complete feature, including `Feature.lua`, helpers, README
   and `tests/`. List runtime Lua files in deterministic order in the TOC. Test files
   are never loaded by WoW. Tests requiring upstream code receive an explicit source path.
 - `tests/`: core tests and the standalone runner, independent of PhoenixOS tooling.

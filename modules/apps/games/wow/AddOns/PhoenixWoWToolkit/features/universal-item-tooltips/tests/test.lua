@@ -19,7 +19,7 @@ C_TooltipComparison = {
         return { '|cff20ff20+38 Stamina|r', '|cffff4040-51 Critical Strike|r' }
     end,
 }
-assert(loadfile(root .. '/Features/UniversalItemTooltips/Comparison.lua'))('PhoenixWoWToolkit', T)
+assert(loadfile(root .. '/features/universal-item-tooltips/Comparison.lua'))('PhoenixWoWToolkit', T)
 local data = { hyperlink = 'candidate' }
 info = { method = 0, item = { hyperlink = 'equipped' }, additionalItems = {} }
 local groups = T.ItemComparison.Groups(data)
@@ -55,8 +55,8 @@ local function frame()
     return f
 end
 CreateFrame = frame
-assert(loadfile(root .. '/Features/UniversalItemTooltips/Preview.lua'))('PhoenixWoWToolkit', T)
-assert(loadfile(root .. '/Features/UniversalItemTooltips/Feature.lua'))('PhoenixWoWToolkit', T)
+assert(loadfile(root .. '/features/universal-item-tooltips/Preview.lua'))('PhoenixWoWToolkit', T)
+assert(loadfile(root .. '/features/universal-item-tooltips/Feature.lua'))('PhoenixWoWToolkit', T)
 local feature = T.feature
 assert(feature.defaults.enabled and feature:GetAvailability())
 feature:Enable(); assert(#callbacks == 1)

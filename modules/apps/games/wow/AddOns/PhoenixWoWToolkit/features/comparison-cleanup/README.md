@@ -53,9 +53,9 @@ No CVar, input handler, protected display API or third-party files are changed.
 From the add-on root:
 
 ```sh
-lua Features/ComparisonCleanup/tests/test.lua .
+lua features/comparison-cleanup/tests/test.lua .
 # Stronger optional source-backed proof:
-lua Features/ComparisonCleanup/tests/test.lua . /path/TooltipComparisonManager.lua
+lua features/comparison-cleanup/tests/test.lua . /path/TooltipComparisonManager.lua
 ```
 
 The source-backed proof executes Blizzard's original SetItemTooltip. Tested source
