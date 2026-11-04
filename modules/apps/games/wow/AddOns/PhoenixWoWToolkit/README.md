@@ -23,6 +23,8 @@ may require a client restart. A restart cannot expose an undeployed package.
 
 - [Objective Tracker](Features/ObjectiveTracker/README.md): hide the global header and independently make section buttons invisible but clickable.
 
+- [OPie Visual Delay](Features/OPieVisualDelay/README.md): experimental version-pinned visual delay, without intentional action latency. Local proof passes; client/combat acceptance remains.
+
 ## Architecture and extension
 
 - `Core.lua`: versioned feature registration, saved preferences, lifecycle, dependency

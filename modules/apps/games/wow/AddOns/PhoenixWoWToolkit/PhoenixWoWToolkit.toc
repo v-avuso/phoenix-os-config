@@ -9,3 +9,5 @@
 Core.lua
 Options.lua
 Features/ObjectiveTracker/Feature.lua
+Features/OPieVisualDelay/Renderer.lua
+Features/OPieVisualDelay/Feature.lua
