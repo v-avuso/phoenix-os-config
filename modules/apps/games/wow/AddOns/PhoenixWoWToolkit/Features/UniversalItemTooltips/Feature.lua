@@ -1,5 +1,6 @@
 local _, Toolkit = ...
-local feature = { id = "universalItemTooltips", section = "Item Tooltips", defaults = { enabled = true }, states = {} }
+local feature = { id = "universalItemTooltips", section = "Item Tooltips", defaults = { enabled = true },
+    dependencies = { "Blizzard_SharedXMLGame" }, states = {} }
 
 local function safe(tooltip)
     return not tooltip:IsForbidden() and not tooltip:IsProtected()
@@ -23,6 +24,8 @@ function feature:Process(tooltip, data)
         local function clear() state.data = nil; Toolkit.ItemPreview.Hide(state) end
         tooltip:HookScript("OnTooltipCleared", clear)
         tooltip:HookScript("OnHide", clear)
+        tooltip:HookScript("OnShow", function() Toolkit.ItemPreview.Place(state, tooltip) end)
+        tooltip:HookScript("OnSizeChanged", function() Toolkit.ItemPreview.Place(state, tooltip) end)
     end
     if state.data == data then return end
     state.data = data

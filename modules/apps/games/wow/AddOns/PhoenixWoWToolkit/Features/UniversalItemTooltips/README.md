@@ -8,7 +8,7 @@ item tooltips** is independent of comparison-footer cleanup. No Dialogue UI depe
 private renderer access, source/assets copying or CVar changes.
 
 This is a supported-API subset, **not Dialogue UI's renderer**. Native typography and
-annotations remain; the preview is a small adjacent upper-right panel rather than an
+annotations remain; the preview is a small adjacent panel aligned with the tooltip's right edge rather than an
 embedded custom layout. Shift and always-compare still control Blizzard's traditional
 side-by-side windows. The compact summary itself does not have Dialogue UI's separate
 Shift toggle. These are deliberate presentation differences, not completed parity.
@@ -57,7 +57,8 @@ Native tooltip rebuilds naturally retry when uncached data becomes available.
 `Preview.lua` uses native DressUpModel/appearance cameras and the full hovered item
 link, not a copied Dialogue UI model or artwork. Nonvisual items (rings/trinkets),
 unsupported appearances and uncached models can have no preview. The model-loaded
-callback uses current ownership and stops acting after clear/hide. Real equipment
+callback uses current ownership and stops acting after clear/hide. The panel uses space above/below the main tooltip so it does not cover native
+side-by-side columns, and hides when neither location fits. Real equipment
 camera framing and appearance fidelity still require client checks.
 
 Off hides owned previews and rebuilds visible owned native tooltips outside combat.

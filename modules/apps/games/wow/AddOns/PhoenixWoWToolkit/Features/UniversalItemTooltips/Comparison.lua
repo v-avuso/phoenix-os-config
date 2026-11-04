@@ -40,11 +40,13 @@ function Comparison.Groups(data)
     end
     local info = C_TooltipComparison.GetItemComparisonInfo(candidate)
     if not info or not accessible(info) or not info.item or not info.additionalItems then return {} end
-    local methods, groups = Enum.TooltipComparisonMethod, {}
+    local methods, groups, seen = Enum.TooltipComparisonMethod, {}, {}
     local paired = info.method == methods.WithBagMainHandItem or info.method == methods.WithBagOffHandItem
     local function add(equipped, partner)
         local oldLink, pairedLink = link(equipped), link(partner)
         if not public(oldLink) or not oldLink or (partner and (not public(pairedLink) or not pairedLink)) then return end
+        local key = oldLink .. "\0" .. (pairedLink or "")
+        if seen[key] then return end
         local delta = C_TooltipComparison.GetItemComparisonDelta(candidate, equipped, partner, paired)
         if not delta or not accessible(delta) then return end
         local rows = {}
@@ -60,7 +62,10 @@ function Comparison.Groups(data)
             if not public(row) or type(row) ~= "string" then return end
             rows[#rows + 1] = row -- Preserve Blizzard's signs, localization and colors.
         end
-        if #rows > 0 then groups[#groups + 1] = { equipped = oldLink, partner = pairedLink, paired = paired, rows = rows } end
+        if #rows > 0 then
+            seen[key] = true
+            groups[#groups + 1] = { equipped = oldLink, partner = pairedLink, paired = paired, rows = rows }
+        end
     end
     if info.method == methods.Single then
         add(info.item)

@@ -33,6 +33,7 @@ local function object(parent)
     function value:SetJustifyH() end
     function value:SetText(text) self.text = text end
     function value:SetWordWrap() end
+    function value:SetFontObject() end
     function value:SetEnabled(enabled) self.enabled = enabled end
     function value:SetSize() end
     function value:SetHeight() end

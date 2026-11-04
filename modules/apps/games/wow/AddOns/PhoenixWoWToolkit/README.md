@@ -27,6 +27,8 @@ may require a client restart. A restart cannot expose an undeployed package.
 
 - [Item Tooltips](Features/UniversalItemTooltips/README.md): compact native replacement deltas and an adjacent 3D appearance preview; retains the original tooltip and annotations.
 
+- [Comparison Cleanup](Features/ComparisonCleanup/README.md): independently hide the verified native equipped-item stat footer, with conservative fallbacks.
+
 ## Architecture and extension
 
 - `Core.lua`: versioned feature registration, saved preferences, lifecycle, dependency

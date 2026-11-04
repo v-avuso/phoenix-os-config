@@ -14,6 +14,7 @@ function Toolkit.Options.Checkbox(panel, text, y, settings, key, onChanged, desc
     local checkbox = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
     checkbox:SetPoint("TOPLEFT", 12, y)
     checkbox.Text:SetText(text)
+    checkbox.Text:SetFontObject("GameFontHighlight")
     checkbox:SetChecked(settings[key])
     if description then
         local label = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")

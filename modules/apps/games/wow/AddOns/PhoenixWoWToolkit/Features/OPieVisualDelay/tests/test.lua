@@ -117,6 +117,7 @@ for _, name in ipairs({ 'SetVertexColor', 'SetAlphaFromBoolean', 'SetTexCoord', 
     'SetJustifyH', 'SetWordWrap', 'SetValueStep', 'SetObeyStepOnDrag', 'SetAutoFocus', 'SetNumeric',
     'SetMaxLetters', 'RegisterEvent' }) do Methods[name] = noop end
 function Methods:SetText(text) self.text = text end
+function Methods:SetFontObject() end
 function Methods:SetIcon(icon) self.icon = icon end
 function Methods:SetHighlighted(value) self.highlighted = value end
 function CreateFrame(kind, name, parent, template)
