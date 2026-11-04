@@ -24,6 +24,9 @@
   `--opie` / `--comparison-source` arguments and never modify their supplied sources.
 - Test each feature independently and with the bundle. Preserve Objective Tracker's
   accepted behavior during refactors. Local fakes do not prove combat/taint safety.
+- Tooltip regressions must include Show on an already-visible tooltip, hidden pooled
+  text with stale content, and camera application after asynchronous model loading.
+  Passing fake-layout tests never establishes the in-game visual result.
 - An immutable installed package does not follow working files. Deployment and
   reload/restart are separate steps; neither a reload nor restart installs edits.
 - PhoenixOS packaging/activation and its tests are owned outside this directory.

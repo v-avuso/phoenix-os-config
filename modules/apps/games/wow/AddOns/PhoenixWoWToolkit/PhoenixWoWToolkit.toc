@@ -13,5 +13,6 @@ features/opie-visual-delay/Renderer.lua
 features/opie-visual-delay/Feature.lua
 features/universal-item-tooltips/Comparison.lua
 features/universal-item-tooltips/Preview.lua
+features/universal-item-tooltips/Presentation.lua
 features/universal-item-tooltips/Feature.lua
 features/comparison-cleanup/Feature.lua

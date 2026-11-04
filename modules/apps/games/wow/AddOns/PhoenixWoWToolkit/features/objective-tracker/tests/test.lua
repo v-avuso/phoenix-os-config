@@ -36,6 +36,9 @@ local function object(parent)
     function value:SetFontObject() end
     function value:SetEnabled(enabled) self.enabled = enabled end
     function value:SetSize() end
+    function value:SetWidth() end
+    function value:SetupMenu() end
+    function value:OverrideText() end
     function value:SetHeight() end
     function value:SetScrollChild() end
     function value:SetMinMaxValues() end

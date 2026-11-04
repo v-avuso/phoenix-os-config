@@ -28,7 +28,7 @@ may require a client restart. A restart cannot expose an undeployed package.
 
 - [OPie Visual Delay](features/opie-visual-delay/README.md): experimental version-pinned visual delay, without intentional action latency. Local proof passes; client/combat acceptance remains.
 
-- [Item Tooltips](features/universal-item-tooltips/README.md): compact native replacement deltas and an adjacent 3D appearance preview; retains the original tooltip and annotations.
+- [Item Tooltips](features/universal-item-tooltips/README.md): choose the current UI with compact replacement deltas or a Dialogue-inspired presentation with an embedded 3D preview; preserves item information and annotations.
 
 - [Comparison Cleanup](features/comparison-cleanup/README.md): independently hide the verified native equipped-item stat footer, with conservative fallbacks.
 

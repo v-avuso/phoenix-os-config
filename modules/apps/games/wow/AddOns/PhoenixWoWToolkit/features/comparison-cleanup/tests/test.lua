@@ -8,7 +8,7 @@ EQUIPPED, IF_EQUIPPED_TOGETHER = 'Equipped', 'If equipped together'
 RegisterEventCallback = noop
 GetCVarBool = function() return true end
 local delta = { '+38 Stamina', '-51 Critical Strike' }
-local postCalls = {}
+local postCalls, staleRight = {}, false
 TooltipDataProcessor = { AddTooltipPostCall = function(_, callback) postCalls[#postCalls + 1] = callback end }
 C_TooltipComparison = { GetItemComparisonDelta = function() return delta end }
 C_TooltipInfo = { GetHyperlink = function() return { lines = { 'Original equipped stats', 'Other add-on annotation' } } end }
@@ -32,11 +32,18 @@ local function tooltip(name)
     function t:AddLine(text)
         self.lines[#self.lines + 1] = text
         _G[name .. 'TextLeft' .. #self.lines] = font(text)
-        _G[name .. 'TextRight' .. #self.lines] = font('')
+        _G[name .. 'TextRight' .. #self.lines] = font(staleRight and 'old hidden value' or '')
+        if staleRight then _G[name .. 'TextRight' .. #self.lines]:SetShown(false) end
         self:SetSize(300, 16 + #self.lines * 20)
     end
     function t:ClearLines() self.lines = {}; if self.hooks.OnTooltipCleared then self.hooks.OnTooltipCleared() end end
-    function t:Show() self:SetSize(300, 16 + #self.lines * 20); if self.hooks.OnShow then self.hooks.OnShow() end end
+    function t:Show()
+        self:SetSize(300, 16 + #self.lines * 20)
+        -- A layout refresh need not change dimensions or fire OnShow again.
+        for i = 1, #self.lines do _G[name .. 'TextLeft' .. i]:SetShown(true) end
+        if not self.shown and self.hooks.OnShow then self.hooks.OnShow() end
+        self.shown = true
+    end
     function t:HookScript(event, fn) self.hooks[event] = fn end
     function t:ProcessInfo(info)
         for _, line in ipairs(info.tooltipData.lines) do self:AddLine(line) end
@@ -87,10 +94,15 @@ assert(_G.PWTTestShopping1TextLeft1:IsShown() and _G.PWTTestShopping1TextLeft2:I
 assert(not _G.PWTTestShopping1TextLeft4:IsShown() and not _G.PWTTestShopping1TextLeft6:IsShown())
 assert(ShoppingTooltip1.h == 56, 'no footer-sized blank area')
 ShoppingTooltip1:Show(); assert(ShoppingTooltip1.h == 56, 'native size refresh must remain trimmed')
+assert(not _G.PWTTestShopping1TextLeft4:IsShown(), 'Show must not revive the footer on an already-visible tooltip')
 feature:Disable()
 assert(_G.PWTTestShopping1TextLeft4:IsShown() and _G.PWTTestShopping1TextLeft6:IsShown())
 assert(ShoppingTooltip1.h == 136, 'disable restores native dimensions')
 feature:Enable(); manager:SetItemTooltip(true); assert(ShoppingTooltip1.h == 56)
+feature:Disable(); staleRight = true
+feature:Enable(); manager:SetItemTooltip(true)
+assert(ShoppingTooltip1.h == 56, 'hidden pooled right text must not block exact footer recognition')
+staleRight = false
 -- Extra annotation or altered row: leave all content intact rather than guessing.
 ShoppingTooltip1:ClearLines(); ShoppingTooltip1:ProcessInfo({ tooltipData = C_TooltipInfo.GetHyperlink() })
 for _, line in ipairs({ ' ', ITEM_DELTA_DESCRIPTION, delta[1], delta[2], 'New annotation' }) do ShoppingTooltip1:AddLine(line) end
@@ -110,10 +122,11 @@ C_Item = { IsEquippableItem = function() return true end, GetItemInfoInstant = f
     IsDressableItemByID = function() return false end,
     GetDetailedItemLevelInfo = function(link) return link == 'candidate' and 100 or 80 end }
 C_TooltipComparison.GetItemComparisonInfo = function() return manager.compareInfo end
-for _, file in ipairs({ 'Comparison', 'Preview', 'Feature' }) do
+for _, file in ipairs({ 'Comparison', 'Preview', 'Presentation', 'Feature' }) do
     assert(loadfile(root .. '/features/universal-item-tooltips/' .. file .. '.lua'))('PhoenixWoWToolkit', T)
 end
 local compact = T.feature
+compact.settings = { enabled = true, appearance = 'native' }
 compact:Enable(); feature:Enable()
 local main = tooltip('PWTTestMain')
 main.CompareHeader = nil

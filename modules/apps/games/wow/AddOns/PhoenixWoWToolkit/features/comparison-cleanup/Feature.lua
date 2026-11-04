@@ -53,6 +53,8 @@ function feature:Watch(tooltip)
     tooltip:HookScript("OnTooltipCleared", function() self.states[tooltip] = nil end)
     tooltip:HookScript("OnShow", function() self:Apply(tooltip) end)
     tooltip:HookScript("OnSizeChanged", function() self:Apply(tooltip) end)
+    -- Show also refreshes layout on an already-visible tooltip (no OnShow event).
+    hooksecurefunc(tooltip, "Show", function() self:Apply(tooltip) end)
 end
 
 function feature:Trim(manager, primary)
@@ -86,7 +88,8 @@ function feature:Trim(manager, primary)
     for line = state.lines + 1, last do
         local right = region(tooltip, "Right", line)
         local rightText = right and right:GetText()
-        if not public(rightText) or (rightText and rightText ~= "") then return end
+        local rightShown = right and right:IsShown()
+        if not public(rightShown) or (rightShown and (not public(rightText) or (rightText and rightText ~= ""))) then return end
         if line == state.lines + 1 then
             local blank = region(tooltip, "Left", line)
             local text = blank and blank:GetText()

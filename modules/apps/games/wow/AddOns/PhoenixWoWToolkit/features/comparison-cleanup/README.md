@@ -25,11 +25,14 @@ SetItemTooltip observer recognizes only a structurally exact trailing native foo
 - The introduction must equal Blizzard's current localized constant and the delta
   rows must exactly equal the native API's returned rows. This is validation against
   authoritative data, not English keyword/substring parsing or guessing stat lines.
-- Blank/right-column rows must contain no unexpected annotations. Additional content
+- Blank/right-column rows must contain no unexpected visible annotations. Hidden pooled
+  right-column text can retain stale values and is not treated as visible content. Additional content
   or a changed layout makes the adapter leave the entire footer intact.
 
 Only those tail font regions are hidden, and the pre-footer native body size is
-restored. OnShow/OnSizeChanged enforce that view without polling. Original methods,
+restored. OnShow/OnSizeChanged and a secure post-hook of Show enforce that view without polling.
+Calling Show on an already-visible tooltip can refresh text without another OnShow event
+or size change; the post-hook reapplies suppression after that refresh. Original methods,
 CompareHeader, item stats and comparison selection are untouched. When late appended
 annotations alter the row count, previously trimmed regions are released and native
 sizing wins. Hooks become inert when disabled.
@@ -73,3 +76,10 @@ Toggle off to restore it, then combine with compact tooltips. Test annotations,
 rings/trinkets, a two-hand replacement, paired/cycling fallbacks, repeated hovers,
 reload, combat transitions and BugSack. Actual font geometry and ElvUI/ToxiUI behavior
 remain in-game acceptance; local fakes do not prove taint safety.
+
+The next player trial must repeat the reported bag-cloak hover with ElvUI/ToxiUI active.
+Local regressions now cover repeated Show refreshing hidden text without an OnShow event,
+and hidden pooled right-column strings with stale content. These address concrete gaps
+in the old fixture; they do not establish which path caused the player's screenshot.
+If the footer persists, retain the conservative annotation checks and inspect the actual
+client's row/state layout rather than truncating arbitrary tooltip content.

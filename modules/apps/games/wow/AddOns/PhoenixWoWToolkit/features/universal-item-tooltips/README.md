@@ -1,17 +1,28 @@
 # Universal item tooltips
 
-## Intentions and delivered subset
+## Intentions and settings
 
-Add compact replacement information and an equipment preview without discarding the
-native/ElvUI item body or other add-ons' annotations. Default-on **Use Dialogue UI-style
-item tooltips** is independent of comparison-footer cleanup. No Dialogue UI dependency,
-private renderer access, source/assets copying or CVar changes.
+Enhance conventional equipment tooltips without discarding native/ElvUI item information
+or other add-ons' annotations. **Enhance equipment tooltips** is enabled by default and
+independent of comparison-footer cleanup. The account-wide **Tooltip approach** dropdown offers:
 
-This is a supported-API subset, **not Dialogue UI's renderer**. Native typography and
-annotations remain; the preview is a small adjacent panel aligned with the tooltip's right edge rather than an
-embedded custom layout. Shift and always-compare still control Blizzard's traditional
-side-by-side windows. The compact summary itself does not have Dialogue UI's separate
-Shift toggle. These are deliberate presentation differences, not completed parity.
+- **Current UI + compact comparisons**: retain Blizzard/ElvUI fonts and background,
+  append native replacement deltas, and create no model preview.
+- **Dialogue-inspired + embedded preview** (default): the same information with
+  Blizzard's serif font, a dark background and a transparent model in reserved space
+  at the tooltip's upper-right. Equipped comparison windows receive the typography,
+  but never another summary or model.
+
+Switching approaches or disabling restores owned fonts/background/padding. The disabled
+checkbox restores the original tooltip presentation; the separate cleanup preference
+can still hide the equipped item's redundant footer. During combat, existing appended
+summary text changes on the next natural tooltip rebuild rather than a forced rebuild.
+
+This is a native-tooltip presentation, **not Dialogue UI's renderer**. Its custom
+artwork, exact layout, typeface and separate Shift hint are not reproduced. Native Shift
+and always-compare controls still govern traditional side-by-side windows. We use no
+Dialogue UI private API, code/assets or global CVar changes. Custom tooltips that bypass
+Blizzard's item-processing system are outside the shared integration's coverage.
 
 ## Research and reuse decision
 
@@ -54,24 +65,30 @@ prevent duplicate sections. Hovering an equipped item with the same inventory li
 has no replacement summary; an identical bag copy can also conservatively skip it.
 Native tooltip rebuilds naturally retry when uncached data becomes available.
 
-`Preview.lua` uses native DressUpModel/appearance cameras and the full hovered item
-link, not a copied Dialogue UI model or artwork. Nonvisual items (rings/trinkets),
-unsupported appearances and uncached models can have no preview. The model-loaded
-callback uses current ownership and stops acting after clear/hide. The panel uses space above/below the main tooltip so it does not cover native
-side-by-side columns, and hides when neither location fits. Real equipment
-camera framing and appearance fidelity still require client checks.
+`Presentation.lua` changes individual native FontStrings, not shared FontObjects,
+and retains per-region font snapshots. The native body, inline icons, money display,
+item colors and annotation text are preserved. Other skins may still override the
+background or append differently styled content; exact Dialogue UI parity is not claimed.
 
-Off hides owned previews and rebuilds visible owned native tooltips outside combat.
-During combat it waits for the next natural hover/rebuild to remove already-added
-summary text. No protected comparison-display API, binding or global CVar is changed.
-Broad coverage follows conventional Item tooltips; custom bag/AH renderers that bypass
-that layer are not claimed supported without a demonstrated adapter need.
+`Preview.lua` uses DressUpModel and the hovered link's transmog appearance/source camera.
+Armor uses a masked player model; held items use their item appearance. The camera is
+applied again after asynchronous model loading, and the transparent widget stays at
+zero alpha until a model is ready. There is no bordered panel, independent anchor,
+position polling or top/bottom window switching. Native right padding reserves text-free
+space and participates in the normal comparison anchoring. Missing appearance/camera
+information produces no preview or reserved column. Nonvisual items also have no model.
+If AppearanceTooltip is installed, it remains the preview owner. Native tooltip rebuilds
+retry uncached data. Actual camera framing still requires client validation.
+
+Off hides owned previews, restores visual state and rebuilds visible owned native tooltips
+outside combat. No protected comparison-display API, binding or global CVar is changed.
 
 ## Validation and player acceptance
 
 `lua features/universal-item-tooltips/tests/test.lua .` checks native-delta delegation,
 alternatives/pairs, self/uncached/unknown/secret fallbacks, original annotations,
-preview ownership, duplicate prevention and toggle restoration. It uses API fakes;
+preview ownership, asynchronous camera application, missing-camera fallback, font/padding
+restoration, duplicate prevention, approach switching and native dropdown callbacks. It uses API fakes;
 it does not establish real model rendering, source-window coverage or combat taint.
 
 After approved deployment test a normal bag item first: original information plus
@@ -80,3 +97,11 @@ character equipment (no self comparison), bank/Warband bank, AH, vendor, loot an
 links; ring/trinket alternatives, paired weapons and sockets. Check Shift/always compare,
 uncached items, both independent switches, reload persistence, combat and BugSack.
 Keep native fallback on any unsupported context; do not guess counterpart arithmetic.
+
+For the next client trial, use the same cloak from the reported screenshot: confirm
+there is no separate empty window above/below the tooltip, the armor preview appears
+in the main tooltip's upper-right, and the original item body/annotations remain.
+Switch both dropdown approaches on the same item, then disable enhancements completely.
+Check font/padding restoration on a subsequent spell/unit tooltip and `/reload` persistence.
+The screenshot exposed a real rendering gap despite the previous API-fake tests passing;
+those tests are regression checks, not evidence of an acceptable in-game visual result.
