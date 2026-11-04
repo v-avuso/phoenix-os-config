@@ -19,6 +19,10 @@ requires a new deployment before `/reload` can load it. Reload generally reloads
 already-discovered add-on's Lua/TOC, but discovering a newly installed physical add-on
 may require a client restart. A restart cannot expose an undeployed package.
 
+## Features
+
+- [Objective Tracker](Features/ObjectiveTracker/README.md): hide the global header and independently make section buttons invisible but clickable.
+
 ## Architecture and extension
 
 - `Core.lua`: versioned feature registration, saved preferences, lifecycle, dependency
