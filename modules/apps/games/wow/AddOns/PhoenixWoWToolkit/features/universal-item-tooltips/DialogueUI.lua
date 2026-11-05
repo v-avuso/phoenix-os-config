@@ -3,6 +3,9 @@ local Dialogue = {}
 Toolkit.DialogueTooltip = Dialogue
 local Adapter = {}; Adapter.__index = Adapter
 local required = { "ProcessInfo", "ProcessTooltipData", "ShowItemComparison", "DisplayModel", "ShowHotkey", "GetHyperlink", "SetQuestItem" }
+local baseMethods = { "InitFrame", "UpdatePixel", "HideHotkey", "GetLeftLineText", "NumLines", "ClearLines", "SetFrameAlpha", "Show", "Hide", "Layout",
+    "LoadTheme", "LayoutNextUpdate", "SetOwner", "SetLineFont", "SetLineAlignment", "AcquireFontString", "AddText", "AddIcon",
+    "AddLeftLine", "AddRightLine", "AddBlankLine", "ProcessTooltipDataLines" }
 local function public(value) return not (issecretvalue and issecretvalue(value)) end
 local function accessible(value) return public(value) and (not canaccessallvalues or canaccessallvalues(value)) end
 local function safe(frame)
@@ -29,17 +32,35 @@ function Dialogue.Find(version)
         frame = EnumerateFrames(frame)
     end
     if not found then return nil, "renderer not found" end
+    if found.InitFrame and not Dialogue.base then
+        Dialogue.base = {}
+        for _, name in ipairs(baseMethods) do Dialogue.base[name] = found[name] end
+    end
     return found
+end
+
+-- Borrow only self-based base-renderer methods. Private singleton event,
+-- comparison and hotkey closures are deliberately not cloned.
+function Dialogue.CreateBody()
+    if not Dialogue.base or not Dialogue.base.InitFrame then return end
+    local view = CreateFrame("Frame")
+    view.ShowFrame, view.HideFrame = view.Show, view.Hide
+    for name, method in pairs(Dialogue.base) do view[name] = method end
+    view:SetIgnoreParentScale(true); view:SetIgnoreParentAlpha(true)
+    view:SetFrameStrata("TOOLTIP"); view:SetClampedToScreen(true)
+    view:ClearLines(); view:InitFrame()
+    return view
 end
 
 -- Mirror public rendered text, including other add-ons' additions, rather than
 -- asking Dialogue UI to obtain a fresh body that omits native post-processors.
-function Dialogue.Snapshot(source, data, link)
+function Dialogue.Snapshot(source, data, link, limit)
     if not safe(source) or not data or not accessible(data) or type(data.lines) ~= "table"
-        or not accessible(data.lines) or not source.GetLeftLine then return end
-    local lines, signature = {}, { link }
+        or not accessible(data.lines) or not source.GetLeftLine or not source.GetRightLine then return end
+    local lines, signature, indices = {}, { link }, {}
     local count = source:NumLines()
     if not public(count) or count == 0 then return end
+    if limit then count = math.min(count,limit) end
     for i = 1, count do
         local row = { wrapText = true }
         for _, side in ipairs({ "Left", "Right" }) do
@@ -59,8 +80,11 @@ function Dialogue.Snapshot(source, data, link)
                 end
             end
         end
-        row.leftText = row.leftText or " "
-        lines[i] = row
+        if row.leftText or row.rightText then
+            row.leftText = row.leftText or " "
+            lines[#lines + 1] = row
+            indices[i] = #lines
+        end
     end
     -- Native processing supplies semantic lineIndex values: preserve coin rows
     -- without parsing localized sell-price text or guessing which row it occupies.
@@ -68,7 +92,7 @@ function Dialogue.Snapshot(source, data, link)
         if not accessible(original) then return end
         local index, price = original.lineIndex, original.price
         if not public(index) or not public(price) then return end
-        if price and price > 0 and index and lines[index] then lines[index].price = price end
+        if price and price > 0 and index and indices[index] then lines[indices[index]].price = price end
     end
     for _, row in ipairs(lines) do
         local r, g, b, rr, rg, rb
@@ -159,6 +183,35 @@ function Adapter:Bind()
         end
         return displayModel(view, ...)
     end
+    local showComparison = renderer.ShowItemComparison
+    renderer.ShowItemComparison = function(view, ...)
+        local link = view:GetHyperlink()
+        if self.rendering then
+            for slot = 1,19 do
+                local equipped = GetInventoryItemLink("player",slot)
+                if public(equipped) and equipped == link then return end
+            end
+        end
+        local policy = Toolkit.ComparisonVisibility
+        if not policy or not policy:IsManaged() then return showComparison(view, ...) end
+        view:HideHotkey()
+        if policy:HidesHovered() then return end
+        local data, link = view.tooltipData, view:GetHyperlink()
+        if not data or not accessible(data) or not public(link) then return end
+        local candidate = TooltipComparisonManager:CreateComparisonItem(data)
+        local info = candidate and C_TooltipComparison.GetItemComparisonInfo(candidate)
+        if info and accessible(info) and info.method == Enum.TooltipComparisonMethod.Single then
+            view:AddComparisonItems(true, candidate, link, info.item)
+            for _, item in ipairs(info.additionalItems or {}) do view:AddComparisonItems(true, candidate, link, item) end
+        else
+            for _, group in ipairs(Toolkit.ItemComparison.Groups(data)) do
+                view:AddBlankLine()
+                view:AddLeftLine("Replace " .. group.equipped, 1, 0.82, 0, true)
+                for _, row in ipairs(group.rows) do view:AddLeftLine(row, 1, 1, 1, true) end
+            end
+        end
+        view:ProcessItemExternal(link)
+    end
     hooksecurefunc(renderer, "SetOwner", function()
         if self.lease and not self.writing then self:Release(false, "Dialogue UI owner changed") end
     end)
@@ -201,10 +254,7 @@ end
 function Adapter:Watch(source)
     if self.watched[source] then return end
     self.watched[source] = true
-    source:HookScript("OnHide", function()
-        if self.lease and self.lease.source == source then self:Release(false, "native tooltip hidden") end
-    end)
-    source:HookScript("OnTooltipCleared", function()
+    local function scheduleRelease()
         local lease = self.lease
         if lease and lease.source == source then
             local serial = self.serial
@@ -212,7 +262,9 @@ function Adapter:Watch(source)
                 if self.lease == lease and self.serial == serial then self:Release(false, "native clear without render") end
             end)
         end
-    end)
+    end
+    source:HookScript("OnHide", scheduleRelease)
+    source:HookScript("OnTooltipCleared", scheduleRelease)
     source:HookScript("OnSizeChanged", function() if self.lease and self.lease.source == source then self:Place() end end)
     hooksecurefunc(source, "SetAlpha", function(_, alpha)
         if not self.writing then self.pending[source] = nil end -- A new writer owns its intent.
@@ -234,7 +286,7 @@ function Adapter:Watch(source)
     hooksecurefunc(source, "SetShown", function(_, shown)
         if not public(shown) then self:Release(true, "native visibility restricted")
         elseif shown then refresh()
-        elseif self.lease and self.lease.source == source then self:Release(false, "native tooltip hidden") end
+        elseif self.lease and self.lease.source == source then scheduleRelease() end
     end)
 end
 
@@ -247,12 +299,15 @@ function Adapter:Show(source, data, link, force)
     end
     -- The first client trial uses upstream's single-slot comparison path.
     -- Do not inherit its incomplete combined-weapon arithmetic or self comparisons.
+    local selfItem = false
     for slot = 1, 19 do
         local equipped = GetInventoryItemLink("player", slot)
-        if not public(equipped) or equipped == link then
+        if public(equipped) and equipped == link then selfItem = true end
+        if not public(equipped) then
             self.status = "equipped/restricted item: native fallback"; self:Release(); return false
         end
     end
+    if self.lease and self.lease.selfItem ~= selfItem then force = true end
     if data.overrideItemLevel ~= nil then
         self.status = "override item level: native fallback"; self:Release(); return false
     end
@@ -286,7 +341,7 @@ function Adapter:Show(source, data, link, force)
     self.rendering, self.writing, self.refreshModel = false, false, false
     if not rendered or not renderer:IsShown() then self:Release(); return false end
     self.lease = { source = source, owner = owner, link = link, alpha = alpha, signature = signature, data = data,
-        preview = renderer.usePreviewModel }
+        preview = renderer.usePreviewModel, selfItem = selfItem }
     self:Place()
     if not self.lease then return false end
     if not self:Mask() then return false end

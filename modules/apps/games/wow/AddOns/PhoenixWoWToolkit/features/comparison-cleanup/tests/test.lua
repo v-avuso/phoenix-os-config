@@ -16,7 +16,7 @@ C_TooltipComparison = { GetItemComparisonDelta = function() return delta end }
 C_TooltipInfo = { GetHyperlink = function() return { lines = { 'Original equipped stats', 'Other add-on annotation' } } end }
 local function font(text)
     return { text = text, shown = true, GetText = function(self) return self.text end,
-        IsShown = function(self) return self.shown end, Hide = function(self) self.shown = false end,
+        Show = function(self) self.shown=true end, IsShown = function(self) return self.shown end, Hide = function(self) self.shown = false end,
         SetShown = function(self, shown) self.shown = shown end }
 end
 local function tooltip(name)
@@ -105,6 +105,17 @@ assert(ShoppingTooltip1.lines[1] == 'Original equipped stats' and ShoppingToolti
 assert(_G.PWTTestShopping1TextLeft1:IsShown() and _G.PWTTestShopping1TextLeft2:IsShown())
 assert(not _G.PWTTestShopping1TextLeft4:IsShown() and not _G.PWTTestShopping1TextLeft6:IsShown())
 assert(ShoppingTooltip1.h == 56, 'no footer-sized blank area')
+_G.PWTTestShopping1TextLeft4:Show()
+assert(not _G.PWTTestShopping1TextLeft4:IsShown(),'late native font Show cannot revive the verified footer')
+assert(feature:BodyLineLimit(ShoppingTooltip1)==2)
+feature.settings={enabled=true,hideTarget='hovered'}
+feature:Disable();feature:Enable();manager:SetItemTooltip(true)
+assert(_G.PWTTestShopping1TextLeft4:IsShown() and feature:HidesHovered() and not feature:HidesEquipped())
+feature.settings.hideTarget='both'
+feature:Trim(manager,true);assert(not _G.PWTTestShopping1TextLeft4:IsShown() and feature:HidesHovered())
+feature.settings.hideTarget='neither';feature:Disable();feature:Enable();manager:SetItemTooltip(true)
+assert(_G.PWTTestShopping1TextLeft4:IsShown() and not feature:HidesHovered())
+feature.settings.hideTarget='equipped';feature:Trim(manager,true)
 ShoppingTooltip1:Show(); assert(ShoppingTooltip1.h == 56, 'native size refresh must remain trimmed')
 assert(not _G.PWTTestShopping1TextLeft4:IsShown(), 'Show must not revive the footer on an already-visible tooltip')
 ShoppingTooltip1:SetShown(true)

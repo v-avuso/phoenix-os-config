@@ -1,5 +1,5 @@
 local _, Toolkit = ...
-local feature = { id = "comparisonCleanup", section = "Comparison Cleanup", defaults = { enabled = true },
+local feature = { id = "comparisonCleanup", section = "Comparison Cleanup", defaults = { enabled = true, hideTarget = "equipped" },
     dependencies = { "Blizzard_SharedXMLGame" }, states = {}, watched = {} }
 local function public(value) return not (issecretvalue and issecretvalue(value)) end
 local function accessible(value) return public(value) and (not canaccessallvalues or canaccessallvalues(value)) end
@@ -8,6 +8,37 @@ local function safe(tooltip)
         and not (tooltip.IsAnchoringSecret and tooltip:IsAnchoringSecret())
 end
 local function region(tooltip, side, index) return _G[tooltip:GetName() .. "Text" .. side .. index] end
+local function stillMatches(tooltip,state)
+    local count=tooltip:NumLines()
+    if not public(count) or count~=state.last then return false end
+    for _,entry in ipairs(state.regions or {}) do
+        local font=entry.region
+        local shown=font:IsShown()
+        if not public(shown) then return false end
+        local expected=state.expected and state.expected[font]
+        if expected then
+            local text=font:GetText()
+            if not public(text) or text~=expected then return false end
+        elseif shown and not entry.shown then
+            local text=font:GetText()
+            if not public(text) or (text and text~="") then return false end
+        end
+    end
+    return true
+end
+Toolkit.ComparisonVisibility = feature
+function feature:IsManaged() return self.settings and self.settings.enabled ~= false end
+function feature:HidesHovered() return self:IsManaged() and (self.settings.hideTarget == "hovered" or self.settings.hideTarget == "both") end
+function feature:HidesEquipped()
+    local target = self.settings and self.settings.hideTarget or "equipped"
+    return (not self.settings or self:IsManaged()) and (target == "equipped" or target == "both")
+end
+function feature:BodyLineLimit(tooltip)
+    local state = self.states[tooltip]
+    if not self:HidesEquipped() or not state or not state.first or not safe(tooltip) then return end
+    if not stillMatches(tooltip,state) then return end
+    return state.lines
+end
 
 function feature:GetAvailability()
     return not not (TooltipComparisonManager and type(TooltipComparisonManager.SetItemTooltip) == "function"
@@ -37,12 +68,17 @@ end
 
 function feature:Apply(tooltip)
     local state = self.states[tooltip]
-    if self.writing or not self.running or not state or not state.first or not safe(tooltip) then return end
+    if self.writing or not self.running or not self:HidesEquipped() or not state or not state.first or not safe(tooltip) then return end
     local count = tooltip:NumLines()
     if not public(count) then return end
-    if count ~= state.last then
+    local valid = stillMatches(tooltip,state)
+    if not valid then
         if state.trimmed then
-            for _, entry in ipairs(state.regions) do entry.region:SetShown(entry.shown) end
+            self.writing = true
+            for _, entry in ipairs(state.regions) do if entry.shown then entry.region:SetShown(true) end end
+            local _, height = tooltip:GetSize()
+            if public(height) and height == state.appliedHeight then tooltip:SetHeight(state.fullHeight) end
+            self.writing = false
             state.trimmed = false
         end
         return
@@ -85,7 +121,7 @@ function feature:Trim(manager, primary)
     self.trace = self.trace or {}
     local index = primary and 1 or 2
     local function note(reason) self.trace[index] = reason end
-    if not self.running then note("disabled"); return end
+    if not self.running or not self:HidesEquipped() then note("equipped comparison visible by setting"); return end
     if not manager.compareInfo or not accessible(manager.compareInfo) then note("comparison data unavailable"); return end
     local info, methods = manager.compareInfo, Enum.TooltipComparisonMethod
     if not info or not info.additionalItems then note("additional-item data unavailable"); return end
@@ -137,6 +173,23 @@ function feature:Trim(manager, primary)
         end
     end
     state.first, state.last, state.regions, state.index = state.lines + 1, last, regions, index
+    state.expected = {}
+    self.regionWatched = self.regionWatched or {}
+    for _, entry in ipairs(regions) do
+        local font = entry.region
+        local text = font:GetText()
+        if entry.shown and public(text) and text then state.expected[font] = text end
+        if not self.regionWatched[font] then
+            self.regionWatched[font] = true
+            local observed = font
+            local function reapply()
+                local current = self.states[tooltip]
+                if current and current.expected and current.expected[observed] then self:Apply(tooltip) end
+            end
+            if font.Show then hooksecurefunc(font, "Show", reapply) end
+            if font.SetShown then hooksecurefunc(font, "SetShown", reapply) end
+        end
+    end
     self:Apply(tooltip)
     if C_Timer and C_Timer.After then
         C_Timer.After(0, function()
@@ -190,7 +243,7 @@ function feature:Disable()
     self.running, self.writing = false, true
     for tooltip, state in pairs(self.states) do
         if state.trimmed and safe(tooltip) then
-            for _, entry in ipairs(state.regions) do entry.region:SetShown(entry.shown) end
+            for _, entry in ipairs(state.regions) do if entry.shown then entry.region:SetShown(true) end end
             tooltip:SetSize(state.fullWidth, state.fullHeight)
         end
     end
@@ -199,10 +252,33 @@ function feature:Disable()
 end
 
 function feature:RegisterSettings(panel, y)
-    self.checkbox = Toolkit.Options.Checkbox(panel, "Hide redundant comparison statistics", y,
+    self.checkbox = Toolkit.Options.Checkbox(panel, "Manage comparison statistics", y,
         self.settings, "enabled", function() Toolkit:RefreshFeatures() end,
-        "Keep equipped-item information and side-by-side comparison; hide the duplicate stat footer.")
-    return y - 72
+        "Choose where replacement statistics appear, without a Shift comparison hint.")
+    Toolkit.Options.Text(panel, "Hide comparison statistics", y - 64)
+    local choices = { { "equipped", "In currently equipped item" }, { "hovered", "In hovered item" },
+        { "both", "In both" }, { "neither", "In neither" } }
+    self.dropdown = CreateFrame("DropdownButton", nil, panel, "WowStyle1DropdownTemplate")
+    self.dropdown:SetPoint("TOPLEFT", 24, y - 90); self.dropdown:SetWidth(340)
+    self.dropdown:SetupMenu(function(_, menu)
+        for _, entry in ipairs(choices) do
+            menu:CreateRadio(entry[2], function(value) return self.settings.hideTarget == value end,
+                function(value)
+                    self:Disable(); self.settings.hideTarget = value
+                    Toolkit:RefreshFeatures()
+                    if self.settings.enabled and self.available then self:Enable() end
+                    local tooltips = Toolkit.byID and Toolkit.byID.universalItemTooltips
+                    if tooltips then tooltips:RefreshOwned() end
+                    self:RefreshSettings()
+                end, entry[1])
+        end
+    end)
+    self.choices = choices
+    return y - 132
 end
-function feature:RefreshSettings() self.checkbox:SetChecked(self.settings.enabled); self.checkbox:SetEnabled(self.available) end
+function feature:RefreshSettings()
+    self.checkbox:SetChecked(self.settings.enabled); self.checkbox:SetEnabled(self.available)
+    self.dropdown:SetEnabled(self.settings.enabled and self.available)
+    for _, entry in ipairs(self.choices) do if entry[1] == self.settings.hideTarget then self.dropdown:OverrideText(entry[2]) end end
+end
 Toolkit:RegisterFeature(feature)

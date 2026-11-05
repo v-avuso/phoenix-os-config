@@ -26,6 +26,8 @@
   accepted behavior during refactors. Local fakes do not prove combat/taint safety.
 - Tooltip regressions must include Show on an already-visible tooltip, hidden pooled
   text with stale content, and camera application after asynchronous model loading.
+  Include inventory-style hide/clear/rebuild/show in one frame as well as genuine
+  leaves; a stable bank hover does not exercise inventory refresh ownership.
   Include stale/frozen frame dimensions and cached/internal Show/SetShown calls:
   suppression cannot depend on an observed size delta or propagate a masked source's
   alpha to its replacement. Passing fakes never establishes the in-game visual result.

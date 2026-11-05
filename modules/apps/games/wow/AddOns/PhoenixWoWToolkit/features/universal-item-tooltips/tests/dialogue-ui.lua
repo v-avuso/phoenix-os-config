@@ -49,6 +49,15 @@ local function frame(kind, _, parent, template)
     function f:GetText() return self.text end
     function f:GetWrappedWidth() return math.min(#(self.text or '')*6, self.w) end
     function f:SetTexture(texture) self.texture = texture end
+    function f:GetTexture() return self.texture end
+    function f:SetAllPoints() end
+    function f:SetBackdrop(info) self.backdrop=info end
+    function f:GetBackdrop() return self.backdrop end
+    function f:GetBackdropColor() return 0.05,0.05,0.05,1 end
+    function f:GetBackdropBorderColor() return 0,0,0,1 end
+    function f:SetBackdropColor() end
+    function f:SetBackdropBorderColor() end
+    function f:EnableMouse() end
     function f:SetFontObject(font) self.font = font end
     function f:TryOn(item) self.tried = item; self.tries = (self.tries or 0)+1 end
     function f:SetUnit(unit) self.unit = unit; self.units = (self.units or 0)+1 end
@@ -81,7 +90,8 @@ NORMAL_FONT_COLOR = color
 DialogueUI_DB = { TooltipShowItemComparison = true }
 DialogueUIAPI = {}
 C_Timer = { After = function(_, callback) timers[#timers+1]=callback end }
-C_Item = { IsEquippableItem = function() return true end, IsDressableItemByID = function() return true end, GetItemInfoInstant = function() return 123 end,
+local dressable = true
+C_Item = { IsEquippableItem = function() return true end, IsDressableItemByID = function() return dressable end, GetItemInfoInstant = function() return 123 end,
     GetItemLinkByGUID = function() return 'item:equipped' end }
 C_PetJournal = { GetPetInfoByItemID = noop }
 C_TransmogCollection = { GetAppearanceCameraIDBySource = function() return 70 end }
@@ -153,7 +163,7 @@ TooltipDataProcessor = { AllTypes='all', AddTooltipPostCall=function(kind,fn)
     postcalls[kind]=postcalls[kind] or {}; table.insert(postcalls[kind],fn)
 end }
 local T = { RegisterFeature=function(self,feature) self.feature=feature end }
-for _, name in ipairs({'Comparison','DialogueUI','Feature'}) do
+for _, name in ipairs({'Comparison','DialogueUI','Style','Feature'}) do
     assert(loadfile(root..'/features/universal-item-tooltips/'..name..'.lua'))('PhoenixWoWToolkit',T)
 end
 local found, reason = T.DialogueTooltip.Find('1.0.7')
@@ -254,7 +264,7 @@ data.overrideItemLevel=700
 source:Show(); assert(not feature.adapter.lease and source.alpha==0.6,'override-level math remains native')
 data.overrideItemLevel=nil
 GetInventoryItemLink=function() return 'item:candidate' end
-source:Show(); assert(not feature.adapter.lease,'no misleading equipped-item self comparison')
+source:Show(); assert(feature.adapter.lease and shared:GetLeftLineText(7)~='Replace [item:equipped]','equipped content stays uniform without self comparison')
 GetInventoryItemLink=noop
 hover()
 -- A non-item tooltip must become visible immediately, not await a cleanup timer.
@@ -263,7 +273,14 @@ for _,fn in ipairs(postcalls.all) do fn(source,source.primaryData) end
 source:Show()
 assert(source.alpha==0.6 and not shared:IsShown())
 source.primaryData=data
-hover(); source:Hide(); assert(not feature.adapter.lease and source.alpha==0.6)
+hover()
+local stableTries=model.tries
+source:Hide(); nativeShow(source)
+local pending=timers; timers={}; for _,fn in ipairs(pending) do fn() end
+assert(feature.adapter.lease and model.tries==stableTries,'same-frame native hide/show must retain the loaded preview')
+source:Hide()
+pending=timers; timers={}; for _,fn in ipairs(pending) do fn() end
+assert(not feature.adapter.lease and source.alpha==0.6,'a real leave releases on the next frame')
 nativeShow(source); assert(feature.adapter.lease and source.alpha==0, "OnShow must catch internal/cached Show calls")
 combat,source.protected=true,true
 feature:Render(source,data)
@@ -272,6 +289,48 @@ source.protected=false
 feature.adapter:RestorePending(source)
 assert(source.alpha==0.6 and not feature.adapter.pending[source])
 combat=false
+-- Independent base renderer: no singleton model/comparison callbacks are copied.
+local comparison=frame('GameTooltip');comparison.left=100;comparison.right=380
+local header=frame('FontString');header:SetText('Equipped')
+comparison.CompareHeader={Label=header}
+comparison.primaryData={type=0,hyperlink='item:equipped',lines={}}
+comparison.rows={}
+for _,text in ipairs({'Equipped body','Native annotation'}) do
+    local left,right=frame('FontString'),frame('FontString');left:SetText(text);right:Hide()
+    comparison.rows[#comparison.rows+1]={left=left,right=right}
+end
+for _,fn in ipairs(postcalls.all) do fn(comparison,comparison.primaryData) end
+comparison:Show()
+local pending=timers;timers={};for _,fn in ipairs(pending) do fn() end
+drain()
+local styled=feature.style.states[comparison]
+assert(styled and styled.view and styled.active and comparison.alpha==0,'comparison tooltip gets a separate actual base renderer')
+assert(styled.view:GetLeftLineText(1)=='Equipped' and styled.view:GetLeftLineText(3)=='Native annotation')
+comparison.rows[2].left:SetText('Updated annotation')
+for _,fn in ipairs(postcalls.all) do fn(comparison,comparison.primaryData) end
+local update=timers;timers={};for _,fn in ipairs(update) do fn() end
+drain()
+assert(styled.view:GetLeftLineText(3)=='Updated annotation','visible pane updates without Show')
+assert(not styled.view.DisplayModel and not styled.view.ShowItemComparison,'private singleton methods are never cloned')
+feature.settings.framing='native';feature.style:Configure(true)
+assert(shared.Background.shown==false and feature.style.states[shared].chrome.shown,'default frame with Dialogue UI content')
+feature.settings.appearance='native';feature.style:Configure(true)
+assert(comparison.alpha==1 and not styled.active,'default content restores native comparison pane')
+feature.settings.framing='dialogueUI';feature.style:Configure(true)
+assert(feature.style.states[comparison].texture.shown,'Dialogue UI framing with default content')
+feature.settings.appearance='dialogueUI';feature.style:Configure(true)
+assert(styled.active and comparison.alpha==0,'switching content back takes effect immediately')
+local hideHovered=false
+T.ComparisonVisibility={IsManaged=function() return true end,HidesHovered=function() return hideHovered end,BodyLineLimit=function() end}
+source:Show();feature:Render(source,data,true)
+assert(not shared.events.MODIFIER_STATE_CHANGED and not shared.HotkeyFrame:IsShown(),'globally managed comparisons omit the Shift hint')
+hideHovered=true;feature:Render(source,data,true)
+assert(shared:GetLeftLineText(7)==nil,'hovered comparison can be independently hidden')
+dressable=false
+C_MountJournal={GetMountFromItem=function() end}
+feature:Render(source,data,true)
+assert(feature.adapter.lease and not shared.usePreviewModel,'items without a model retain the same original content renderer')
+feature:Disable();assert(comparison.alpha==1 and not styled.view:IsShown(),'disable restores all owned panes')
 if arg[3] then print('Executed Blizzard original CreateComparisonItem with the mirrored Dialogue UI item data') end
 print('Dialogue UI original renderer + production adapter: native annotation mirror, upstream theme/fonts/model/Shift, stable rebuilds, alpha restoration, comparison placement, quest takeover, version and non-item fallback passed')
 print('NOT TESTED: GPU pixels, live bags/AH, arbitrary custom widgets, combat/taint or quest handoffs inside WoW')

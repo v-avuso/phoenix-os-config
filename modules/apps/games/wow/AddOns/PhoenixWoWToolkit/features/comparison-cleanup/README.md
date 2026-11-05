@@ -105,3 +105,17 @@ text, identifiers or personal data are printed. The observed size-gate failure h
 reproduction and correction; confirm actual rendering and spacing in the client. If
 text remains, report the current guard/status and font visibility rather than assuming
 a restart is needed.
+
+## Independent visibility policy
+
+**Manage comparison statistics** enables account-wide policy; **Hide comparison
+statistics** selects Equipped item (default), Hovered item, Both or Neither. Equipped
+suppression validates and hides only the exact native footer. Its FontString Show and
+SetShown post-hooks reapply suppression if a later layout revives the matched regions;
+changed text/annotations invalidate ownership. The Dialogue UI secondary body mirror
+also receives the validated body-line limit rather than relying on native font visibility.
+
+Hovered suppression controls Phoenix compact summaries and the original Dialogue UI
+comparison section. With policy enabled, Dialogue UI's Shift hint is omitted and this
+setting governs its summary without modifying upstream SavedVariables. Disabling policy
+restores upstream behavior. The equipped-only choice leaves the hovered summary intact.
