@@ -143,3 +143,19 @@ enlarges the physical widget, centers it over its original rectangle and applies
 matching insets, retaining logical layout dimensions. This is an API-argument proof;
 unchanged apparent size and actual clipping improvement remain GPU/client acceptance.
 No model scale/camera change is substituted for the requested same-size overflow.
+
+## Action-bar identity and model ordering
+
+Blizzard's [ActionButton SetTooltip](https://raw.githubusercontent.com/Gethe/wow-ui-source/live/Interface/AddOns/Blizzard_ActionBar/Shared/ActionButton.lua)
+uses GameTooltip:SetAction, unlike the journal's SetMountBySpellID. The installed
+ElvUI_Libraries LibActionButton Action.GetSpellId confirms current GetActionInfo
+semantics: spell actions and macro subtype spell already return the spell ID;
+untyped macro indexes require GetMacroSpell. The adapter follows these native
+identities and never parses secure macro text or action attributes.
+
+Inspected Dialogue UI initializes its model frames at the parent tooltip's level,
+and Model1 uses ARTWORK. The foreground prototype changes those ordinary rendering
+properties with exact restoration. The native SimpleModel API documents OVERLAY as a
+model draw layer but does not prove that layers isolate 3D depth composition. The
+reported journal masking requires a client test. SetUseGBuffer is restriction-marked
+in native documentation; no speculative restricted call or swallowed error is used.

@@ -51,6 +51,9 @@ local function frame(kind, _, parent, template)
     function f:SetViewInsets(...) self.insets={...} end
     function f:SetCompanionPet(id) self.petGUID=id end
     function f:SetMountBySpellID(id) self.mountSpellID=id end
+    function f:SetAction(slot) self.actionSlot=slot end
+    function f:SetModelDrawLayer(layer) self.drawLayer=layer end
+    function f:GetModelDrawLayer() return self.drawLayer or 'ARTWORK' end
     function f:SetAnimation(id) self.animation=id end
     function f:SetFacing(yaw) self.facing=yaw end
     function f:SetText(text) self.text = text end
@@ -74,7 +77,7 @@ local function frame(kind, _, parent, template)
     function f:CreateFontString() return frame('FontString', nil, self) end
     for _, name in ipairs({ 'SetIgnoreParentScale', 'SetIgnoreParentAlpha', 'SetFixedFrameStrata', 'SetClampedToScreen',
         'SetClampRectInsets', 'SetSpacing', 'SetJustifyV', 'SetJustifyH', 'SetTextureSliceMargins',
-        'SetTextureSliceMode', 'SetKeepModelOnHide', 'SetModelDrawLayer', 'SetAutoDress', 'SetDoBlend',
+        'SetTextureSliceMode', 'SetKeepModelOnHide', 'SetAutoDress', 'SetDoBlend',
         'SetUseTransmogChoices', 'SetUseTransmogSkin', 'FreezeAnimation', 'ClearModel', 'SetPosition', 'SetPitch', 'SetRoll', 'UseModelCenterToTransform' }) do f[name] = noop end
     frames[#frames+1] = f
     return f
@@ -406,6 +409,24 @@ local summon=feature.style.states[source]
 assert(summon.active and not feature.adapter.lease and summon.view.PreviewModel.Model1.displayID==700,
     'mount summon spell mirrors native content and uses its resolved creature')
 assert(summon.view.PreviewModel.Model1.scripts.OnUpdate and source.alpha==0)
+assert(summon.view.PreviewModel.Model1:GetFrameStrata()=='TOOLTIP'
+    and summon.view.PreviewModel.Model1:GetFrameLevel()>summon.view:GetFrameLevel()
+    and summon.view.PreviewModel.Model1:GetModelDrawLayer()=='OVERLAY','preview has an explicit foreground layer')
+GetActionInfo=function(slot)
+    if slot==4 then return 'spell',1234
+    elseif slot==5 then return 'macro',1234,'spell'
+    elseif slot==6 then return 'macro',7 end
+end
+GetMacroSpell=function(id) assert(id==7);return 1234 end
+hoverData({type=1,id=4,lines={}},'SetAction',4)
+assert(summon.active and summon.view.creaturePreview.key:find('mount:1234:',1,true),'action slot resolves actual mount spell')
+hoverData({type=25,id=5,lines={}},'SetAction',5)
+assert(summon.active,'resolved Retail spell macro gets a mount preview')
+hoverData({type=25,id=6,lines={}},'SetAction',6)
+assert(summon.active,'macro index uses native spell resolution')
+hoverData({type=25,id=7,lines={}},'SetAction','secret')
+assert(not summon.active,'secret action slot is not inspected')
+hoverData({type=1,id=1234,lines={}})
 feature.settings.mountSpellPreviews=false;feature.style:Configure(true)
 assert(not summon.active and source.alpha==0.6,'mount checkbox restores native source independently')
 feature.settings.mountSpellPreviews=true
@@ -426,7 +447,11 @@ assert(not summon.active and feature.adapter.lease and feature.adapter.lease.alp
     'summon-to-item handoff restores native opacity before singleton acquisition')
 feature.settings.equippedPreviews=false;feature.style:Configure(true)
 assert(styled.active and not styled.view.usePreviewModel,'equipped preview checkbox preserves text-only comparison')
-feature:Disable();assert(comparison.alpha==1 and not styled.view:IsShown(),'disable restores all owned panes')
+feature:Disable()
+assert(summon.view.PreviewModel.Model1:GetModelDrawLayer()=='ARTWORK'
+    and summon.view.PreviewModel.Model1:GetFrameLevel()==summon.view:GetFrameLevel(),
+    'disable restores original model layer and frame level')
+assert(comparison.alpha==1 and not styled.view:IsShown(),'disable restores all owned panes')
 if arg[3] then print('Executed Blizzard original CreateComparisonItem with the mirrored Dialogue UI item data') end
 print('Dialogue UI original renderer + production adapter: native annotation mirror, upstream theme/fonts/model/Shift, stable rebuilds, alpha restoration, comparison placement, quest takeover, version and non-item fallback passed')
 print('NOT TESTED: GPU pixels, live bags/AH, arbitrary custom widgets, combat/taint or quest handoffs inside WoW')

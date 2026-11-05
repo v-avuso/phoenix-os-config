@@ -155,3 +155,26 @@ Verify tooltip annotations, no flicker, settings persistence, and General/Toolti
 navigation. Lua fakes verify viewport/projection arguments, restoration, summon
 identity, stale-identity rejection and ownership transitions; they do not prove GPU
 projection, clipping or combat taint.
+
+## Foreground models and action bars
+
+Visible preview containers/model frames use TOOLTIP strata, five frame levels above
+the text view, with the ordinary model draw layer set to OVERLAY. Original levels and
+draw layer restore on disable. This is the bounded first fix for the journal's large
+model apparently masking the tooltip model: it does not establish that the client
+uses independent 3D depth buffers. Retest overlapping journal previews; if masking
+persists, investigate model compositing separately rather than escalating arbitrary
+frame levels. No restricted SetUseGBuffer call is made.
+
+A passive SetAction post-hook resolves the public action slot through GetActionInfo.
+Spell actions and Retail macros whose subtype is already spell use the resolved
+spell ID. Macros returning a macro index use GetMacroSpell; item macros remain
+unsupported. The mount resolver then validates that spell against the mount journal.
+No secure action attributes, button scripts, macro text or bindings are modified.
+Secret inputs and unresolved/random actions fall back to native presentation.
+
+Client test: hover the same mount in the journal and on the action bar, including a
+mount macro and conditional macro while changing modifiers. Move the tooltip preview
+over the journal's large preview and verify the tooltip model remains visible. Repeat
+with overflow off/on, after reload and in/out of combat. Tests exercise adapter calls
+and restoration; GPU model/depth compositing remains client-only evidence.

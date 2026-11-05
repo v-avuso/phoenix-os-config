@@ -6,6 +6,48 @@ local function accessible(value)
     return value and public(value) and (not canaccessallvalues or canaccessallvalues(value))
 end
 
+-- Read only native action metadata; never inspect or alter secure button attributes.
+function Preview.ActionHint(slot, data)
+    if not public(slot) or type(slot)~="number" or not GetActionInfo then return end
+    local kind,id,subType=GetActionInfo(slot)
+    if not public(kind) or not public(id) or not public(subType) then return end
+    local spell
+    if kind=="spell" or (kind=="macro" and subType=="spell") then spell=id
+    elseif kind=="macro" and subType~="item" and type(id)=="number" and GetMacroSpell then spell=GetMacroSpell(id) end
+    if public(spell) and type(spell)=="number" and spell>0 then return {kind="mount",id=spell,data=data} end
+end
+
+-- The base renderer initializes model frames at its own level. Keep our visible
+-- models above that content, reapplying after show; restore owned state on disable.
+function Preview.Foreground(view, enabled)
+    local preview=view and view.PreviewModel
+    if not preview then return end
+    local frames={view.PreviewFrame,preview.Model1,preview.ModelScene}
+    for _,frame in ipairs(frames) do
+        if frame:IsForbidden() or frame:IsProtected() then return end
+    end
+    if enabled then
+        if not preview.foreground then
+            preview.foreground={}
+            for _,frame in ipairs(frames) do
+                preview.foreground[frame]={strata=frame:GetFrameStrata(),level=frame:GetFrameLevel()}
+            end
+            preview.foreground.layer=preview.Model1:GetModelDrawLayer()
+        end
+        for _,frame in ipairs(frames) do
+            frame:SetFrameStrata("TOOLTIP");frame:SetFrameLevel(view:GetFrameLevel()+5)
+        end
+        preview.Model1:SetModelDrawLayer("OVERLAY")
+    elseif preview.foreground then
+        for _,frame in ipairs(frames) do
+            local original=preview.foreground[frame]
+            frame:SetFrameStrata(original.strata);frame:SetFrameLevel(original.level)
+        end
+        preview.Model1:SetModelDrawLayer(preview.foreground.layer)
+        preview.foreground=nil
+    end
+end
+
 function Preview.Resolve(data, hint, settings)
     if not accessible(data) then return end
     local types=Enum.TooltipDataType

@@ -20,7 +20,10 @@ function Style.New(adapter, settings)
         if renderer.Init then renderer:Init() end
         hooksecurefunc(renderer,"Show",function()
             self:Chrome(renderer,true)
-            if Toolkit.CreaturePreview then Toolkit.CreaturePreview.Overflow(renderer,self.enabled and self.settings.previewOverflow~=false) end
+            if Toolkit.CreaturePreview then
+                Toolkit.CreaturePreview.Foreground(renderer,self.enabled)
+                Toolkit.CreaturePreview.Overflow(renderer,self.enabled and self.settings.previewOverflow~=false)
+            end
         end)
         hooksecurefunc(renderer,"LoadTheme",function()
             for _,state in pairs(self.states) do if state.view then state.view:LoadTheme() end end
@@ -210,7 +213,10 @@ function Style:Refresh(source)
         state.alpha=alpha;state.active=true
     end
     self:Chrome(state.view,true,source)
-    if Toolkit.CreaturePreview then Toolkit.CreaturePreview.Overflow(state.view,self.settings.previewOverflow~=false) end
+    if Toolkit.CreaturePreview then
+        Toolkit.CreaturePreview.Foreground(state.view,true)
+        Toolkit.CreaturePreview.Overflow(state.view,self.settings.previewOverflow~=false)
+    end
     self:Place(source,state)
     self.writing=true;source:SetAlpha(0);self.writing=false
 end
@@ -243,6 +249,13 @@ function Style:Observe(source,data)
                 end)
             end
         end
+        if source.SetAction and Toolkit.CreaturePreview then
+            hooksecurefunc(source,"SetAction",function(_,slot)
+                if not safe(source) then return end
+                state.hint=Toolkit.CreaturePreview.ActionHint(slot,state.data)
+                queue()
+            end)
+        end
         local function shown()
             if state.active and source:IsShown() then
                 self.writing=true;source:SetAlpha(0);self.writing=false
@@ -273,12 +286,18 @@ function Style:Configure(enabled)
         self:Release(frame); self:Restore(frame)
         if state.view then
             self:Restore(state.view)
-            if Toolkit.CreaturePreview then Toolkit.CreaturePreview.Overflow(state.view,false) end
+            if Toolkit.CreaturePreview then
+                Toolkit.CreaturePreview.Foreground(state.view,false)
+                Toolkit.CreaturePreview.Overflow(state.view,false)
+            end
         end
     end
     if enabled then for _,source in ipairs(sources) do self:Refresh(source) end end
     if self.adapter.renderer then
         self:Chrome(self.adapter.renderer,true)
-        if Toolkit.CreaturePreview then Toolkit.CreaturePreview.Overflow(self.adapter.renderer,enabled and self.settings.previewOverflow~=false) end
+        if Toolkit.CreaturePreview then
+            Toolkit.CreaturePreview.Foreground(self.adapter.renderer,enabled)
+            Toolkit.CreaturePreview.Overflow(self.adapter.renderer,enabled and self.settings.previewOverflow~=false)
+        end
     end
 end
