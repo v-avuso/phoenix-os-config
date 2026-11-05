@@ -27,6 +27,10 @@
 - Tooltip regressions must include Show on an already-visible tooltip, hidden pooled
   text with stale content, and camera application after asynchronous model loading.
   Passing fake-layout tests never establishes the in-game visual result.
+- For actual Dialogue UI tooltip reuse, read the item feature's `research/README.md`
+  first. The original renderer reuse proof supersedes the assumption that absence of
+  a supported global API requires a new renderer. Keep singleton ownership and
+  item-aware dispatch intact; do not extend the imitation before a live reuse trial.
 - An immutable installed package does not follow working files. Deployment and
   reload/restart are separate steps; neither a reload nor restart installs edits.
 - PhoenixOS packaging/activation and its tests are owned outside this directory.

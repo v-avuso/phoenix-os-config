@@ -24,7 +24,17 @@ and always-compare controls still govern traditional side-by-side windows. We us
 Dialogue UI private API, code/assets or global CVar changes. Custom tooltips that bypass
 Blizzard's item-processing system are outside the shared integration's coverage.
 
-## Research and reuse decision
+## Actual Dialogue UI reuse investigation
+
+The current runtime is still the approximation described above. A newer
+[source-backed investigation and probe](research/README.md) demonstrates reuse of the
+actual installed 1.0.7 renderer without copying its code/assets or patching its files.
+The missing supported global entry point does not prevent a narrowly scoped internal
+adapter. The probe is not in the TOC; native suppression and live client acceptance are
+still required before replacing the runtime. Do not extend the imitation to approach
+Dialogue UI's exact visuals.
+
+## Original research and approximation decision
 
 - [Dialogue UI public tooltip source](https://github.com/Peterodox/YUI-Dialogue/blob/main/Code/Tooltip/Tooltip_Public.lua)
   exposes annotation callbacks, not a global reward-tooltip renderer. Installed 1.0.6

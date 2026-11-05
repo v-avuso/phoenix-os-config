@@ -8,6 +8,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--lua', default=shutil.which('lua'))
 parser.add_argument('--opie', help='Installed OPie 8.10.2 source for the optional real-renderer proof')
 parser.add_argument('--comparison-source', help='Blizzard TooltipComparisonManager.lua for the optional real-source proof')
+parser.add_argument('--dialogue-ui', help='Installed Dialogue UI 1.0.7 source for the optional actual-renderer reuse proof')
 args = parser.parse_args()
 if not args.lua:
     parser.error('Lua is required: use --lua /path/to/lua')
@@ -23,3 +24,6 @@ for fixture in sorted(root.glob('features/*/tests/test.lua')):
     elif fixture.parents[1].name == 'comparison-cleanup' and args.comparison_source:
         extra = [args.comparison_source]
     subprocess.run([args.lua, str(fixture), str(root), *extra], check=True)
+if args.dialogue_ui:
+    subprocess.run([args.lua, str(root / 'features/universal-item-tooltips/tests/dialogue-ui.lua'),
+                    str(root), args.dialogue_ui], check=True)
