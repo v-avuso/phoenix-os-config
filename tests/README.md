@@ -54,6 +54,9 @@ nix eval --impure --file modules/security/tests/opensnitch-observation.nix
 nix eval --impure --file modules/security/tests/pam-desktop-conditional.nix
 nix eval --impure --file modules/tests/desktop-services.nix
 nix eval --impure --file modules/tests/desktop-recovery.nix
+python3 -B hosts/metal/wifi/tests/diagnostics.py
+nix eval --impure --file hosts/metal/wifi/tests/configuration.nix
+nix build --impure --no-link --file hosts/metal/wifi/tests/runtime.nix
 nix eval --impure --file home/hue-lighting/tests/service.nix
 python3 -B modules/tests/desktop-live-check.py
 python3 -B modules/development/ai/agent/tests/reservation-deployment.py

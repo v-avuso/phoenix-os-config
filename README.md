@@ -12,7 +12,8 @@ for one workstation, not a general-purpose distribution.
   only on the VM target.
   Wi-Fi power saving is disabled on metal to prioritize connection reliability
   during investigation of recurring WCN7850 stalls; an experimental
-  [receive-buffer backport](hosts/metal/wifi/README.md) targets the held kernel.
+  [receive-buffer backport and bounded diagnostic capture](hosts/metal/wifi/README.md)
+  target the held kernel.
   Neither mitigation is a confirmed fix.
   [Game window policy](home/hyprland/gaming/windows/README.md) keeps classified games tiled;
   direct pointer release until click remains a proposed compositor extension.
