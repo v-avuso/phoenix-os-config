@@ -71,6 +71,13 @@ slots per screen: left 1–5, middle 6–10, right 11–15. Caelestia shows the 
 monitor's numeric group, including empty slots. Kando's Global menu opens the
 all-monitor HyprExpo overview and navigates within the pointer monitor's group.
 
+Discord uses ordinary workspaces. `home/caelestia.nix` excludes its class from
+upstream communication routing and disables its entry in the declarative
+`caelestia/cli.json`: Super+D must neither launch nor move Discord into the
+overlay. Other communication clients and special workspace controls retain
+upstream behavior. Move an existing overlay window to a numeric workspace once;
+changing the startup rule does not relocate already-open windows.
+
 Kando on metal uses a private config root. Only its `config.json` and `menus.json`
 are writable baselines; every service start also reasserts them, including login
 and restart. This deliberately differs from Caelestia/VSCodium experiment

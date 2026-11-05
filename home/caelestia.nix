@@ -129,6 +129,9 @@ let
     dontBuild = true;
 
     postPatch = ''
+      # Discord belongs to ordinary workspaces; retain routing for other clients.
+      substituteInPlace hypr/hyprland/rules.lua \
+        --replace-fail '"discord|equibop|vesktop"' '"equibop|vesktop"'
       substituteInPlace hypr/hyprland/execs.lua \
         --replace-fail '"/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1"' '"${pkgs.kdePackages.polkit-kde-agent-1}/libexec/polkit-kde-authentication-agent-1"' \
         --replace-fail 'hl.exec_cmd("/usr/lib/geoclue-2.0/demos/agent")' '-- GeoClue agent is managed by NixOS.' \
@@ -308,6 +311,12 @@ in
   # recursive linking leaves the directories themselves writable, including
   # hypr/scheme for the runtime-generated current.lua.
   xdg.configFile = {
+    # Disabling the entry prevents both launch-on-special and move-on-toggle.
+    # move=false alone would still launch a missing Discord into the overlay.
+    "caelestia/cli.json".text = builtins.toJSON {
+      toggles.communication.discord.enable = false;
+    };
+
     "hypr" = {
       source = "${caelestiaDots}/hypr";
       recursive = true;

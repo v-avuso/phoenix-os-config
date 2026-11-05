@@ -13,6 +13,7 @@ python3 commands/tests/commands.py
 python3 -B hosts/metal/storage-migration/test_restore.py
 python3 -B hosts/metal/storage-migration/test_migrate.py
 nix eval --impure --file modules/tests/target.nix
+nix build --impure --file home/tests/discord-workspaces.nix --no-link
 nix shell --inputs-from . nixpkgs#lua --command lua home/idle/tests/idle-blank.lua home/idle/blank.lua home/idle/black.frag
 nix shell --inputs-from . nixpkgs#lua --command lua home/workspaces/tests/navigation.lua home/workspaces/navigation.lua
 nix shell --inputs-from . nixpkgs#lua --command lua home/hyprland/gaming/windows/tests/game-windows.lua home/hyprland/gaming/windows/game-windows.lua home/hyprland/gaming/windows/classification.lua
