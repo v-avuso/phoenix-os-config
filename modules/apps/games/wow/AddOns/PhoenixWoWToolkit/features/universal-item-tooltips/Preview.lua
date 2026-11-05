@@ -7,14 +7,23 @@ local function accessible(value)
 end
 
 -- Read only native action metadata; never inspect or alter secure button attributes.
-function Preview.ActionHint(slot, data)
-    if not public(slot) or type(slot)~="number" or not GetActionInfo then return end
-    local kind,id,subType=GetActionInfo(slot)
-    if not public(kind) or not public(id) or not public(subType) then return end
+function Preview.ActionHint(slot, data, source)
+    if not public(slot) or type(slot)~="number" then return nil,"restricted action slot" end
+    local kind,id,subType
+    if GetActionInfo then kind,id,subType=GetActionInfo(slot) end
+    if not public(kind) or not public(id) or not public(subType) then return nil,"restricted action identity" end
     local spell
+    if kind=="summonpet" and type(id)=="string" then return {kind="pet",id=id,data=data},"summonpet GUID" end
     if kind=="spell" or (kind=="macro" and subType=="spell") then spell=id
     elseif kind=="macro" and subType~="item" and type(id)=="number" and GetMacroSpell then spell=GetMacroSpell(id) end
-    if public(spell) and type(spell)=="number" and spell>0 then return {kind="mount",id=spell,data=data} end
+    if (not public(spell) or type(spell)~="number") and source and source.GetSpell then
+        local name
+        name,spell=source:GetSpell()
+    end
+    if public(spell) and type(spell)=="number" and spell>0 then
+        return {kind="mount",id=spell,data=data},tostring(kind).." -> spell "..spell
+    end
+    return nil,tostring(kind)..": no public summon identity"
 end
 
 -- The base renderer initializes model frames at its own level. Keep our visible

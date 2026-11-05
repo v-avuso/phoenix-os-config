@@ -159,3 +159,20 @@ properties with exact restoration. The native SimpleModel API documents OVERLAY 
 model draw layer but does not prove that layers isolate 3D depth composition. The
 reported journal masking requires a client test. SetUseGBuffer is restriction-marked
 in native documentation; no speculative restricted call or swallowed error is used.
+
+## Evidence after the foreground trial
+
+Player screenshot after verified installation/reload still showed the journal dragon
+masking the tooltip bear. Ordinary frame/draw layering was therefore insufficient in
+that trial; a restart was not indicated. Installed Leatrix_Plus.lua's model viewer
+initialization explicitly documents the same silhouette interaction and enables
+SetIsFrameBuffer(true) once. The native Frame API exposes SetIsFrameBuffer(bool) with
+non-secret arguments; it is distinct from restriction-marked Model:SetUseGBuffer.
+The Phoenix experiment applies it only to owned Model1 widgets, preserving borrowed
+models and avoiding the documented off-toggle blank-model problem.
+
+Installed ElvUI Toolkit.SetTemplate creates iborder/oborder as ordinary child frames.
+Clearing SetBackdrop does not clear those frames. The adapter now owns their alpha
+only while Dialogue UI framing is selected, with restoration and late-write tests.
+The action path additionally accepts a public tooltip GetSpell identity rather than
+interpreting an opaque mount action index; runtime diagnostics record the actual route.

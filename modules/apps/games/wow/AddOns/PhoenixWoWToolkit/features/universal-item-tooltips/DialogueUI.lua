@@ -59,6 +59,9 @@ function Dialogue.CreateBody()
     if preview then
         view.GetItemID,view.GetHyperlink=preview.GetItemID,preview.GetHyperlink
         preview.Init(view)
+        -- Isolate this toolkit-owned model from other UI model depth buffers.
+        -- Set once: toggling framebuffers off can leave an existing model blank.
+        if view.PreviewModel.Model1.SetIsFrameBuffer then view.PreviewModel.Model1:SetIsFrameBuffer(true) end
         view.DisplayModel=function(self)
             if self.previewAllowed==false then
                 self.usePreviewModel=false;self.PreviewFrame:Hide()

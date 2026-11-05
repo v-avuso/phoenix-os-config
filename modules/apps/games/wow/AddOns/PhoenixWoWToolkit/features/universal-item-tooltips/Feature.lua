@@ -177,6 +177,7 @@ if SlashCmdList then
     SLASH_PWTTIP1 = "/pwttip"
     SlashCmdList.PWTTIP = function()
         local adapter = feature.adapter
+        print("PWT preview adapter: composite-v1; action=" .. (feature.style and feature.style.actionTrace or "not observed"))
         print("PWT tooltips: enabled=" .. tostring(feature.settings and feature.settings.enabled)
             .. " approach=" .. tostring(feature.settings and feature.settings.appearance))
         print("Dialogue UI: " .. (adapter and (adapter.reason or adapter.status) or "not initialized")

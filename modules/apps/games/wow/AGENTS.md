@@ -44,6 +44,9 @@
   `deploy-toolkit.py` manages only the reserved store symlink, skips missing AddOns
   directories and preserves collisions. Never write to the real game as a test.
   Disable and activate the toolkit before removing the whole module or changing paths.
+- Iterative add-on deployments use the supported broker's `phoenix-test` mapping.
+  Reserve `phoenix-switch` for an operator-authorized final checkpoint; do not update
+  the boot profile for each development trial.
 - The deployed package is immutable: checkout edits require deployment before a
   client reload/restart sees them. A restart cannot make undeployed code appear.
 

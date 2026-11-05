@@ -52,6 +52,8 @@ local function frame(kind, _, parent, template)
     function f:SetCompanionPet(id) self.petGUID=id end
     function f:SetMountBySpellID(id) self.mountSpellID=id end
     function f:SetAction(slot) self.actionSlot=slot end
+    function f:GetSpell() return 'Tooltip spell',self.tooltipSpell end
+    function f:SetIsFrameBuffer(value) self.frameBuffer=value end
     function f:SetModelDrawLayer(layer) self.drawLayer=layer end
     function f:GetModelDrawLayer() return self.drawLayer or 'ARTWORK' end
     function f:SetAnimation(id) self.animation=id end
@@ -316,6 +318,7 @@ local pending=timers;timers={};for _,fn in ipairs(pending) do fn() end
 drain()
 local styled=feature.style.states[comparison]
 assert(styled and styled.view and styled.active and comparison.alpha==0,'comparison tooltip gets a separate actual base renderer')
+assert(styled.view.PreviewModel.Model1.frameBuffer,'owned previews isolate 3D rendering in a framebuffer')
 assert(styled.view.PreviewModel and styled.view.PreviewModel~=shared.PreviewModel
     and styled.view.usePreviewModel,'equipped pane owns an independent upstream preview')
 local equippedTries=styled.view.PreviewModel.Model1.tries
@@ -415,7 +418,9 @@ assert(summon.view.PreviewModel.Model1:GetFrameStrata()=='TOOLTIP'
 GetActionInfo=function(slot)
     if slot==4 then return 'spell',1234
     elseif slot==5 then return 'macro',1234,'spell'
-    elseif slot==6 then return 'macro',7 end
+    elseif slot==6 then return 'macro',7
+    elseif slot==8 then return 'summonmount',999
+    elseif slot==9 then return 'summonpet','pet-guid' end
 end
 GetMacroSpell=function(id) assert(id==7);return 1234 end
 hoverData({type=1,id=4,lines={}},'SetAction',4)
@@ -424,6 +429,11 @@ hoverData({type=25,id=5,lines={}},'SetAction',5)
 assert(summon.active,'resolved Retail spell macro gets a mount preview')
 hoverData({type=25,id=6,lines={}},'SetAction',6)
 assert(summon.active,'macro index uses native spell resolution')
+source.tooltipSpell=1234
+hoverData({type=10,id=8,lines={}},'SetAction',8)
+assert(summon.active and summon.view.creaturePreview.key:find('mount:1234:',1,true),
+    'opaque dragged mount action uses public tooltip spell, never opaque mount index')
+source.tooltipSpell=nil
 hoverData({type=25,id=7,lines={}},'SetAction','secret')
 assert(not summon.active,'secret action slot is not inspected')
 hoverData({type=1,id=1234,lines={}})
@@ -437,6 +447,8 @@ assert(not summon.active,'pet checkbox independently restores native tooltip')
 feature.settings.petSummonPreviews=true
 hoverData({type=9,lines={}},'SetCompanionPet','pet-guid')
 assert(summon.active and summon.view.PreviewModel.Model1.displayID==801,'native setter GUID works when generic data lacks it')
+hoverData({type=9,lines={}},'SetAction',9)
+assert(summon.active and summon.view.PreviewModel.Model1.displayID==801,'pet action resolves its summon GUID')
 hoverData({type=1,id=9999,lines={}})
 assert(not summon.active and source.alpha==0.6,'unrelated spell cannot retain a stale pet identity')
 hoverData({type=1,id='secret',lines={}})
@@ -447,10 +459,26 @@ assert(not summon.active and feature.adapter.lease and feature.adapter.lease.alp
     'summon-to-item handoff restores native opacity before singleton acquisition')
 feature.settings.equippedPreviews=false;feature.style:Configure(true)
 assert(styled.active and not styled.view.usePreviewModel,'equipped preview checkbox preserves text-only comparison')
+local skin=frame('GameTooltip')
+skin.iborder=frame('Frame');skin.oborder=frame('Frame');skin.iborder:SetAlpha(0.8)
+skin:SetBackdrop({bgFile='native-skin'})
+feature.style:Observe(skin,{type=2,lines={}})
+assert(skin.iborder:GetAlpha()==0 and skin.oborder:GetAlpha()==0,'Dialogue UI skin suppresses separate ElvUI border frames')
+skin.oborder:SetAlpha(0.4)
+assert(skin.oborder:GetAlpha()==0,'late skin updates cannot restore a second border')
+feature.settings.framing='native';feature.style:Configure(true)
+assert(skin.iborder:GetAlpha()==0.8 and skin.oborder:GetAlpha()==0.4,'default framing restores the native borders')
+feature.settings.framing='dialogueUI';feature.style:Configure(true)
+assert(skin.iborder:GetAlpha()==0 and skin.oborder:GetAlpha()==0,'Dialogue UI framing suppresses borders again')
+skin:SetBackdrop({bgFile='updated-native-skin'})
+assert(not skin:GetBackdrop(),'late native backdrop reset is suppressed')
 feature:Disable()
+assert(skin.iborder:GetAlpha()==0.8 and skin.oborder:GetAlpha()==0.4
+    and skin:GetBackdrop().bgFile=='updated-native-skin','disable restores latest native skin intent')
 assert(summon.view.PreviewModel.Model1:GetModelDrawLayer()=='ARTWORK'
     and summon.view.PreviewModel.Model1:GetFrameLevel()==summon.view:GetFrameLevel(),
     'disable restores original model layer and frame level')
+assert(summon.view.PreviewModel.Model1.frameBuffer,'owned framebuffer remains initialized while hidden, avoiding blank-model toggle regression')
 assert(comparison.alpha==1 and not styled.view:IsShown(),'disable restores all owned panes')
 if arg[3] then print('Executed Blizzard original CreateComparisonItem with the mirrored Dialogue UI item data') end
 print('Dialogue UI original renderer + production adapter: native annotation mirror, upstream theme/fonts/model/Shift, stable rebuilds, alpha restoration, comparison placement, quest takeover, version and non-item fallback passed')

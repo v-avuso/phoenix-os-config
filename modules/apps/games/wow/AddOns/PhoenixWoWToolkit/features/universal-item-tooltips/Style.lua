@@ -45,6 +45,8 @@ function Style:Restore(frame)
     if state.texture then state.texture:Hide() end
     if state.chrome then state.chrome:Hide() end
     if state.owned then
+        state.owned=false -- Release before restoring: our post-hooks must be inert.
+        for border,alpha in pairs(state.borders or {}) do if safe(border) then border:SetAlpha(alpha) end end
         if frame.NineSlice and state.nine ~= nil then frame.NineSlice:SetAlpha(state.nine) end
         if state.backdrop and frame.SetBackdrop then
             frame:SetBackdrop(state.backdrop)
@@ -53,6 +55,32 @@ function Style:Restore(frame)
         end
         if frame.Background and state.background ~= nil then frame.Background:SetShown(state.background) end
         state.owned=false
+    end
+end
+
+-- ElvUI's SetTemplate creates two separate border frames, outside SetBackdrop.
+-- Suppress only those known skin surfaces; retain annotations and other children.
+function Style:HideBorders(frame,state)
+    self.borderWatched=self.borderWatched or {}
+    for _,key in ipairs({"iborder","oborder"}) do
+        local border=frame[key]
+        if border and border.IsForbidden and border.IsProtected and border.GetAlpha and border.SetAlpha and safe(border) then
+            local alpha=border:GetAlpha()
+            if public(alpha) then
+                if state.borders[border]==nil then state.borders[border]=alpha end
+                if not self.borderWatched[border] then
+                    self.borderWatched[border]=true
+                    hooksecurefunc(border,"SetAlpha",function(_,value)
+                        if state.owned and self.enabled and self.settings.framing=="dialogueUI" and not self.settingBorders
+                            and public(value) and safe(border) then
+                            state.borders[border]=value
+                            self.settingBorders=true;border:SetAlpha(0);self.settingBorders=false
+                        end
+                    end)
+                end
+                self.settingBorders=true;border:SetAlpha(0);self.settingBorders=false
+            end
+        end
     end
 end
 
@@ -73,10 +101,14 @@ function Style:Chrome(frame, original, nativeSource)
         state.color=tuple(frame,"GetBackdropColor"); state.border=tuple(frame,"GetBackdropBorderColor")
         state.background=frame.Background and frame.Background:IsShown()
         if not public(state.background) then return end
+        state.borders={}
         state.owned=true
     end
+    if not original then self:HideBorders(frame,state) end
     if frame.NineSlice then frame.NineSlice:SetAlpha(0) end
-    if state.backdrop and frame.SetBackdrop then frame:SetBackdrop(nil) end
+    if state.backdrop and frame.SetBackdrop then
+        self.settingBackdrop=true;frame:SetBackdrop(nil);self.settingBackdrop=false
+    end
     if original then
         if frame.Background then frame.Background:Hide() end
         if not state.chrome then
@@ -239,6 +271,25 @@ function Style:Observe(source,data)
             C_Timer.After(0,function() state.queued=false;self:Refresh(source) end)
         end
         state.queue=queue
+        if source.SetBackdrop then
+            hooksecurefunc(source,"SetBackdrop",function(_,info)
+                if state.owned and self.enabled and self.settings.framing=="dialogueUI" and not self.settingBackdrop
+                    and safe(source) and public(info) and (not info or not canaccessallvalues or canaccessallvalues(info)) then
+                    state.backdrop=info
+                    self:Chrome(source,false)
+                end
+            end)
+        end
+        for _,entry in ipairs({{"SetBackdropColor","color"},{"SetBackdropBorderColor","border"}}) do
+            if source[entry[1]] then
+                local method,key=entry[1],entry[2]
+                hooksecurefunc(source,method,function()
+                    if state.owned and safe(source) then
+                        state[key]=tuple(source,method=="SetBackdropColor" and "GetBackdropColor" or "GetBackdropBorderColor")
+                    end
+                end)
+            end
+        end
         for _,entry in ipairs({{"SetCompanionPet","pet"},{"SetMountBySpellID","mount"}}) do
             local method,kind=entry[1],entry[2]
             if source[method] then
@@ -252,7 +303,7 @@ function Style:Observe(source,data)
         if source.SetAction and Toolkit.CreaturePreview then
             hooksecurefunc(source,"SetAction",function(_,slot)
                 if not safe(source) then return end
-                state.hint=Toolkit.CreaturePreview.ActionHint(slot,state.data)
+                state.hint,self.actionTrace=Toolkit.CreaturePreview.ActionHint(slot,state.data,source)
                 queue()
             end)
         end
