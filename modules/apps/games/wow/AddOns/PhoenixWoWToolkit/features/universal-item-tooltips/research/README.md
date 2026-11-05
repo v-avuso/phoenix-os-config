@@ -4,7 +4,7 @@
 
 Reuse the separately installed renderer and its assets in place. A missing supported
 export is not proof that reuse is impossible. Do not extend the former native-tooltip
-imitation or clone singleton methods onto another frame. The selected integration is
+imitation or clone singleton-bound methods onto another frame. The selected integration is
 owned by [DialogueUI.lua](../DialogueUI.lua); [feature usage and acceptance](../README.md)
 owns current behavior. Source proof is not client visual/combat acceptance.
 
@@ -108,3 +108,20 @@ Installed source is authoritative for this proof; upstream web snapshots may be 
 and [callback registry](https://github.com/Peterodox/YUI-Dialogue/blob/main/Code/CallbackRegistry.lua)
 provide navigation, not a compatibility promise. No copying/forking license is assumed;
 redistributing a modified Dialogue UI would require its own permission review.
+
+## Independent preview reuse
+
+In inspected 1.0.7, SharedTooltip.Init, GetHyperlink, GetItemID and DisplayModel use
+self; their preview model initialization and callbacks likewise use the owning model
+instance. Unlike ShowItemComparison and OnEvent, these methods do not close over the
+shared tooltip. The adapter therefore captures those function references before Init
+removes InitFrame and invokes them on independently allocated comparison views. No
+source/assets are copied. Each view owns its PreviewFrame, DressUpModel and ModelScene.
+The existing base Show/Layout applies the original preview spacing and alpha.
+
+DisplayModel already resolves mount items with C_MountJournal.GetMountFromItem and
+pet items with C_PetJournal.GetPetInfoByItemID, then selects creature display, idle
+animation and SetUseTurntable(true). Reusing that path is cheaper than adding another
+model addon or duplicating camera/rotation code. Journal and battlepet-link tooltips
+lack the ordinary item identity expected by this path; support would require a
+separate bounded adapter, not a guessed item conversion.

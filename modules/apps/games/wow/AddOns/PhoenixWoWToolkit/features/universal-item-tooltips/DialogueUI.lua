@@ -35,6 +35,12 @@ function Dialogue.Find(version)
     if found.InitFrame and not Dialogue.base then
         Dialogue.base = {}
         for _, name in ipairs(baseMethods) do Dialogue.base[name] = found[name] end
+        -- These inspected 1.0.7 functions and their model callbacks use self,
+        -- unlike the singleton comparison/event closures. Keep upstream code in place.
+        if found.Init and found.GetItemID then
+            Dialogue.preview = {Init=found.Init, DisplayModel=found.DisplayModel,
+                GetItemID=found.GetItemID, GetHyperlink=found.GetHyperlink}
+        end
     end
     return found
 end
@@ -48,7 +54,17 @@ function Dialogue.CreateBody()
     for name, method in pairs(Dialogue.base) do view[name] = method end
     view:SetIgnoreParentScale(true); view:SetIgnoreParentAlpha(true)
     view:SetFrameStrata("TOOLTIP"); view:SetClampedToScreen(true)
-    view:ClearLines(); view:InitFrame()
+    view:ClearLines()
+    local preview=Dialogue.preview
+    if preview then
+        view.GetItemID,view.GetHyperlink=preview.GetItemID,preview.GetHyperlink
+        preview.Init(view)
+        view.DisplayModel=function(self)
+            if self.reusePreview then
+                self.usePreviewModel=true;self.PreviewFrame:Show()
+            else preview.DisplayModel(self) end
+        end
+    else view:InitFrame() end
     return view
 end
 

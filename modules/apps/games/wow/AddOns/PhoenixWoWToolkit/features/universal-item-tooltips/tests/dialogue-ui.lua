@@ -47,6 +47,9 @@ local function frame(kind, _, parent, template)
     function f:GetRightLine(index) return self.rows[index].right end
     function f:GetPrimaryTooltipData() return self.primaryData end
     function f:SetModelAlpha(alpha) self.modelAlpha = alpha end
+    function f:SetDisplayInfo(id) self.displayID=id end
+    function f:SetAnimation(id) self.animation=id end
+    function f:SetFacing(yaw) self.facing=yaw end
     function f:SetText(text) self.text = text end
     function f:GetText() return self.text end
     function f:GetWrappedWidth() return math.min(#(self.text or '')*6, self.w) end
@@ -69,7 +72,7 @@ local function frame(kind, _, parent, template)
     for _, name in ipairs({ 'SetIgnoreParentScale', 'SetIgnoreParentAlpha', 'SetFixedFrameStrata', 'SetClampedToScreen',
         'SetClampRectInsets', 'SetSpacing', 'SetJustifyV', 'SetJustifyH', 'SetTextureSliceMargins',
         'SetTextureSliceMode', 'SetKeepModelOnHide', 'SetModelDrawLayer', 'SetAutoDress', 'SetDoBlend',
-        'SetUseTransmogChoices', 'SetUseTransmogSkin', 'FreezeAnimation', 'SetFacing', 'ClearModel', 'SetAnimation' }) do f[name] = noop end
+        'SetUseTransmogChoices', 'SetUseTransmogSkin', 'FreezeAnimation', 'ClearModel', 'SetPosition', 'SetPitch', 'SetRoll', 'UseModelCenterToTransform' }) do f[name] = noop end
     frames[#frames+1] = f
     return f
 end
@@ -291,7 +294,7 @@ source.protected=false
 feature.adapter:RestorePending(source)
 assert(source.alpha==0.6 and not feature.adapter.pending[source])
 combat=false
--- Independent base renderer: no singleton model/comparison callbacks are copied.
+-- Independent renderer: only self-based preview methods, no singleton comparison/events.
 local comparison=frame('GameTooltip');comparison.left=100;comparison.right=380
 local header=frame('FontString');header:SetText('Equipped')
 comparison.CompareHeader={Label=header}
@@ -307,12 +310,18 @@ local pending=timers;timers={};for _,fn in ipairs(pending) do fn() end
 drain()
 local styled=feature.style.states[comparison]
 assert(styled and styled.view and styled.active and comparison.alpha==0,'comparison tooltip gets a separate actual base renderer')
-assert(styled.view:GetLeftLineText(1)=='Equipped' and styled.view:GetLeftLineText(3)=='Native annotation')
+assert(styled.view.PreviewModel and styled.view.PreviewModel~=shared.PreviewModel
+    and styled.view.usePreviewModel,'equipped pane owns an independent upstream preview')
+local equippedTries=styled.view.PreviewModel.Model1.tries
+styled.view.PreviewModel.Model1.scripts.OnModelLoaded(styled.view.PreviewModel.Model1)
+assert(styled.view.PreviewModel.Model1.appliedCamera==70,'equipped preview applies original camera after loading')
+assert(styled.view:GetLeftLineText(1)=='Equipped'  and styled.view:GetLeftLineText(3)=='Native annotation')
 comparison.rows[2].left:SetText('Updated annotation')
 for _,fn in ipairs(postcalls.all) do fn(comparison,comparison.primaryData) end
 local update=timers;timers={};for _,fn in ipairs(update) do fn() end
 drain()
-assert(styled.view:GetLeftLineText(3)=='Updated annotation','visible pane updates without Show')
+assert(styled.view.PreviewModel.Model1.tries==equippedTries,'same-item equipped annotations do not redress the model')
+assert(styled.view:GetLeftLineText(3)=='Updated annotation' ,'visible pane updates without Show')
 local second=frame('GameTooltip');second.left=20;second.right=90
 second.CompareHeader={Label=header};second.primaryData=comparison.primaryData;second.rows=comparison.rows
 for _,fn in ipairs(postcalls.all) do fn(second,second.primaryData) end
@@ -321,6 +330,8 @@ local updates=timers;timers={};for _,fn in ipairs(updates) do fn() end
 drain()
 feature.style:Place()
 local secondView=feature.style.states[second].view
+assert(secondView.PreviewModel~=styled.view.PreviewModel and secondView.PreviewModel~=shared.PreviewModel,
+    'two equipped panes and hovered pane never share model instances')
 assert(secondView.points[1][1]=='TOPRIGHT' and secondView.points[1][2]==styled.view
     and secondView.points[1][3]=='TOPLEFT','outer equipped pane chains against rendered inner pane, not native width')
 local width1,width2=styled.view:GetWidth(),secondView:GetWidth()
@@ -333,7 +344,7 @@ feature.style:Place();assert(styled.view:GetScale()==1,'normal scale restored wh
 second:Hide()
 local updates=timers;timers={};for _,fn in ipairs(updates) do fn() end
 assert(not feature.style.states[second].active,'second comparison releases independently')
-assert(not styled.view.DisplayModel and not styled.view.ShowItemComparison,'private singleton methods are never cloned')
+assert(not styled.view.ShowItemComparison and not styled.view.OnEvent,'singleton comparison and event methods are never cloned')
 feature.settings.framing='native';feature.style:Configure(true)
 assert(shared.Background.shown==false and feature.style.states[shared].chrome.shown,'default frame with Dialogue UI content')
 feature.settings.appearance='native';feature.style:Configure(true)
@@ -352,6 +363,20 @@ dressable=false
 C_MountJournal={GetMountFromItem=function() end}
 feature:Render(source,data,true)
 assert(feature.adapter.lease and not shared.usePreviewModel,'items without a model retain the same original content renderer')
+C_MountJournal.GetMountFromItem=function() return 42 end
+C_MountJournal.GetMountInfoExtraByID=function() return 700,nil,nil,false end
+feature:Render(source,data,true)
+local model=shared.PreviewModel.Model1
+assert(shared.usePreviewModel and model.displayID==700 and model.animation==0,'mount item uses original animated creature preview')
+assert(model.scripts.OnUpdate,'mount preview rotates using original turntable')
+local yaw=model.yaw;model.scripts.OnUpdate(model,0.1)
+assert(model.yaw>yaw and model.facing==model.yaw,'original mount turntable advances facing')
+model.scripts.OnModelLoaded(model)
+assert(model.animation==0,'mount animation remains synchronized after asynchronous loading')
+C_MountJournal.GetMountFromItem=function() end
+C_PetJournal.GetPetInfoByItemID=function() return nil,nil,nil,99,nil,nil,nil,nil,nil,nil,nil,701 end
+feature:Render(source,data,true)
+assert(shared.usePreviewModel and model.displayID==701 and model.scripts.OnUpdate,'pet item uses original animated rotating preview')
 feature:Disable();assert(comparison.alpha==1 and not styled.view:IsShown(),'disable restores all owned panes')
 if arg[3] then print('Executed Blizzard original CreateComparisonItem with the mirrored Dialogue UI item data') end
 print('Dialogue UI original renderer + production adapter: native annotation mirror, upstream theme/fonts/model/Shift, stable rebuilds, alpha restoration, comparison placement, quest takeover, version and non-item fallback passed')

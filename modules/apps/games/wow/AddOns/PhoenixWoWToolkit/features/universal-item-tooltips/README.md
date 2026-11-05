@@ -40,11 +40,13 @@ establish that every inventory refresh path is fixed.
 
 `Style.lua` applies/restores owned backgrounds. Secondary item/comparison panes use
 separate ordinary frames with an explicit whitelist of upstream **self-based base
-text/layout methods**. Singleton model, comparison, event and hotkey closures are not
-cloned. The base methods are captured before upstream initialization removes its
+text/layout methods**. Singleton comparison, event and hotkey closures are not cloned. The base methods are captured before upstream initialization removes its
 initializer; if unavailable, secondary panes fall back to native content. These panes
-omit the cleanup adapter's validated native footer and preserve other text. Only the
-main hovered item uses the upstream singleton model. Comparison panes chain against
+omit the cleanup adapter's validated native footer and preserve other text. Each pane
+initializes its own preview with the upstream self-based initializer and display
+method, captured before initialization. Cameras, transmog setup, overlapping model
+placement and creature animation remain upstream-owned. Same-item text updates reuse
+the loaded model; different items and reopened panes run the original display method. Comparison panes chain against
 the actual rendered neighbor, rather than the smaller native anchor. When their total
 width exceeds space beside the hovered item, equipped panes scale down together to
 fit; native frames and the hovered item remain unchanged.
@@ -90,3 +92,25 @@ sheet, merchant/AH and quest rewards; all four framing/content combinations; eac
 comparison visibility choice and disabled settings; reload persistence; combat and
 BugSack. Use `/pwttip` and `/pwtcompare` after a failing hover. A restart does not
 install checkout changes: the immutable package must be deployed first.
+
+## Equipped, mount and pet previews
+
+With Dialogue UI content enabled, equipped comparison panes display independent
+previews when the item has an appearance. Rings/trinkets typically have no wearable
+model, so those panes remain text-only. Existing width fitting includes preview layout.
+No new checkbox is needed: previews follow the selected content style.
+
+Dialogue UI already resolves mount items through C_MountJournal and pet items through
+C_PetJournal.GetPetInfoByItemID. Its original creature display, idle animation and
+turntable provide animated rotating previews without a custom animation loop. Only
+visible preview models use upstream OnUpdate animation; no tooltip polling is added.
+Unsupported item appearances fall back to text. This does not extend collection-journal
+spell tooltips or caged battle-pet links: those are not ordinary item tooltips and need
+separate identity/data adapters. No blanket preview is promised for those contexts.
+
+Client acceptance: compare two wearable armor/weapon items and verify both previews,
+then hover mount and pet items. Confirm rotation, switching item types, repeated text
+refreshes, disabling content customization, and quest-reward ownership. Source-backed
+fixtures prove separate model ownership, no repeated dressing on text refresh, native
+creature display/animation and turntable updates; they cannot prove real creature
+framing or GPU appearance.

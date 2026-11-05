@@ -173,13 +173,18 @@ function Style:Refresh(source)
     end
     if not state.view then return end
     if not state.active or state.signature~=signature then
+        local retained=state.view.usePreviewModel and state.view.hyperlink==link
+        if retained then state.view.usePreviewModel=false end
         state.view:ClearLines()
+        state.view.hyperlink=link
+        state.view.reusePreview=retained
         if source.CompareHeader and source.CompareHeader.Label then
             local text=source.CompareHeader.Label:GetText()
             if public(text) and text then state.view:AddLeftLine(text,1,0.82,0,false,nil,3) end
         end
         state.view:ProcessTooltipDataLines(data.lines,1)
         state.view:Show(true)
+        state.view.reusePreview=nil
         state.signature=signature
     end
     if not state.active then
