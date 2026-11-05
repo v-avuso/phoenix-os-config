@@ -24,6 +24,9 @@ function Style.New(adapter, settings)
             self:Chrome(renderer,true)
         end)
     end
+    if TooltipComparisonManager and TooltipComparisonManager.AnchorShoppingTooltips then
+        hooksecurefunc(TooltipComparisonManager,"AnchorShoppingTooltips",function() self:Place() end)
+    end
     return self
 end
 
@@ -94,19 +97,60 @@ function Style:Release(source)
     if not state or not state.active then return end
     state.active=false
     if state.view then state.view:Hide() end
+    self:Place()
     if safe(source) and state.alpha ~= nil then
         self.writing=true;source:SetAlpha(state.alpha);self.writing=false
     end
 end
 
-function Style:Place(source,state)
-    if not state.view or not state.active then return end
-    local anchor="TOPLEFT"
-    if source.CompareHeader and GameTooltip then
-        local left, edge=source:GetLeft(),GameTooltip:GetLeft()
-        if public(left) and public(edge) and left and edge and left<edge then anchor="TOPRIGHT" end
+-- Chain comparison panes against the actual rendered neighbor. Native shopping
+-- anchors describe smaller Blizzard panes and cannot space our wider text views.
+function Style:Place()
+    if self.placing or not GameTooltip then return end
+    self.placing=true
+    local primary=self.adapter.lease and self.adapter.renderer or GameTooltip
+    local edge=GameTooltip:GetLeft()
+    if not public(edge) or not edge then self.placing=false;return end
+    local sides={left={},right={}}
+    for source,state in pairs(self.states) do
+        if state.active and state.view and safe(source) then
+            local left=source:GetLeft()
+            if public(left) and left then
+                local side=left<edge and sides.left or sides.right
+                side[#side+1]={source=source,state=state,left=left}
+            end
+        end
     end
-    state.view:ClearAllPoints();state.view:SetPoint(anchor,source,anchor,0,0)
+    for side,entries in pairs(sides) do
+        table.sort(entries,function(a,b) if side=="left" then return a.left>b.left end;return a.left<b.left end)
+        local previous=primary
+        local scale=1
+        -- Keep a wide multi-pane group inside the viewport rather than allowing
+        -- independent screen clamping to push the outer pane onto its neighbor.
+        if UIParent and UIParent.GetWidth and primary.GetEffectiveScale then
+            local parentScale=UIParent:GetEffectiveScale()
+            local boundary=side=="left" and primary:GetLeft() or primary:GetRight()
+            if public(boundary) and boundary then
+                local available=side=="left" and boundary*primary:GetEffectiveScale()
+                    or UIParent:GetWidth()*parentScale-boundary*primary:GetEffectiveScale()
+                local width=0
+                for _,entry in ipairs(entries) do
+                    local view=entry.state.view
+                    width=width+view:GetWidth()*view:GetEffectiveScale()/view:GetScale()
+                end
+                if available>0 and width>0 then scale=math.min(1,available/width) end
+            end
+        end
+        for _,entry in ipairs(entries) do
+            local view=entry.state.view
+            if view.SetScale then view:SetScale(scale) end
+            view:ClearAllPoints()
+            view:SetPoint(side=="left" and "TOPRIGHT" or "TOPLEFT",previous,
+                side=="left" and "TOPLEFT" or "TOPRIGHT",0,0)
+            previous=view
+        end
+    end
+    self.placing=false
 end
 
 function Style:Refresh(source)
@@ -123,7 +167,10 @@ function Style:Refresh(source)
     local limit=policy and policy:BodyLineLimit(source)
     local data,signature=Toolkit.DialogueTooltip.Snapshot(source,state.data,link,limit)
     if not data then self:Release(source);return end
-    if not state.view then state.view=Toolkit.DialogueTooltip.CreateBody() end
+    if not state.view then
+        state.view=Toolkit.DialogueTooltip.CreateBody()
+        if state.view then state.view:HookScript("OnSizeChanged",function() self:Place() end) end
+    end
     if not state.view then return end
     if not state.active or state.signature~=signature then
         state.view:ClearLines()

@@ -2,7 +2,7 @@
 
 ## Intentions and behavior
 
-Default-on **Hide redundant comparison statistics** leaves native side-by-side
+Default-on **Manage comparison statistics**, hiding equipped-item statistics, leaves native side-by-side
 comparison and the equipped item's body/annotations intact. It is independent of
 compact item tooltips and Dialogue UI. Disabling restores owned font visibility and
 native dimensions immediately; enabling applies on the next natural comparison.
@@ -17,11 +17,11 @@ its blank row, localized introduction and API-produced delta rows. Better Item
 Compare changes comparison presentation, but does not establish a native removal API.
 
 The implementation uses secure post-hooks, not replacement methods or global delta
-API overrides. A ProcessInfo observer records the equipped item's finished line count
-including annotations already added by tooltip processors. The
-SetItemTooltip observer recognizes only a structurally exact trailing native footer:
+API overrides. A ProcessInfo observer tracks refreshes; its line count is not assumed
+to delimit the body. The SetItemTooltip observer recognizes only a structurally exact
+trailing native footer:
 
-- The row count must equal the item body plus the native blank/header/delta rows.
+- The suffix must contain exactly the native blank/header/delta rows, after a nonempty body.
 - The introduction must equal Blizzard's current localized constant and the delta
   rows must exactly equal the native API's returned rows. This is validation against
   authoritative data, not English keyword/substring parsing or guessing stat lines.
@@ -105,6 +105,16 @@ text, identifiers or personal data are printed. The observed size-gate failure h
 reproduction and correction; confirm actual rendering and spacing in the client. If
 text remains, report the current guard/status and font visibility rather than assuming
 a restart is needed.
+
+## Reprocessed bodies and multiple equipped items
+
+Cleanup matches the exact trailing spacer, localized native introduction and API delta
+rows, independently of an earlier ProcessInfo body count. A later ProcessInfo pass can
+capture the already-completed tooltip; treating that count as the body previously
+prevented recognition. Both equipped slots are validated separately. Before mirroring
+a comparison pane, the adapter revalidates its native manager context, preserving
+original visibility for restoration. Extra/changed trailing annotations still fail
+closed; no arbitrary truncation or substring matching is used.
 
 ## Independent visibility policy
 

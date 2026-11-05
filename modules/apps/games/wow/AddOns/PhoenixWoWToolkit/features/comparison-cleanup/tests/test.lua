@@ -108,6 +108,18 @@ assert(ShoppingTooltip1.h == 56, 'no footer-sized blank area')
 _G.PWTTestShopping1TextLeft4:Show()
 assert(not _G.PWTTestShopping1TextLeft4:IsShown(),'late native font Show cannot revive the verified footer')
 assert(feature:BodyLineLimit(ShoppingTooltip1)==2)
+feature:Disable();feature:Enable();manager:SetItemTooltip(true)
+-- A later ProcessInfo pass can capture the completed tooltip, not just its body.
+feature.writing=true;ShoppingTooltip1:Show();feature.writing=false
+feature.states[ShoppingTooltip1]={lines=ShoppingTooltip1:NumLines()}
+feature:Trim(manager,true)
+assert(feature:BodyLineLimit(ShoppingTooltip1)==2,'recognize exact API footer despite a late body baseline')
+if nativeSource then
+    manager.compareInfo.additionalItems={{hyperlink='second-equipped'}}
+    manager:SetItemTooltip(false)
+    assert(feature:BodyLineLimit(ShoppingTooltip2)==2,'second ring/trinket footer is independently removed')
+    manager.compareInfo.additionalItems={}
+end
 feature.settings={enabled=true,hideTarget='hovered'}
 feature:Disable();feature:Enable();manager:SetItemTooltip(true)
 assert(_G.PWTTestShopping1TextLeft4:IsShown() and feature:HidesHovered() and not feature:HidesEquipped())

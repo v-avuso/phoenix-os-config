@@ -34,6 +34,9 @@ function feature:HidesEquipped()
     return (not self.settings or self:IsManaged()) and (target == "equipped" or target == "both")
 end
 function feature:BodyLineLimit(tooltip)
+    if not self:HidesEquipped() then return end
+    local context = self.contexts and self.contexts[tooltip]
+    if context then self:Trim(context.manager, context.primary) end
     local state = self.states[tooltip]
     if not self:HidesEquipped() or not state or not state.first or not safe(tooltip) then return end
     if not stillMatches(tooltip,state) then return end
@@ -132,33 +135,39 @@ function feature:Trim(manager, primary)
     local tooltip = manager.tooltip and manager.tooltip.shoppingTooltips[index]
     local state = self.states[tooltip]
     if not safe(tooltip) then note("tooltip restricted"); return end
-    if not state then note("no ProcessInfo baseline"); return end
+    self.contexts = self.contexts or {}
+    self.contexts[tooltip] = {manager=manager,primary=primary}
+    if state and state.first and stillMatches(tooltip,state) then
+        self:Apply(tooltip); note("matched footer; " .. (state.status or "layout pending")); return
+    end
     local displayed = primary and info.item or info.additionalItems[manager.comparisonIndex or 1]
     local partner = info.method ~= methods.Single and info.additionalItems[manager.comparisonIndex or 1] or nil
     if not displayed or not accessible(displayed) or not accessible(manager.comparisonItem) then note("item data inaccessible"); return end
     local delta = C_TooltipComparison.GetItemComparisonDelta(manager.comparisonItem, displayed, partner, false)
     if not delta or not accessible(delta) or #delta == 0 then note("no accessible deltas"); return end
-    local last = state.lines + 2 + #delta
     local actual = tooltip:NumLines()
     if not public(actual) then note("line count restricted"); return end
-    if actual ~= last then
-        note(string.format("row count mismatch: body=%d expected=%d actual=%d", state.lines, last, actual)); return
-    end -- Additional annotations must survive.
+    -- Match the exact API-generated suffix, not a ProcessInfo count: a later
+    -- processing pass may already include the native comparison footer.
+    local body = actual - 2 - #delta
+    if body < 1 then note("comparison suffix missing"); return end
+    local last = actual
+    state = state or {}
     local header = primary and info.method == methods.WithBothHands
         and ITEM_DELTA_MULTIPLE_COMPARISON_DESCRIPTION or ITEM_DELTA_DESCRIPTION
-    local intro = region(tooltip, "Left", state.lines + 2)
+    local intro = region(tooltip, "Left", body + 2)
     if not intro or not public(intro:GetText()) or intro:GetText() ~= header then note("header mismatch"); return end
     for i, text in ipairs(delta) do
-        local font = region(tooltip, "Left", state.lines + 2 + i)
+        local font = region(tooltip, "Left", body + 2 + i)
         if not public(text) or not font or not public(font:GetText()) or font:GetText() ~= text then note("delta mismatch at row " .. i); return end
     end
     local regions = {}
-    for line = state.lines + 1, last do
+    for line = body + 1, last do
         local right = region(tooltip, "Right", line)
         local rightText = right and right:GetText()
         local rightShown = right and right:IsShown()
         if not public(rightShown) or (rightShown and (not public(rightText) or (rightText and rightText ~= ""))) then note("right-column annotation or restricted value"); return end
-        if line == state.lines + 1 then
+        if line == body + 1 then
             local blank = region(tooltip, "Left", line)
             local text = blank and blank:GetText()
             if not public(text) or (text and text ~= "" and text ~= " ") then note("spacer mismatch"); return end
@@ -172,7 +181,9 @@ function feature:Trim(manager, primary)
             end
         end
     end
-    state.first, state.last, state.regions, state.index = state.lines + 1, last, regions, index
+    state.lines = body
+    self.states[tooltip] = state
+    state.first, state.last, state.regions, state.index = body + 1, last, regions, index
     state.expected = {}
     self.regionWatched = self.regionWatched or {}
     for _, entry in ipairs(regions) do

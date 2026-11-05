@@ -32,7 +32,9 @@ local function frame(kind, _, parent, template)
     function f:GetFrameStrata() return self.strata or 'TOOLTIP' end
     function f:SetFrameLevel(level) self.level = level end
     function f:GetFrameLevel() return self.level or 1 end
-    function f:GetEffectiveScale() return 1 end
+    function f:GetEffectiveScale() return self.scale or 1 end
+    function f:GetScale() return self.scale or 1 end
+    function f:SetScale(scale) self.scale=scale end
     function f:GetAlpha() return self.alpha end
     function f:GetOwner() return self.owner end
     function f:GetLeft() return self.left or 400 end
@@ -311,6 +313,26 @@ for _,fn in ipairs(postcalls.all) do fn(comparison,comparison.primaryData) end
 local update=timers;timers={};for _,fn in ipairs(update) do fn() end
 drain()
 assert(styled.view:GetLeftLineText(3)=='Updated annotation','visible pane updates without Show')
+local second=frame('GameTooltip');second.left=20;second.right=90
+second.CompareHeader={Label=header};second.primaryData=comparison.primaryData;second.rows=comparison.rows
+for _,fn in ipairs(postcalls.all) do fn(second,second.primaryData) end
+second:Show()
+local updates=timers;timers={};for _,fn in ipairs(updates) do fn() end
+drain()
+feature.style:Place()
+local secondView=feature.style.states[second].view
+assert(secondView.points[1][1]=='TOPRIGHT' and secondView.points[1][2]==styled.view
+    and secondView.points[1][3]=='TOPLEFT','outer equipped pane chains against rendered inner pane, not native width')
+local width1,width2=styled.view:GetWidth(),secondView:GetWidth()
+styled.view:SetWidth(700);secondView:SetWidth(700)
+UIParent={GetWidth=function() return 1500 end,GetEffectiveScale=function() return 1 end}
+feature.style:Place()
+assert(styled.view:GetScale()<1 and secondView:GetScale()==styled.view:GetScale(),'wide comparison group scales together to fit available side')
+UIParent=nil;styled.view:SetWidth(width1);secondView:SetWidth(width2)
+feature.style:Place();assert(styled.view:GetScale()==1,'normal scale restored when space allows')
+second:Hide()
+local updates=timers;timers={};for _,fn in ipairs(updates) do fn() end
+assert(not feature.style.states[second].active,'second comparison releases independently')
 assert(not styled.view.DisplayModel and not styled.view.ShowItemComparison,'private singleton methods are never cloned')
 feature.settings.framing='native';feature.style:Configure(true)
 assert(shared.Background.shown==false and feature.style.states[shared].chrome.shown,'default frame with Dialogue UI content')

@@ -44,7 +44,10 @@ text/layout methods**. Singleton model, comparison, event and hotkey closures ar
 cloned. The base methods are captured before upstream initialization removes its
 initializer; if unavailable, secondary panes fall back to native content. These panes
 omit the cleanup adapter's validated native footer and preserve other text. Only the
-main hovered item uses the upstream singleton model.
+main hovered item uses the upstream singleton model. Comparison panes chain against
+the actual rendered neighbor, rather than the smaller native anchor. When their total
+width exceeds space beside the hovered item, equipped panes scale down together to
+fit; native frames and the hovered item remain unchanged.
 
 No private source or artwork is copied. [Research](research/README.md) records the
 installed source and reuse decision. This remains a version-pinned internal adapter,
