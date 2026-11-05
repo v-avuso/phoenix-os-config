@@ -23,7 +23,9 @@ The native choice remains available for its compact combined-weapon summaries.
 
 Disabling restores owned visuals. Existing compact text is removed through a native
 rebuild outside combat; during combat, it disappears on the next natural rebuild.
-`/pwttip` prints the selected approach, renderer/fallback status and current ownership.
+`/pwttip` prints the selected approach, status, render/release counters and the last
+sampled visibility/opacity. A delayed sample survives closing the hover to enter the
+command; active=false by itself is normal after leaving the item.
 
 ## Ownership and implementation
 
@@ -55,7 +57,10 @@ restart its fade. A next-frame token allows clear/rebuild sequences to complete 
 briefly releasing ownership. Equipment changes refresh the active comparison once.
 
 No native fonts, backdrop or padding are restyled. The adapter retains other alpha
-writers' public intent and restores it on leave/disable/non-item transition. Restricted
+writers' public intent for restoration, but never drives replacement opacity from the
+intentionally masked native tooltip. Show, SetShown and OnShow reapply suppression even
+for cached/internal show paths without rebuilding the original renderer. It restores
+native opacity on leave/disable/non-item transition. Restricted
 frames/data use native fallback; protected restoration is deferred until safe. Errors
 from protected actions are never swallowed.
 
@@ -67,8 +72,8 @@ from protected actions are never swallowed.
   demonstrated, narrow adapter. Test ElvUI/ToxiUI and existing annotations explicitly.
 - One upstream singleton cannot display two independent candidate tooltips at once.
   Sticky item links and competing contexts keep native fallback.
-- The actual renderer retains its own comparison preference, theme, initial delay and
-  animations. Model appearance variants/cameras need real-item acceptance. Combined
+- The actual renderer retains its comparison preference and theme. Global hovers use
+  its existing instant-show option; the configured quest-tooltip delay is unchanged. Model appearance variants/cameras need real-item acceptance. Combined
   weapon and override-level arithmetic are deliberately outside the initial reuse path.
 - Before adding another version to the gate, rerun the source-backed fixture against
   that exact installed version, inspect ownership/event/model changes, and repeat the

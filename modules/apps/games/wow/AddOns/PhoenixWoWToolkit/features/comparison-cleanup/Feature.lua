@@ -15,6 +15,26 @@ function feature:GetAvailability()
         and C_TooltipComparison.GetItemComparisonDelta and Enum and Enum.TooltipComparisonMethod)
 end
 
+-- Native frame dimensions can still describe the previous/full tooltip in a
+-- ProcessInfo post-hook. Use the verified spacer's real line position instead.
+local function measuredHeights(tooltip, state)
+    local first = region(tooltip, "Left", 1)
+    local spacer = region(tooltip, "Left", state.first)
+    local last = region(tooltip, "Left", state.last)
+    if not first or not spacer or not last or not first.GetTop or not spacer.GetTop or not last.GetBottom then return end
+    local top, firstTop, spacerTop, lastBottom = tooltip:GetTop(), first:GetTop(), spacer:GetTop(), last:GetBottom()
+    if not public(top) or not public(firstTop) or not public(spacerTop) or not public(lastBottom)
+        or not top or not firstTop or not spacerTop or not lastBottom then return end
+    local inset = top - firstTop
+    if tooltip.GetPadding then
+        local _, bottom, _, extraTop = tooltip:GetPadding()
+        if not public(bottom) or not public(extraTop) then return end
+        inset = inset + (bottom or 0) - (extraTop or 0)
+    end
+    if inset < 0 or firstTop < spacerTop or spacerTop < lastBottom then return end
+    return top - spacerTop + inset, top - lastBottom + inset
+end
+
 function feature:Apply(tooltip)
     local state = self.states[tooltip]
     if self.writing or not self.running or not state or not state.first or not safe(tooltip) then return end
@@ -29,16 +49,18 @@ function feature:Apply(tooltip)
     end
     local width, height = tooltip:GetSize()
     if not public(width) or not public(height) then return end
-    if width ~= state.bodyWidth or height ~= state.bodyHeight then
-        state.fullWidth, state.fullHeight = width, height
-    end
-    if not state.fullWidth then state.status = "waiting for native layout"; return end
+    if not state.trimmed or height ~= state.appliedHeight then state.fullHeight = height end
+    state.fullWidth = width
+    local bodyHeight, fullHeight = measuredHeights(tooltip, state)
+    if fullHeight then state.fullHeight = fullHeight end
     self.writing = true
+    -- Recognition is sufficient to suppress the text: never wait for a size delta.
     for _, entry in ipairs(state.regions) do entry.region:Hide() end
-    tooltip:SetSize(state.bodyWidth, state.bodyHeight)
+    if bodyHeight then tooltip:SetHeight(bodyHeight); state.appliedHeight = bodyHeight end
     self.writing = false
     state.trimmed = true
-    state.status = "trimmed"
+    state.status = bodyHeight and "trimmed" or "footer hidden; awaiting line geometry"
+    if state.index then self.trace[state.index] = "matched footer; " .. state.status end
 end
 
 function feature:Watch(tooltip)
@@ -48,17 +70,15 @@ function feature:Watch(tooltip)
     self.watched[tooltip] = true
     hooksecurefunc(tooltip, "ProcessInfo", function()
         if not self.running or not safe(tooltip) then return end
-        local width, height = tooltip:GetSize()
         local count = tooltip:NumLines()
-        if public(width) and public(height) and public(count) and width > 0 and height > 0 then
-            self.states[tooltip] = { lines = count, bodyWidth = width, bodyHeight = height }
-        end
+        if public(count) then self.states[tooltip] = { lines = count } end
     end)
     tooltip:HookScript("OnTooltipCleared", function() self.states[tooltip] = nil end)
     tooltip:HookScript("OnShow", function() self:Apply(tooltip) end)
     tooltip:HookScript("OnSizeChanged", function() self:Apply(tooltip) end)
     -- Show also refreshes layout on an already-visible tooltip (no OnShow event).
     hooksecurefunc(tooltip, "Show", function() self:Apply(tooltip) end)
+    hooksecurefunc(tooltip, "SetShown", function(_, shown) if public(shown) and shown then self:Apply(tooltip) end end)
 end
 
 function feature:Trim(manager, primary)
@@ -116,8 +136,13 @@ function feature:Trim(manager, primary)
             end
         end
     end
-    state.first, state.last, state.regions = state.lines + 1, last, regions
+    state.first, state.last, state.regions, state.index = state.lines + 1, last, regions, index
     self:Apply(tooltip)
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, function()
+            if self.states[tooltip] == state then self:Apply(tooltip) end
+        end)
+    end
     note("matched footer; " .. (state.status or "layout not applied"))
 end
 

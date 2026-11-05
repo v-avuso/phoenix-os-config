@@ -25,7 +25,7 @@ function feature:Render(tooltip, data, force)
         if self.adapter.lease and self.adapter.lease.source == tooltip then self.adapter:Release() end
         return
     end
-    if not accessible(data) or data.type ~= Enum.TooltipDataType.Item then self.adapter:Release(); return end
+    if not accessible(data) or data.type ~= Enum.TooltipDataType.Item then self.adapter:Release(false, "native non-item/restricted data"); return end
     local candidate = Toolkit.ItemComparison.Candidate(data)
     local link = candidate and Toolkit.ItemComparison.Link(candidate)
     if not link or (issecretvalue and issecretvalue(link)) or not C_Item.IsEquippableItem(link) then
@@ -87,7 +87,7 @@ function feature:Enable()
             self.adapter:RestorePending(tooltip)
             if self.adapter.lease and self.adapter.lease.source == tooltip
                 and (not accessible(data) or data.type ~= Enum.TooltipDataType.Item) then
-                self.adapter:Release()
+                self.adapter:Release(false, "native non-item/restricted data")
             end
         end)
         local events = CreateFrame("Frame")
@@ -143,6 +143,11 @@ if SlashCmdList then
             .. " approach=" .. tostring(feature.settings and feature.settings.appearance))
         print("Dialogue UI: " .. (adapter and (adapter.reason or adapter.status) or "not initialized")
             .. "; active=" .. tostring(not not (adapter and adapter.lease)))
+        if adapter then
+            print("PWT renderer: renders=" .. adapter.renders .. " unchanged=" .. adapter.reuses
+                .. " releases=" .. adapter.releases .. "; last=" .. (adapter.lastRelease or "none"))
+            print("PWT last view: " .. (adapter.sample or "not sampled"))
+        end
     end
 end
 Toolkit:RegisterFeature(feature)

@@ -49,7 +49,11 @@ quest reward. Concurrent sticky links retain native fallback.
 
 The actual preview's Y offset is `0.33 * modelHeight`, producing the reference overhang.
 Its own source camera applies after model loading. It also uses its own theme, fonts
-and show delay (the main Dialogue UI frame configures 250 ms). None needs to be copied.
+and show delay (the main Dialogue UI frame configures 250 ms). Global hovers use its
+existing Show(true) argument to appear immediately without changing the quest delay.
+The hidden native tooltip's alpha is not a replacement-view fade source; native show
+resets must be masked again on cached and internal show paths. None of the renderer's
+artwork or model code needs copying.
 The original model resolves appearance information from item ID internally; appearance
 variants need real-item checks before a scoped full-link extension is justified.
 

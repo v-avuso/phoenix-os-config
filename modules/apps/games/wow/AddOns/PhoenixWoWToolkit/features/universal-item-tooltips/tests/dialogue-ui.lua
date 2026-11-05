@@ -15,8 +15,9 @@ local function frame(kind, _, parent, template)
     end
     function f:RegisterEvent(event) self.events[event] = true end
     function f:UnregisterEvent(event) self.events[event] = nil end
-    function f:Show() local changed = not self.shown; self.shown = true; if changed and self.scripts.OnShow then self.scripts.OnShow(self) end end
+    function f:Show() if self.nativeResetAlpha then self.alpha=1 end; local changed = not self.shown; self.shown = true; if changed and self.scripts.OnShow then self.scripts.OnShow(self) end end
     function f:Hide() local changed = self.shown; self.shown = false; if changed and self.scripts.OnHide then self.scripts.OnHide(self) end end
+    function f:SetShown(shown) self.shown=shown; if shown and self.nativeResetAlpha then self.alpha=1 end end
     function f:IsShown() return self.shown end
     f.IsVisible = f.IsShown
     function f:IsForbidden() return self.forbidden or false end
@@ -164,11 +165,12 @@ local captured
 DialogueUIAPI.AddItemTooltipProcessorExternal(function(tooltip) captured=tooltip end)
 shared:SetOwner(frame('BagButton'),'ANCHOR_NONE'); shared:SetHyperlink('item:candidate'); drain()
 assert(compareCalls==0 and not captured)
-shared:Hide()
+shared:Hide(); shared:SetShowDelay(0.25) -- Main Dialogue UI configures this delay.
 GameTooltip=frame('GameTooltip')
 GameTooltip.owner=frame('BagButton')
 GameTooltip.alpha=0.85
 local source=GameTooltip
+local nativeShow=source.Show -- C/internal callers can retain the original Show primitive.
 local data=getData('item:candidate'); data.type=0
 for i,line in ipairs(data.lines) do line.lineIndex=i end
 data.lines[4].price=42
@@ -195,7 +197,7 @@ local function hover()
     source:Show(); drain()
 end
 hover()
-assert(feature.adapter.lease and source.alpha==0 and shared:IsShown())
+assert(feature.adapter.lease and source.alpha==0 and shared:IsShown() and shared.alpha==1 and shared.showDelay == -0.25, 'global hover is immediate without changing the quest tooltip delay')
 assert(captured==shared and shared:GetLeftLineText(5)=='Late ElvUI annotation', 'actual renderer preserves late native text')
 assert(shared.grid[5][1].color[2]==1 and shared.grid[5][1].color[1]==0)
 assert(shared:GetLeftLineText(4):find('42 coins',1,true),'semantic native price row survives the mirror')
@@ -210,8 +212,14 @@ local tries=model.tries
 hover(); source:Show()
 local work=timers; timers={}; for _,fn in ipairs(work) do fn() end
 assert(model.tries==tries and shared:IsShown(), 'repeat rebuilds never reset model or fade')
+-- Native C Show/SetShown can restore alpha without invoking the Lua SetAlpha hook.
+source.nativeResetAlpha=true
+source:Show(); assert(source.alpha==0 and model.tries==tries, 'cached hovers must reapply native suppression after Show')
+source:SetShown(true); assert(source.alpha==0 and model.tries==tries, 'SetShown uses the same suppression path without reloading the model')
+source.nativeResetAlpha=false
 -- Preserve external alpha intent while keeping the source processing active.
-source:SetAlpha(0.6); assert(source.alpha==0 and shared.alpha==0.6)
+source:SetAlpha(0); assert(source.alpha==0 and shared.alpha==1, 'the masked native tooltip must not make the replacement transparent')
+source:SetAlpha(0.6); assert(source.alpha==0 and shared.alpha==1)
 source.rows[5].left:SetText('Updated annotation'); source:Show()
 assert(shared:GetLeftLineText(5)=='Updated annotation' and model.tries>tries)
 shared:OnEvent('MODIFIER_STATE_CHANGED','LSHIFT',1)
@@ -256,7 +264,7 @@ source:Show()
 assert(source.alpha==0.6 and not shared:IsShown())
 source.primaryData=data
 hover(); source:Hide(); assert(not feature.adapter.lease and source.alpha==0.6)
-source:Show(); assert(feature.adapter.lease)
+nativeShow(source); assert(feature.adapter.lease and source.alpha==0, "OnShow must catch internal/cached Show calls")
 combat,source.protected=true,true
 feature:Render(source,data)
 assert(not feature.adapter.lease and feature.adapter.pending[source]==0.6, 'defer protected alpha restoration')

@@ -26,7 +26,9 @@
   accepted behavior during refactors. Local fakes do not prove combat/taint safety.
 - Tooltip regressions must include Show on an already-visible tooltip, hidden pooled
   text with stale content, and camera application after asynchronous model loading.
-  Passing fake-layout tests never establishes the in-game visual result.
+  Include stale/frozen frame dimensions and cached/internal Show/SetShown calls:
+  suppression cannot depend on an observed size delta or propagate a masked source's
+  alpha to its replacement. Passing fakes never establishes the in-game visual result.
 - For actual Dialogue UI tooltip reuse, read the item feature's `research/README.md`
   first. The original renderer reuse proof supersedes the assumption that absence of
   a supported global API requires a new renderer. Keep singleton ownership and

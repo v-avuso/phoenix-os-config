@@ -82,7 +82,20 @@ function Dialogue.Snapshot(source, data, link)
 end
 
 function Dialogue.New()
-    return setmetatable({ watched = {}, pending = {} }, Adapter)
+    return setmetatable({ watched = {}, pending = {}, renders = 0, reuses = 0, releases = 0 }, Adapter)
+end
+
+function Adapter:Sample(lease)
+    if self.lease ~= lease then return end
+    local function read(frame, method)
+        if not safe(frame) or not frame[method] then return "n/a" end
+        local value = frame[method](frame)
+        return public(value) and tostring(value) or "restricted"
+    end
+    self.sample = "source shown=" .. read(lease.source, "IsShown") .. " alpha=" .. read(lease.source, "GetAlpha")
+        .. "; renderer shown=" .. read(self.renderer, "IsShown") .. " alpha=" .. read(self.renderer, "GetAlpha")
+        .. " effective=" .. read(self.renderer, "GetEffectiveAlpha")
+        .. "; preview shown=" .. read(self.renderer and self.renderer.PreviewFrame, "IsShown")
 end
 
 function Adapter:RestorePending(source)
@@ -95,9 +108,23 @@ function Adapter:RestorePending(source)
     end
 end
 
-function Adapter:Release(skipNativeRestore)
+function Adapter:Mask()
+    local lease = self.lease
+    if not lease or not safe(lease.source) then return false end
+    local alpha = lease.source:GetAlpha()
+    if not public(alpha) then self:Release(true, "native alpha restricted"); return false end
+    if alpha ~= 0 then
+        lease.alpha = alpha
+        self.writing = true; lease.source:SetAlpha(0); self.writing = false
+    end
+    return true
+end
+
+function Adapter:Release(skipNativeRestore, reason)
     local lease = self.lease
     if not lease then return end
+    self:Sample(lease)
+    self.releases, self.lastRelease = self.releases + 1, reason or "released"
     self.lease = nil
     if not skipNativeRestore then
         if safe(lease.source) then
@@ -119,9 +146,9 @@ function Adapter:Bind()
     self.renderer, self.reason = renderer, reason
     if not renderer then return end
     hooksecurefunc(renderer, "SetOwner", function()
-        if self.lease and not self.writing then self:Release() end -- An upstream takeover wins.
+        if self.lease and not self.writing then self:Release(false, "Dialogue UI owner changed") end
     end)
-    renderer:HookScript("OnHide", function() if not self.writing then self:Release() end end)
+    renderer:HookScript("OnHide", function() if not self.writing then self:Release(false, "Dialogue UI hidden") end end)
     hooksecurefunc(renderer, "ProcessTooltipData", function()
         if self.rendering or (self.lease and renderer.owner == self.lease.owner) then
             -- The still-active native tooltip owns data updates and annotation refresh.
@@ -160,12 +187,16 @@ end
 function Adapter:Watch(source)
     if self.watched[source] then return end
     self.watched[source] = true
-    source:HookScript("OnHide", function() if self.lease and self.lease.source == source then self:Release() end end)
+    source:HookScript("OnHide", function()
+        if self.lease and self.lease.source == source then self:Release(false, "native tooltip hidden") end
+    end)
     source:HookScript("OnTooltipCleared", function()
         local lease = self.lease
         if lease and lease.source == source then
             local serial = self.serial
-            C_Timer.After(0, function() if self.lease == lease and self.serial == serial then self:Release() end end)
+            C_Timer.After(0, function()
+                if self.lease == lease and self.serial == serial then self:Release(false, "native clear without render") end
+            end)
         end
     end)
     source:HookScript("OnSizeChanged", function() if self.lease and self.lease.source == source then self:Place() end end)
@@ -175,13 +206,21 @@ function Adapter:Watch(source)
             if not public(alpha) or not safe(source) then self:Release(true); return end
             self.lease.alpha = alpha
             self.writing = true; source:SetAlpha(0); self.writing = false
-            if alpha < 1 then self.renderer:SetFrameAlpha(alpha) end
+            -- Native alpha is intentionally masked. Its fade/reset values must
+            -- never drive the replacement's opacity or restart its animation.
         end
     end)
     -- Every Show refresh is observable, including Show on an already-visible tooltip.
-    hooksecurefunc(source, "Show", function()
+    local function refresh()
         local data = safe(source) and source.GetPrimaryTooltipData and source:GetPrimaryTooltipData()
         if self.request then self.request(source, data) end
+    end
+    source:HookScript("OnShow", refresh)
+    hooksecurefunc(source, "Show", refresh)
+    hooksecurefunc(source, "SetShown", function(_, shown)
+        if not public(shown) then self:Release(true, "native visibility restricted")
+        elseif shown then refresh()
+        elseif self.lease and self.lease.source == source then self:Release(false, "native tooltip hidden") end
     end)
 end
 
@@ -217,7 +256,8 @@ function Adapter:Show(source, data, link, force)
     if not snapshot then self.status = "native body inaccessible or unsupported"; self:Release(); return false end
     self.serial = (self.serial or 0) + 1
     if ours and self.lease.owner == owner and self.lease.signature == signature and not force then
-        self.status = "unchanged hover"; self:Place(); return true
+        self.reuses = self.reuses + 1
+        self.status = "unchanged hover"; self:Place(); return self:Mask()
     end
     self:Watch(source)
     local alpha = self.lease and self.lease.source == source and self.lease.alpha or source:GetAlpha()
@@ -227,13 +267,17 @@ function Adapter:Show(source, data, link, force)
     self.rendering = true
     renderer:ClearLines()
     local rendered = renderer:ProcessTooltipData(snapshot)
-    if rendered then renderer:Show() end
+    if rendered then renderer:Show(true) end -- Global hover is immediate; quest delay is unchanged.
     self.rendering, self.writing = false, false
     if not rendered or not renderer:IsShown() then self:Release(); return false end
     self.lease = { source = source, owner = owner, link = link, alpha = alpha, signature = signature, data = data }
     self:Place()
     if not self.lease then return false end
-    self.writing = true; source:SetAlpha(0); self.writing = false
+    if not self:Mask() then return false end
+    self.renders = self.renders + 1
+    local lease = self.lease
+    self:Sample(lease)
+    C_Timer.After(0.35, function() self:Sample(lease) end)
     self.status = "native body rendered by Dialogue UI"
     return true
 end

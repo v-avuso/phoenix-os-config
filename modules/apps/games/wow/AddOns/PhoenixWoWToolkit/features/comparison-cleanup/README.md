@@ -18,7 +18,7 @@ Compare changes comparison presentation, but does not establish a native removal
 
 The implementation uses secure post-hooks, not replacement methods or global delta
 API overrides. A ProcessInfo observer records the equipped item's finished line count
-and dimensions, including annotations already added by tooltip processors. The
+including annotations already added by tooltip processors. The
 SetItemTooltip observer recognizes only a structurally exact trailing native footer:
 
 - The row count must equal the item body plus the native blank/header/delta rows.
@@ -29,8 +29,19 @@ SetItemTooltip observer recognizes only a structurally exact trailing native foo
   right-column text can retain stale values and is not treated as visible content. Additional content
   or a changed layout makes the adapter leave the entire footer intact.
 
-Only those tail font regions are hidden, and the pre-footer native body size is
-restored. OnShow/OnSizeChanged and a secure post-hook of Show enforce that view without polling.
+Verified tail font regions are hidden immediately, independently of frame dimensions.
+GetSize in a ProcessInfo hook may still describe the previous/full tooltip: the player's
+`matched footer; waiting for native layout` diagnostic exposed that failure. Sizing
+must never block suppression of already-recognized text.
+
+Height is reclaimed from the first body's font inset, the verified spacer's top and
+the last footer line's bottom, accounting for native extra top/bottom padding. Only
+height changes; native width/layout remains authoritative. Missing or restricted line
+geometry leaves the footer text hidden without guessing a crop. One next-frame retry
+allows deferred geometry to settle, and normal size/show callbacks reapply the view.
+Full footer geometry is retained for disable/restore.
+
+OnShow/OnSizeChanged and secure post-hooks of Show and SetShown enforce that view without polling.
 Calling Show on an already-visible tooltip can refresh text without another OnShow event
 or size change; the post-hook reapplies suppression after that refresh. Original methods,
 CompareHeader, item stats and comparison selection are untouched. When late appended
@@ -66,9 +77,9 @@ SHA-256: `5734a4f0270f47b5d8c858d6f9d355d2850fc258687d75a372631369f3420727`.
 Fixtures cover body/annotation preservation, exact footer matching, native size
 refresh, disable/restore, extra/altered rows and independence from the compact feature.
 All four enable/disable combinations also run with the compact feature on the same
-processing path. The real-source proof caught and fixed a repeated-size-callback restoration bug:
-retain the untrimmed dimensions when the callback observes our already-trimmed size.
-No source is vendored and no running client is exercised.
+processing path. Frozen GetSize snapshots, repeated stale body captures, missing/delayed
+font geometry and internal SetShown visibility resets now have regressions. No source
+is vendored and no running client is exercised.
 
 After approved deployment, enable this alone first. Shift-hover a normal bag item:
 side-by-side equipped information should remain, with no comparison paragraph or gap.
@@ -89,6 +100,8 @@ client's row/state layout rather than truncating arbitrary tooltip content.
 After hovering the failing item, run `/pwtcompare`. It reports enabled/available/running
 state and the last primary/secondary guard result (baseline missing, row/header/delta
 mismatch, restricted data, retained weapon/cycling context, or matched footer/layout
-state). No item text, identifiers or personal data are printed. This revision adds
-observability; it does not claim the reported ElvUI failure fixed. Capture the primary
-result and use it for the next narrowly scoped regression and correction.
+state), plus currently shown footer-font counts when a live comparison exists. No item
+text, identifiers or personal data are printed. The observed size-gate failure has a
+reproduction and correction; confirm actual rendering and spacing in the client. If
+text remains, report the current guard/status and font visibility rather than assuming
+a restart is needed.

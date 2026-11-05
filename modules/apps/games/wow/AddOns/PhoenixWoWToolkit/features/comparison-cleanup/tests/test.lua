@@ -9,7 +9,7 @@ RegisterEventCallback = noop
 SlashCmdList = {}
 GetCVarBool = function() return true end
 local delta = { '+38 Stamina', '-51 Critical Strike' }
-local postCalls, staleRight = {}, false
+local postCalls, staleRight, frozenLayout, geometryReady = {}, false, false, true
 CreateFrame=function() return { RegisterEvent=noop, SetScript=noop } end
 TooltipDataProcessor = { AddTooltipPostCall = function(_, callback) postCalls[#postCalls + 1] = callback end }
 C_TooltipComparison = { GetItemComparisonDelta = function() return delta end }
@@ -25,6 +25,8 @@ local function tooltip(name)
     function t:IsForbidden() return false end
     function t:IsProtected() return false end
     function t:GetSize() return self.w, self.h end
+    function t:GetTop() return 500 end
+    function t:SetHeight(height) self:SetSize(self.w,height) end
     function t:SetSize(w, h)
         local changed = self.w ~= w or self.h ~= h
         self.w, self.h = w, h
@@ -34,17 +36,24 @@ local function tooltip(name)
     function t:AddLine(text)
         self.lines[#self.lines + 1] = text
         _G[name .. 'TextLeft' .. #self.lines] = font(text)
+        local index=#self.lines
+        _G[name .. 'TextLeft' .. index].GetTop=function() if geometryReady then return self:GetTop()-8-(index-1)*20 end end
+        _G[name .. 'TextLeft' .. index].GetBottom=function() if geometryReady then return self:GetTop()-8-index*20 end end
         _G[name .. 'TextRight' .. #self.lines] = font(staleRight and 'old hidden value' or '')
         if staleRight then _G[name .. 'TextRight' .. #self.lines]:SetShown(false) end
-        self:SetSize(300, 16 + #self.lines * 20)
+        if not frozenLayout then self:SetSize(300, 16 + #self.lines * 20) end
     end
     function t:ClearLines() self.lines = {}; if self.hooks.OnTooltipCleared then self.hooks.OnTooltipCleared() end end
     function t:Show()
-        self:SetSize(300, 16 + #self.lines * 20)
+        if not frozenLayout then self:SetSize(300, 16 + #self.lines * 20) end
         -- A layout refresh need not change dimensions or fire OnShow again.
         for i = 1, #self.lines do _G[name .. 'TextLeft' .. i]:SetShown(true) end
         if not self.shown and self.hooks.OnShow then self.hooks.OnShow() end
         self.shown = true
+    end
+    function t:SetShown(shown)
+        self.shown=shown
+        if shown then for i=1,#self.lines do _G[name..'TextLeft'..i]:SetShown(true) end end
     end
     function t:HookScript(event, fn) self.hooks[event] = fn end
     function t:ProcessInfo(info)
@@ -88,6 +97,7 @@ end
 local T = { RegisterFeature = function(self, feature) self.feature = feature end }
 assert(loadfile(root .. '/features/comparison-cleanup/Feature.lua'))('PhoenixWoWToolkit', T)
 local feature = T.feature
+C_Timer={After=function(_,fn) end}
 assert(feature.defaults.enabled and feature:GetAvailability())
 feature:Enable()
 manager:SetItemTooltip(true)
@@ -97,6 +107,8 @@ assert(not _G.PWTTestShopping1TextLeft4:IsShown() and not _G.PWTTestShopping1Tex
 assert(ShoppingTooltip1.h == 56, 'no footer-sized blank area')
 ShoppingTooltip1:Show(); assert(ShoppingTooltip1.h == 56, 'native size refresh must remain trimmed')
 assert(not _G.PWTTestShopping1TextLeft4:IsShown(), 'Show must not revive the footer on an already-visible tooltip')
+ShoppingTooltip1:SetShown(true)
+assert(not _G.PWTTestShopping1TextLeft4:IsShown(), 'native comparison SetShown must not revive the footer either')
 feature:Disable()
 assert(_G.PWTTestShopping1TextLeft4:IsShown() and _G.PWTTestShopping1TextLeft6:IsShown())
 assert(ShoppingTooltip1.h == 136, 'disable restores native dimensions')
@@ -105,6 +117,23 @@ feature:Disable(); staleRight = true
 feature:Enable(); manager:SetItemTooltip(true)
 assert(ShoppingTooltip1.h == 56, 'hidden pooled right text must not block exact footer recognition')
 staleRight = false
+-- Observed in the player diagnostic: body capture and footer size are identical.
+feature:Disable(); ShoppingTooltip1.w,ShoppingTooltip1.h=300,136
+frozenLayout=true
+feature:Enable(); manager:SetItemTooltip(true)
+assert(not _G.PWTTestShopping1TextLeft4:IsShown(), 'verified footer must hide even when GetSize never changes')
+assert(ShoppingTooltip1.h==56,'measure body boundary from laid-out font positions, not a size delta')
+manager:SetItemTooltip(true)
+assert(ShoppingTooltip1.h==56,'repeated stale-size snapshots remain trimmed')
+feature:Disable(); assert(ShoppingTooltip1.h==136)
+geometryReady=false
+feature:Enable(); manager:SetItemTooltip(true)
+assert(not _G.PWTTestShopping1TextLeft4:IsShown() and ShoppingTooltip1.h==136, 'hide verified rows immediately, without guessing missing geometry')
+geometryReady=true; feature:Apply(ShoppingTooltip1)
+assert(ShoppingTooltip1.h==56 and feature:Diagnostic()[2]:find('trimmed',1,true))
+feature:Disable(); assert(ShoppingTooltip1.h==136)
+frozenLayout=false
+feature:Enable()
 -- Extra annotation or altered row: leave all content intact rather than guessing.
 ShoppingTooltip1:ClearLines(); ShoppingTooltip1:ProcessInfo({ tooltipData = C_TooltipInfo.GetHyperlink() })
 for _, line in ipairs({ ' ', ITEM_DELTA_DESCRIPTION, delta[1], delta[2], 'New annotation' }) do ShoppingTooltip1:AddLine(line) end
