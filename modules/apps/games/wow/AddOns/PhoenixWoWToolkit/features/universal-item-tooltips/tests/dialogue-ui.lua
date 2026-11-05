@@ -5,10 +5,14 @@ local version = toc:read('*a'):match('## Version:%s*([^%s]+)'); toc:close()
 assert(version == '1.0.7', 'This investigation targets the installed Dialogue UI 1.0.7')
 unpack = table.unpack or unpack
 local function noop() end
-local frames = {}
+local frames, timers, combat = {}, {}, false
 local function frame(kind, _, parent, template)
     local f = { kind = kind, parent = parent, scripts = {}, events = {}, shown = true, w = 16, h = 16, points = {}, alpha = 1 }
     function f:SetScript(event, callback) self.scripts[event] = callback end
+    function f:HookScript(event, callback)
+        local original=self.scripts[event]
+        self.scripts[event]=function(...) if original then original(...) end; callback(...) end
+    end
     function f:RegisterEvent(event) self.events[event] = true end
     function f:UnregisterEvent(event) self.events[event] = nil end
     function f:Show() local changed = not self.shown; self.shown = true; if changed and self.scripts.OnShow then self.scripts.OnShow(self) end end
@@ -28,7 +32,17 @@ local function frame(kind, _, parent, template)
     function f:SetFrameLevel(level) self.level = level end
     function f:GetFrameLevel() return self.level or 1 end
     function f:GetEffectiveScale() return 1 end
-    function f:SetAlpha(alpha) self.alpha = alpha end
+    function f:GetAlpha() return self.alpha end
+    function f:GetOwner() return self.owner end
+    function f:GetLeft() return self.left or 400 end
+    function f:GetRight() return self.right or 600 end
+    function f:SetAlpha(alpha) assert(not (combat and self.protected)); self.alpha = alpha end
+    function f:GetTextColor() return unpack(self.color or {1,1,1,1}) end
+    function f:SetTextColor(...) self.color={...} end
+    function f:NumLines() return #(self.rows or {}) end
+    function f:GetLeftLine(index) return self.rows[index].left end
+    function f:GetRightLine(index) return self.rows[index].right end
+    function f:GetPrimaryTooltipData() return self.primaryData end
     function f:SetModelAlpha(alpha) self.modelAlpha = alpha end
     function f:SetText(text) self.text = text end
     function f:GetText() return self.text end
@@ -41,7 +55,7 @@ local function frame(kind, _, parent, template)
     function f:CreateTexture() return frame('Texture', nil, self) end
     function f:CreateFontString() return frame('FontString', nil, self) end
     for _, name in ipairs({ 'SetIgnoreParentScale', 'SetIgnoreParentAlpha', 'SetFixedFrameStrata', 'SetClampedToScreen',
-        'SetClampRectInsets', 'SetSpacing', 'SetJustifyV', 'SetJustifyH', 'SetTextColor', 'SetTextureSliceMargins',
+        'SetClampRectInsets', 'SetSpacing', 'SetJustifyV', 'SetJustifyH', 'SetTextureSliceMargins',
         'SetTextureSliceMode', 'SetKeepModelOnHide', 'SetModelDrawLayer', 'SetAutoDress', 'SetDoBlend',
         'SetUseTransmogChoices', 'SetUseTransmogSkin', 'FreezeAnimation', 'SetFacing', 'ClearModel', 'SetAnimation' }) do f[name] = noop end
     frames[#frames+1] = f
@@ -65,16 +79,16 @@ local color = { GetRGB = function() return 1,1,1 end, GenerateHexColor = functio
 NORMAL_FONT_COLOR = color
 DialogueUI_DB = { TooltipShowItemComparison = true }
 DialogueUIAPI = {}
-C_Timer = { After = function() error('Unexpected uncached-item retry') end }
-C_Item = { IsDressableItemByID = function() return true end, GetItemInfoInstant = function() return 123 end,
+C_Timer = { After = function(_, callback) timers[#timers+1]=callback end }
+C_Item = { IsEquippableItem = function() return true end, IsDressableItemByID = function() return true end, GetItemInfoInstant = function() return 123 end,
     GetItemLinkByGUID = function() return 'item:equipped' end }
 C_PetJournal = { GetPetInfoByItemID = noop }
 C_TransmogCollection = { GetAppearanceCameraIDBySource = function() return 70 end }
 Model_ApplyUICamera = function(model, camera) model.appliedCamera = camera end
-local compareCalls = 0
-TooltipComparisonManager = { CreateComparisonItem = function(_,data) return { hyperlink = data.hyperlink } end }
+local compareCalls, comparisonMethod = 0,0
+TooltipComparisonManager = { AnchorShoppingTooltips = noop, CreateComparisonItem = function(_,data) if data.type == 0 then return { hyperlink = data.hyperlink } end end }
 C_TooltipComparison = {
-    GetItemComparisonInfo = function() compareCalls=compareCalls+1; return { method = 0, item = { guid = 'equipped' }, additionalItems = {} } end,
+    GetItemComparisonInfo = function(item) if not item then return end; compareCalls=compareCalls+1; return { method = comparisonMethod, item = { guid = 'equipped' }, additionalItems = {} } end,
     GetItemComparisonDelta = function() return { '+38 Stamina', '-51 Critical Strike' } end,
 }
 local dataCalls = 0
@@ -95,6 +109,7 @@ local api = {
     GetMaxEquippedItemLevelDelta = function() return nil,true end,
     GetItemLevelDelta = function() return '+13 Item Level' end,
     GetItemEffect = function() return nil,true end,
+    GenerateMoneyText = function(price) return tostring(price)..' coins' end,
     Mixin = function(target, source) for k,v in pairs(source) do target[k]=v end; return target end,
     CreateFromMixins = function(source) local t={}; for k,v in pairs(source) do t[k]=v end; return t end,
     CreateObjectPool = function() return { Release = noop } end,
@@ -110,59 +125,145 @@ local files = { 'Tooltip_Base.lua', 'Tooltip_Private.lua', 'Tooltip_Public.lua' 
 for _, file in ipairs(files) do
     assert(loadfile(upstream..'/Code/Tooltip/'..file))('DialogueUI', addon)
 end
-local probe = assert(loadfile(root..'/features/universal-item-tooltips/research/DialogueUIProbe.lua'))()
-local shared, reason = probe.Find('1.0.7')
-assert(shared and not reason)
-assert(shared == addon.SharedTooltip, 'one-time structural discovery locates the real, initially unused singleton')
-assert(not shared.PreviewModel, 'discovery works before the first quest hover initializes the model')
-assert(not probe.Find('unknown'))
--- Public annotation callback gives the same actual instance, without namespace access.
+-- The production adapter uses these public native primitives.
+function CreateColor(r,g,b,a)
+    return { GetRGB=function() return r,g,b end,
+        GenerateHexColor=function() return string.format('ff%02x%02x%02x',r*255,g*255,b*255) end }
+end
+function hooksecurefunc(object,key,callback)
+    local original=assert(object[key],key)
+    object[key]=function(...)
+        local result=table.pack(original(...)); callback(...); return table.unpack(result,1,result.n)
+    end
+end
+if arg[3] then
+    local manager=TooltipComparisonManager
+    RegisterEventCallback=noop
+    assert(loadfile(arg[3]))()
+    manager.CreateComparisonItem=TooltipComparisonManager.CreateComparisonItem
+    TooltipComparisonManager=manager
+end
+C_AddOns = { IsAddOnLoaded=function() return true end, GetAddOnMetadata=function() return '1.0.7' end }
+Enum = { TooltipDataType={Item=0}, TooltipComparisonMethod={Single=0,WithBothHands=1,WithBagMainHandItem=2,WithBagOffHandItem=3} }
+InCombatLockdown=function() return combat end
+GetInventoryItemLink=noop
+local postcalls={}
+TooltipDataProcessor = { AllTypes='all', AddTooltipPostCall=function(kind,fn)
+    postcalls[kind]=postcalls[kind] or {}; table.insert(postcalls[kind],fn)
+end }
+local T = { RegisterFeature=function(self,feature) self.feature=feature end }
+for _, name in ipairs({'Comparison','DialogueUI','Feature'}) do
+    assert(loadfile(root..'/features/universal-item-tooltips/'..name..'.lua'))('PhoenixWoWToolkit',T)
+end
+local found, reason = T.DialogueTooltip.Find('1.0.7')
+local shared=addon.SharedTooltip
+assert(found==shared and not reason and not shared.PreviewModel, 'find actual renderer before first quest hover')
+assert(not T.DialogueTooltip.Find('unknown'))
+-- SetHyperlink alone bypasses item-aware processing in the original source.
 local captured
 DialogueUIAPI.AddItemTooltipProcessorExternal(function(tooltip) captured=tooltip end)
-shared:SetOwner(frame('BagButton'), 'ANCHOR_NONE')
-shared:SetHyperlink('item:candidate')
-drain()
-assert(compareCalls == 0 and not captured, 'SetHyperlink does NOT mark data as an item or trigger item processors')
+shared:SetOwner(frame('BagButton'),'ANCHOR_NONE'); shared:SetHyperlink('item:candidate'); drain()
+assert(compareCalls==0 and not captured)
 shared:Hide()
-local owner = frame('BagButton')
-local lease = assert(probe.Show(shared, owner, 'item:candidate'))
-drain()
-assert(captured == shared, 'public callback receives the same renderer used for the bag-item proof')
-assert(compareCalls > 0 and shared.HotkeyFrame:IsShown(), 'actual comparison and modifier-hint machinery runs')
-assert(shared.Background.texture == 'DialogueUI-owned/TooltipBackground-Temp.png', 'upstream owns its theme asset')
-assert(shared.PreviewModel.Model1.tried == 300 and shared.PreviewModel.y > 0, 'actual source-based preview overhangs the tooltip')
-assert(shared.grid[1][1].font == 'DUIFont_Tooltip_Large', 'upstream font objects are used')
-assert(shared:GetLeftLineText(6) == 'Replace [item:equipped]')
-local model = shared.PreviewModel.Model1
-model.scripts.OnModelLoaded(model)
-assert(model.appliedCamera == 70, 'upstream applies its camera after model loading')
-assert(not probe.Show(shared, owner, 'secret', lease), 'restricted input retains the original display')
-local tries, reads = model.tries, dataCalls
-assert(probe.Show(shared, owner, 'item:candidate', lease) == lease)
-assert(model.tries == tries and dataCalls == reads, 'same hover does not repeatedly reload the model')
-shared:OnEvent('MODIFIER_STATE_CHANGED', 'LSHIFT', 1)
-assert(DialogueUI_DB.TooltipShowItemComparison == false and shared:GetLeftLineText(6) == 'Show Comparison', 'original Shift toggle works')
-shared:OnEvent('MODIFIER_STATE_CHANGED', 'LSHIFT', 0)
-assert(DialogueUI_DB.TooltipShowItemComparison == false, 'releasing Shift must not toggle a second time')
-shared:OnEvent('MODIFIER_STATE_CHANGED', 'LSHIFT', 1)
-assert(DialogueUI_DB.TooltipShowItemComparison == true, 'comparison preference is owned by Dialogue UI')
--- A quest takeover wins, and releasing our stale lease cannot hide it.
-local questOwner = frame('QuestRewardButton')
-shared:SetOwner(questOwner, 'ANCHOR_NONE'); shared:SetQuestItem('reward',1)
-assert(not probe.Show(shared, owner, 'item:candidate', lease), 'do not steal a live quest tooltip')
-probe.Release(lease)
-assert(shared:IsShown() and shared.owner == questOwner, 'stale release preserves quest ownership')
-shared:Hide()
-lease = assert(probe.Show(shared,owner,'item:candidate'))
-probe.Release(lease)
-assert(not shared:IsShown() and not shared.tooltipInfo and not shared.events.TOOLTIP_DATA_UPDATE)
-local duplicate = frame('Frame')
-for _, name in ipairs({ 'ProcessInfo', 'ShowItemComparison', 'DisplayModel', 'ShowHotkey', 'GetHyperlink', 'SetQuestItem' }) do duplicate[name]=noop end
-duplicate.forbidden = true
-assert(probe.Find('1.0.7') == shared, 'skip forbidden frames before inspecting their structure')
-duplicate.forbidden, duplicate.protected = false,true
-assert(probe.Find('1.0.7') == shared, 'skip protected candidates')
-duplicate.protected = false
-assert(not probe.Find('1.0.7'), 'ambiguous discovery fails safely')
-print('Dialogue UI original renderer: bag-item data, theme/fonts, overhanging preview, source camera, comparisons, modifier toggle, refresh coalescing and singleton lease passed')
-print('NOT TESTED: GPU pixels, live native-tooltip suppression, annotations from other add-ons, combat/taint, bags/AH or quest handoffs inside WoW')
+GameTooltip=frame('GameTooltip')
+GameTooltip.owner=frame('BagButton')
+GameTooltip.alpha=0.85
+local source=GameTooltip
+local data=getData('item:candidate'); data.type=0
+for i,line in ipairs(data.lines) do line.lineIndex=i end
+data.lines[4].price=42
+source.primaryData=data
+local function setRows(texts)
+    source.rows={}
+    for _,text in ipairs(texts) do
+        local left,right=frame('FontString'),frame('FontString')
+        left:SetText(text); right:Hide(); right:SetText('stale hidden text')
+        source.rows[#source.rows+1]={left=left,right=right}
+    end
+end
+local feature=T.feature
+feature.settings={enabled=true,appearance='dialogue'} -- Old choice migrates to the actual renderer.
+feature:Enable(); assert(feature.settings.appearance=='dialogueUI')
+local function hover()
+    if source.scripts.OnTooltipCleared then source.scripts.OnTooltipCleared(source) end
+    setRows({'Original bag item','Item Level 100','+20 Intellect','Original item information','ElvUI annotation'})
+    for _,fn in ipairs(postcalls.all or {}) do fn(source,data) end
+    for _,fn in ipairs(postcalls[0]) do fn(source,data) end
+    -- Simulate a processor registered after Phoenix, before the final native Show.
+    source.rows[5].left:SetText('Late ElvUI annotation')
+    source.rows[5].left:SetTextColor(0,1,0,1)
+    source:Show(); drain()
+end
+hover()
+assert(feature.adapter.lease and source.alpha==0 and shared:IsShown())
+assert(captured==shared and shared:GetLeftLineText(5)=='Late ElvUI annotation', 'actual renderer preserves late native text')
+assert(shared.grid[5][1].color[2]==1 and shared.grid[5][1].color[1]==0)
+assert(shared:GetLeftLineText(4):find('42 coins',1,true),'semantic native price row survives the mirror')
+assert(shared.Background.texture=='DialogueUI-owned/TooltipBackground-Temp.png')
+assert(shared.grid[1][1].font=='DUIFont_Tooltip_Large')
+assert(shared.PreviewModel.Model1.tried==300 and shared.PreviewModel.y>0)
+assert(shared:GetLeftLineText(7)=='Replace [item:equipped]')
+assert(not shared.events.TOOLTIP_DATA_UPDATE, 'native tooltip owns data refresh while leased')
+local model=shared.PreviewModel.Model1
+model.scripts.OnModelLoaded(model); assert(model.appliedCamera==70)
+local tries=model.tries
+hover(); source:Show()
+local work=timers; timers={}; for _,fn in ipairs(work) do fn() end
+assert(model.tries==tries and shared:IsShown(), 'repeat rebuilds never reset model or fade')
+-- Preserve external alpha intent while keeping the source processing active.
+source:SetAlpha(0.6); assert(source.alpha==0 and shared.alpha==0.6)
+source.rows[5].left:SetText('Updated annotation'); source:Show()
+assert(shared:GetLeftLineText(5)=='Updated annotation' and model.tries>tries)
+shared:OnEvent('MODIFIER_STATE_CHANGED','LSHIFT',1)
+assert(not DialogueUI_DB.TooltipShowItemComparison and not shared.events.TOOLTIP_DATA_UPDATE)
+shared:OnEvent('MODIFIER_STATE_CHANGED','LSHIFT',0)
+assert(not DialogueUI_DB.TooltipShowItemComparison)
+shared:OnEvent('MODIFIER_STATE_CHANGED','LSHIFT',1)
+assert(DialogueUI_DB.TooltipShowItemComparison)
+-- Side-by-side comparisons keep their native behavior; only our renderer is placed.
+local compare=frame('ShoppingTooltip'); compare.left=650; source.shoppingTooltips={compare}
+TooltipComparisonManager:AnchorShoppingTooltips()
+assert(shared.points[1][1]=='TOPRIGHT', 'render away from a comparison on the right')
+compare.left=100; TooltipComparisonManager:AnchorShoppingTooltips()
+assert(shared.points[1][1]=='TOPLEFT')
+-- Quest takeover restores native alpha, without hiding the new quest tooltip.
+local questOwner=frame('QuestRewardButton')
+shared:SetOwner(questOwner,'ANCHOR_NONE'); shared:SetQuestItem('reward',1)
+assert(not feature.adapter.lease and source.alpha==0.6 and shared:IsShown())
+source:Show(); assert(not feature.adapter.lease, 'never steal a busy quest renderer')
+shared:Hide(); hover()
+feature:Disable(); assert(not shared:IsShown() and source.alpha==0.6)
+-- Unavailable versions keep the original presentation and compact native option.
+feature:Enable(); hover()
+C_AddOns.GetAddOnMetadata=function() return 'changed' end
+source:Show(); assert(not feature.adapter.lease and source.alpha==0.6)
+C_AddOns.GetAddOnMetadata=function() return '1.0.7' end
+hover()
+comparisonMethod=1
+source:Show(); assert(not feature.adapter.lease and source.alpha==0.6,'unproven combined weapon comparison stays native')
+comparisonMethod=0
+data.overrideItemLevel=700
+source:Show(); assert(not feature.adapter.lease and source.alpha==0.6,'override-level math remains native')
+data.overrideItemLevel=nil
+GetInventoryItemLink=function() return 'item:candidate' end
+source:Show(); assert(not feature.adapter.lease,'no misleading equipped-item self comparison')
+GetInventoryItemLink=noop
+hover()
+-- A non-item tooltip must become visible immediately, not await a cleanup timer.
+source.primaryData={type=9,hyperlink='item:candidate'}
+for _,fn in ipairs(postcalls.all) do fn(source,source.primaryData) end
+source:Show()
+assert(source.alpha==0.6 and not shared:IsShown())
+source.primaryData=data
+hover(); source:Hide(); assert(not feature.adapter.lease and source.alpha==0.6)
+source:Show(); assert(feature.adapter.lease)
+combat,source.protected=true,true
+feature:Render(source,data)
+assert(not feature.adapter.lease and feature.adapter.pending[source]==0.6, 'defer protected alpha restoration')
+source.protected=false
+feature.adapter:RestorePending(source)
+assert(source.alpha==0.6 and not feature.adapter.pending[source])
+combat=false
+if arg[3] then print('Executed Blizzard original CreateComparisonItem with the mirrored Dialogue UI item data') end
+print('Dialogue UI original renderer + production adapter: native annotation mirror, upstream theme/fonts/model/Shift, stable rebuilds, alpha restoration, comparison placement, quest takeover, version and non-item fallback passed')
+print('NOT TESTED: GPU pixels, live bags/AH, arbitrary custom widgets, combat/taint or quest handoffs inside WoW')

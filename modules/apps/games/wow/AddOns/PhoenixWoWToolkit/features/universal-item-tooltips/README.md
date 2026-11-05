@@ -1,117 +1,109 @@
-# Universal item tooltips
+# Equipment tooltips
 
 ## Intentions and settings
 
-Enhance conventional equipment tooltips without discarding native/ElvUI item information
-or other add-ons' annotations. **Enhance equipment tooltips** is enabled by default and
-independent of comparison-footer cleanup. The account-wide **Tooltip approach** dropdown offers:
+Use Dialogue UI's actual renderer for conventional equipment hovers, preserving public
+native text and useful annotations. Do not recreate its artwork, typography or model
+layout. The **Enhance equipment tooltips** checkbox and **Tooltip approach** dropdown
+are account-wide and independent of comparison-footer cleanup:
 
-- **Current UI + compact comparisons**: retain Blizzard/ElvUI fonts and background,
-  append native replacement deltas, and create no model preview.
-- **Dialogue-inspired + embedded preview** (default): the same information with
-  Blizzard's serif font, a dark background and a transparent model in reserved space
-  at the tooltip's upper-right. Equipped comparison windows receive the typography,
-  but never another summary or model.
+- **Current UI + compact comparisons** retains Blizzard/ElvUI presentation and appends
+  native replacement deltas. It has no custom model or skin.
+- **Dialogue UI (original renderer)** uses installed Dialogue UI **1.0.7**. It supplies
+  its own themed background, fonts, overlapping transparent model, camera, replacement
+  section and Shift hint. The previous `dialogue` approximation preference migrates
+  to this choice; the approximation's runtime code has been removed.
 
-Switching approaches or disabling restores owned fonts/background/padding. The disabled
-checkbox restores the original tooltip presentation; the separate cleanup preference
-can still hide the equipped item's redundant footer. During combat, existing appended
-summary text changes on the next natural tooltip rebuild rather than a forced rebuild.
+Missing/incompatible Dialogue UI keeps native presentation. **GameTooltip-driven**
+non-equipped equipment hovers are the first supported path (normal bag items, and other
+windows using that same tooltip). Equipped self-comparisons, combined/paired weapons,
+override-item-level contexts and simultaneous ItemRef/custom windows retain native
+presentation. Do not claim those contexts globally replaced before separate proof.
+The native choice remains available for its compact combined-weapon summaries.
 
-This is a native-tooltip presentation, **not Dialogue UI's renderer**. Its custom
-artwork, exact layout, typeface and separate Shift hint are not reproduced. Native Shift
-and always-compare controls still govern traditional side-by-side windows. We use no
-Dialogue UI private API, code/assets or global CVar changes. Custom tooltips that bypass
-Blizzard's item-processing system are outside the shared integration's coverage.
+Disabling restores owned visuals. Existing compact text is removed through a native
+rebuild outside combat; during combat, it disappears on the next natural rebuild.
+`/pwttip` prints the selected approach, renderer/fallback status and current ownership.
 
-## Actual Dialogue UI reuse investigation
+## Ownership and implementation
 
-The current runtime is still the approximation described above. A newer
-[source-backed investigation and probe](research/README.md) demonstrates reuse of the
-actual installed 1.0.7 renderer without copying its code/assets or patching its files.
-The missing supported global entry point does not prevent a narrowly scoped internal
-adapter. The probe is not in the TOC; native suppression and live client acceptance are
-still required before replacing the runtime. Do not extend the imitation to approach
-Dialogue UI's exact visuals.
+`Comparison.lua` delegates the native choice's pairing/deltas to C_TooltipComparison.
+Single-slot alternatives are labelled separately; combined/paired weapons use the
+native API's paired arguments. Uncached, inaccessible and unknown data fall back.
 
-## Original research and approximation decision
+`DialogueUI.lua` is a version-pinned internal adapter, not a new renderer. It discovers
+the unique ordinary shared frame once per dependency version, then leases it only
+while idle or already owned. Quest/tooltips from Dialogue UI take priority. A secure
+SetOwner post-hook and OnHide observer release Phoenix ownership; stale cleanup never
+hides a newer quest reward. No upvalue inspection, function replacement, copied assets,
+third-party source edits, global CVar changes or secure action hooks are used.
 
-- [Dialogue UI public tooltip source](https://github.com/Peterodox/YUI-Dialogue/blob/main/Code/Tooltip/Tooltip_Public.lua)
-  exposes annotation callbacks, not a global reward-tooltip renderer. Installed 1.0.6
-  `Tooltip_Private.lua` owns its custom model/comparison machinery. The public callback
-  registry even leaves RegisterCallback unexported. No applicable code/assets license
-  grant was found in the bounded source/root inspection; nothing was copied.
-- [Reward tooltip source](https://github.com/Peterodox/YUI-Dialogue/blob/main/Code/Dialogue/RewardTooltipCode.lua)
-  is quest-context behavior, not a reusable global tooltip adapter. Replacing native
-  bodies would also lose useful annotations and create context-specific integration.
-- [AppearanceTooltip](https://github.com/kemayo/wow-appearancetooltip) is a maintained
-  preview alternative with broad native-tooltip support. Its implementation also owns
-  bindings, CVars, collection annotations and scene/position polling. No narrow public
-  preview-provider API was identified. This task's smaller native DressUpModel view
-  avoids adopting those unrelated behaviors. If AppearanceTooltip is installed, its
-  preview owner wins and this feature does not create another preview.
-- [Better Item Compare](https://www.curseforge.com/wow/addons/better-item-compare)
-  advertises advanced weapon/stat comparison in native windows, but not this combined
-  preview/inline experience; its publisher lists All Rights Reserved. It is a credible
-  separate alternative, not a code dependency or code source here.
-- Blizzard's [comparison APIs](https://github.com/Gethe/wow-ui-source/blob/live/Interface/AddOns/Blizzard_APIDocumentationGenerated/TooltipComparisonDocumentation.lua)
-  own equipment pairing and signed/formatted deltas. Reuse those results rather than
-  recomputing stats, sockets or specialization rules with GetItemStats.
+The adapter mirrors the **finished native tooltip's text**, colors, both columns and
+inline texture markup after Show, including processors registered after Phoenix.
+Semantic `lineIndex`/`price` data preserve native money rows through Dialogue UI's own
+money formatter. `TooltipDataType.Item`, GUID, full link and level metadata are retained.
+This is passed to the original ProcessTooltipData/Show methods; the native tooltip is
+suppressed with owned alpha only after successful rendering. Original handlers,
+comparison input, owner and data processing remain active. Comparison frames remain
+native; the actual renderer anchors away from whichever side holds those comparisons.
 
-## Implementation and limits
+During a lease, native data updates drive the mirrored body; Dialogue UI's duplicate
+TOOLTIP_DATA_UPDATE subscription is removed. Shift still invokes the original renderer's
+ReprocessInfo and preference; quest ownership naturally restores upstream event handling.
+Repeated identical owner/text/color/price snapshots do not clear/reload the model or
+restart its fade. A next-frame token allows clear/rebuild sequences to complete without
+briefly releasing ownership. Equipment changes refresh the active comparison once.
 
-`Comparison.lua` builds groups from C_TooltipComparison. Single-slot alternatives
-(rings/trinkets) are individually labelled; two-hand replacements pass both equipped
-items to the native delta API. A bag-paired weapon explicitly names the paired item
-and uses additive paired stats. Only the native first/default pair is summarized;
-cycling another pair in Blizzard's side window does not silently change this named
-summary. Item-level delta is shown only for unambiguous single-slot comparisons;
-combined weapon item-level arithmetic is deliberately omitted.
+No native fonts, backdrop or padding are restyled. The adapter retains other alpha
+writers' public intent and restores it on leave/disable/non-item transition. Restricted
+frames/data use native fallback; protected restoration is deferred until safe. Errors
+from protected actions are never swallowed.
 
-`Feature.lua` registers one Item post-processor. It skips comparison windows, forbidden,
-protected or secret-anchored tooltips, inaccessible data and unknown/uncached comparisons.
-Existing body/annotations stay in place; data identity and tooltip-clear lifecycle
-prevent duplicate sections. Hovering an equipped item with the same inventory link
-has no replacement summary; an identical bag copy can also conservatively skip it.
-Native tooltip rebuilds naturally retry when uncached data becomes available.
+## Limits and upgrade strategy
 
-`Presentation.lua` changes individual native FontStrings, not shared FontObjects,
-and retains per-region font snapshots. The native body, inline icons, money display,
-item colors and annotation text are preserved. Other skins may still override the
-background or append differently styled content; exact Dialogue UI parity is not claimed.
+- Native text and inline icons are mirrored; arbitrary addon-created frames, interactive
+  widgets, status bars or non-text overlays are not automatically transferred. Add-ons
+  annotating both native and Dialogue UI surfaces may duplicate content and need a
+  demonstrated, narrow adapter. Test ElvUI/ToxiUI and existing annotations explicitly.
+- One upstream singleton cannot display two independent candidate tooltips at once.
+  Sticky item links and competing contexts keep native fallback.
+- The actual renderer retains its own comparison preference, theme, initial delay and
+  animations. Model appearance variants/cameras need real-item acceptance. Combined
+  weapon and override-level arithmetic are deliberately outside the initial reuse path.
+- Before adding another version to the gate, rerun the source-backed fixture against
+  that exact installed version, inspect ownership/event/model changes, and repeat the
+  bag/quest/combat client trial. Never make a new version silently use a guessed frame.
+- Future extensions should prefer AddItemTooltipProcessorExternal, scoped to an active
+  owned lease and the callback's item identity. Keep Pawn's ProcessItemExternal hook intact.
+  An upstream supported getter could replace discovery; no upstream message was sent.
 
-`Preview.lua` uses DressUpModel and the hovered link's transmog appearance/source camera.
-Armor uses a masked player model; held items use their item appearance. The camera is
-applied again after asynchronous model loading, and the transparent widget stays at
-zero alpha until a model is ready. There is no bordered panel, independent anchor,
-position polling or top/bottom window switching. Native right padding reserves text-free
-space and participates in the normal comparison anchoring. Missing appearance/camera
-information produces no preview or reserved column. Nonvisual items also have no model.
-If AppearanceTooltip is installed, it remains the preview owner. Native tooltip rebuilds
-retry uncached data. Actual camera framing still requires client validation.
+[Research, source hashes and reuse rationale](research/README.md) records the boundary.
 
-Off hides owned previews, restores visual state and rebuilds visible owned native tooltips
-outside combat. No protected comparison-display API, binding or global CVar is changed.
+## Validation and first player test
 
-## Validation and player acceptance
+```sh
+python3 tests/run.py --lua /path/to/lua --dialogue-ui /path/to/AddOns/DialogueUI \
+  --comparison-source /path/to/Blizzard/TooltipComparisonManager.lua
+```
 
-`lua features/universal-item-tooltips/tests/test.lua .` checks native-delta delegation,
-alternatives/pairs, self/uncached/unknown/secret fallbacks, original annotations,
-preview ownership, asynchronous camera application, missing-camera fallback, font/padding
-restoration, duplicate prevention, approach switching and native dropdown callbacks. It uses API fakes;
-it does not establish real model rendering, source-window coverage or combat taint.
+Fakes check native comparisons/fallbacks and settings. The source-backed proof executes
+Dialogue UI's actual callback/base/private/public files plus Blizzard's constructor.
+It covers native annotations/colors/money, original theme/fonts/model overhang/camera,
+Shift, repeated rebuilds, external alpha, comparison-side placement, quest takeover,
+non-item/unknown-version fallback, protected restoration and disable. This does not
+prove GPU visuals, real combat/taint or source-window coverage.
 
-After approved deployment test a normal bag item first: original information plus
-one correctly signed replacement group and its actual appearance preview. Then test
-character equipment (no self comparison), bank/Warband bank, AH, vendor, loot and
-links; ring/trinket alternatives, paired weapons and sockets. Check Shift/always compare,
-uncached items, both independent switches, reload persistence, combat and BugSack.
-Keep native fallback on any unsupported context; do not guess counterpart arithmetic.
+After approved deployment and `/reload`:
 
-For the next client trial, use the same cloak from the reported screenshot: confirm
-there is no separate empty window above/below the tooltip, the armor preview appears
-in the main tooltip's upper-right, and the original item body/annotations remain.
-Switch both dropdown approaches on the same item, then disable enhancements completely.
-Check font/padding restoration on a subsequent spell/unit tooltip and `/reload` persistence.
-The screenshot exposed a real rendering gap despite the previous API-fake tests passing;
-those tests are regression checks, not evidence of an acceptable in-game visual result.
+1. `/pwt`: select **Dialogue UI (original renderer)**. Hover the same normal bag cloak
+   or helmet for ten seconds. Expect the actual textured tooltip, overhanging model,
+   original price/notes, one replacement section and no repeated flashing.
+2. Switch items rapidly, press/release Shift, and check native side-by-side comparisons.
+   Test current UI mode and disabled state: original presentation must return.
+3. Keep bags open while hovering a Dialogue UI quest reward. It must retain its own
+   tooltip; leaving the bag item must not hide the newer quest tooltip.
+4. Test reload persistence, combat transitions, uncached items and BugSack. Equipped
+   items and combined/paired weapons should use the documented native fallback.
+5. If rendering differs, run `/pwttip` after the hover and capture its status. If the
+   equipped item's native footer remains, run `/pwtcompare` and report the primary
+   reason. Footer cleanup is independent and is not claimed fixed by this integration.

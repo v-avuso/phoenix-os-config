@@ -26,4 +26,4 @@ for fixture in sorted(root.glob('features/*/tests/test.lua')):
     subprocess.run([args.lua, str(fixture), str(root), *extra], check=True)
 if args.dialogue_ui:
     subprocess.run([args.lua, str(root / 'features/universal-item-tooltips/tests/dialogue-ui.lua'),
-                    str(root), args.dialogue_ui], check=True)
+                    str(root), args.dialogue_ui, *([args.comparison_source] if args.comparison_source else [])], check=True)

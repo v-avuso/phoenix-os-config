@@ -31,6 +31,8 @@
   first. The original renderer reuse proof supersedes the assumption that absence of
   a supported global API requires a new renderer. Keep singleton ownership and
   item-aware dispatch intact; do not extend the imitation before a live reuse trial.
+  Mirrored data must retain TooltipDataType.Item and semantic price rows; exercise the
+  real Blizzard comparison constructor, not a permissive fake accepting any table.
 - An immutable installed package does not follow working files. Deployment and
   reload/restart are separate steps; neither a reload nor restart installs edits.
 - PhoenixOS packaging/activation and its tests are owned outside this directory.

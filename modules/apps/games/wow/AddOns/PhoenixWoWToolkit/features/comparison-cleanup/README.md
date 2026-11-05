@@ -83,3 +83,12 @@ and hidden pooled right-column strings with stale content. These address concret
 in the old fixture; they do not establish which path caused the player's screenshot.
 If the footer persists, retain the conservative annotation checks and inspect the actual
 client's row/state layout rather than truncating arbitrary tooltip content.
+
+## Live diagnostic
+
+After hovering the failing item, run `/pwtcompare`. It reports enabled/available/running
+state and the last primary/secondary guard result (baseline missing, row/header/delta
+mismatch, restricted data, retained weapon/cycling context, or matched footer/layout
+state). No item text, identifiers or personal data are printed. This revision adds
+observability; it does not claim the reported ElvUI failure fixed. Capture the primary
+result and use it for the next narrowly scoped regression and correction.

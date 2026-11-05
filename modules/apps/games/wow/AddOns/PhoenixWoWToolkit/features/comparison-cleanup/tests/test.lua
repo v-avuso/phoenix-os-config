@@ -6,9 +6,11 @@ Enum = { TooltipComparisonMethod = { Single = 0, WithBothHands = 1, WithBagMainH
 ITEM_DELTA_DESCRIPTION, ITEM_DELTA_MULTIPLE_COMPARISON_DESCRIPTION = 'Native single comparison', 'Native combined comparison'
 EQUIPPED, IF_EQUIPPED_TOGETHER = 'Equipped', 'If equipped together'
 RegisterEventCallback = noop
+SlashCmdList = {}
 GetCVarBool = function() return true end
 local delta = { '+38 Stamina', '-51 Critical Strike' }
 local postCalls, staleRight = {}, false
+CreateFrame=function() return { RegisterEvent=noop, SetScript=noop } end
 TooltipDataProcessor = { AddTooltipPostCall = function(_, callback) postCalls[#postCalls + 1] = callback end }
 C_TooltipComparison = { GetItemComparisonDelta = function() return delta end }
 C_TooltipInfo = { GetHyperlink = function() return { lines = { 'Original equipped stats', 'Other add-on annotation' } } end }
@@ -111,7 +113,9 @@ assert(_G.PWTTestShopping1TextLeft4:IsShown() and _G.PWTTestShopping1TextLeft7:I
 ShoppingTooltip1:ClearLines(); ShoppingTooltip1:ProcessInfo({ tooltipData = C_TooltipInfo.GetHyperlink() })
 for _, line in ipairs({ ' ', ITEM_DELTA_DESCRIPTION, 'Unexpected row', delta[2] }) do ShoppingTooltip1:AddLine(line) end
 feature:Trim(manager, true); assert(_G.PWTTestShopping1TextLeft4:IsShown())
+assert(feature:Diagnostic()[2]:find('delta mismatch',1,true) and SLASH_PWTCOMPARE1=='/pwtcompare' and SlashCmdList.PWTCOMPARE)
 manager.compareInfo.method = 2; feature:Trim(manager, true); assert(_G.PWTTestShopping1TextLeft4:IsShown())
+assert(feature:Diagnostic()[2]:find('paired/unknown',1,true) and SLASH_PWTCOMPARE1=='/pwtcompare' and SlashCmdList.PWTCOMPARE)
 feature:Disable(); manager.compareInfo.method = 0; manager:SetItemTooltip(true)
 assert(_G.PWTTestShopping1TextLeft4:IsShown(), 'cleanup off retains native footer')
 assert(T.ItemComparison == nil, 'cleanup must not depend on the compact-comparison feature')
@@ -122,7 +126,7 @@ C_Item = { IsEquippableItem = function() return true end, GetItemInfoInstant = f
     IsDressableItemByID = function() return false end,
     GetDetailedItemLevelInfo = function(link) return link == 'candidate' and 100 or 80 end }
 C_TooltipComparison.GetItemComparisonInfo = function() return manager.compareInfo end
-for _, file in ipairs({ 'Comparison', 'Preview', 'Presentation', 'Feature' }) do
+for _, file in ipairs({ 'Comparison', 'DialogueUI', 'Feature' }) do
     assert(loadfile(root .. '/features/universal-item-tooltips/' .. file .. '.lua'))('PhoenixWoWToolkit', T)
 end
 local compact = T.feature
