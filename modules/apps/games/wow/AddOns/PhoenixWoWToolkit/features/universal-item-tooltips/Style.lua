@@ -6,6 +6,10 @@ local function safe(frame)
     return frame and not frame:IsForbidden() and not frame:IsProtected()
         and not (frame.IsAnchoringSecret and frame:IsAnchoringSecret())
 end
+local function regionSafe(region)
+    return region and region.IsForbidden and not region:IsForbidden()
+        and (not region.IsProtected or not region:IsProtected()) and region.GetAlpha and region.SetAlpha
+end
 local function tuple(object, method)
     if not object[method] then return end
     local r,g,b,a = object[method](object)
@@ -35,8 +39,17 @@ function Style.New(adapter, settings)
     end
     -- Install setter hooks before the first tooltip call (especially pet GUIDs
     -- not present in a generic tooltip-data snapshot).
-    if GameTooltip then self:Observe(GameTooltip,nil) end
+    self:WatchKnownTooltips()
     return self
+end
+
+-- Named ordinary tooltips also render raw text, bypassing data postcalls.
+-- DataTextTooltip is the shared ElvUI tooltip used by WunderBar.
+function Style:WatchKnownTooltips()
+    for _,name in ipairs({"GameTooltip","ItemRefTooltip","ShoppingTooltip1","ShoppingTooltip2","DataTextTooltip"}) do
+        local frame=_G[name]
+        if safe(frame) and not self.states[frame] then self:Observe(frame,nil) end
+    end
 end
 
 function Style:Restore(frame)
@@ -46,37 +59,46 @@ function Style:Restore(frame)
     if state.chrome then state.chrome:Hide() end
     if state.owned then
         state.owned=false -- Release before restoring: our post-hooks must be inert.
-        for border,alpha in pairs(state.borders or {}) do if safe(border) then border:SetAlpha(alpha) end end
-        if frame.NineSlice and state.nine ~= nil then frame.NineSlice:SetAlpha(state.nine) end
+        for border,alpha in pairs(state.borders or {}) do if regionSafe(border) then border:SetAlpha(alpha) end end
+        if frame.NineSlice and state.nine ~= nil and not (state.borders and state.borders[frame.NineSlice]~=nil) then
+            frame.NineSlice:SetAlpha(state.nine)
+        end
         if state.backdrop and frame.SetBackdrop then
             frame:SetBackdrop(state.backdrop)
             if state.color then frame:SetBackdropColor(unpack(state.color)) end
             if state.border then frame:SetBackdropBorderColor(unpack(state.border)) end
         end
-        if frame.Background and state.background ~= nil then frame.Background:SetShown(state.background) end
+        if frame.Background and state.background ~= nil and not (state.borders and state.borders[frame.Background]~=nil) then
+            frame.Background:SetShown(state.background)
+        end
         state.owned=false
     end
 end
 
--- ElvUI's SetTemplate creates two separate border frames, outside SetBackdrop.
--- Suppress only those known skin surfaces; retain annotations and other children.
-function Style:HideBorders(frame,state)
+-- Suppress only known skin surfaces, never arbitrary children/annotations.
+-- This path does not inspect tooltip content; restricted anchors still fall back.
+function Style:HideNativeSkin(frame,state)
     self.borderWatched=self.borderWatched or {}
-    for _,key in ipairs({"iborder","oborder"}) do
+    for _,key in ipairs({"iborder","oborder","NineSlice","Background"}) do
         local border=frame[key]
-        if border and border.IsForbidden and border.IsProtected and border.GetAlpha and border.SetAlpha and safe(border) then
+        if regionSafe(border) then
             local alpha=border:GetAlpha()
             if public(alpha) then
                 if state.borders[border]==nil then state.borders[border]=alpha end
                 if not self.borderWatched[border] then
                     self.borderWatched[border]=true
-                    hooksecurefunc(border,"SetAlpha",function(_,value)
-                        if state.owned and self.enabled and self.settings.framing=="dialogueUI" and not self.settingBorders
-                            and public(value) and safe(border) then
-                            state.borders[border]=value
+                    local function suppress()
+                        if state.owned and self.enabled and self.settings.framing=="dialogueUI" and regionSafe(border) then
                             self.settingBorders=true;border:SetAlpha(0);self.settingBorders=false
                         end
+                    end
+                    hooksecurefunc(border,"SetAlpha",function(_,value)
+                        if state.owned and not self.settingBorders and public(value) then
+                            state.borders[border]=value;suppress()
+                        end
                     end)
+                    if border.Show then hooksecurefunc(border,"Show",suppress) end
+                    if border.SetShown then hooksecurefunc(border,"SetShown",suppress) end
                 end
                 self.settingBorders=true;border:SetAlpha(0);self.settingBorders=false
             end
@@ -104,8 +126,8 @@ function Style:Chrome(frame, original, nativeSource)
         state.borders={}
         state.owned=true
     end
-    if not original then self:HideBorders(frame,state) end
-    if frame.NineSlice then frame.NineSlice:SetAlpha(0) end
+    if not original then self:HideNativeSkin(frame,state)
+    elseif frame.NineSlice then frame.NineSlice:SetAlpha(0) end
     if state.backdrop and frame.SetBackdrop then
         self.settingBackdrop=true;frame:SetBackdrop(nil);self.settingBackdrop=false
     end
@@ -147,7 +169,7 @@ end
 -- Chain comparison panes against the actual rendered neighbor. Native shopping
 -- anchors describe smaller Blizzard panes and cannot space our wider text views.
 function Style:Place()
-    if self.placing or not GameTooltip then return end
+    if self.placing or not safe(GameTooltip) then return end
     self.placing=true
     local main=self.states[GameTooltip]
     local primary=main and main.active and main.view or (self.adapter.lease and self.adapter.renderer or GameTooltip)
@@ -199,8 +221,8 @@ function Style:Place()
 end
 
 function Style:Refresh(source)
-    if not safe(source) then return end
     self:Chrome(source,false)
+    if not safe(source) then self:Release(source);return end
     local state=self.states[source]
     if not state then return end
     if not self.enabled or self.settings.appearance~="dialogueUI" or not source:IsShown() or not state.data then
@@ -289,6 +311,12 @@ function Style:Observe(source,data)
                     end
                 end)
             end
+        end
+        -- Native unit/aura paths can reset skin internally while remaining shown,
+        -- without an accessible data callback. Never inspect their arguments.
+        for _,method in ipairs({"SetUnit","SetUnitAura","SetUnitBuff","SetUnitDebuff",
+            "SetUnitAuraByAuraInstanceID","SetUnitBuffByAuraInstanceID","SetUnitDebuffByAuraInstanceID","SetSpellByID"}) do
+            if source[method] then hooksecurefunc(source,method,function() self:Chrome(source,false);queue() end) end
         end
         for _,entry in ipairs({{"SetCompanionPet","pet"},{"SetMountBySpellID","mount"}}) do
             local method,kind=entry[1],entry[2]

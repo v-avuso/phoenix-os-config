@@ -99,9 +99,16 @@ function feature:Enable()
             end
         end)
         local events = CreateFrame("Frame")
+        events:RegisterEvent("PLAYER_LOGIN")
+        events:RegisterEvent("PLAYER_ENTERING_WORLD")
+        events:RegisterEvent("ADDON_LOADED")
         events:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
         events:RegisterEvent("PLAYER_REGEN_ENABLED")
-        events:SetScript("OnEvent", function(_, event)
+        events:SetScript("OnEvent", function(_, event, addon)
+            if self.style and (event=="PLAYER_LOGIN" or event=="PLAYER_ENTERING_WORLD"
+                or (event=="ADDON_LOADED" and (addon=="ElvUI" or addon=="ElvUI_ToxiUI"))) then
+                self.style:WatchKnownTooltips()
+            end
             for tooltip in pairs(self.adapter.pending) do self.adapter:RestorePending(tooltip) end
             local lease = self.adapter.lease
             if self.running and event == "PLAYER_EQUIPMENT_CHANGED" and lease then self:Render(lease.source, lease.data, true) end
@@ -177,7 +184,7 @@ if SlashCmdList then
     SLASH_PWTTIP1 = "/pwttip"
     SlashCmdList.PWTTIP = function()
         local adapter = feature.adapter
-        print("PWT preview adapter: composite-v1; action=" .. (feature.style and feature.style.actionTrace or "not observed"))
+        print("PWT preview adapter: framing-v2; action=" .. (feature.style and feature.style.actionTrace or "not observed"))
         print("PWT tooltips: enabled=" .. tostring(feature.settings and feature.settings.enabled)
             .. " approach=" .. tostring(feature.settings and feature.settings.appearance))
         print("Dialogue UI: " .. (adapter and (adapter.reason or adapter.status) or "not initialized")

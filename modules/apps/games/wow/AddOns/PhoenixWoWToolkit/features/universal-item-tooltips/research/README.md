@@ -176,3 +176,19 @@ Clearing SetBackdrop does not clear those frames. The adapter now owns their alp
 only while Dialogue UI framing is selected, with restoration and late-write tests.
 The action path additionally accepts a public tooltip GetSpell identity rather than
 interpreting an opaque mount action index; runtime diagnostics record the actual route.
+
+## Native/raw tooltip framing coverage
+
+Blizzard TooltipDataHandler.InternalProcessInfo runs tooltip postcalls, then Show,
+then optional SharedTooltip_SetBackdropStyle. Appearance can therefore reset after
+an all-types callback. The adapter suppresses known native skin surfaces with guarded
+alpha/show hooks and passive unit/aura setter post-hooks, without reading aura args.
+
+Installed ElvUI DataTexts/DataTexts.lua creates the named DataTextTooltip at file load.
+ToxiUI WunderBar Profession/SpecSwitch/Currency add raw lines to DT.tooltip and Show it;
+there need not be an item/spell data callback. Explicit named-frame observation reuses
+this existing frame and preserves its content, with lifecycle-based late discovery.
+The earlier framing code also left native Background visible and did not guard late
+NineSlice resets. Regressions now distinguish those skin surfaces from the selected
+texture and verify Default restoration. Secret data is not inspected; the original
+protected/forbidden/anchoring checks remain in force.

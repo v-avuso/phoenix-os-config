@@ -22,6 +22,7 @@ local function frame(kind, _, parent, template)
     f.IsVisible = f.IsShown
     function f:IsForbidden() return self.forbidden or false end
     function f:IsProtected() return self.protected or false end
+    function f:IsAnchoringSecret() return self.anchorSecret or false end
     function f:SetSize(w,h) self.w,self.h = w,h end
     function f:SetWidth(w) self.w = w end
     function f:GetWidth() return self.w end
@@ -52,6 +53,7 @@ local function frame(kind, _, parent, template)
     function f:SetCompanionPet(id) self.petGUID=id end
     function f:SetMountBySpellID(id) self.mountSpellID=id end
     function f:SetAction(slot) self.actionSlot=slot end
+    function f:SetUnitAura() if self.Background then self.Background.alpha=1 end end
     function f:GetSpell() return 'Tooltip spell',self.tooltipSpell end
     function f:SetIsFrameBuffer(value) self.frameBuffer=value end
     function f:SetModelDrawLayer(layer) self.drawLayer=layer end
@@ -461,13 +463,39 @@ feature.settings.equippedPreviews=false;feature.style:Configure(true)
 assert(styled.active and not styled.view.usePreviewModel,'equipped preview checkbox preserves text-only comparison')
 local skin=frame('GameTooltip')
 skin.iborder=frame('Frame');skin.oborder=frame('Frame');skin.iborder:SetAlpha(0.8)
+skin.NineSlice=frame('Frame');skin.Background=frame('Texture')
+skin.NineSlice.nativeResetAlpha=true
 skin:SetBackdrop({bgFile='native-skin'})
 feature.style:Observe(skin,{type=2,lines={}})
 assert(skin.iborder:GetAlpha()==0 and skin.oborder:GetAlpha()==0,'Dialogue UI skin suppresses separate ElvUI border frames')
+assert(skin.Background:GetAlpha()==0,'native background is not layered beneath the selected skin')
+skin.NineSlice:SetAlpha(0.7);skin.NineSlice:SetShown(true)
+assert(skin.NineSlice:GetAlpha()==0,'late native NineSlice reset cannot revive a second outline')
+DataTextTooltip=frame('GameTooltip');DataTextTooltip:SetBackdrop({bgFile='datatext-native'})
+feature.style:WatchKnownTooltips()
+DataTextTooltip:Show()
+local pending=timers;timers={};for _,fn in ipairs(pending) do fn() end
+assert(feature.style.states[DataTextTooltip].texture.shown and not DataTextTooltip:GetBackdrop(),
+    'WunderBar raw text tooltip follows framing without a data postcall')
+local aura=frame('GameTooltip');aura.Background=frame('Texture')
+aura.GetLeft=function() error('secret anchor geometry must never be read') end
+feature.style:Observe(aura,'secret')
+aura:Show()
+local pending=timers;timers={};for _,fn in ipairs(pending) do fn() end
+assert(feature.style.states[aura].texture.shown and aura.Background:GetAlpha()==0
+    and not feature.style.states[aura].active,'secret aura data gets skin only, without content or geometry access')
+aura:SetUnitAura()
+assert(aura.Background:GetAlpha()==0,'native aura setter restores selected skin after an internal reset')
+local restricted=frame('GameTooltip');restricted.anchorSecret=true
+feature.style:Observe(restricted,'secret')
+assert(not feature.style.states[restricted],'restricted anchoring remains a native fallback')
 skin.oborder:SetAlpha(0.4)
 assert(skin.oborder:GetAlpha()==0,'late skin updates cannot restore a second border')
 feature.settings.framing='native';feature.style:Configure(true)
 assert(skin.iborder:GetAlpha()==0.8 and skin.oborder:GetAlpha()==0.4,'default framing restores the native borders')
+assert(skin.NineSlice:GetAlpha()==0.7 and skin.Background:GetAlpha()==1,'default restores latest native surfaces')
+assert(DataTextTooltip:GetBackdrop().bgFile=='datatext-native'
+    and not feature.style.states[DataTextTooltip].texture.shown,'default framing restores WunderBar')
 feature.settings.framing='dialogueUI';feature.style:Configure(true)
 assert(skin.iborder:GetAlpha()==0 and skin.oborder:GetAlpha()==0,'Dialogue UI framing suppresses borders again')
 skin:SetBackdrop({bgFile='updated-native-skin'})

@@ -33,7 +33,8 @@
   alpha to its replacement. Exercise item/summon ownership transitions before another
   renderer samples native opacity. Cover native SetAction's spell/macro and opaque
   mount/pet routes; a journal setter alone does not establish action-bar coverage.
-  Passing fakes never establishes the in-game visual result.
+  Cover raw DataTextTooltip and native aura setters: data postcalls alone do not
+  establish framing coverage. Passing fakes never establishes the in-game visual result.
 - For actual Dialogue UI tooltip reuse, read the item feature's `research/README.md`
   first. The original renderer reuse proof supersedes the assumption that absence of
   a supported global API requires a new renderer. Keep singleton ownership and

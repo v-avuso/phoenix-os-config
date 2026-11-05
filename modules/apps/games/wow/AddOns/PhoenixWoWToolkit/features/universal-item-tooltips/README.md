@@ -172,14 +172,38 @@ identity. Opaque mount indexes are never interpreted as spell IDs. Summonpet act
 supply a pet GUID. No action attributes, buttons, macro text or bindings are modified.
 Missing/secret identities and item macros retain native fallback.
 
-ElvUI's SetTemplate creates separate iborder/oborder frames beyond SetBackdrop.
-Dialogue UI framing suppresses only those known skin surfaces and the native backdrop,
-including late writes. Default framing or disabling restores the latest native intent;
-annotations and other children remain intact.
+Dialogue UI framing suppresses the native backdrop and the known iborder, oborder,
+NineSlice and Background surfaces. Late alpha/show/backdrop resets cannot revive a
+second visible skin. Default framing or disabling restores the latest native intent;
+annotations, status bars and other children remain intact.
 
-`/pwttip` prints `composite-v1` and the last public action-resolution route, surviving
+`/pwttip` prints `framing-v2` and the last public action-resolution route, surviving
 leaving the button. Development deployments use phoenix-test, then `/reload`; restart
 is not a remedy for a verified runtime failure and the next-boot profile stays intact.
 Client test: check the marker, overlap journal models, hover a dragged mount and macro
 on the action bar, and switch framing on unit/spell/item tooltips. Test overflow on/off,
 reload, modifiers and combat. Fakes verify adapter calls/restoration, not GPU output.
+
+## Uniform framing for units, auras and WunderBar
+
+The existing **Tooltip framing style** setting controls conventional action, unit,
+aura/buff, item and WunderBar tooltips. Framing is independent of content replacement:
+unit and buff information remains native. Missing/restricted tooltip data does not
+prevent styling an otherwise safe frame; protected, forbidden or secret-anchored
+frames still fall back without relaxing their access boundary.
+
+Style.lua observes named GameTooltip, ItemRefTooltip, shopping tooltips and ElvUI's
+DataTextTooltip, including ordinary Show calls without data callbacks. WunderBar's
+inspected Profession/SpecSwitch/Currency modules use that shared DataTextTooltip.
+Discovery repeats at login/entering world and relevant addon loads, not by polling.
+Native unit/aura setters also receive passive skin post-hooks, because they can reset
+appearance internally while the tooltip remains shown. Their arguments are ignored.
+
+Only selected skin surfaces are suppressed. Text, status bars, annotations, input
+and anchoring are retained. Source-backed fixtures cover native Background visibility,
+late NineSlice resets, raw DataTextTooltip, restricted aura content, setter resets,
+Default restoration and protected-anchor fallback. Client test: select Dialogue UI,
+hover the player, a buff, an action button and WunderBar; expect one textured frame
+without the native thin outline. Switch to Default and back, then disable customization.
+Check annotations, combat and reload. `/pwttip` prints revision `framing-v2`; actual
+ElvUI/ToxiUI visual uniformity still requires player acceptance.
