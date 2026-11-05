@@ -173,11 +173,12 @@ supply a pet GUID. No action attributes, buttons, macro text or bindings are mod
 Missing/secret identities and item macros retain native fallback.
 
 Dialogue UI framing suppresses the native backdrop and the known iborder, oborder,
-NineSlice and Background surfaces. Late alpha/show/backdrop resets cannot revive a
+NineSlice and Background surfaces, plus ToxiUI's txSoftShadow, txInnerShadow and
+txInnerNoise decorations. Late alpha/show/backdrop/template resets cannot revive a
 second visible skin. Default framing or disabling restores the latest native intent;
 annotations, status bars and other children remain intact.
 
-`/pwttip` prints `framing-v2` and the last public action-resolution route, surviving
+`/pwttip` prints `framing-v3` and the last public action-resolution route, surviving
 leaving the button. Development deployments use phoenix-test, then `/reload`; restart
 is not a remedy for a verified runtime failure and the next-boot profile stays intact.
 Client test: check the marker, overlap journal models, hover a dragged mount and macro
@@ -205,5 +206,19 @@ late NineSlice resets, raw DataTextTooltip, restricted aura content, setter rese
 Default restoration and protected-anchor fallback. Client test: select Dialogue UI,
 hover the player, a buff, an action button and WunderBar; expect one textured frame
 without the native thin outline. Switch to Default and back, then disable customization.
-Check annotations, combat and reload. `/pwttip` prints revision `framing-v2`; actual
+Check annotations, combat and reload. `/pwttip` prints revision `framing-v3`; actual
 ElvUI/ToxiUI visual uniformity still requires player acceptance.
+
+ToxiUI Theme.SetTemplate adds three separate decorations after ElvUI's template call;
+clearing the native backdrop alone does not remove them. A coalesced next-frame
+refresh after native backdrop changes lets the provider finish colors/decorations
+before suppression. No inherited SetTemplate method is shadowed or globally patched.
+Default framing restores recorded decoration alpha and the latest public color intent.
+
+The native default-anchor hook discovers alternate ordinary GameTooltip frames,
+including the cooldown viewer's GetAppropriateTooltip path, before their data setter
+runs. Protected/forbidden/secret-anchored tooltips remain untouched. After hovering a
+buff/cooldown that still looks native, run `/pwttip`: the **PWT framing** line records
+the last frame, setter route and applied/skipped reason without recording aura text,
+unit names, IDs or coordinates. Such a runtime skip is a compatibility limit to
+investigate, not evidence that a restart or another layer adjustment is needed.

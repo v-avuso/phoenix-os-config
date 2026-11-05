@@ -38,6 +38,7 @@ local function frame(kind, _, parent, template)
     function f:SetScale(scale) self.scale=scale end
     function f:GetAlpha() return self.alpha end
     function f:GetOwner() return self.owner end
+    function f:GetName() return self.frameName end
     function f:GetLeft() return self.left or 400 end
     function f:GetRight() return self.right or 600 end
     function f:SetAlpha(alpha) assert(not (combat and self.protected)); self.alpha = alpha end
@@ -54,6 +55,16 @@ local function frame(kind, _, parent, template)
     function f:SetMountBySpellID(id) self.mountSpellID=id end
     function f:SetAction(slot) self.actionSlot=slot end
     function f:SetUnitAura() if self.Background then self.Background.alpha=1 end end
+    function f:SetUnitAuraByAuraInstanceID() self:SetUnitAura() end
+    function f:SetUnitBuffByAuraInstanceID() self:SetUnitAura() end
+    function f:SetTemplate()
+        self:SetBackdrop({bgFile='native-template'})
+        self.txSoftShadow=self.txSoftShadow or frame('Frame')
+        self.txInnerShadow=self.txInnerShadow or frame('Texture')
+        self.txInnerNoise=self.txInnerNoise or frame('Texture')
+        self:SetBackdropColor(0.2,0.3,0.4,0.6)
+        self:SetBackdropBorderColor(0.1,0.2,0.3,1)
+    end
     function f:GetSpell() return 'Tooltip spell',self.tooltipSpell end
     function f:SetIsFrameBuffer(value) self.frameBuffer=value end
     function f:SetModelDrawLayer(layer) self.drawLayer=layer end
@@ -68,10 +79,10 @@ local function frame(kind, _, parent, template)
     function f:SetAllPoints() end
     function f:SetBackdrop(info) self.backdrop=info end
     function f:GetBackdrop() return self.backdrop end
-    function f:GetBackdropColor() return 0.05,0.05,0.05,1 end
-    function f:GetBackdropBorderColor() return 0,0,0,1 end
-    function f:SetBackdropColor() end
-    function f:SetBackdropBorderColor() end
+    function f:GetBackdropColor() return unpack(self.bgColor or {0.05,0.05,0.05,1}) end
+    function f:GetBackdropBorderColor() return unpack(self.edgeColor or {0,0,0,1}) end
+    function f:SetBackdropColor(...) self.bgColor={...} end
+    function f:SetBackdropBorderColor(...) self.edgeColor={...} end
     function f:EnableMouse() end
     function f:SetFontObject(font) self.font = font end
     function f:TryOn(item) self.tried = item; self.tries = (self.tries or 0)+1 end
@@ -87,6 +98,7 @@ local function frame(kind, _, parent, template)
     return f
 end
 CreateFrame = frame
+GameTooltip_SetDefaultAnchor=function(tooltip) tooltip.nativeAnchorCalled=true end
 GetCursorPosition = function() return 100,100 end
 function EnumerateFrames(previous)
     if not previous then return frames[1] end
@@ -464,11 +476,14 @@ assert(styled.active and not styled.view.usePreviewModel,'equipped preview check
 local skin=frame('GameTooltip')
 skin.iborder=frame('Frame');skin.oborder=frame('Frame');skin.iborder:SetAlpha(0.8)
 skin.NineSlice=frame('Frame');skin.Background=frame('Texture')
+skin.txSoftShadow=frame('Frame');skin.txInnerShadow=frame('Texture');skin.txInnerNoise=frame('Texture')
 skin.NineSlice.nativeResetAlpha=true
 skin:SetBackdrop({bgFile='native-skin'})
 feature.style:Observe(skin,{type=2,lines={}})
 assert(skin.iborder:GetAlpha()==0 and skin.oborder:GetAlpha()==0,'Dialogue UI skin suppresses separate ElvUI border frames')
 assert(skin.Background:GetAlpha()==0,'native background is not layered beneath the selected skin')
+assert(skin.txSoftShadow:GetAlpha()==0 and skin.txInnerShadow:GetAlpha()==0 and skin.txInnerNoise:GetAlpha()==0,
+    'ToxiUI shadow/noise layers are not drawn beneath or outside the chosen skin')
 skin.NineSlice:SetAlpha(0.7);skin.NineSlice:SetShown(true)
 assert(skin.NineSlice:GetAlpha()==0,'late native NineSlice reset cannot revive a second outline')
 DataTextTooltip=frame('GameTooltip');DataTextTooltip:SetBackdrop({bgFile='datatext-native'})
@@ -486,6 +501,22 @@ assert(feature.style.states[aura].texture.shown and aura.Background:GetAlpha()==
     and not feature.style.states[aura].active,'secret aura data gets skin only, without content or geometry access')
 aura:SetUnitAura()
 assert(aura.Background:GetAlpha()==0,'native aura setter restores selected skin after an internal reset')
+local alternate=frame('GameTooltip');alternate.Background=frame('Texture');alternate.frameName='CooldownTestTooltip'
+GameTooltip_SetDefaultAnchor(alternate)
+alternate:SetUnitAuraByAuraInstanceID('secret','secret')
+assert(alternate.nativeAnchorCalled and feature.style.states[alternate].texture.shown and alternate.Background:GetAlpha()==0,
+    'native cooldown GetAppropriateTooltip path discovers an alternate ordinary tooltip at default anchoring')
+assert(feature.style.skinTrace:find('CooldownTestTooltip / SetUnitAuraByAuraInstanceID: Dialogue UI applied',1,true))
+alternate:SetUnitBuffByAuraInstanceID('secret','secret')
+assert(alternate.Background:GetAlpha()==0,'target buff setter preserves selected framing without inspecting arguments')
+local lateSkin=frame('GameTooltip');feature.style:Observe(lateSkin,nil);lateSkin:SetTemplate()
+local pending=timers;timers={};for _,fn in ipairs(pending) do fn() end
+assert(lateSkin.txSoftShadow:GetAlpha()==0 and lateSkin.txInnerShadow:GetAlpha()==0,
+    'post-template discovery catches ToxiUI decorations created after backdrop callbacks')
+local forbidden=frame('GameTooltip');forbidden.forbidden=true
+GameTooltip_SetDefaultAnchor(forbidden)
+assert(not feature.style.states[forbidden] and feature.style.skinTrace:find('forbidden',1,true),
+    'forbidden alternate tooltip is diagnosed without bypassing its access boundary')
 local restricted=frame('GameTooltip');restricted.anchorSecret=true
 feature.style:Observe(restricted,'secret')
 assert(not feature.style.states[restricted],'restricted anchoring remains a native fallback')
@@ -494,15 +525,23 @@ assert(skin.oborder:GetAlpha()==0,'late skin updates cannot restore a second bor
 feature.settings.framing='native';feature.style:Configure(true)
 assert(skin.iborder:GetAlpha()==0.8 and skin.oborder:GetAlpha()==0.4,'default framing restores the native borders')
 assert(skin.NineSlice:GetAlpha()==0.7 and skin.Background:GetAlpha()==1,'default restores latest native surfaces')
+assert(skin.txSoftShadow:GetAlpha()==1 and skin.txInnerShadow:GetAlpha()==1 and skin.txInnerNoise:GetAlpha()==1,
+    'Default restores independent ToxiUI decorations')
 assert(DataTextTooltip:GetBackdrop().bgFile=='datatext-native'
     and not feature.style.states[DataTextTooltip].texture.shown,'default framing restores WunderBar')
 feature.settings.framing='dialogueUI';feature.style:Configure(true)
 assert(skin.iborder:GetAlpha()==0 and skin.oborder:GetAlpha()==0,'Dialogue UI framing suppresses borders again')
 skin:SetBackdrop({bgFile='updated-native-skin'})
+skin:SetBackdropColor(0.3,0.4,0.5,0.6)
+local pending=timers;timers={};for _,fn in ipairs(pending) do fn() end
 assert(not skin:GetBackdrop(),'late native backdrop reset is suppressed')
 feature:Disable()
 assert(skin.iborder:GetAlpha()==0.8 and skin.oborder:GetAlpha()==0.4
     and skin:GetBackdrop().bgFile=='updated-native-skin','disable restores latest native skin intent')
+local r,g,b,a=skin:GetBackdropColor()
+assert(r==0.3 and g==0.4 and b==0.5 and a==0.6,'native color intent survives deferred provider completion')
+local r,g,b,a=lateSkin:GetBackdropColor()
+assert(r==0.2 and g==0.3 and b==0.4 and a==0.6,'late template colors restore with its decorations')
 assert(summon.view.PreviewModel.Model1:GetModelDrawLayer()=='ARTWORK'
     and summon.view.PreviewModel.Model1:GetFrameLevel()==summon.view:GetFrameLevel(),
     'disable restores original model layer and frame level')

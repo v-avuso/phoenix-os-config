@@ -192,3 +192,22 @@ The earlier framing code also left native Background visible and did not guard l
 NineSlice resets. Regressions now distinguish those skin surfaces from the selected
 texture and verify Default restoration. Secret data is not inspected; the original
 protected/forbidden/anchoring checks remain in force.
+
+## ToxiUI decorations and alternate aura/cooldown frames
+
+The next player trial still showed a dark outline despite native skin suppression.
+Installed ToxiUI Modules/AddOns/Theme.lua:SetTemplate and Core/Functions/Core.lua
+identify three omitted surfaces: txSoftShadow (ordinary frame), txInnerShadow and
+txInnerNoise (textures). These are separate from the native/ElvUI backdrop and may
+be created after SetBackdrop callbacks. The adapter now suppresses those known
+surfaces after a coalesced native-backdrop refresh, with Default restoration regressions.
+The callback lets provider colors/decorations finish; it does not cache or shadow the
+inherited, dynamically hooked SetTemplate method. Explicit public color arguments
+are retained for restoration even while the displayed native backdrop is suppressed.
+
+Blizzard CooldownViewerItemDataMixin:OnEnter chooses GetAppropriateTooltip, calls the
+native default anchor, then sets an aura-instance or spell tooltip. Passive discovery
+at GameTooltip_SetDefaultAnchor handles alternate ordinary tooltips without guessing
+names or querying aura arguments. Tests cover that flow and target-aura setters.
+Runtime diagnostics now record the exact frame/route and access-gating result; they
+must establish any remaining blocked native aura context before further changes.

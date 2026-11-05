@@ -40,6 +40,15 @@ function Style.New(adapter, settings)
     -- Install setter hooks before the first tooltip call (especially pet GUIDs
     -- not present in a generic tooltip-data snapshot).
     self:WatchKnownTooltips()
+    if type(GameTooltip_SetDefaultAnchor)=="function" then
+        hooksecurefunc(_G,"GameTooltip_SetDefaultAnchor",function(tooltip)
+            if safe(tooltip) and tooltip.GetPrimaryTooltipData then
+                if not self.states[tooltip] then self:Observe(tooltip,nil) end
+                self:Chrome(tooltip,false)
+            end
+            self:RecordSkin(tooltip,"default anchor")
+        end)
+    end
     return self
 end
 
@@ -50,6 +59,25 @@ function Style:WatchKnownTooltips()
         local frame=_G[name]
         if safe(frame) and not self.states[frame] then self:Observe(frame,nil) end
     end
+end
+
+-- Record public frame/skin status only, never unit/aura text, IDs or geometry.
+-- Keep the last setter sample after leaving the hover to enter /pwttip.
+function Style:RecordSkin(frame,route)
+    if not frame then return end
+    local name=frame==GameTooltip and "GameTooltip" or "tooltip"
+    local reason
+    if frame:IsForbidden() then reason="forbidden"
+    elseif frame:IsProtected() then reason="protected"
+    elseif frame.IsAnchoringSecret and frame:IsAnchoringSecret() then reason="secret anchor"
+    else
+        local frameName=frame.GetName and frame:GetName()
+        if public(frameName) and frameName then name=frameName end
+        local state=self.states[frame]
+        reason=not self.enabled and "disabled" or self.settings.framing=="native" and "Default selected"
+            or (state and state.owned and "Dialogue UI applied" or "not acquired")
+    end
+    self.skinTrace=name.." / "..route..": "..reason
 end
 
 function Style:Restore(frame)
@@ -79,7 +107,7 @@ end
 -- This path does not inspect tooltip content; restricted anchors still fall back.
 function Style:HideNativeSkin(frame,state)
     self.borderWatched=self.borderWatched or {}
-    for _,key in ipairs({"iborder","oborder","NineSlice","Background"}) do
+    for _,key in ipairs({"iborder","oborder","NineSlice","Background","txSoftShadow","txInnerShadow","txInnerNoise"}) do
         local border=frame[key]
         if regionSafe(border) then
             local alpha=border:GetAlpha()
@@ -298,16 +326,19 @@ function Style:Observe(source,data)
                 if state.owned and self.enabled and self.settings.framing=="dialogueUI" and not self.settingBackdrop
                     and safe(source) and public(info) and (not info or not canaccessallvalues or canaccessallvalues(info)) then
                     state.backdrop=info
-                    self:Chrome(source,false)
+                    -- Let the provider finish colors and ToxiUI decorations first.
+                    -- Do not shadow an inherited/dynamically replaced SetTemplate.
+                    queue()
                 end
             end)
         end
         for _,entry in ipairs({{"SetBackdropColor","color"},{"SetBackdropBorderColor","border"}}) do
             if source[entry[1]] then
                 local method,key=entry[1],entry[2]
-                hooksecurefunc(source,method,function()
-                    if state.owned and safe(source) then
-                        state[key]=tuple(source,method=="SetBackdropColor" and "GetBackdropColor" or "GetBackdropBorderColor")
+                hooksecurefunc(source,method,function(_,r,g,b,a)
+                    if state.owned and safe(source) and public(r) and public(g) and public(b) and public(a)
+                        and type(r)=="number" and type(g)=="number" and type(b)=="number" then
+                        state[key]={r,g,b,a or 1}
                     end
                 end)
             end
@@ -316,7 +347,12 @@ function Style:Observe(source,data)
         -- without an accessible data callback. Never inspect their arguments.
         for _,method in ipairs({"SetUnit","SetUnitAura","SetUnitBuff","SetUnitDebuff",
             "SetUnitAuraByAuraInstanceID","SetUnitBuffByAuraInstanceID","SetUnitDebuffByAuraInstanceID","SetSpellByID"}) do
-            if source[method] then hooksecurefunc(source,method,function() self:Chrome(source,false);queue() end) end
+            if source[method] then
+                local route=method
+                hooksecurefunc(source,method,function()
+                    self:Chrome(source,false);self:RecordSkin(source,route);queue()
+                end)
+            end
         end
         for _,entry in ipairs({{"SetCompanionPet","pet"},{"SetMountBySpellID","mount"}}) do
             local method,kind=entry[1],entry[2]
@@ -324,6 +360,7 @@ function Style:Observe(source,data)
                 hooksecurefunc(source,method,function(_,id)
                     if not safe(source) then return end
                     state.hint=public(id) and {kind=kind,id=id,data=state.data} or nil
+                    self:Chrome(source,false);self:RecordSkin(source,method)
                     queue()
                 end)
             end
@@ -332,6 +369,7 @@ function Style:Observe(source,data)
             hooksecurefunc(source,"SetAction",function(_,slot)
                 if not safe(source) then return end
                 state.hint,self.actionTrace=Toolkit.CreaturePreview.ActionHint(slot,state.data,source)
+                self:Chrome(source,false);self:RecordSkin(source,"SetAction")
                 queue()
             end)
         end
