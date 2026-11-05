@@ -11,7 +11,9 @@ for one workstation, not a general-purpose distribution.
   CoolerControl with a kernel-backed firmware fan fallback. Plasma is retained
   only on the VM target.
   Wi-Fi power saving is disabled on metal to prioritize connection reliability
-  during investigation of recurring WCN7850 stalls; this is not a confirmed fix.
+  during investigation of recurring WCN7850 stalls; an experimental
+  [receive-buffer backport](hosts/metal/wifi/README.md) targets the held kernel.
+  Neither mitigation is a confirmed fix.
   [Game window policy](home/hyprland/gaming/windows/README.md) keeps classified games tiled;
   direct pointer release until click remains a proposed compositor extension.
 - **VM:** historical Plasma/X11 setup, currently untested. Its tracked hardware

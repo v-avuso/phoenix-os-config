@@ -38,6 +38,7 @@ in
   imports = [
     ../../modules/input/mouse-side-button-debounce/default.nix
     ./fan-control.nix
+    ./wifi
   ];
 
   # Bare-metal desktop options belong here.

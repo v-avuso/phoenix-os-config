@@ -1,0 +1,60 @@
+Message-ID: <20261016124620.76-1-26rote@gmail.com>
+Date: Fri, 16 Oct 2026 21:46:20 +0900
+From: Joonhoe Kim <26rote@...il.com>
+To: jjohnson@...nel.org
+Cc: kvalo@...nel.org,
+	baochen.qiang@....qualcomm.com,
+	linux-wireless@...r.kernel.org,
+	ath12k@...ts.infradead.org,
+	linux-kernel@...r.kernel.org
+Subject: [PATCH ath-next] wifi: ath12k: replenish the RX buffers reaped without a complete MSDU
+
+ath12k_wifi7_dp_rx_process() returns early when none of the buffers
+reaped from the REO destination ring ends an MSDU, for example when
+they are all error pushes or continuation buffers whose last part has
+not arrived yet. The reaped descriptors are then neither posted back
+to the refill ring nor freed, and their skbs leak, so the refill ring
+loses those buffers for good.
+
+Replenish the reaped buffers before checking for complete MSDUs, and
+free the incomplete ones.
+
+Found by code review while debugging RX stalls on WCN7860.
+
+Fixes: d889913205cf ("wifi: ath12k: driver for Qualcomm Wi-Fi 7 devices")
+Signed-off-by: Joonhoe Kim <26rote@...il.com>
+---
+WCN7860 runs here with out-of-tree enablement patches. This path did
+not trigger in about 105 minutes of TCP soak runs on it, so the fix
+comes from reading the code.
+
+ drivers/net/wireless/ath/ath12k/wifi7/dp_rx.c | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/net/wireless/ath/ath12k/wifi7/dp_rx.c b/drivers/net/wireless/ath/ath12k/wifi7/dp_rx.c
+index a32c804403e8..abd262d58a97 100644
+--- a/drivers/net/wireless/ath/ath12k/wifi7/dp_rx.c
++++ b/drivers/net/wireless/ath/ath12k/wifi7/dp_rx.c
+@@ -801,9 +801,6 @@ int ath12k_wifi7_dp_rx_process(struct ath12k_dp *dp, int ring_id,
+ 
+ 	spin_unlock_bh(&srng->lock);
+ 
+-	if (!total_msdu_reaped)
+-		goto exit;
+-
+ 	for (device_id = 0; device_id < ATH12K_MAX_DEVICES; device_id++) {
+ 		if (!num_buffs_reaped[device_id])
+ 			continue;
+@@ -816,6 +813,11 @@ int ath12k_wifi7_dp_rx_process(struct ath12k_dp *dp, int ring_id,
+ 					    num_buffs_reaped[device_id]);
+ 	}
+ 
++	if (!total_msdu_reaped) {
++		__skb_queue_purge(&msdu_list);
++		goto exit;
++	}
++
+ 	ath12k_wifi7_dp_rx_process_received_packets(dp, napi, &msdu_list,
+ 						    ring_id);
+ 
+
