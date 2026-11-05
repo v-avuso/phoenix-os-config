@@ -145,6 +145,20 @@ function Adapter:Bind()
     local renderer, reason = Dialogue.Find(version)
     self.renderer, self.reason = renderer, reason
     if not renderer then return end
+    -- 1.0.7's Show always dresses the model again, even for a text-only refresh.
+    -- Reuse only our same-item preview; upstream/quest calls retain the original path.
+    local displayModel = renderer.DisplayModel
+    renderer.DisplayModel = function(view, ...)
+        local lease = self.lease
+        if self.rendering and not self.refreshModel and lease and lease.preview
+            and view.owner == lease.owner and view:GetHyperlink() == lease.link
+            and view.PreviewModel and not view.PreviewModel.hasModel then
+            view.usePreviewModel = true
+            view.PreviewFrame:Show()
+            return
+        end
+        return displayModel(view, ...)
+    end
     hooksecurefunc(renderer, "SetOwner", function()
         if self.lease and not self.writing then self:Release(false, "Dialogue UI owner changed") end
     end)
@@ -265,12 +279,14 @@ function Adapter:Show(source, data, link, force)
     self.writing = true
     renderer:SetOwner(owner, "ANCHOR_NONE")
     self.rendering = true
+    self.refreshModel = force
     renderer:ClearLines()
     local rendered = renderer:ProcessTooltipData(snapshot)
     if rendered then renderer:Show(true) end -- Global hover is immediate; quest delay is unchanged.
-    self.rendering, self.writing = false, false
+    self.rendering, self.writing, self.refreshModel = false, false, false
     if not rendered or not renderer:IsShown() then self:Release(); return false end
-    self.lease = { source = source, owner = owner, link = link, alpha = alpha, signature = signature, data = data }
+    self.lease = { source = source, owner = owner, link = link, alpha = alpha, signature = signature, data = data,
+        preview = renderer.usePreviewModel }
     self:Place()
     if not self.lease then return false end
     if not self:Mask() then return false end

@@ -37,7 +37,7 @@ native API's paired arguments. Uncached, inaccessible and unknown data fall back
 the unique ordinary shared frame once per dependency version, then leases it only
 while idle or already owned. Quest/tooltips from Dialogue UI take priority. A secure
 SetOwner post-hook and OnHide observer release Phoenix ownership; stale cleanup never
-hides a newer quest reward. No upvalue inspection, function replacement, copied assets,
+hides a newer quest reward. No upvalue inspection, copied assets,
 third-party source edits, global CVar changes or secure action hooks are used.
 
 The adapter mirrors the **finished native tooltip's text**, colors, both columns and
@@ -112,3 +112,12 @@ After approved deployment and `/reload`:
 5. If rendering differs, run `/pwttip` after the hover and capture its status. If the
    equipped item's native footer remains, run `/pwtcompare` and report the primary
    reason. Footer cleanup is independent and is not claimed fixed by this integration.
+
+## Same-item preview refresh
+
+The 1.0.7 adapter narrowly wraps DisplayModel to retain an already-loaded same-item
+preview during Phoenix-owned text refreshes. All quest/unowned calls, different items
+and forced equipment refreshes call the original function. This corrects the source-
+backed annotation-refresh regression: updated text must not repeat TryOn. It is an
+explicit exception to the post-hook-only approach, not a global model API override.
+Native hide/show ownership resets remain a separate flicker path requiring validation.

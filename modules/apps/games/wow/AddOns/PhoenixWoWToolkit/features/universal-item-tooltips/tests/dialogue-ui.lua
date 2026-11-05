@@ -221,7 +221,7 @@ source.nativeResetAlpha=false
 source:SetAlpha(0); assert(source.alpha==0 and shared.alpha==1, 'the masked native tooltip must not make the replacement transparent')
 source:SetAlpha(0.6); assert(source.alpha==0 and shared.alpha==1)
 source.rows[5].left:SetText('Updated annotation'); source:Show()
-assert(shared:GetLeftLineText(5)=='Updated annotation' and model.tries>tries)
+assert(shared:GetLeftLineText(5)=='Updated annotation' and model.tries==tries)
 shared:OnEvent('MODIFIER_STATE_CHANGED','LSHIFT',1)
 assert(not DialogueUI_DB.TooltipShowItemComparison and not shared.events.TOOLTIP_DATA_UPDATE)
 shared:OnEvent('MODIFIER_STATE_CHANGED','LSHIFT',0)
