@@ -5,7 +5,9 @@
   `debug_mask` parameter does not prove its debug calls were compiled in.
 - Check debug categories and trace formats before enabling them: Linux 7.3's
   ath12k MAC category has key-material dump sites; raw trace events can include
-  packet buffers. Preserve explicit capture/time/storage limits and root-owned,
+  packet buffers. PCI debugging logs every external interrupt and can flood a
+  continuous capture; exclude it from the normal mask. Preserve explicit
+  capture/time/storage limits and root-owned,
   read-only-to-operator output. Never simulate firmware crashes during diagnosis.
 - Distinguish passive counters from firmware requests: ath12k `get_survey` can
   issue a WMI request and wait for a response. Avoid adding that probe to a

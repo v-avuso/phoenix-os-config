@@ -17,8 +17,8 @@ import time
 
 IFACE = 'wlp12s0'
 MASK = Path('/sys/module/ath12k/parameters/debug_mask')
-# WMI + QMI + PCI. MAC debug includes key-material dump sites in Linux 7.3.
-DEBUG_MASK = 0x1042
+# WMI + QMI. MAC can dump keys; PCI prints on every external interrupt.
+DEBUG_MASK = 0x42
 TRACE = Path('/sys/kernel/tracing/instances/phoenix-wifi')
 STATE = Path('/var/lib/phoenix-wifi-diagnostics')
 RUNTIME = Path('/run/phoenix-wifi-diagnostics')

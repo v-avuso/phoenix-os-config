@@ -42,7 +42,8 @@ NetworkManager logging settings when stopped, including via `ExecStopPost`.
 Failures restoring NetworkManager logging are reported, with driver cleanup
 still attempted. A service restart begins another bounded capture.
 
-- The debug mask `0x1042` selects WMI/QMI/PCI messages. MAC debugging is excluded:
+- The debug mask `0x42` selects WMI/QMI messages. PCI interrupt logging is
+  excluded because it floods the rolling capture. MAC debugging is excluded:
   Linux 7.3 contains MAC-debug key dump sites. Raw ath12k packet/buffer trace
   events and management-frame/control-port events are not selected.
 - The isolated `phoenix-wifi` tracefs instance records driver call/return,
