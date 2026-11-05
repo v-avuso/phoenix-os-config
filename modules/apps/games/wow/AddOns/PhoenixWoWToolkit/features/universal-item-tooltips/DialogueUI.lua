@@ -60,8 +60,11 @@ function Dialogue.CreateBody()
         view.GetItemID,view.GetHyperlink=preview.GetItemID,preview.GetHyperlink
         preview.Init(view)
         view.DisplayModel=function(self)
-            if self.reusePreview then
+            if self.previewAllowed==false then
+                self.usePreviewModel=false;self.PreviewFrame:Hide()
+            elseif self.reusePreview then
                 self.usePreviewModel=true;self.PreviewFrame:Show()
+            elseif self.creaturePreview then Toolkit.CreaturePreview.Display(self,self.creaturePreview)
             else preview.DisplayModel(self) end
         end
     else view:InitFrame() end

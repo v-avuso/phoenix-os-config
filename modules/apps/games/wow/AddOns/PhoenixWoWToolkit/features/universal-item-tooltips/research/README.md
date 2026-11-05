@@ -82,9 +82,10 @@ message was sent. An independent factory would need to untangle singleton callba
 and is justified only by demonstrated concurrent-tooltip needs. A fork or a new renderer
 is unnecessary for the primary workflow and adds permission/maintenance burdens.
 
-The equipped native footer remains a separate failed player acceptance case. Reuse does
-not diagnose its live row/hook failure. `/pwtcompare` now records the exact guard result;
-use that evidence to create the next regression instead of another speculative fix.
+Equipped-footer cleanup is owned by the comparison feature. The player accepted the
+suffix-validation and rendered-pane-spacing correction before this preview extension.
+Use `/pwtcompare` and an exact-source regression for any new footer failure; renderer
+reuse by itself does not prove cleanup.
 
 ## Evidence and limits
 
@@ -122,6 +123,23 @@ The existing base Show/Layout applies the original preview spacing and alpha.
 DisplayModel already resolves mount items with C_MountJournal.GetMountFromItem and
 pet items with C_PetJournal.GetPetInfoByItemID, then selects creature display, idle
 animation and SetUseTurntable(true). Reusing that path is cheaper than adding another
-model addon or duplicating camera/rotation code. Journal and battlepet-link tooltips
-lack the ordinary item identity expected by this path; support would require a
-separate bounded adapter, not a guessed item conversion.
+model addon or duplicating camera/rotation code. Native summon tooltips lack ordinary
+item identity; the adapter below supplies a resolved creature directly, without
+converting it to a guessed item. Custom journal widgets and caged battlepet links
+remain separate contexts.
+
+## Native summon identities and expanded viewport
+
+Blizzard's [MountJournal API](https://raw.githubusercontent.com/Gethe/wow-ui-source/live/Interface/AddOns/Blizzard_APIDocumentationGenerated/MountJournalDocumentation.lua)
+provides GetMountFromSpell. [TooltipInfo](https://raw.githubusercontent.com/Gethe/wow-ui-source/live/Interface/AddOns/Blizzard_APIDocumentationGenerated/TooltipInfoDocumentation.lua)
+provides GetCompanionPet(petGUID), and native SetCompanionPet carries that same identity.
+Installed Plumber's summon flyout likewise uses SetCompanionPet for owned pet GUIDs;
+no reliable generic pet-spell-to-species mapping was established, so none is guessed.
+
+The native [SimpleModel API](https://raw.githubusercontent.com/Gethe/wow-ui-source/live/Interface/AddOns/Blizzard_APIDocumentationGenerated/SimpleModelAPIDocumentation.lua)
+provides SetViewInsets. Installed Narcissus ProductList documents that insets affect
+projection without enlarging the clipping viewport. The bounded prototype therefore
+enlarges the physical widget, centers it over its original rectangle and applies
+matching insets, retaining logical layout dimensions. This is an API-argument proof;
+unchanged apparent size and actual clipping improvement remain GPU/client acceptance.
+No model scale/camera change is substituted for the requested same-size overflow.

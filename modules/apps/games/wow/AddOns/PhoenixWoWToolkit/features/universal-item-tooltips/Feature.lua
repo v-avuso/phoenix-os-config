@@ -1,5 +1,7 @@
 local _, Toolkit = ...
-local feature = { id = "universalItemTooltips", section = "Item Tooltips", defaults = { enabled = true, appearance = "dialogueUI", framing = "dialogueUI" },
+local feature = { id = "universalItemTooltips", section = "Tooltip Appearance", optionsTab = "Tooltip",
+    defaults = { enabled = true, appearance = "dialogueUI", framing = "dialogueUI",
+        equippedPreviews = true, previewOverflow = true, mountSpellPreviews = true, petSummonPreviews = true },
     dependencies = { "Blizzard_SharedXMLGame", "DialogueUI" }, states = {} }
 local appearances = {
     { "native", "Default" },
@@ -118,7 +120,7 @@ function feature:SetAppearance(value)
     self:RefreshSettings()
 end
 function feature:RegisterSettings(panel, y)
-    self.checkbox = Toolkit.Options.Checkbox(panel, "Customize item tooltips", y,
+    self.checkbox = Toolkit.Options.Checkbox(panel, "Customize tooltips", y,
         self.settings, "enabled", function() Toolkit:RefreshFeatures() end,
         "Choose framing and content styles independently.")
     Toolkit.Options.Text(panel, "Tooltip content style", y - 64)
@@ -140,7 +142,21 @@ function feature:RegisterSettings(panel, y)
                 function(value) self.settings.framing=value;if self.style then self.style:Configure(self.running) end;self:RefreshOwned();self:RefreshSettings() end,entry[1])
         end
     end)
-    return y - 204
+    local choices = {
+        {"equippedPreviews", "Show equipped-item previews", "Display available appearances on equipped comparison items."},
+        {"previewOverflow", "Allow creature previews to overflow", "Give large mount and pet previews more room around the tooltip."},
+        {"mountSpellPreviews", "Show mount summon previews", "Animate and rotate mount previews on summon tooltips."},
+        {"petSummonPreviews", "Show pet summon previews", "Animate and rotate pet previews on companion summon tooltips."},
+    }
+    self.previewCheckboxes = {}
+    for index, entry in ipairs(choices) do
+        self.previewCheckboxes[entry[1]] = Toolkit.Options.Checkbox(panel,entry[2],y-204-(index-1)*64,
+            self.settings,entry[1],function()
+                if self.style then self.style:Configure(self.running) end
+                self:RefreshOwned();self:RefreshSettings()
+            end,entry[3])
+    end
+    return y - 464
 end
 function feature:RefreshSettings()
     if not self.checkbox then return end
@@ -148,6 +164,10 @@ function feature:RefreshSettings()
     self.checkbox:SetEnabled(self.available)
     self.dropdown:SetEnabled(self.settings.enabled and self.available)
     self.frameDropdown:SetEnabled(self.settings.enabled and self.available)
+    for key, checkbox in pairs(self.previewCheckboxes or {}) do
+        checkbox:SetChecked(self.settings[key])
+        checkbox:SetEnabled(self.settings.enabled and self.available and self.settings.appearance=="dialogueUI")
+    end
     for _, entry in ipairs(appearances) do
         if entry[1] == self.settings.appearance then self.dropdown:OverrideText(entry[2]) end
         if entry[1] == self.settings.framing then self.frameDropdown:OverrideText(entry[2]) end

@@ -4,9 +4,9 @@
 
 Reuse installed Dialogue UI's actual text renderer, theme and model preview while
 preserving native item information and useful annotations. Do not copy its assets or
-replace secure input. Account-wide controls under `/pwt`:
+replace secure input. Account-wide controls under `/pwt` → **Tooltip**:
 
-- **Customize item tooltips** enables this feature.
+- **Customize tooltips** enables this feature.
 - **Tooltip framing style** independently chooses Dialogue UI or Default backgrounds.
   Applied to observed native tooltips and the original Dialogue UI tooltip, including
   its quest rewards. Default uses the available native backdrop or Blizzard fallback;
@@ -57,8 +57,9 @@ not an upstream supported global renderer API.
 
 ## Limits and upgrades
 
-- Content replacement targets conventional public item tooltips. Unit/spell content
-  stays native; its framing can still be styled. Arbitrary interactive addon widgets,
+- Content replacement targets conventional public item tooltips and resolved native
+  mount/pet summon tooltips. Other unit/spell content stays native; framing can still
+  be styled. Arbitrary interactive addon widgets,
   status bars and custom overlays are not transferred.
 - Combined/paired weapon arithmetic, override-level contexts and busy singleton
   ownership retain native fallback. Multiple comparison panes and custom skin geometry
@@ -98,15 +99,15 @@ install checkout changes: the immutable package must be deployed first.
 With Dialogue UI content enabled, equipped comparison panes display independent
 previews when the item has an appearance. Rings/trinkets typically have no wearable
 model, so those panes remain text-only. Existing width fitting includes preview layout.
-No new checkbox is needed: previews follow the selected content style.
+The **Show equipped-item previews** checkbox controls these independently; content
+style must be Dialogue UI. Turning it off preserves the equipped item's text.
 
 Dialogue UI already resolves mount items through C_MountJournal and pet items through
 C_PetJournal.GetPetInfoByItemID. Its original creature display, idle animation and
 turntable provide animated rotating previews without a custom animation loop. Only
 visible preview models use upstream OnUpdate animation; no tooltip polling is added.
-Unsupported item appearances fall back to text. This does not extend collection-journal
-spell tooltips or caged battle-pet links: those are not ordinary item tooltips and need
-separate identity/data adapters. No blanket preview is promised for those contexts.
+Unsupported item appearances fall back to text. Summon tooltip support is described below. Caged battle-pet links and custom widgets
+outside the native tooltip-data path still need a separate adapter.
 
 Client acceptance: compare two wearable armor/weapon items and verify both previews,
 then hover mount and pet items. Confirm rotation, switching item types, repeated text
@@ -114,3 +115,43 @@ refreshes, disabling content customization, and quest-reward ownership. Source-b
 fixtures prove separate model ownership, no repeated dressing on text refresh, native
 creature display/animation and turntable updates; they cannot prove real creature
 framing or GPU appearance.
+
+## Creature overflow and summon tooltips
+
+The Tooltip page contains four independent, default-on preview checkboxes:
+
+- **Show equipped-item previews**: retain/hide available equipped appearances.
+- **Allow creature previews to overflow**: enlarge the creature model's physical
+  clipping viewport to three times its logical width/height. Matching positive view
+  insets keep the original projection rectangle; the original center, layout space,
+  camera and model scale remain unchanged. Disabling restores original viewport and
+  zero insets. This is bounded extra space, not unlimited rendering outside a GPU
+  viewport. Pixel-size preservation and oversized mounts require in-game acceptance.
+- **Show mount summon previews**: resolve public Spell/Mount data or
+  SetMountBySpellID identities through C_MountJournal.GetMountFromSpell and the mount's
+  native display data. Mirror finished tooltip text on an independent upstream view.
+- **Show pet summon previews**: use the native CompanionPet GUID or SetCompanionPet
+  setter argument and C_PetJournal.GetPetInfoByPetID's display ID. No name matching,
+  guessed summon spell mappings, journal filter changes or pet summoning is used.
+
+Preview options require Dialogue UI content. Generic combat spells, random-summon
+buttons without a definite creature, secret/restricted identities and unsupported
+custom tooltips retain native presentation. Native action buttons using the standard
+summon tooltip paths are covered by the adapter; exact OPie/journal/action-bar coverage
+requires a live check. Caged battle-pet links are still outside this path.
+
+`Preview.lua` owns identity resolution, creature-model setup through the upstream
+preview object, and reversible viewport expansion. Hooks are passive, data-driven and
+installed before the first native setter call. Native text/annotations remain active;
+owned alpha restores before switching between summon and item renderers. No polling,
+input changes or CVar edits are introduced. Upstream turntable OnUpdate remains solely
+for visible model animation.
+
+Client test: hover a previously clipped large mount with overflow on/off, checking
+that apparent size and center stay unchanged while more of the creature is visible.
+Try mount summon buttons/spell links and pet summon buttons; toggle both options
+separately, switch back to an item/combat spell, enter/leave combat and reload.
+Verify tooltip annotations, no flicker, settings persistence, and General/Tooltip
+navigation. Lua fakes verify viewport/projection arguments, restoration, summon
+identity, stale-identity rejection and ownership transitions; they do not prove GPU
+projection, clipping or combat taint.

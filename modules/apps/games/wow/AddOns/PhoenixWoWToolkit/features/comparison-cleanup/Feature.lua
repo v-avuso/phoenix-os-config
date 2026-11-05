@@ -1,5 +1,5 @@
 local _, Toolkit = ...
-local feature = { id = "comparisonCleanup", section = "Comparison Cleanup", defaults = { enabled = true, hideTarget = "equipped" },
+local feature = { id = "comparisonCleanup", section = "Comparison Cleanup", optionsTab = "Tooltip", defaults = { enabled = true, hideTarget = "equipped" },
     dependencies = { "Blizzard_SharedXMLGame" }, states = {}, watched = {} }
 local function public(value) return not (issecretvalue and issecretvalue(value)) end
 local function accessible(value) return public(value) and (not canaccessallvalues or canaccessallvalues(value)) end

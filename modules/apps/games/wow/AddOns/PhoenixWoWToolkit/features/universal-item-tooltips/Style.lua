@@ -18,7 +18,10 @@ function Style.New(adapter, settings)
     local renderer = adapter:Bind()
     if renderer then
         if renderer.Init then renderer:Init() end
-        hooksecurefunc(renderer,"Show",function() self:Chrome(renderer,true) end)
+        hooksecurefunc(renderer,"Show",function()
+            self:Chrome(renderer,true)
+            if Toolkit.CreaturePreview then Toolkit.CreaturePreview.Overflow(renderer,self.enabled and self.settings.previewOverflow~=false) end
+        end)
         hooksecurefunc(renderer,"LoadTheme",function()
             for _,state in pairs(self.states) do if state.view then state.view:LoadTheme() end end
             self:Chrome(renderer,true)
@@ -27,6 +30,9 @@ function Style.New(adapter, settings)
     if TooltipComparisonManager and TooltipComparisonManager.AnchorShoppingTooltips then
         hooksecurefunc(TooltipComparisonManager,"AnchorShoppingTooltips",function() self:Place() end)
     end
+    -- Install setter hooks before the first tooltip call (especially pet GUIDs
+    -- not present in a generic tooltip-data snapshot).
+    if GameTooltip then self:Observe(GameTooltip,nil) end
     return self
 end
 
@@ -108,12 +114,16 @@ end
 function Style:Place()
     if self.placing or not GameTooltip then return end
     self.placing=true
-    local primary=self.adapter.lease and self.adapter.renderer or GameTooltip
+    local main=self.states[GameTooltip]
+    local primary=main and main.active and main.view or (self.adapter.lease and self.adapter.renderer or GameTooltip)
+    if main and main.active and main.view then
+        main.view:ClearAllPoints();main.view:SetPoint("TOPLEFT",GameTooltip,"TOPLEFT",0,0)
+    end
     local edge=GameTooltip:GetLeft()
     if not public(edge) or not edge then self.placing=false;return end
     local sides={left={},right={}}
     for source,state in pairs(self.states) do
-        if state.active and state.view and safe(source) then
+        if source~=GameTooltip and state.active and state.view and safe(source) then
             local left=source:GetLeft()
             if public(left) and left then
                 local side=left<edge and sides.left or sides.right
@@ -158,10 +168,14 @@ function Style:Refresh(source)
     self:Chrome(source,false)
     local state=self.states[source]
     if not state then return end
-    if not self.enabled or self.settings.appearance~="dialogueUI" or source==GameTooltip or not source:IsShown()
-        or not state.data or state.data.type~=Enum.TooltipDataType.Item then self:Release(source); return end
-    local candidate=Toolkit.ItemComparison.Candidate(state.data)
-    local link=candidate and Toolkit.ItemComparison.Link(candidate)
+    if not self.enabled or self.settings.appearance~="dialogueUI" or not source:IsShown() or not state.data then
+        self:Release(source); return
+    end
+    local creature=Toolkit.CreaturePreview and Toolkit.CreaturePreview.Resolve(state.data,state.hint,self.settings)
+    local item=state.data.type==Enum.TooltipDataType.Item
+    if (not item and not creature) or (source==GameTooltip and not creature) then self:Release(source);return end
+    local candidate=item and Toolkit.ItemComparison.Candidate(state.data)
+    local link=creature and creature.key or (candidate and Toolkit.ItemComparison.Link(candidate))
     if not public(link) or not link then self:Release(source);return end
     local policy=Toolkit.ComparisonVisibility
     local limit=policy and policy:BodyLineLimit(source)
@@ -173,7 +187,10 @@ function Style:Refresh(source)
     end
     if not state.view then return end
     if not state.active or state.signature~=signature then
-        local retained=state.view.usePreviewModel and state.view.hyperlink==link
+        local allowed=not source.CompareHeader or self.settings.equippedPreviews~=false
+        local retained=allowed and state.view.usePreviewModel and state.view.hyperlink==link
+        state.view.previewAllowed=allowed
+        state.view.creaturePreview=creature
         if retained then state.view.usePreviewModel=false end
         state.view:ClearLines()
         state.view.hyperlink=link
@@ -193,6 +210,7 @@ function Style:Refresh(source)
         state.alpha=alpha;state.active=true
     end
     self:Chrome(state.view,true,source)
+    if Toolkit.CreaturePreview then Toolkit.CreaturePreview.Overflow(state.view,self.settings.previewOverflow~=false) end
     self:Place(source,state)
     self.writing=true;source:SetAlpha(0);self.writing=false
 end
@@ -200,7 +218,12 @@ end
 function Style:Observe(source,data)
     if not safe(source) then return end
     if not self.adapter.renderer then return end
+    -- Hand item hovers back before the singleton samples native opacity. Two
+    -- renderers must never acquire an already-masked source from one another.
+    if public(data) and data and (not canaccessallvalues or canaccessallvalues(data))
+        and source==GameTooltip and data.type==Enum.TooltipDataType.Item then self:Release(source) end
     local state=self.states[source] or {};self.states[source]=state
+    if state.data~=data then state.hint=nil end
     state.data = public(data) and (not canaccessallvalues or canaccessallvalues(data)) and data or nil
     if not state.watched then
         state.watched=true
@@ -210,6 +233,16 @@ function Style:Observe(source,data)
             C_Timer.After(0,function() state.queued=false;self:Refresh(source) end)
         end
         state.queue=queue
+        for _,entry in ipairs({{"SetCompanionPet","pet"},{"SetMountBySpellID","mount"}}) do
+            local method,kind=entry[1],entry[2]
+            if source[method] then
+                hooksecurefunc(source,method,function(_,id)
+                    if not safe(source) then return end
+                    state.hint=public(id) and {kind=kind,id=id,data=state.data} or nil
+                    queue()
+                end)
+            end
+        end
         local function shown()
             if state.active and source:IsShown() then
                 self.writing=true;source:SetAlpha(0);self.writing=false
@@ -220,7 +253,7 @@ function Style:Observe(source,data)
         hooksecurefunc(source,"SetShown",shown)
         source:HookScript("OnShow",shown)
         source:HookScript("OnHide",queue)
-        source:HookScript("OnTooltipCleared",function() state.data=nil;queue() end)
+        source:HookScript("OnTooltipCleared",function() state.data=nil;state.hint=nil;queue() end)
         hooksecurefunc(source,"SetAlpha",function(_,alpha)
             if state.active and not self.writing then
                 if not public(alpha) then self:Release(source);return end
@@ -238,8 +271,14 @@ function Style:Configure(enabled)
     for frame,state in pairs(self.states) do
         if state.watched then sources[#sources+1]=frame end
         self:Release(frame); self:Restore(frame)
-        if state.view then self:Restore(state.view) end
+        if state.view then
+            self:Restore(state.view)
+            if Toolkit.CreaturePreview then Toolkit.CreaturePreview.Overflow(state.view,false) end
+        end
     end
     if enabled then for _,source in ipairs(sources) do self:Refresh(source) end end
-    if self.adapter.renderer then self:Chrome(self.adapter.renderer,true) end
+    if self.adapter.renderer then
+        self:Chrome(self.adapter.renderer,true)
+        if Toolkit.CreaturePreview then Toolkit.CreaturePreview.Overflow(self.adapter.renderer,enabled and self.settings.previewOverflow~=false) end
+    end
 end

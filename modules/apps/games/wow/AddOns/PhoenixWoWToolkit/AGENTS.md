@@ -30,7 +30,8 @@
   leaves; a stable bank hover does not exercise inventory refresh ownership.
   Include stale/frozen frame dimensions and cached/internal Show/SetShown calls:
   suppression cannot depend on an observed size delta or propagate a masked source's
-  alpha to its replacement. Passing fakes never establishes the in-game visual result.
+  alpha to its replacement. Exercise item/summon ownership transitions before another
+  renderer samples native opacity. Passing fakes never establishes the in-game visual result.
 - For actual Dialogue UI tooltip reuse, read the item feature's `research/README.md`
   first. The original renderer reuse proof supersedes the assumption that absence of
   a supported global API requires a new renderer. Keep singleton ownership and

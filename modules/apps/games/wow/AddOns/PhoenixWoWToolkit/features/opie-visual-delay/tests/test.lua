@@ -1,3 +1,6 @@
+PanelTemplates_SelectTab = function(tab) tab:SetEnabled(false) end
+PanelTemplates_DeselectTab = function(tab) tab:SetEnabled(true) end
+PanelTemplates_TabResize = function() end
 -- Executes the locally supplied, unmodified OPie renderer and visual notification.
 -- WoW frame rendering, secure snippets and taint are NOT emulated by this fixture.
 local toolkitSource, opieSource = assert(arg[1]), assert(arg[2])
@@ -54,6 +57,7 @@ function Methods:SetParent(parent) self.parent = parent end
 function Methods:SetSize(w, h) self.w, self.h = w, h end
 function Methods:SetHeight(h) self.h = h end
 function Methods:SetScrollChild(child) self.scrollChild = child end
+function Methods:SetVerticalScroll() end
 function Methods:GetSize() return self.w, self.h end
 function Methods:SetFrameStrata(v) self.strata = v end
 function Methods:GetFrameStrata() return self.strata end

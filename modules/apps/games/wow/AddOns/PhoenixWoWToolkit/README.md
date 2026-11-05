@@ -13,7 +13,8 @@ Preserve other add-ons, user profiles, bindings and secure input authority.
 ## Install and use
 
 Copy or symlink this directory as `Interface/AddOns/PhoenixWoWToolkit`. `/pwt` opens
-**Options → AddOns → Phoenix WoW Toolkit**. Preferences live in WoW-owned
+**Options → AddOns → Phoenix WoW Toolkit**. **General** contains tracker/OPie
+options; **Tooltip** contains appearance, preview and comparison options. Preferences live in WoW-owned
 `PhoenixWoWToolkitDB.features.<id>`; removing the add-on does not delete them.
 
 The PhoenixOS deployment adapter lives outside this directory. It installs an
@@ -36,8 +37,9 @@ may require a client restart. A restart cannot expose an undeployed package.
 
 - `Core.lua`: versioned feature registration, saved preferences, lifecycle, dependency
   refresh and `/pwt`. It knows no OPie, tracker or tooltip implementation details.
-- `Options.lua`: a scrollable native Settings canvas. Each section has one heading;
-  contributors with the same section name share it. Checkbox descriptions use a
+- `Options.lua`: a scrollable native Settings canvas with General and Tooltip pages.
+  Features may set `optionsTab = "Tooltip"`; omitted/unknown values use General.
+  Each section has one heading; contributors on the same page share named sections. Checkbox descriptions use a
   smaller indented font beneath their labels. Compatibility/implementation essays
   belong in module docs, not in the player's settings flow.
 - `features/<name>/`: the complete feature, including `Feature.lua`, helpers, README

@@ -1,3 +1,6 @@
+PanelTemplates_SelectTab = function(tab) tab:SetEnabled(false) end
+PanelTemplates_DeselectTab = function(tab) tab:SetEnabled(true) end
+PanelTemplates_TabResize = function() end
 -- Behavioral fixture, not a WoW renderer/taint emulator.
 local source = assert(arg[1])
 local frames, combat = {}, false
@@ -41,6 +44,7 @@ local function object(parent)
     function value:OverrideText() end
     function value:SetHeight() end
     function value:SetScrollChild() end
+    function value:SetVerticalScroll() end
     function value:SetMinMaxValues() end
     function value:SetValueStep() end
     function value:SetObeyStepOnDrag() end

@@ -48,6 +48,9 @@ local function frame(kind, _, parent, template)
     function f:GetPrimaryTooltipData() return self.primaryData end
     function f:SetModelAlpha(alpha) self.modelAlpha = alpha end
     function f:SetDisplayInfo(id) self.displayID=id end
+    function f:SetViewInsets(...) self.insets={...} end
+    function f:SetCompanionPet(id) self.petGUID=id end
+    function f:SetMountBySpellID(id) self.mountSpellID=id end
     function f:SetAnimation(id) self.animation=id end
     function f:SetFacing(yaw) self.facing=yaw end
     function f:SetText(text) self.text = text end
@@ -168,7 +171,7 @@ TooltipDataProcessor = { AllTypes='all', AddTooltipPostCall=function(kind,fn)
     postcalls[kind]=postcalls[kind] or {}; table.insert(postcalls[kind],fn)
 end }
 local T = { RegisterFeature=function(self,feature) self.feature=feature end }
-for _, name in ipairs({'Comparison','DialogueUI','Style','Feature'}) do
+for _, name in ipairs({'Comparison','DialogueUI','Preview','Style','Feature'}) do
     assert(loadfile(root..'/features/universal-item-tooltips/'..name..'.lua'))('PhoenixWoWToolkit',T)
 end
 local found, reason = T.DialogueTooltip.Find('1.0.7')
@@ -377,6 +380,52 @@ C_MountJournal.GetMountFromItem=function() end
 C_PetJournal.GetPetInfoByItemID=function() return nil,nil,nil,99,nil,nil,nil,nil,nil,nil,nil,701 end
 feature:Render(source,data,true)
 assert(shared.usePreviewModel and model.displayID==701 and model.scripts.OnUpdate,'pet item uses original animated rotating preview')
+-- Overflow changes physical viewport only; original layout dimensions stay fixed.
+local logicalWidth,logicalHeight=shared.PreviewModel.width,shared.PreviewModel.height
+local oldCamera=model.cameraID
+assert(model:GetWidth()==logicalWidth*3 and model.insets[1]==logicalWidth,
+    'creature viewport expands with a matching projection inset')
+assert(shared.PreviewModel.width==logicalWidth and shared.PreviewModel.height==logicalHeight and model.cameraID==oldCamera)
+feature.settings.previewOverflow=false;feature.style:Configure(true)
+assert(model:GetWidth()==logicalWidth and model.insets[1]==0,'overflow toggle restores original viewport')
+feature.settings.previewOverflow=true
+-- Native summon tooltips use separate bodies; item comparison/singleton APIs stay untouched.
+Enum.TooltipDataType.Spell,Enum.TooltipDataType.Mount,Enum.TooltipDataType.CompanionPet=1,10,9
+C_MountJournal.GetMountFromSpell=function(id) if id==1234 then return 42 end end
+C_PetJournal.GetPetInfoByPetID=function(guid) if guid=='pet-guid' then return 7,nil,nil,nil,nil,801 end end
+local function hoverData(nextData,method,id)
+    source.primaryData=nextData
+    for _,fn in ipairs(postcalls.all) do fn(source,nextData) end
+    if method then source[method](source,id) end
+    source:Show()
+    local pending=timers;timers={};for _,fn in ipairs(pending) do fn() end
+    drain()
+end
+hoverData({type=1,id=1234,lines={}})
+local summon=feature.style.states[source]
+assert(summon.active and not feature.adapter.lease and summon.view.PreviewModel.Model1.displayID==700,
+    'mount summon spell mirrors native content and uses its resolved creature')
+assert(summon.view.PreviewModel.Model1.scripts.OnUpdate and source.alpha==0)
+feature.settings.mountSpellPreviews=false;feature.style:Configure(true)
+assert(not summon.active and source.alpha==0.6,'mount checkbox restores native source independently')
+feature.settings.mountSpellPreviews=true
+hoverData({type=9,guid='pet-guid',lines={}})
+assert(summon.active and summon.view.PreviewModel.Model1.displayID==801,'pet summon GUID resolves the correct display')
+feature.settings.petSummonPreviews=false;feature.style:Configure(true)
+assert(not summon.active,'pet checkbox independently restores native tooltip')
+feature.settings.petSummonPreviews=true
+hoverData({type=9,lines={}},'SetCompanionPet','pet-guid')
+assert(summon.active and summon.view.PreviewModel.Model1.displayID==801,'native setter GUID works when generic data lacks it')
+hoverData({type=1,id=9999,lines={}})
+assert(not summon.active and source.alpha==0.6,'unrelated spell cannot retain a stale pet identity')
+hoverData({type=1,id='secret',lines={}})
+assert(not summon.active,'secret summon identity falls back without resolving it')
+hoverData({type=1,id=1234,lines={}})
+hoverData(data)
+assert(not summon.active and feature.adapter.lease and feature.adapter.lease.alpha==0.6,
+    'summon-to-item handoff restores native opacity before singleton acquisition')
+feature.settings.equippedPreviews=false;feature.style:Configure(true)
+assert(styled.active and not styled.view.usePreviewModel,'equipped preview checkbox preserves text-only comparison')
 feature:Disable();assert(comparison.alpha==1 and not styled.view:IsShown(),'disable restores all owned panes')
 if arg[3] then print('Executed Blizzard original CreateComparisonItem with the mirrored Dialogue UI item data') end
 print('Dialogue UI original renderer + production adapter: native annotation mirror, upstream theme/fonts/model/Shift, stable rebuilds, alpha restoration, comparison placement, quest takeover, version and non-item fallback passed')
