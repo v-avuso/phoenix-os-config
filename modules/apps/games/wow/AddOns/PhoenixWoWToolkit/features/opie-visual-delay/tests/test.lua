@@ -262,6 +262,33 @@ gate:Configure(true, 250); notify('close'); notify('open'); advance(.249); invis
 advance(.002); assert(not gate.hidden)
 notify('close')
 assert(type(core.NotifyState) == 'function' and core:IsProtected())
+-- Toolkit fade multiplies native alpha, keeps selections running and cancels on close.
+gate:Configure(true, 1000, 100)
+notify('open'); advance(.999); invisible()
+advance(.051)
+assert(view.main:GetAlpha() > 0 and view.main:GetAlpha() < gate.alpha[view.main], 'fade must be partial')
+local inputsDuringFade = nativeInputs
+advance(.060)
+assert(view.main:GetAlpha() == gate.alpha[view.main] and nativeInputs > inputsDuringFade)
+notify('close'); notify('open'); advance(1.04)
+local closingAlpha = view.main:GetAlpha()
+notify('close'); advance(.2)
+assert(view.main:GetAlpha() == closingAlpha, 'close must not finish a cancelled fade')
+notify('open'); advance(.02); invisible(); notify('close'); advance(1.2); invisible()
+notify('open'); advance(1.04); gate:Configure(false, 1000, 100)
+assert(view.main:GetAlpha() == gate.alpha[view.main], 'disable must restore native alpha')
+gate:Configure(true, 0, 100); notify('close'); notify('open')
+assert(view.main:GetAlpha() == gate.alpha[view.main], 'zero delay restores immediate display')
+notify('close')
+-- Compose with actual native animations rather than replacing their alpha.
+options.XTAnimation = true
+gate:Configure(true, 50, 100)
+notify('open'); advance(.085)
+assert(gate.opacity > 0 and gate.opacity < 1)
+assert(view.main:GetAlpha() == gate.alpha[view.main] * gate.opacity)
+notify('switch'); advance(.08)
+assert(gate.opacity == 1, 'nested switch must not restart fade')
+notify('close')
 -- Structure checks must fail before adding hooks or touching any alpha.
 local notificationFunction = core.NotifyState
 core.NotifyState = nil
@@ -289,13 +316,17 @@ SlashCmdList = {}
 Settings = { RegisterCanvasLayoutCategory = function() return {} end, RegisterAddOnCategory = noop }
 PhoenixWoWToolkitDB = nil
 events.scripts.OnEvent(events, 'ADDON_LOADED', 'PhoenixWoWToolkit')
-assert(feature.settings.enabled and feature.settings.delayMs == 50)
+assert(feature.settings.enabled and feature.settings.delayMs == 50 and feature.settings.fadeMs == 100)
 feature.slider:SetValue(73)
 assert(feature.settings.delayMs == 73 and feature.input:GetText() == '73')
 feature.input:SetText('18'); feature.input.scripts.OnEnterPressed(feature.input)
 assert(feature.settings.delayMs == 18 and feature.slider.value == 18)
 feature.input:SetText('999'); feature.input.scripts.OnEditFocusLost(feature.input)
-assert(feature.settings.delayMs == 250)
+assert(feature.settings.delayMs == 999)
+feature.fadeInput:SetText('140'); feature.fadeInput.scripts.OnEnterPressed(feature.fadeInput)
+assert(feature.settings.fadeMs == 140 and feature.fadeSlider.value == 140)
+feature.input:SetText('1500'); feature.input.scripts.OnEnterPressed(feature.input)
+assert(feature.settings.delayMs == 1000)
 feature.slider:SetValue(-4); assert(feature.settings.delayMs == 0)
 feature.slider:SetValue(50.4); assert(feature.settings.delayMs == 50)
 feature.input:SetText('9'); feature.input.scripts.OnEscapePressed(feature.input)
@@ -312,6 +343,6 @@ assert(not feature.available and not gate.enabled and not gate.hidden and not fe
 assert(PhoenixWoWToolkitDB.features.opieVisualDelay.delayMs == 50)
 GetBuildInfo = function() return '12.2', '', '', 120200 end
 assert(not feature:GetAvailability({ opieLoaded = true, opieVersion = '8.10.2' }))
-print('Actual OPie 8.10.2 renderer + notification: tap/hold/flick updates, stale timers, nested switches, animations, tooltip ownership, disable and 0/250 ms passed')
+print('Actual OPie 8.10.2 renderer + notification: tap/hold/flick updates, stale timers, nested switches, animations, tooltip ownership, disable, 0/1000 ms and cancellable fade-in passed')
 print('Settings, numeric validation, version/client gating and missing/ambiguous/protected structure checks passed')
 print('NOT TESTED: actual protected-action execution, GPU frame presentation, combat lockdown or taint in WoW')

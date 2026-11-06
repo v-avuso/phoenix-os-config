@@ -10,11 +10,12 @@ explicitly authorized by the operator. It needs no wrapper or OPie source patch.
 renderer and notification Lua with simulated WoW APIs. Actual displayed frames,
 protected actions and combat taint remain in-game acceptance; do not call them proven.
 
-The Settings section contains only controls. `enabled` and integer `delayMs` live
-under `PhoenixWoWToolkitDB.features.opieVisualDelay`. Fresh defaults are on / 50 ms;
+The Settings section contains only controls. `enabled`, integer `delayMs` and integer `fadeMs` live
+under `PhoenixWoWToolkitDB.features.opieVisualDelay`. Fresh defaults are on / 50 ms delay / 100 ms fade-in;
 a previously saved disabled preference from the old placeholder remains disabled.
-The slider and numeric field accept 0–250 ms in 1 ms increments. Enter/focus loss
-commits numeric input; Escape restores the saved value. Zero means immediate display.
+The slider and numeric field accept 0–1000 ms in 1 ms increments. Enter/focus loss
+commits numeric input; Escape restores the saved value. Zero delay means immediate display, including bypassing the fade. Zero fade duration
+disables fading. Fade duration has its own slider and exact numeric field.
 Changing the delay while waiting uses the original opening time. Enabling while a
 ring is already visible takes effect on its next opening, without hiding it mid-use.
 
@@ -47,14 +48,19 @@ identify this version and appearance compatibility changes.
 ## Lifecycle and limits
 
 An `open` notification starts a visual gate after original rendering setup finishes
-and before the Lua event returns. `C_Timer.After` reveals the latest native alpha.
+and before the Lua event returns. `C_Timer.After` starts the reveal. An owned frame runs `OnUpdate` only during the
+fade, multiplying the latest native alpha by a linear 0–1 factor. OPie's own
+animation remains active. Closing stops the fade and freezes that factor through
+the native close animation; it cannot complete an abandoned reveal.
 Each opening/settings transition changes a serial, invalidating old callbacks.
 A `close` cancels reveal and keeps a still-hidden ring suppressed throughout native
 fade-out. Nested `switch` notifications preserve the first deadline or already-visible
-state. Disable restores recorded native alpha and cancels pending callbacks.
+state. Disable restores recorded native alpha and cancels pending callbacks and fades.
+Changing settings during a fade completes that fade immediately; changing the
+delay while waiting still uses the original opening time.
 
 Only alpha on verified ordinary visual frames is changed. No Hide, SetParent,
-SetScript, WrapScript, secure-action override, input timer or error-catching fallback
+SetScript on OPie frames, WrapScript, secure-action override, input timer or error-catching fallback
 is used by the adapter. `hooksecurefunc` retains the original callback; its observer
 is not a new source of protected execution authority. Unknown versions/interfaces,
 missing notification methods, ambiguous discovery or protected visuals leave the
@@ -89,7 +95,7 @@ Adding `baseline` as the third argument deliberately fails `ring leaked`, showin
 that native OPie immediately makes its visual alpha nonzero. With hooks, the proof
 passes taps, cursor/modifier changes during hidden updates, holds, repeated/reopened
 menus, nested switches, animation-on/off, tooltip ownership, cancellation, restoration,
-zero/max delay, controls, numeric validation, unknown versions/interfaces and changed
+zero/max delay, partial/completed/cancelled fades, controls, numeric validation, unknown versions/interfaces and changed
 frame/method structure. Regressions cover the observed 149.994461 client dimensions,
 notification discovery outside direct UIParent children, materially different sizes
 and duplicate notification frames. The frame scan skips non-string `GetName()`
@@ -111,5 +117,6 @@ After separately approved deployment, use a harmless test ring and compare with
    action/taint reporting. Stop on any missed/delayed action, forbidden call or flash;
    the local proof cannot pass this acceptance item.
 5. Disable during a pending reveal and after reveal. Check native visuals and ordinary
-   tooltips return. Test 0, 1, 50 and 250 ms, numeric entry/Escape, `/reload` and restart
-   persistence. Confirm Objective Tracker preferences still work independently.
+   tooltips return. Test 0, 1, 50, 250 and 1000 ms, numeric entry/Escape, `/reload` and restart
+   persistence. Test fade durations 0, 100 and 1000 ms; close during the fade,
+   reopen rapidly and disable mid-fade. Confirm Objective Tracker preferences still work independently.

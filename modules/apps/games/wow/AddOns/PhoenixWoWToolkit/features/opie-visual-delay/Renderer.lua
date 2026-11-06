@@ -66,9 +66,10 @@ function Adapter.Find()
 end
 
 function Adapter.Bind(view)
-    local gate = { view = view, serial = 0, enabled = false, hidden = false, open = false,
+    local gate = { view = view, serial = 0, enabled = false, hidden = false, open = false, opacity = 1,
         alpha = { [view.main] = view.main:GetAlpha(), [view.proxy] = view.proxy:GetAlpha() } }
     gate.tipAlpha = view.tip:GetAlpha()
+    local fadeDriver = CreateFrame("Frame")
 
     function gate:Write(frame, alpha)
         -- Do not attempt a protected mutation or catch/suppress a client error.
@@ -79,9 +80,9 @@ function Adapter.Bind(view)
     end
 
     function gate:Tooltip()
-        if self.hidden and view.tip:IsOwned(view.proxy) then
+        if self.opacity < 1 and view.tip:IsOwned(view.proxy) then
             self.tipSuppressed = true
-            self:Write(view.tip, 0)
+            self:Write(view.tip, self.tipAlpha * self.opacity)
         elseif self.tipSuppressed then
             self.tipSuppressed = false
             self:Write(view.tip, self.tipAlpha)
@@ -89,8 +90,25 @@ function Adapter.Bind(view)
     end
 
     function gate:Restore()
-        for frame, alpha in pairs(self.alpha) do self:Write(frame, alpha) end
+        for frame, alpha in pairs(self.alpha) do self:Write(frame, alpha * self.opacity) end
         self:Tooltip()
+    end
+
+    function gate:Reveal()
+        self.hidden = false
+        fadeDriver:SetScript("OnUpdate", nil)
+        if self.delayMs == 0 or self.fadeMs == 0 then
+            self.opacity = 1
+            self:Restore()
+            return
+        end
+        local started = GetTime()
+        fadeDriver:SetScript("OnUpdate", function()
+            self.opacity = math.min(1, (GetTime() - started) / (self.fadeMs / 1000))
+            self:Restore()
+            if self.opacity == 1 then fadeDriver:SetScript("OnUpdate", nil) end
+        end)
+        self:Restore()
     end
 
     function gate:RevealAfter(delay)
@@ -98,16 +116,17 @@ function Adapter.Bind(view)
         local serial = self.serial
         C_Timer.After(delay, function()
             if self.enabled and self.open and serial == self.serial then
-                self.hidden = false
-                self:Restore()
+                self:Reveal()
             end
         end)
     end
 
     function gate:Start()
         self.serial = self.serial + 1
+        fadeDriver:SetScript("OnUpdate", nil)
         self.open, self.openedAt = true, GetTime()
         self.hidden = self.delayMs > 0
+        self.opacity = self.hidden and 0 or 1
         if self.hidden then
             self:Write(view.main, 0)
             self:Write(view.proxy, 0)
@@ -118,22 +137,24 @@ function Adapter.Bind(view)
         end
     end
 
-    function gate:Configure(enabled, delayMs)
+    function gate:Configure(enabled, delayMs, fadeMs)
         self.serial = self.serial + 1 -- Invalidates callbacks even on disable/re-enable.
-        self.enabled, self.delayMs = enabled, delayMs
+        fadeDriver:SetScript("OnUpdate", nil)
+        self.enabled, self.delayMs, self.fadeMs = enabled, delayMs, fadeMs or 0
         if not enabled then
-            self.hidden = false
+            self.hidden, self.opacity = false, 1
             self:Restore()
         elseif self.open then
             if self.hidden then
                 local remaining = self.openedAt + delayMs / 1000 - GetTime()
                 if remaining > 0 then self:RevealAfter(remaining)
-                else self.hidden = false; self:Restore() end
-            elseif delayMs == 0 then
+                else self:Reveal() end
+            else
+                self.opacity = 1
                 self:Restore()
             end
         elseif delayMs == 0 then
-            self.hidden = false
+            self.hidden, self.opacity = false, 1
             self:Restore()
         end
     end
@@ -142,7 +163,7 @@ function Adapter.Bind(view)
         hooksecurefunc(frame, "SetAlpha", function(_, alpha)
             if gate.writing then return end
             gate.alpha[frame] = alpha
-            if gate.hidden then gate:Write(frame, 0) end
+            if gate.opacity < 1 then gate:Write(frame, alpha * gate.opacity) end
         end)
     end
     hooksecurefunc(view.tip, "SetAlpha", function(_, alpha)
@@ -157,6 +178,7 @@ function Adapter.Bind(view)
     -- secure attributes, bindings, action selection or original function replacement.
     hooksecurefunc(view.core, "NotifyState", function(_, state)
         if state == "close" then
+            fadeDriver:SetScript("OnUpdate", nil)
             gate.open = false
             gate.serial = gate.serial + 1
             -- Keep a cancelled, still-hidden ring hidden throughout native fade-out.

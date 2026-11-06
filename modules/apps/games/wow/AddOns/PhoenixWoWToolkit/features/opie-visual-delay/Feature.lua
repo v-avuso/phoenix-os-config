@@ -3,13 +3,13 @@ local feature = {
     id = "opieVisualDelay",
     section = "OPie Visual Delay",
     dependencies = { "OPie" },
-    defaults = { enabled = true, delayMs = 50 },
+    defaults = { enabled = true, delayMs = 50, fadeMs = 100 },
 }
 
-local function milliseconds(value)
+local function milliseconds(value, fallback)
     value = tonumber(value)
-    if not value or value ~= value then return 50 end
-    return math.max(0, math.min(250, math.floor(value + 0.5)))
+    if not value or value ~= value then return fallback or 50 end
+    return math.max(0, math.min(1000, math.floor(value + 0.5)))
 end
 
 function feature:GetAvailability(dependencies)
@@ -35,17 +35,18 @@ end
 
 function feature:Enable()
     self.settings.delayMs = milliseconds(self.settings.delayMs)
+    self.settings.fadeMs = milliseconds(self.settings.fadeMs, 100)
     if not self.gate then self.gate = Toolkit.OPieDelay.Bind(self.view) end
-    self.gate:Configure(true, self.settings.delayMs)
+    self.gate:Configure(true, self.settings.delayMs, self.settings.fadeMs)
 end
 
 function feature:Disable()
-    if self.gate then self.gate:Configure(false, self.settings.delayMs) end
+    if self.gate then self.gate:Configure(false, self.settings.delayMs, self.settings.fadeMs) end
 end
 
 function feature:SetDelay(value)
     self.settings.delayMs = milliseconds(value)
-    if self.gate then self.gate:Configure(self.active, self.settings.delayMs) end
+    if self.gate then self.gate:Configure(self.active, self.settings.delayMs, self.settings.fadeMs) end
     self:RefreshSettings()
 end
 
@@ -55,41 +56,52 @@ function feature:RegisterSettings(panel, y)
             Toolkit:RefreshFeatures()
             self:RefreshSettings()
         end)
-    Toolkit.Options.Text(panel, "Ring appearance delay (ms)", y - 40)
-    local slider = CreateFrame("Slider", nil, panel, "OptionsSliderTemplate")
-    self.slider = slider
-    slider:SetPoint("TOPLEFT", 24, y - 68)
-    slider:SetSize(240, 16)
-    slider:SetMinMaxValues(0, 250)
-    slider:SetValueStep(1)
-    slider:SetObeyStepOnDrag(true)
-    if slider.Low then slider.Low:SetText("0") end
-    if slider.High then slider.High:SetText("250") end
-    if slider.Text then slider.Text:SetText("") end
-    slider:SetScript("OnValueChanged", function(_, value)
-        if not self.refreshing then self:SetDelay(value) end
-    end)
-    local input = CreateFrame("EditBox", nil, panel, "InputBoxTemplate")
-    self.input = input
-    input:SetPoint("LEFT", slider, "RIGHT", 24, 0)
-    input:SetSize(64, 24)
-    input:SetAutoFocus(false)
-    input:SetNumeric(true)
-    input:SetMaxLetters(3)
-    local function commit() self:SetDelay(input:GetText()) end
-    input:SetScript("OnEnterPressed", function() commit(); input:ClearFocus() end)
-    input:SetScript("OnEditFocusLost", commit)
-    input:SetScript("OnEscapePressed", function() self:RefreshSettings(); input:ClearFocus() end)
-    return y - 116
+    local function timingControl(label, offset, key, fallback)
+        Toolkit.Options.Text(panel, label, y + offset)
+        local slider = CreateFrame("Slider", nil, panel, "OptionsSliderTemplate")
+        slider:SetPoint("TOPLEFT", 24, y + offset - 28)
+        slider:SetSize(240, 16)
+        slider:SetMinMaxValues(0, 1000)
+        slider:SetValueStep(1)
+        slider:SetObeyStepOnDrag(true)
+        if slider.Low then slider.Low:SetText("0") end
+        if slider.High then slider.High:SetText("1000") end
+        if slider.Text then slider.Text:SetText("") end
+        local input = CreateFrame("EditBox", nil, panel, "InputBoxTemplate")
+        input:SetPoint("LEFT", slider, "RIGHT", 24, 0)
+        input:SetSize(64, 24)
+        input:SetAutoFocus(false)
+        input:SetNumeric(true)
+        input:SetMaxLetters(4)
+        local function update(value)
+            self.settings[key] = milliseconds(value, fallback)
+            if self.gate then self.gate:Configure(self.active, self.settings.delayMs, self.settings.fadeMs) end
+            self:RefreshSettings()
+        end
+        slider:SetScript("OnValueChanged", function(_, value)
+            if not self.refreshing then update(value) end
+        end)
+        local function commit() update(input:GetText()) end
+        input:SetScript("OnEnterPressed", function() commit(); input:ClearFocus() end)
+        input:SetScript("OnEditFocusLost", commit)
+        input:SetScript("OnEscapePressed", function() self:RefreshSettings(); input:ClearFocus() end)
+        return slider, input
+    end
+    self.slider, self.input = timingControl("Ring appearance delay (ms)", -40, "delayMs", 50)
+    self.fadeSlider, self.fadeInput = timingControl("Fade-in duration (ms; 0 disables fade)", -120, "fadeMs", 100)
+    return y - 196
 end
 
 function feature:RefreshSettings()
     self.refreshing = true
     self.settings.delayMs = milliseconds(self.settings.delayMs)
+    self.settings.fadeMs = milliseconds(self.settings.fadeMs, 100)
     self.checkbox:SetChecked(self.settings.enabled)
     self.checkbox:SetEnabled(self.available)
     self.slider:SetValue(self.settings.delayMs)
     self.input:SetText(tostring(self.settings.delayMs))
+    self.fadeSlider:SetValue(self.settings.fadeMs)
+    self.fadeInput:SetText(tostring(self.settings.fadeMs))
     self.refreshing = false
 end
 
