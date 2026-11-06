@@ -33,7 +33,8 @@ function feature:Apply()
     if InCombatLockdown() then self.pending=true; return end
     self:Initialize()
     local config=M.Resolve(self.settings,self:Spec())
-    local key=M.Key({config,self.settings.palette,self.running==true})
+    local key=M.Key({config,self.settings.palette,self.running==true,
+        tostring(ElvUF_Player and ElvUF_Player.Power or false)})
     if key==self.appliedKey then self.pending=false; return end
     self.appliedKey=key
     D.Stop(self.testBars); self.testBars=nil

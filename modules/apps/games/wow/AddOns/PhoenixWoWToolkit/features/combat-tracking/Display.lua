@@ -60,7 +60,14 @@ function D.Bars(config,palette,validate)
             end
             local anchor=CreateFrame('Frame',nil,display.root)
             anchor:SetSize(style.width,style.height)
-            anchor:SetPoint('CENTER',display.root,'CENTER',bar.x or 0,bar.y or -(barIndex-1)*(style.height+8))
+            local power=bar.anchorPlayer and ElvUF_Player and ElvUF_Player.Power
+            if power and not power:IsForbidden() then
+                -- Anchor our ordinary root's child, without parenting to or modifying
+                -- the protected player frame or repurposing its resource display.
+                anchor:SetPoint('TOP',power,'BOTTOM',bar.x or 0,bar.y or -6)
+            else
+                anchor:SetPoint('CENTER',display.root,'CENTER',bar.x or 0,bar.y or -(barIndex-1)*(style.height+8))
+            end
             local c=container(anchor,display.containers)
             -- Lowest priority first. Each active slot has a full opaque backing,
             -- so higher layers cover every pixel of the lower layer, including its label.
@@ -91,7 +98,7 @@ function D.Bars(config,palette,validate)
                         end
                         if style.label then
                             local label=progress:CreateFontString(nil,'OVERLAY')
-                            label:SetFont(font,math.min(14,style.height-4),'OUTLINE')
+                            label:SetFont(font,math.max(8,math.min(14,style.height-4)),'OUTLINE')
                             label:SetPoint('LEFT',progress,'LEFT',6,0)
                             label:SetPoint('RIGHT',progress,'RIGHT',-6,0)
                             label:SetJustifyH('LEFT')

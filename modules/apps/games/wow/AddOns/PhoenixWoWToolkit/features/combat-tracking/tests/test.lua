@@ -10,8 +10,12 @@ assert(M.NextHue({315,135}) == 45)
 assert(M.ParseHex('#ff0080') == 'FF0080' and not M.ParseHex('oops'))
 local db = {}; M.Initialize(db)
 local guardian = M.Resolve(db,104)
-assert(guardian.bars[1].effects[1].spellID == 1308399)
+assert(guardian.bars[1].effects[1].spellID == 102558)
 assert(guardian.bars[1].effects[2].spellID == 1308176)
+assert(guardian.bars[1].effects[1].hue==190 and guardian.bars[1].effects[2].hue==45)
+assert(guardian.bars[1].width==65 and guardian.bars[1].height==6)
+assert(guardian.bars[1].icon==false and guardian.bars[1].label==false)
+assert(guardian.bars[1].anchorPlayer==true)
 assert(#M.Resolve(db,103).bars == 0, 'Feral must not inherit Guardian bars')
 db.global.width=300; db.druid.width=310; db.specs['104']={width=320}
 assert(M.Resolve(db,104).width==320 and M.Resolve(db,102).width==310)
@@ -41,5 +45,5 @@ r,g,b=M.Color(manual,db.palette); near(r,18/255); near(g,171/255); near(b,239/25
 db.palette.saturation=.1
 local rr,gg,bb=M.Color(manual,db.palette); near(r,rr); near(g,gg); near(b,bb)
 guardian.bars[1].effects[1].spellID=1
-assert(M.Resolve(db,104).bars[1].effects[1].spellID==1308399,'Resolved config must not alias defaults')
+assert(M.Resolve(db,104).bars[1].effects[1].spellID==102558,'Resolved config must not alias defaults')
 print('Combat Tracking: palette, inheritance, independent defaults and all seven composites passed')

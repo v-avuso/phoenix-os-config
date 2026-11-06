@@ -34,7 +34,11 @@ rendering; an unavailable talent simply never matches. ID validation confirms th
 client recognizes a spell, **not** that it is learned or exposed as a trackable buff.
 The first editor uses explicit IDs rather than guessing cast-to-aura mappings from
 the spellbook. Every bar can override size, offsets, texture, fill opacity, icon and
-label. Bar offsets are relative to the shared screen-center position. Blank per-bar
+label. Guardian defaults to a 65 × 6 cyan/orange stick without icon or label, anchored
+beneath `ElvUF_Player.Power` using the existing ElvUI/ToxiUI texture. Other bars use
+the shared screen-center position. The per-bar anchor checkbox selects this behavior;
+without ElvUI the shared position is the fallback. Anchoring changes no resource bar.
+Blank per-bar
 numbers inherit shared settings, except vertical offset which defaults to stacking.
 
 Nameplate highlights accept up to three player-applied debuffs. Borders use the mean
@@ -48,7 +52,7 @@ six-digit hex override remains independent of global S/V. Empty hex restores pal
 
 | Spec | Bar priority | Nameplates |
 |---|---|---|
-| Guardian | Answered Calling `1308399` → Dream Conduit `1308176` | Moonfire `164812` |
+| Guardian | Incarnation: Guardian of Ursoc `102558` (cyan) → Dream Conduit `1308176` (orange) | Moonfire `164812` |
 | Balance | Solar Eclipse `48517` → Lunar Eclipse `48518` | Moonfire `164812` + Sunfire `164815` |
 | Restoration | Clearcasting `16870` → Soul of the Forest `114108` | Inherited Moonfire |
 | Feral | No spec bar | Inherited Moonfire only |
@@ -56,9 +60,10 @@ six-digit hex override remains independent of global S/V. Empty hex restores pal
 The installed Retail client metadata is `12.1.5.70783`; installed ToxiUI is `7.6.1`
 and ElvUI's declared requirement is `15.26`. Spell catalog entries were researched,
 but the character's spellbook/talent state and actual aura matches require client
-validation. **Answered Calling is flagged as a hidden aura in its spell data**;
-its availability to AuraSlot remains unresolved. There is no inferred eight-second
-timer or substitute Priest Guardian Spirit ID. Ascendant Eclipses is a passive apex
+validation. The player has observed Dream Conduit in the initial client trial;
+Incarnation matching and the revised nameplate adapter still need client acceptance.
+The Guardian preset now follows Incarnation rather than the earlier hidden Answered
+Calling proposal. There are no inferred timers. Ascendant Eclipses is a passive apex
 talent, not an assumed active buff; extra Ascendant state IDs are deferred until
 verified. No Astral Power bar is added.
 
@@ -141,9 +146,9 @@ emulates engine access restrictions, secret values, GPU compositing or combat ta
 
 After a separately authorized trial deployment, `/reload` loads this existing add-on:
 
-1. Guardian: open settings; check green Answered Calling above orange Dream Conduit.
+1. Guardian: open settings; check cyan Incarnation above orange Dream Conduit.
    Trigger each and both, in and out of combat. Verify native progress, immediate
-   fallback and hiding when neither is active. If Answered Calling never appears,
+   fallback and hiding when neither is active. If Incarnation never appears,
    report that separately from priority; substitute two known accessible buffs
    temporarily (e.g. Mark of the Wild `1126` and Barkskin `22812`) to isolate mechanism.
 2. Balance: apply Moonfire only, Sunfire only, both; remove/expire each. Verify pink,
@@ -162,5 +167,9 @@ After a separately authorized trial deployment, `/reload` loads this existing ad
 7. Verify existing Objective Tracker, OPie and tooltip behavior remains unchanged.
 
 Stop expansion if steps 1–2 fail. Remaining gaps are spellbook-to-aura discovery,
-verified Ascendant states/hidden Guardian aura, health tinting and live acceptance;
+verified Ascendant states, health tinting and live acceptance;
 they are not silently replaced by out-of-combat tracking.
+
+Existing explicit bar-list overrides are preserved. To adopt the revised Guardian
+preset after customizing its list, select Guardian overrides and Reset to inherited.
+This also resets other Guardian overrides; saved global and Druid settings remain.

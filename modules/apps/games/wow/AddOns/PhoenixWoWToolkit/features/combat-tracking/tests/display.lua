@@ -7,10 +7,11 @@ local function object(parent,kind)
  local o=setmetatable({parent=parent,kind=kind,level=parent and parent.level or 0,shown=true},{__index=methods})
  objects[#objects+1]=o; return o
 end
-function methods:SetSize() end
+function methods:SetSize(w,h) self.width,self.height=w,h end
 function methods:SetWidth() end
 function methods:SetHeight() end
-function methods:SetPoint() end
+function methods:SetPoint(...) self.point={...} end
+function methods:IsForbidden() return false end
 function methods:SetAllPoints() end
 function methods:SetFrameLevel(n) self.level=n end
 function methods:GetFrameLevel() return self.level end
@@ -37,6 +38,8 @@ function methods:AddAuraSlot(_,filter,options)
  self.button=button
 end
 UIParent=object(nil,'root'); STANDARD_TEXT_FONT='font'
+ElvUF_Player={Power=object(UIParent,'power')}
+ElvUF_Player.Power.width=260
 CreateFrame=function(kind,_,parent) return object(parent,kind) end
 C_AuraContainerUtil={ProcessCustomAuraButtonDurationBarOptions=function() end}
 assert(loadfile(root..'/features/combat-tracking/Display.lua'))('PWT',T)
@@ -45,6 +48,11 @@ local db={}; M.Initialize(db)
 local config=M.Resolve(db,104)
 local display=D.Bars(config,db.palette,function() return true end)
 assert(#display.containers==1 and display.slotCount==2,'Share one native event/parse owner per bar')
+local slotFrame=display.containers[1].button
+assert(slotFrame.width==65 and slotFrame.height==6,'Guardian defaults must be a small stick')
+assert(display.containers[1].parent.point[2]==ElvUF_Player.Power,'Follow the existing power bar anchor')
+assert(ElvUF_Player.Power.width==260,'Do not modify the existing power bar')
+for _,o in ipairs(objects) do assert(o.kind~='text','Minimal Guardian preset must not create text') end
 local function visible(o)
  if not o.shown then return false end
  if o.kind=='slot' and not active[o.effect] then return false end
@@ -60,8 +68,8 @@ local function top(kind)
 end
 assert(not top('slot'))
 active[1308176]=true; assert(top('slot').effect==1308176)
-active[1308399]=true; assert(top('slot').effect==1308399)
-active[1308399]=nil; assert(top('slot').effect==1308176,'Expiry reveals lower active bar')
+active[102558]=true; assert(top('slot').effect==102558)
+active[102558]=nil; assert(top('slot').effect==1308176,'Expiry reveals lower active bar')
 active[1308176]=nil; assert(not top('slot'))
 D.Stop(display)
 config=M.Resolve(db,102)

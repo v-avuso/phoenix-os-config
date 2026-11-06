@@ -50,7 +50,9 @@ end
 local function effect(id,hue) return {spellID=id,hue=hue,enabled=true} end
 local function bar(name,effects) return {name=name,enabled=true,effects=effects} end
 M.presets = {
-    [104] = {bars={bar('Guardian spirits',{effect(1308399,135),effect(1308176,45)})}},
+    [104] = {bars={{name='Incarnation / Dream Conduit',enabled=true,
+        effects={effect(102558,190),effect(1308176,45)},
+        width=65,height=6,icon=false,label=false,anchorPlayer=true}}},
     [102] = {bars={bar('Eclipse',{effect(48517,45),effect(48518,265)})},
         highlights={effect(164812,315),effect(164815,190)}},
     [105] = {bars={bar('Healing procs',{effect(16870,135),effect(114108,45)})}},

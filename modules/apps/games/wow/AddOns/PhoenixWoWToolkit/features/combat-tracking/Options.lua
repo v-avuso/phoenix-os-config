@@ -91,7 +91,7 @@ function F:RegisterSettings(panel,y)
         y=y-56
     end
     numeric('Width (40–1000)', 'width',40,1000)
-    numeric('Height (12–100)', 'height',12,100)
+    numeric('Height (2–100)', 'height',2,100)
     numeric('Horizontal offset from center','x',-4000,4000)
     numeric('Vertical offset from center','y',-2000,2000)
     numeric('Fill opacity (0–1; backing stays opaque)','fillAlpha',0,1)
@@ -154,7 +154,7 @@ function F:RegisterSettings(panel,y)
         button(panel,'Remove bar',310,y-18,function() table.remove(config.bars,index); changed() end,110)
         y=y-60
         Toolkit.Options.Checkbox(panel,'Enable this bar',y,bar,'enabled',changed); y=y-40
-        for _,fields in ipairs({{{'width','Width',40,1000},{'height','Height',12,100},{'fillAlpha','Fill opacity',0,1}},
+        for _,fields in ipairs({{{'width','Width',40,1000},{'height','Height',2,100},{'fillAlpha','Fill opacity',0,1}},
             {{'x','Horizontal offset',-4000,4000},{'y','Vertical offset',-2000,2000}}}) do
             for column,field in ipairs(fields) do
                 input(panel,field[2]..' (blank = inherited)',bar[field[1]],24+(column-1)*175,y,function(text)
@@ -166,8 +166,9 @@ function F:RegisterSettings(panel,y)
             y=y-56
         end
         local appearance={icon=bar.icon==nil and config.icon or bar.icon,
-            label=bar.label==nil and config.label or bar.label}
-        for _,entry in ipairs({{'icon','Show icon'},{'label','Show label'}}) do
+            label=bar.label==nil and config.label or bar.label,anchorPlayer=bar.anchorPlayer}
+        for _,entry in ipairs({{'icon','Show icon'},{'label','Show label'},
+            {'anchorPlayer','Anchor beneath ElvUI player power bar'}}) do
             Toolkit.Options.Checkbox(panel,entry[2],y,appearance,entry[1],function()
                 bar[entry[1]]=appearance[entry[1]]; changed()
             end)
@@ -179,7 +180,7 @@ function F:RegisterSettings(panel,y)
             end)
         y=y-62
         button(panel,'Reset bar appearance',24,y,function()
-            for _,key in ipairs({'width','height','x','y','fillAlpha','icon','label','texture'}) do bar[key]=nil end
+            for _,key in ipairs({'width','height','x','y','fillAlpha','icon','label','texture','anchorPlayer'}) do bar[key]=nil end
             changed()
         end,175)
         y=y-38
