@@ -195,6 +195,8 @@ in
       battleNet
     ];
     home-manager.users.${user.name} = { lib, ... }: {
+      # Native Wine Wayland windows lack Caelestia's steam_app_default game tag.
+      phoenix.gameWindows.extraClasses = [ "wow.exe" ];
       home.activation.wowToolkit = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
         run ${toolkitDeploy}/bin/phoenix-wow-toolkit-deploy ${lib.escapeShellArg addonDir} ${lib.optionalString config.phoenix.wow.toolkit.enable "${toolkit}/PhoenixWoWToolkit"}
       '';

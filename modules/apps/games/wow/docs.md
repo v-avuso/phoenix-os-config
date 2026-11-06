@@ -182,6 +182,13 @@ instawow, restore/deploy the pre-change manifest and leave unchanged WTF alone. 
 
 ## Updater ownership and safe use
 
+WoW's native Wine Wayland window uses class `wow.exe` without a game content hint
+or Caelestia game tag. The WoW module explicitly classifies that exact class so
+Kando's held side-button shortcuts reach the game's radial menus. XWayland's
+`steam_app_default` windows retain the existing tag-based route. Do not infer
+game classification from the executable filename or assume the display backend
+stays unchanged across normal Battle.net launches; inspect live window metadata.
+
 The original 46 instawow package records are ignored with auto-updates off. The twelve additions
 from `b7f39af` are still absent from WowUp's records and may need a rescan, then Ignore / Auto Update
 off. The fifteen CurseForge package records must remain WowUp-managed. See the README's
