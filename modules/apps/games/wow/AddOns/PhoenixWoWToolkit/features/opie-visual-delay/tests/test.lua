@@ -37,6 +37,10 @@ function hooksecurefunc(object, method, callback)
         return table.unpack(result, 1, result.n)
     end
 end
+function EnumerateFrames(previous)
+    if not previous then return frames[1] end
+    for i, frame in ipairs(frames) do if frame == previous then return frames[i + 1] end end
+end
 local Methods = {}
 local function object(kind, name, parent)
     local f = setmetatable({ kind = kind, name = name, parent = parent, alpha = 1, scale = 1,
@@ -163,8 +167,26 @@ core.CheckCVars = noop
 assert(load(notification, '@OPieCore.lua:NotifyState', 't', environment))()
 local toolkit = {}
 assert(loadfile(toolkitSource .. '/features/opie-visual-delay/Renderer.lua'))('PhoenixWoWToolkit', toolkit)
+-- Real client dimensions are rounded; the protected notification frame need not
+-- remain a direct UIParent child (for example after another add-on reparents it).
+for _, frame in ipairs(UIParent.children) do
+    if frame.w == 150 and frame.level == 100 then frame:SetSize(149.99446105957, 149.99446105957) end
+end
+for i, frame in ipairs(UIParent.children) do
+    if frame == core then table.remove(UIParent.children, i); break end
+end
+core.parent = nil
 local view, why = toolkit.OPieDelay.Find()
 assert(view, why)
+local width, height = view.main:GetSize()
+view.main:SetSize(149, 150)
+assert(not toolkit.OPieDelay.Find(), 'materially different dimensions must fail closed')
+view.main:SetSize(width, height)
+local extraCore = object('Button', 'OPieRT-87654321-dcba')
+extraCore.protected, extraCore.NotifyState = true, core.NotifyState
+assert(not toolkit.OPieDelay.Find(), 'ambiguous notification frames must fail closed')
+extraCore.NotifyState = nil
+assert(toolkit.OPieDelay.Find())
 local pointer = view.main.regions[1]
 local filename = pointer.texture
 pointer.texture, GetFileIDFromPath = 777, function() return 777 end

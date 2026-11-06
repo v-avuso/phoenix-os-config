@@ -26,18 +26,28 @@ function Adapter.Find()
         return pointer ~= nil and texture == pointer
     end
     local mains, cores = {}, {}
-    for _, frame in ipairs({ UIParent:GetChildren() }) do
+    -- Parenting is not an identity: other UI add-ons can reparent the input frame.
+    -- Observe only its public identity; never mutate this protected button.
+    local frame = EnumerateFrames()
+    while frame do
         if not frame:IsForbidden() then
             local name = frame:GetName()
             if public(name) and name and name:match("^OPieRT%-%x%x%x%x%x%x%x%x%-%x%x%x%x$")
                 and frame:IsObjectType("Button") and frame:IsProtected()
                 and type(frame.NotifyState) == "function" then
                 cores[#cores + 1] = frame
-            elseif public(name) and ordinary(frame) and not name then
+            end
+        end
+        frame = EnumerateFrames(frame)
+    end
+    for _, frame in ipairs({ UIParent:GetChildren() }) do
+        if not frame:IsForbidden() then
+            local name = frame:GetName()
+            if public(name) and ordinary(frame) and not name then
                 local strata, level = frame:GetFrameStrata(), frame:GetFrameLevel()
                 local w, h = frame:GetSize()
                 if public(strata) and public(level) and public(w) and public(h)
-                    and strata == "FULLSCREEN" and level == 100 and w == 150 and h == 150 then
+                    and strata == "FULLSCREEN" and level == 100 and math.abs(w - 150) < 0.05 and math.abs(h - 150) < 0.05 then
                     for _, region in ipairs({ frame:GetRegions() }) do
                         if region:IsObjectType("Texture") then
                             local texture = region:GetTexture()
@@ -51,7 +61,7 @@ function Adapter.Find()
             end
         end
     end
-    if #mains ~= 1 or #cores ~= 1 then return nil, "Unexpected renderer/notification structure" end
+    if #mains ~= 1 or #cores ~= 1 then return nil, ("Unexpected renderer/notification structure (visuals=%d, notifications=%d)"):format(#mains, #cores) end
     return { main = mains[1], proxy = proxy, tip = tip, core = cores[1] }
 end
 

@@ -6,7 +6,7 @@ Delay only OPie's visuals, leaving bindings, cursor selection, quick actions and
 secure execution with OPie. This version uses narrowly scoped internal post-hooks
 explicitly authorized by the operator. It needs no wrapper or OPie source patch.
 
-**Implemented, not activated by this change.** The local proof runs OPie's real
+**Experimental implementation; client acceptance remains required.** The local proof runs OPie's real
 renderer and notification Lua with simulated WoW APIs. Actual displayed frames,
 protected actions and combat taint remain in-game acceptance; do not call them proven.
 
@@ -25,9 +25,9 @@ compatibility gates. Source paths below are relative to installed `AddOns/OPie`:
 
 | Location | Evidence and integration |
 |---|---|
-| `OPieCore.lua:127` | The protected input/action button has generated name `OPieRT-<8 hex>-<4 hex>`. It stays under OPie's control. |
+| `OPieCore.lua:127` | The protected input/action button has generated name `OPieRT-<8 hex>-<4 hex>`. It stays under OPie's control. Discover it with `EnumerateFrames`, independently of parenting; require exactly one protected Button with this identity and `NotifyState`. |
 | `OPieCore.lua:1215–1265` | `NotifyState` is ordinary Lua, called by secure snippets via `CallMethod`. It dispatches `securecall(ORI.Show/Hide, ...)`. A `hooksecurefunc` observer runs **after** the complete original callback; no click, binding, secure snippet or protected attribute is replaced. |
-| `UI/RingView.lua:97–154` | Separate main and `OPieVisualElementsProxy` roots contain the central ring, slices and ghost groups. The unnamed main root is FULLSCREEN, level 100, 150×150, with the OPie pointer texture. Discovery requires exactly one matching main frame and notification frame. Pointer matching accepts local texture paths or file IDs and skips secret values. |
+| `UI/RingView.lua:97–154` | Separate main and `OPieVisualElementsProxy` roots contain the central ring, slices and ghost groups. The unnamed main root is FULLSCREEN, level 100, 150×150 (allowing less than 0.05 units of client rounding per dimension), with the OPie pointer texture. Discovery requires exactly one matching main frame and notification frame. Pointer matching accepts local texture paths or file IDs and skips secret values. |
 | `UI/RingView.lua:781–812` | Native animation repeatedly writes alpha. Post-hooks record the intended alpha and immediately reassert zero while gated. All original OnUpdate, position, scale, cooldown and selection updates keep running. |
 | `UI/RingView.lua:822–880` | `Show` completes before the notification observer; Lua execution does not yield in this path. `Hide` starts a closing animation, so OnHide is too late to identify a cancelled pending reveal. Observe logical `close` instead. |
 | `UI/RingView.lua:489–529`, `Libs/NotGameTooltip.lua` | The separate tooltip is read through `OPie.HUM.NotGameTooltip`. Only while it belongs to the visual proxy is its alpha gated. Show, alpha and owner changes are observed; changing owner releases suppression. |
@@ -90,7 +90,9 @@ that native OPie immediately makes its visual alpha nonzero. With hooks, the pro
 passes taps, cursor/modifier changes during hidden updates, holds, repeated/reopened
 menus, nested switches, animation-on/off, tooltip ownership, cancellation, restoration,
 zero/max delay, controls, numeric validation, unknown versions/interfaces and changed
-frame/method structure. It executes unmodified `RingView.lua` and extracts the exact
+frame/method structure. Regressions cover the observed 149.994461 client dimensions,
+notification discovery outside direct UIParent children, materially different sizes
+and duplicate notification frames. It executes unmodified `RingView.lua` and extracts the exact
 `NotifyState` callback into an isolated local environment. Frame APIs, protected
 snippets and actual casting are not executed in a WoW client.
 

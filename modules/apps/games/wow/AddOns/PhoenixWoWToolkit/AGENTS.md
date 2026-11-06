@@ -44,5 +44,8 @@
   real Blizzard comparison constructor, not a permissive fake accepting any table.
 - An immutable installed package does not follow working files. Deployment and
   reload/restart are separate steps; neither a reload nor restart installs edits.
+- Frame discovery must tolerate small client dimension rounding; exact `SetSize`
+  inputs need not round-trip through `GetSize`. Identify protected notification
+  frames independently of their current parent and reject ambiguous matches.
 - PhoenixOS packaging/activation and its tests are owned outside this directory.
   Never activate or restart services just to validate these sources.
