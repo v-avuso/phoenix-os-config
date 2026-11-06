@@ -182,6 +182,37 @@ instawow, restore/deploy the pre-change manifest and leave unchanged WTF alone. 
 
 ## Updater ownership and safe use
 
+### Tracker and desktop backend
+
+Myu's Knowledge Points Tracker 0.9.0 is installed from the author's
+[GitHub releases](https://github.com/myu-westfall/MyusKnowledgePointsTracker/releases)
+as `github:myu-westfall/MyusKnowledgePointsTracker`, folder
+`MyusKnowledgePointsTracker` (Retail TOCs 120100/120105; Blizzard_Professions
+dependency). Native instawow install/list and update dry-run passed; the normal
+up-to-date result exits 1. The manifest now owns 70 packages. Before installation,
+all 46 overlapping WowUp records were Ignore / Auto Update off; the tracker had
+neither an existing folder nor a WowUp record. If subsequently discovered by
+WowUp, protect it there before writes. In-game operation remains a player check.
+
+Home Manager owns `applications/wowup-cf.desktop`, derived from the packaged
+desktop file with only Exec changed to the absolute package executable plus
+`--no-sandbox --ozone-platform=wayland %U`. The native Wayland launch was confirmed
+usable by the operator. The previous X11 launch crashed during platform
+initialization on 2026-11-06: the session advertised `DISPLAY=:1`, with Xwayland
+running but no `/tmp/.X11-unix/X1` socket. The FHS launcher exposes that exact
+filesystem socket; the cause of its disappearance is unconfirmed. No compositor
+restart or global display override is required for the WowUp fix.
+
+The installed Lutris is 0.5.22. Its
+[Wine runner](https://github.com/lutris/lutris/blob/v0.5.22/lutris/runners/wine.py)
+defaults Graphics to Auto and sets `PROTON_ENABLE_WAYLAND=1` only for an explicit
+Wayland selection with a compatible Proton. The current Battle.net game config
+has no explicit Graphics selection. The missing X11 socket could affect its FHS
+launch too, but does not prove why today's game behavior changed. Native WoW
+Wayland windows were already observed in the game-routing work; do not attribute
+that change to the WowUp-only launcher flag. Lutris/Wine settings remain owned
+by their existing configuration; no game was launched for this investigation.
+
 WoW's native Wine Wayland window uses class `wow.exe` without a game content hint
 or Caelestia game tag. The WoW module explicitly classifies that exact class so
 Kando's held side-button shortcuts reach the game's radial menus. XWayland's

@@ -78,6 +78,14 @@ let
       addon_dir = addonDir;
     }
   );
+  # Preserve upstream metadata while selecting the verified native backend.
+  wowUpDesktop = pkgs.runCommand "wowup-cf-wayland-desktop" { } ''
+    mkdir -p "$out"
+    cp ${pkgs.wowup-cf}/share/applications/wowup-cf.desktop "$out/wowup-cf.desktop"
+    substituteInPlace "$out/wowup-cf.desktop" \
+      --replace-fail 'Exec=wowup-cf --no-sandbox %U' \
+      'Exec=${pkgs.wowup-cf}/bin/wowup-cf --no-sandbox --ozone-platform=wayland %U'
+  '';
   settingsWriter = import ../../../../home/mutable-json-settings { inherit pkgs; };
   click = pkgs.python3.pkgs.click.overridePythonAttrs {
     version = "8.4.1";
@@ -206,6 +214,7 @@ in
       # Preserve the existing Lutris entry and its ID; HM backs up the old file.
       xdg.dataFile."applications/net.lutris.battlenet-1.desktop".source =
         "${battleNetDesktop}/share/applications/net.lutris.battlenet-1.desktop";
+      xdg.dataFile."applications/wowup-cf.desktop".source = "${wowUpDesktop}/wowup-cf.desktop";
       systemd.user.services.wow-tsm-session = {
         Unit.Description = "TSM companion for the Battle.net / WoW session";
         Service = {

@@ -19,7 +19,7 @@ Development and local tests do not modify game files or restart the client.
 
 ## Current setup
 
-**69 desired instawow packages + 16 WowUp-CF packages.** The original ElvUI/ToxiUI profile,
+**70 desired instawow packages + 16 WowUp-CF packages.** The original ElvUI/ToxiUI profile,
 bindings, casting settings and private WTF files are preserved. The user has completed ToxiUI's in-game installer and customization;
 this addon batch preserves those current settings and does not launch WoW.
 **No addon-specific configuration overrides, new ToxiUI profiles or action-bar bindings have been
@@ -40,6 +40,16 @@ reinstall or adopt either manager's packages in the other. The ten new English v
 are also instawow-owned and must be ignored if WowUp discovers them.
 
 ## Crafting and TSM companion
+
+Myu's Knowledge Points Tracker is managed as
+`github:myu-westfall/MyusKnowledgePointsTracker`, using the author's public release
+without a new CurseForge/Wago API key. It participates in the 05:00 Berlin updates.
+Use `/mkpt` to toggle its window. If WowUp discovers it, set **Ignore / Auto Update off**
+before updating packages there; do not transfer its ownership.
+
+WowUp-CF's normal launcher uses native Wayland (`--ozone-platform=wayland`).
+This avoids the X11 initialization crash observed with the missing session X11
+socket. Battle.net and WoW keep their existing Lutris/Wine configuration.
 
 **WorthIt — exact match, installation blocked (2026-10-29):** InstaWow's current
 catalogue lists `curse:worthit`, matching [WorthIt by DalaGG](https://www.curseforge.com/wow/addons/worthit)
