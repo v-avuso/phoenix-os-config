@@ -36,6 +36,7 @@ function feature:Apply()
     local key=M.Key({config,self.settings.palette,self.running==true})
     if key==self.appliedKey then self.pending=false; return end
     self.appliedKey=key
+    D.Stop(self.testBars); self.testBars=nil
     D.Stop(self.bars); self.bars=nil
     for _,entry in pairs(self.plates) do D.Stop(entry.display) end
     self.plates={}
@@ -59,12 +60,13 @@ function feature:AddPlate(unit)
     if not self.running or not self.config or not self.config.platesEnabled then return end
     if not C_NamePlate then return end
     local plate=C_NamePlate.GetNamePlateForUnit(unit)
-    if not usable(plate) then return end
+    if not usable(plate) then self.plateStatus='missing, forbidden or protected nameplate'; return end
     -- Plater documents unitFrame.healthBar. Blizzard uses UnitFrame.healthBar.
     -- No profile changes, aura hooks, or writes to the provider's health bar.
     local frame=plate.unitFrame or plate.UnitFrame
-    local health=frame and (frame.healthBar or frame.HealthBarsContainer and frame.HealthBarsContainer.healthBar)
-    if not usable(health) then return end
+    local health=frame and (frame.Health or frame.healthBar or frame.HealthBarsContainer and frame.HealthBarsContainer.healthBar)
+    if not usable(health) then self.plateStatus='missing, forbidden or protected health bar'; return end
+    self.plateStatus=frame.Health and 'ElvUI Health anchor' or 'healthBar anchor'
     local previous=self.plates[plate]
     if previous and previous.health==health then
         previous.unit=unit
@@ -105,12 +107,38 @@ events:SetScript('OnEvent',function(_,event,unit)
 end)
 
 SLASH_PWTCOMBAT1='/pwtcombat'
-SlashCmdList.PWTCOMBAT=function()
-    print('PWT combat: prototype-v1; spec='..tostring(feature:Spec())..'; active='..tostring(feature.running==true)
+SlashCmdList.PWTCOMBAT=function(message)
+    if message=='test' then
+        if not feature.running then print('PWT: enable Combat Tracking before starting the reference test.'); return end
+        if InCombatLockdown() then print('PWT: start the reference test outside combat.'); return end
+        if not feature.testBars then
+            local config=M.Copy(feature.config)
+            config.y=config.y+80
+            config.bars={{enabled=true,effects={{spellID=22812,hue=135,enabled=true},
+                {spellID=1126,hue=45,enabled=true}}}}
+            feature.testBars=D.Bars(config,feature.settings.palette,M.ValidSpell)
+        end
+        print('PWT reference bar: Mark of the Wild, overridden by Barkskin. Cast those buffs; /pwtcombat stop removes the test.')
+        return
+    elseif message=='stop' then
+        if InCombatLockdown() then print('PWT: stop the reference test outside combat.'); return end
+        D.Stop(feature.testBars); feature.testBars=nil
+        print('PWT reference test stopped; saved preferences unchanged.')
+        return
+    end
+    print('PWT combat: prototype-v2; spec='..tostring(feature:Spec())..'; active='..tostring(feature.running==true)
         ..'; pending='..tostring(feature.pending==true))
     local count,slots=0,feature.bars and feature.bars.slotCount or 0
     for _,entry in pairs(feature.plates or {}) do
         if entry.unit then count=count+1; slots=slots+entry.display.slotCount end
     end
     print('PWT combat: nameplates='..count..'; configured slots='..slots..'; no live aura values sampled')
+    print('PWT combat: last plate='..(feature.plateStatus or 'no nameplate event observed'))
+    for _,bar in ipairs(feature.config and feature.config.bars or {}) do
+        for _,effect in ipairs(bar.effects) do
+            local info=C_Spell.GetSpellInfo(effect.spellID)
+            print('PWT configured buff: '..effect.spellID..' '..(info and info.name or 'unavailable')
+                ..'; enabled='..tostring(effect.enabled==true)..'; aura assignment not inspected')
+        end
+    end
 end

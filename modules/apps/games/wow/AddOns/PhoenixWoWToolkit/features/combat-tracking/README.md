@@ -22,6 +22,12 @@ events also apply saved changes outside combat. Existing combat displays remain 
 queued configuration is applied. `/pwtcombat` reports configuration/slot counts only;
 it never samples live aura state.
 
+For an isolated renderer test, `/pwtcombat test` outside combat creates a temporary
+bar above the configured position: Barkskin `22812` takes priority over Mark of the
+Wild `1126`. Cast Mark, then Barkskin; check fallback when Barkskin ends. This does
+not change saved preferences. `/pwtcombat stop` removes the test outside combat;
+disabling the feature also removes it, with the normal combat deferral.
+
 Bars accept any number of enabled candidates with Up/Down priorities. Use the **aura**
 spell ID, which can differ from the cast ID. Invalid/unavailable IDs are skipped by
 rendering; an unavailable talent simply never matches. ID validation confirms the
@@ -100,7 +106,8 @@ or modifying ToxiUI's database. The native viewer remains usable independently;
 disable PWT's duplicate proc bar if the native display already suffices.
 
 Plater documents `C_NamePlate.GetNamePlateForUnit(unit).unitFrame.healthBar` as an
-attachment point. Blizzard's `UnitFrame.healthBar` is the fallback. Unknown, forbidden
+attachment point. ElvUI uses `unitFrame.Health`; Blizzard's `UnitFrame.healthBar`
+is another fallback. Unknown, forbidden
 or protected anchors are skipped. Plater is optional and was **not found in the
 configured local AddOns directory** during this investigation; its public upstream
 frame contract was inspected instead. Optional TOC dependencies ensure installed
