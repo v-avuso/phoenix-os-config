@@ -4,6 +4,9 @@ PanelTemplates_TabResize = function() end
 -- Behavioral fixture, not a WoW renderer/taint emulator.
 local source = assert(arg[1])
 local frames, combat = {}, false
+-- The bundle also registers class-specific features; this fixture is a non-Druid.
+UnitClass = function() return 'Mage', 'MAGE' end
+GetSpecialization = function() return nil end
 function InCombatLockdown() return combat end
 function hooksecurefunc(object, method, callback)
     local original = assert(object[method], method)
@@ -55,6 +58,8 @@ local function object(parent)
     function value:SetChecked(checked) self.checked = checked end
     function value:GetChecked() return self.checked end
     function value:CreateFontString() return object(self) end
+    function value:CreateTexture() return object(self) end
+    function value:SetColorTexture() end
     function value:Click()
         if self.shown and self.scripts.OnClick then self.scripts.OnClick(self) end
     end

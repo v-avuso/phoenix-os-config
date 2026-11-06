@@ -33,6 +33,8 @@ may require a client restart. A restart cannot expose an undeployed package.
 
 - [Comparison Cleanup](features/comparison-cleanup/README.md): independently hide the verified native equipped-item stat footer, with conservative fallbacks.
 
+- [Combat Tracking](features/combat-tracking/README.md): experimental Druid priority aura bars and combined DoT borders; client/combat proof remains required before expansion.
+
 ## Architecture and extension
 
 - `Core.lua`: versioned feature registration, saved preferences, lifecycle, dependency

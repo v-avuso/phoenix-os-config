@@ -51,3 +51,7 @@
   entries return a FontString from `GetName`; validate types before string operations.
 - PhoenixOS packaging/activation and its tests are owned outside this directory.
   Never activate or restart services just to validate these sources.
+- For native AuraSlots, initialize owned visuals in `initializeFrame`, before
+  Blizzard applies button access restrictions. Spell catalog existence does not
+  prove a hidden aura is assignable; validate aura identity and composition in the
+  client before expanding integrations. Never infer aura state from slot visibility.
