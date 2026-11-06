@@ -15,3 +15,7 @@
 
 - Trace-buffer requests are rounded by the kernel. Check the actual
   `buffer_total_size_kb` in the root/tracefs VM fixture against the hard budget.
+
+- Exercise suspend/manual-leave events as well as real link loss when changing
+  incident triggers. A local reason-3 leave must not consume a one-incident
+  capture and silently leave later wake-time failures without diagnostics.

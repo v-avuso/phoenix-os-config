@@ -40,6 +40,22 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertFalse(state.observe('wlp12s0: CTRL-EVENT-CONNECTED', 2))
         self.assertTrue(state.observe('wlp12s0: CTRL-EVENT-DISCONNECTED', 3))
 
+    def test_suspend_leave_does_not_consume_the_incident_window(self):
+        state = d.Incident()
+        state.arm()
+        self.assertFalse(state.observe(
+            'wlp12s0: CTRL-EVENT-DISCONNECTED bssid=bc:f8:7e:c8:03:7e '
+            'reason=3 locally_generated=1', 10))
+        self.assertFalse(state.finished(10000))
+        self.assertTrue(state.observe(
+            'wlp12s0: Connection to AP bc:f8:7e:c8:03:7e lost', 10001))
+
+    def test_peer_leave_is_still_an_incident(self):
+        state = d.Incident()
+        state.arm()
+        self.assertTrue(state.observe(
+            'wlp12s0: CTRL-EVENT-DISCONNECTED reason=3 locally_generated=0', 10))
+
     def test_trace_export_keeps_recent_events_when_text_exceeds_limit(self):
         raw = b'old-event\n' * 10000 + b'newest-event\n'
         data, total = d.read_tail(io.BytesIO(raw), 1024)

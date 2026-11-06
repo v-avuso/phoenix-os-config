@@ -51,7 +51,12 @@ class Incident:
     def observe(self, message, now):
         if IFACE + ': CTRL-EVENT-CONNECTED' in message:
             self.arm()
-        loss = self.armed and IFACE + ':' in message and (
+        # NetworkManager deliberately leaves during suspend/manual disconnect.
+        # A peer-originated leave or kernel-reported connection loss still counts.
+        planned_leave = ('CTRL-EVENT-DISCONNECTED' in message
+                         and re.search(r'\breason=3\b', message)
+                         and re.search(r'\blocally_generated=1\b', message))
+        loss = self.armed and not planned_leave and IFACE + ':' in message and (
             'CTRL-EVENT-DISCONNECTED' in message or
             ('Connection to AP ' in message and ' lost' in message))
         if loss and self.deadline is None:

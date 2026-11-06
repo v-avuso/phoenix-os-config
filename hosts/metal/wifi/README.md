@@ -35,7 +35,10 @@ patch is retained to keep this observability trial otherwise comparable; a
 recurrence on November 5 showed that it does not prevent all stalls.
 
 `phoenix-wifi-diagnostics.service` starts at boot and captures until the first
-disconnect after establishing a connection, plus 60 seconds, or 24 hours. It never reloads the driver, reconnects,
+unexpected disconnect after establishing a connection, plus 60 seconds, or
+24 hours. Locally generated reason-3 leaves (including normal suspend) do not
+consume the incident window; peer-originated leaves and kernel connection-loss
+events still trigger it. It never reloads the driver, reconnects,
 requests firmware statistics, simulates a crash, or changes power saving. A
 module reload is tolerated. It restores the previous driver debug mask and
 NetworkManager logging settings when stopped, including via `ExecStopPost`.
