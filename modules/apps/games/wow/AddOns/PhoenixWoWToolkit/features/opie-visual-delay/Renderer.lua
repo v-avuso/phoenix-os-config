@@ -32,7 +32,7 @@ function Adapter.Find()
     while frame do
         if not frame:IsForbidden() then
             local name = frame:GetName()
-            if public(name) and name and name:match("^OPieRT%-%x%x%x%x%x%x%x%x%-%x%x%x%x$")
+            if public(name) and type(name) == "string" and name:match("^OPieRT%-%x%x%x%x%x%x%x%x%-%x%x%x%x$")
                 and frame:IsObjectType("Button") and frame:IsProtected()
                 and type(frame.NotifyState) == "function" then
                 cores[#cores + 1] = frame

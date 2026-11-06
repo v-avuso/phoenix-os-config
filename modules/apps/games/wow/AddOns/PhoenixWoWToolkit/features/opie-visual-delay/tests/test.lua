@@ -176,6 +176,11 @@ for i, frame in ipairs(UIParent.children) do
     if frame == core then table.remove(UIParent.children, i); break end
 end
 core.parent = nil
+-- DamageMeterEntryMixin:GetName returns its name FontString, not a frame name.
+-- Enumerating unrelated frames must never stop toolkit initialization.
+local damageEntry = object('Button', nil, UIParent)
+local damageName = object('FontString')
+damageEntry.GetName = function() return damageName end
 local view, why = toolkit.OPieDelay.Find()
 assert(view, why)
 local width, height = view.main:GetSize()

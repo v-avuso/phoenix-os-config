@@ -47,5 +47,7 @@
 - Frame discovery must tolerate small client dimension rounding; exact `SetSize`
   inputs need not round-trip through `GetSize`. Identify protected notification
   frames independently of their current parent and reject ambiguous matches.
+  Treat enumerated frame methods as potentially overridden: Blizzard damage-meter
+  entries return a FontString from `GetName`; validate types before string operations.
 - PhoenixOS packaging/activation and its tests are owned outside this directory.
   Never activate or restart services just to validate these sources.

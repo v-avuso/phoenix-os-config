@@ -92,7 +92,8 @@ menus, nested switches, animation-on/off, tooltip ownership, cancellation, resto
 zero/max delay, controls, numeric validation, unknown versions/interfaces and changed
 frame/method structure. Regressions cover the observed 149.994461 client dimensions,
 notification discovery outside direct UIParent children, materially different sizes
-and duplicate notification frames. It executes unmodified `RingView.lua` and extracts the exact
+and duplicate notification frames. The frame scan skips non-string `GetName()`
+results: Blizzard damage-meter entries override that method to return a FontString. It executes unmodified `RingView.lua` and extracts the exact
 `NotifyState` callback into an isolated local environment. Frame APIs, protected
 snippets and actual casting are not executed in a WoW client.
 
