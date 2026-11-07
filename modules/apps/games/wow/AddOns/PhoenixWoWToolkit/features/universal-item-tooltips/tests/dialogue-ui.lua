@@ -255,6 +255,11 @@ local annotationTimers=timers;timers={};for _,callback in ipairs(annotationTimer
 drain()
 assert(shared:GetLeftLineText(6)=='Late market annotation without Show','late public AddLine annotations mirrored after final layout')
 hover()
+source:AddLine('First market update');source:Show();source:AddLine('Second market update')
+local sameFrameTimers=timers;timers={};for _,callback in ipairs(sameFrameTimers) do callback() end
+drain()
+assert(shared:GetLeftLineText(7)=='Second market update','same-frame native Show cannot discard a later annotation')
+hover()
 
 local model=shared.PreviewModel.Model1
 model.scripts.OnModelLoaded(model); assert(model.appliedCamera==70)

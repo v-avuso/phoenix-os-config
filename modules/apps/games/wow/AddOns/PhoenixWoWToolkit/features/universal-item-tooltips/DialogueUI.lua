@@ -313,10 +313,11 @@ function Adapter:Watch(source)
     local function annotationChanged()
         if queued or not self.lease or self.lease.source~=source then return end
         queued=true
-        local lease=self.lease
         C_Timer.After(0,function()
             queued=false
-            if self.lease==lease then refresh() end
+            -- Show may replace the lease while another provider is still adding
+            -- rows this frame. Read current data rather than discard that update.
+            if self.lease and self.lease.source==source then refresh() end
         end)
     end
     for _,method in ipairs({"AddLine","AddDoubleLine"}) do
