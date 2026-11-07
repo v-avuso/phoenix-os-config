@@ -4,6 +4,8 @@ local M=T.CombatTracking
 local F={settings={enabled=true},editScope='spec'}; M.feature=F
 function F:Initialize() M.Initialize(self.settings) end
 function F:Spec() return 104 end
+function F:Class() return 'DRUID' end
+UnitClass=function() return 'Druid','DRUID' end
 function F:RequestApply() self.applied=true end
 function T:RefreshFeatures() end
 local widgets,lastLabel={},nil
@@ -70,4 +72,16 @@ click('Apply changes'); assert(F.applied)
 click('Reset to inherited')
 assert(next(F.settings.specs['104'])==nil)
 assert(M.Resolve(F.settings,104).bars[1].effects[1].spellID==102558)
+function F:Spec() return 62 end
+function F:Class() return 'MAGE' end
+UnitClass=function() return 'Mage','MAGE' end
+T:BuildOptions()
+find('check','Enable combat tracking (experimental)')
+local labels={}
+for _,w in ipairs(widgets) do
+ if w.kind=='DropdownButton' then
+  w.menu(nil,{CreateRadio=function(_,label) labels[label]=true end})
+ end
+end
+assert(labels['Mage defaults'] and not labels['Druid defaults'],'Editor must follow the current class')
 print('Combat Tracking editor: input validation, colors, list CRUD/reorder, apply and reset passed')

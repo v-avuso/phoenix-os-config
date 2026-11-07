@@ -49,23 +49,28 @@ end
 function F:RegisterSettings(panel,y)
     self:Initialize()
     local spec=self:Spec()
+    local class=self:Class()
+    local className=UnitClass('player')
     local scope=self.editScope or 'spec'
-    local config=M.Resolve(self.settings,spec,scope)
-    local overrides=scope=='global' and self.settings.global or scope=='druid' and self.settings.druid
+    if scope=='druid' then scope='class' end
+    local config=M.Resolve(self.settings,spec,scope,class)
+    self.settings.classes[class]=self.settings.classes[class] or {}
+    local classSettings=class=='DRUID' and self.settings.druid or self.settings.classes[class]
+    local overrides=scope=='global' and self.settings.global or scope=='class' and classSettings
     if not overrides then
         local key=tostring(spec)
         self.settings.specs[key]=self.settings.specs[key] or {}
         overrides=self.settings.specs[key]
     end
     local function save(key,value) overrides[key]=M.Copy(value); self:RebuildEditor() end
-    self.enableCheckbox=Toolkit.Options.Checkbox(panel,'Enable Druid combat tracking (experimental)',y,
+    self.enableCheckbox=Toolkit.Options.Checkbox(panel,'Enable combat tracking (experimental)',y,
         self.settings,'enabled',function() Toolkit:RefreshFeatures() end,
-        'Uses the matching specialization preset; other classes are unaffected.')
+        'Track your chosen buffs and debuffs. Druid specialization presets are included.')
     y=y-64
     self.statusLabel=Toolkit.Options.Text(panel,'',y,'GameFontHighlightSmall'); y=y-32
     Toolkit.Options.Text(panel,'Profiles',y,'GameFontNormal'); y=y-26
     dropdown(panel,'Edit inherited defaults or specialization overrides',{
-        {'global','Global defaults'},{'druid','Druid defaults'},
+        {'global','Global defaults'},{'class',className..' defaults'},
         {'spec',(M.specNames[spec] or 'Current specialization')..' overrides'},
     },scope,y,function(value) self.editScope=value; self:RebuildEditor() end)
     y=y-62
@@ -76,6 +81,8 @@ function F:RegisterSettings(panel,y)
     button(panel,'Apply changes',200,y,function() self:RequestApply(); self:RefreshSettings() end,130)
     y=y-40
     Toolkit.Options.Text(panel,'Aura Bars',y,'GameFontNormal'); y=y-28
+    Toolkit.Options.Text(panel,'Move bars with ElvUI Toggle Anchors: Phoenix Combat Bar 1, 2, …',y,'GameFontHighlightSmall')
+    y=y-28
     local function check(label,key)
         Toolkit.Options.Checkbox(panel,label..(overrides[key]==nil and ' (inherited)' or ' (override)'),
             y,config,key,function() save(key,config[key]) end)
@@ -83,6 +90,7 @@ function F:RegisterSettings(panel,y)
     end
     check('Show priority aura bars','barsEnabled')
     check('Show aura icons','icon'); check('Show aura labels','label')
+    check('Default position above Player Power','anchorPlayer')
     local function numeric(label,key,min,max)
         input(panel,label..(overrides[key]==nil and ' (inherited)' or ' (override)'),config[key],24,y,function(text)
             local n=number(text,min,max); if not n then return false end
@@ -92,8 +100,8 @@ function F:RegisterSettings(panel,y)
     end
     numeric('Width (40–1000)', 'width',40,1000)
     numeric('Height (2–100)', 'height',2,100)
-    numeric('Horizontal offset from center','x',-4000,4000)
-    numeric('Vertical offset from center','y',-2000,2000)
+    numeric('Fallback horizontal offset from center','x',-4000,4000)
+    numeric('Fallback vertical offset from center','y',-2000,2000)
     numeric('Fill opacity (0–1; backing stays opaque)','fillAlpha',0,1)
     dropdown(panel,'Bar texture',{{'theme','ElvUI / ToxiUI texture'},
         {'Interface\\Buttons\\WHITE8X8','Flat'}},config.texture,y,function(v) save('texture',v) end)
@@ -165,10 +173,12 @@ function F:RegisterSettings(panel,y)
             end
             y=y-56
         end
-        local appearance={icon=bar.icon==nil and config.icon or bar.icon,
-            label=bar.label==nil and config.label or bar.label,anchorPlayer=bar.anchorPlayer}
+        local appearance={}
+        for _,key in ipairs({'icon','label','anchorPlayer'}) do
+            appearance[key]=bar[key]; if appearance[key]==nil then appearance[key]=config[key] end
+        end
         for _,entry in ipairs({{'icon','Show icon'},{'label','Show label'},
-            {'anchorPlayer','Anchor beneath ElvUI player power bar'}}) do
+            {'anchorPlayer','Default position above Player Power'}}) do
             Toolkit.Options.Checkbox(panel,entry[2],y,appearance,entry[1],function()
                 bar[entry[1]]=appearance[entry[1]]; changed()
             end)

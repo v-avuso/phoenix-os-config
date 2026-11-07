@@ -1,5 +1,10 @@
 local _, Toolkit = ...
 Toolkit.Options = {}
+local tabs = {"General", "Tooltip", "Combat"}
+local function featureTab(feature)
+    for _, name in ipairs(tabs) do if feature.optionsTab == name then return name end end
+    return "General"
+end
 
 function Toolkit.Options.Text(panel, text, y, font)
     local label = panel:CreateFontString(nil, "ARTWORK", font or "GameFontHighlight")
@@ -48,13 +53,13 @@ end
 function Toolkit:BuildOptions()
     for _, content in pairs(self.contents or {}) do content:Hide() end
     self.contents = {}
-    for _, tab in ipairs({"General", "Tooltip"}) do
+    for _, tab in ipairs(tabs) do
         local content = CreateFrame("Frame", nil, self.scroll)
         self.contents[tab] = content
         content:SetSize(600, 1)
         local groups, order = {}, {}
         for _, feature in ipairs(self.features) do
-            if (feature.optionsTab == "Tooltip" and "Tooltip" or "General") == tab then
+            if featureTab(feature) == tab then
                 local section = feature.section or feature.id
                 if not groups[section] then groups[section] = {}; order[#order + 1] = section end
                 table.insert(groups[section], feature)
@@ -77,7 +82,7 @@ function Toolkit:CreateOptions()
     local panel = CreateFrame("Frame")
     self.Options.Text(panel, "Phoenix WoW Toolkit", -16, "GameFontNormalLarge")
     self.tabButtons = {}
-    for index, name in ipairs({"General", "Tooltip"}) do
+    for index, name in ipairs(tabs) do
         local button = CreateFrame("Button", nil, panel, "PanelTabButtonTemplate")
         button:SetPoint("TOPLEFT", 16 + (index-1)*120, -44)
         button:SetText(name)

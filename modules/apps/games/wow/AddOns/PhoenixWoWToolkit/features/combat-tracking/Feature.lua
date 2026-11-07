@@ -1,15 +1,17 @@
 local _, Toolkit = ...
 local M,D = Toolkit.CombatTracking,Toolkit.CombatTracking.Display
-local feature = {id='combatTracking',section='Combat Tracking',defaults={enabled=true},
+local feature = {id='combatTracking',section='Combat Tracking',optionsTab='Combat',defaults={enabled=true},
     dependencies={'Blizzard_AuraContainer','Plater','ElvUI','ElvUI_ToxiUI'}}
 M.feature=feature
 Toolkit:RegisterFeature(feature)
 
 function feature:GetAvailability()
-    local _,class=UnitClass('player')
-    if class~='DRUID' then return false,'Druid only' end
     if not D.Available() then return false,'Requires the Retail 12.1 AuraContainer API' end
     return true
+end
+
+function feature:Class()
+    return select(2,UnitClass('player'))
 end
 
 function feature:Spec()
@@ -32,9 +34,10 @@ end
 function feature:Apply()
     if InCombatLockdown() then self.pending=true; return end
     self:Initialize()
-    local config=M.Resolve(self.settings,self:Spec())
+    local config=M.Resolve(self.settings,self:Spec(),nil,self:Class())
     local key=M.Key({config,self.settings.palette,self.running==true,
-        tostring(ElvUF_Player and ElvUF_Player.Power or false)})
+        tostring(ElvUF_Player and ElvUF_Player.Power or false),
+        not not (ElvUI and ElvUI[1] and ElvUI[1].db and ElvUI[1].CreateMover)})
     if key==self.appliedKey then self.pending=false; return end
     self.appliedKey=key
     D.Stop(self.testBars); self.testBars=nil
@@ -59,6 +62,11 @@ end
 
 function feature:AddPlate(unit)
     if not self.running or not self.config or not self.config.platesEnabled then return end
+    local hasEffects=false
+    for _,effect in ipairs(self.config.highlights) do
+        if effect.enabled and M.ValidSpell(effect.spellID) then hasEffects=true; break end
+    end
+    if not hasEffects then return end
     if not C_NamePlate then return end
     local plate=C_NamePlate.GetNamePlateForUnit(unit)
     if not usable(plate) then self.plateStatus='missing, forbidden or protected nameplate'; return end
@@ -110,10 +118,12 @@ end)
 SLASH_PWTCOMBAT1='/pwtcombat'
 SlashCmdList.PWTCOMBAT=function(message)
     if message=='test' then
+        if feature:Class()~='DRUID' then print('PWT reference test uses Druid buffs; use a configured bar for your class.'); return end
         if not feature.running then print('PWT: enable Combat Tracking before starting the reference test.'); return end
         if InCombatLockdown() then print('PWT: start the reference test outside combat.'); return end
         if not feature.testBars then
             local config=M.Copy(feature.config)
+            config.referenceTest=true
             config.y=config.y+80
             config.bars={{enabled=true,effects={{spellID=22812,hue=135,enabled=true},
                 {spellID=1126,hue=45,enabled=true}}}}
@@ -127,7 +137,7 @@ SlashCmdList.PWTCOMBAT=function(message)
         print('PWT reference test stopped; saved preferences unchanged.')
         return
     end
-    print('PWT combat: prototype-v2; spec='..tostring(feature:Spec())..'; active='..tostring(feature.running==true)
+    print('PWT combat: prototype-v3; class='..feature:Class()..'; spec='..tostring(feature:Spec())..'; active='..tostring(feature.running==true)
         ..'; pending='..tostring(feature.pending==true))
     local count,slots=0,feature.bars and feature.bars.slotCount or 0
     for _,entry in pairs(feature.plates or {}) do

@@ -12,7 +12,7 @@ function methods:SetWidth() end
 function methods:SetHeight() end
 function methods:SetPoint(...) self.point={...} end
 function methods:IsForbidden() return false end
-function methods:SetAllPoints() end
+function methods:SetAllPoints(other) self.allPoints=other end
 function methods:SetFrameLevel(n) self.level=n end
 function methods:GetFrameLevel() return self.level end
 function methods:SetFrameStrata() end
@@ -40,6 +40,19 @@ end
 UIParent=object(nil,'root'); STANDARD_TEXT_FONT='font'
 ElvUF_Player={Power=object(UIParent,'power')}
 ElvUF_Player.Power.width=260
+local E={db={},CreatedMovers={},DisabledMovers={},registrations=0}
+ElvUI={E}
+function E:CreateMover(holder,name,label)
+ self.registrations=self.registrations+1
+ self.CreatedMovers[name]={parent=holder,originPoint=holder.point,label=label}
+ holder:SetPoint('CENTER',UIParent,'CENTER',100,100) -- Simulate restored native mover position.
+end
+function E:DisableMover(name)
+ self.DisabledMovers[name]=self.CreatedMovers[name]; self.CreatedMovers[name]=nil
+end
+function E:EnableMover(name)
+ self.CreatedMovers[name]=self.DisabledMovers[name]; self.DisabledMovers[name]=nil
+end
 CreateFrame=function(kind,_,parent) return object(parent,kind) end
 C_AuraContainerUtil={ProcessCustomAuraButtonDurationBarOptions=function() end}
 assert(loadfile(root..'/features/combat-tracking/Display.lua'))('PWT',T)
@@ -50,7 +63,11 @@ local display=D.Bars(config,db.palette,function() return true end)
 assert(#display.containers==1 and display.slotCount==2,'Share one native event/parse owner per bar')
 local slotFrame=display.containers[1].button
 assert(slotFrame.width==65 and slotFrame.height==6,'Guardian defaults must be a small stick')
-assert(display.containers[1].parent.point[2]==ElvUF_Player.Power,'Follow the existing power bar anchor')
+local moverName='PhoenixCombatBar1Mover'
+local holder=E.CreatedMovers[moverName].parent
+assert(E.CreatedMovers[moverName].originPoint[2]==ElvUF_Player.Power)
+assert(E.CreatedMovers[moverName].originPoint[5]==20,'Default to 20 above the player power bar')
+assert(display.containers[1].parent.allPoints==holder,'Follow the ElvUI-owned mover holder')
 assert(ElvUF_Player.Power.width==260,'Do not modify the existing power bar')
 for _,o in ipairs(objects) do assert(o.kind~='text','Minimal Guardian preset must not create text') end
 local function visible(o)
@@ -72,7 +89,13 @@ active[102558]=true; assert(top('slot').effect==102558)
 active[102558]=nil; assert(top('slot').effect==1308176,'Expiry reveals lower active bar')
 active[1308176]=nil; assert(not top('slot'))
 D.Stop(display)
+assert(E.DisabledMovers[moverName],'Disable the mover when the feature display stops')
 config=M.Resolve(db,102)
+local balanceBar=D.Bars(config,db.palette,function() return true end)
+assert(E.registrations==1 and E.CreatedMovers[moverName].parent==holder,'Reuse one persistent mover across specs')
+assert(holder.point[4]==100 and holder.point[5]==100,'Keep the restored or dragged position on rebuild')
+assert(balanceBar.containers[1].button.height==6,'Balance must also be minimal')
+D.Stop(balanceBar)
 local plates=D.Nameplate(UIParent,'nameplate1',config,db.palette,function() return true end)
 assert(#plates.containers==4,'Two effects need two singleton slots and a two-slot AND chain')
 local function topBorder()

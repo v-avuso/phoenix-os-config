@@ -65,6 +65,11 @@ assert(toolkit.content==toolkit.contents.Tooltip and toolkit.contents.General.hi
 assert(toolkit.content.labels[1].text=='Tooltips','tooltip features have their own page')
 toolkit.tabButtons.General.scripts.OnClick()
 assert(toolkit.content==toolkit.contents.General)
+local combatFeature=feature('combat','Combat Tracking'); combatFeature.optionsTab='Combat'
+category.panel.OnRefresh()
+toolkit.tabButtons.Combat.scripts.OnClick()
+assert(toolkit.content==toolkit.contents.Combat and toolkit.contents.General.hidden)
+assert(toolkit.content.labels[1].text=='Combat Tracking')
 a.settings.enabled = true; toolkit:RefreshFeatures()
 b.settings.enabled = false; toolkit:RefreshFeatures()
 assert(a.active and not b.active and a.starts == 1 and b.stops == 1)

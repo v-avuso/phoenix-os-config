@@ -1,6 +1,7 @@
 local _, Toolkit = ...
 local M = Toolkit.CombatTracking
 local D = {}
+D.anchors = {}
 M.Display = D
 
 function D.Available()
@@ -38,6 +39,43 @@ function D.Stop(display)
     -- Only inbound configuration and our ordinary root; never query/modify aura buttons here.
     for _,c in ipairs(display.containers) do c:SetEnabled(false) end
     display.root:Hide()
+    local E=ElvUI and ElvUI[1]
+    for _,name in ipairs(display.movers or {}) do
+        if E and E.DisableMover and E.CreatedMovers and E.CreatedMovers[name] then E:DisableMover(name) end
+    end
+end
+
+local function position(anchor,config,bar,index,height)
+    local usePower=bar.anchorPlayer
+    if config.referenceTest then usePower=false
+    elseif usePower==nil then usePower=config.anchorPlayer end
+    local power=usePower and ElvUF_Player and ElvUF_Player.Power
+    if power and not power:IsForbidden() then
+        anchor:SetPoint('BOTTOM',power,'TOP',bar.x or 0,bar.y or 20+(index-1)*(height+8))
+    else
+        anchor:SetPoint('CENTER',UIParent,'CENTER',config.x+(bar.x or 0),
+            config.y+(bar.y or -(index-1)*(height+8)))
+    end
+end
+
+local function mover(config,bar,index,style,display)
+    if config.referenceTest then return end
+    local E=ElvUI and ElvUI[1]
+    if not (E and E.CreateMover and E.db and E.CreatedMovers and ElvUF_Player and ElvUF_Player.Power) then return end
+    local name='PhoenixCombatBar'..index..'Mover'
+    local holder=D.anchors[index]
+    if not holder then
+        holder=CreateFrame('Frame','PhoenixCombatBar'..index..'Anchor',UIParent)
+        holder:SetSize(style.width,style.height)
+        position(holder,config,bar,index,style.height)
+        E:CreateMover(holder,name,'Phoenix Combat Bar '..index,nil,nil,nil,'ALL,SOLO')
+        D.anchors[index]=holder
+    else
+        holder:SetSize(style.width,style.height)
+        if E.DisabledMovers and E.DisabledMovers[name] then E:EnableMover(name) end
+    end
+    display.movers[#display.movers+1]=name
+    return holder
 end
 
 local function theme()
@@ -47,7 +85,7 @@ local function theme()
 end
 
 function D.Bars(config,palette,validate)
-    local display={root=CreateFrame('Frame',nil,UIParent),containers={},slotCount=0}
+    local display={root=CreateFrame('Frame',nil,UIParent),containers={},slotCount=0,movers={}}
     display.root:SetSize(1,1)
     display.root:SetPoint('CENTER',UIParent,'CENTER',config.x,config.y)
     display.root:SetFrameStrata('MEDIUM')
@@ -60,13 +98,11 @@ function D.Bars(config,palette,validate)
             end
             local anchor=CreateFrame('Frame',nil,display.root)
             anchor:SetSize(style.width,style.height)
-            local power=bar.anchorPlayer and ElvUF_Player and ElvUF_Player.Power
-            if power and not power:IsForbidden() then
-                -- Anchor our ordinary root's child, without parenting to or modifying
-                -- the protected player frame or repurposing its resource display.
-                anchor:SetPoint('TOP',power,'BOTTOM',bar.x or 0,bar.y or -6)
+            local holder=mover(config,bar,barIndex,style,display)
+            if holder then
+                anchor:SetAllPoints(holder)
             else
-                anchor:SetPoint('CENTER',display.root,'CENTER',bar.x or 0,bar.y or -(barIndex-1)*(style.height+8))
+                position(anchor,config,bar,barIndex,style.height)
             end
             local c=container(anchor,display.containers)
             -- Lowest priority first. Each active slot has a full opaque backing,
@@ -84,8 +120,8 @@ function D.Bars(config,palette,validate)
                         backing:SetAllPoints(); backing:SetColorTexture(.035,.035,.035,1)
                         local offset=style.icon and style.height or 0
                         local progress=CreateFrame('StatusBar',nil,button)
-                        progress:SetPoint('TOPLEFT',button,'TOPLEFT',offset,0)
-                        progress:SetPoint('BOTTOMRIGHT',button,'BOTTOMRIGHT')
+                        progress:SetPoint('TOPLEFT',button,'TOPLEFT',offset+1,-1)
+                        progress:SetPoint('BOTTOMRIGHT',button,'BOTTOMRIGHT',-1,1)
                         progress:SetStatusBarTexture(style.texture=='theme' and themeTexture or style.texture)
                         local r,g,b=M.Color(effect,palette)
                         progress:SetStatusBarColor(r,g,b,style.fillAlpha)

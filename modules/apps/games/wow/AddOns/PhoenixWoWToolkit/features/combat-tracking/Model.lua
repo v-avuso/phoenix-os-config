@@ -53,20 +53,21 @@ M.presets = {
     [104] = {bars={{name='Incarnation / Dream Conduit',enabled=true,
         effects={effect(102558,190),effect(1308176,45)},
         width=65,height=6,icon=false,label=false,anchorPlayer=true}}},
-    [102] = {bars={bar('Eclipse',{effect(48517,45),effect(48518,265)})},
+    [102] = {bars={bar('Eclipse',{effect(48517,45),effect(48518,190)})},
         highlights={effect(164812,315),effect(164815,190)}},
     [105] = {bars={bar('Healing procs',{effect(16870,135),effect(114108,45)})}},
     [103] = {},
 }
 M.specNames = {[104]='Guardian',[102]='Balance',[105]='Restoration',[103]='Feral'}
-M.base = {barsEnabled=true,platesEnabled=true,width=260,height=30,x=0,y=-180,
-    icon=true,label=true,fillAlpha=1,texture='theme',
+M.base = {barsEnabled=true,platesEnabled=true,width=65,height=6,x=0,y=-180,
+    icon=false,label=false,anchorPlayer=true,fillAlpha=1,texture='theme',
     thickness=3,bars={},highlights={}}
 M.classDefaults = {highlights={effect(164812,315)}}
 
 function M.Initialize(db)
     db.palette = db.palette or {saturation=.75,value=.95}
     db.global,db.druid,db.specs = db.global or {}, db.druid or {}, db.specs or {}
+    db.classes=db.classes or {}
 end
 
 function M.Key(value)
@@ -83,12 +84,16 @@ local function overlay(result,values)
 end
 
 -- Lists replace inherited lists atomically; scalar presentation options inherit individually.
-function M.Resolve(db,spec,scope)
+function M.Resolve(db,spec,scope,class)
+    class=class or 'DRUID'
     local result=M.Copy(M.base); overlay(result,db.global)
     if scope=='global' then return result end
-    overlay(result,M.classDefaults); overlay(result,db.druid)
-    if scope=='druid' then return result end
-    overlay(result,M.presets[spec]); overlay(result,db.specs[tostring(spec)])
+    if class=='DRUID' then
+        overlay(result,M.classDefaults); overlay(result,db.druid)
+    else overlay(result,db.classes[class]) end
+    if scope=='class' or scope=='druid' then return result end
+    if class=='DRUID' then overlay(result,M.presets[spec]) end
+    overlay(result,db.specs[tostring(spec)])
     return result
 end
 

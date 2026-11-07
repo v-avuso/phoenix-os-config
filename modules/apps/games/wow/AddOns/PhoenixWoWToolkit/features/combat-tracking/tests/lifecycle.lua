@@ -22,7 +22,7 @@ function T:RegisterFeature(f) self.feature=f end
 assert(loadfile(root..'/features/combat-tracking/Feature.lua'))('PWT',T)
 local F=T.feature; F.settings={enabled=true}
 assert(F:GetAvailability())
-class='MAGE'; assert(not F:GetAvailability()); class='DRUID'
+class='MAGE'; assert(F:GetAvailability(),'The feature must support non-Druid classes'); class='DRUID'
 F:Enable(); assert(builds==1)
 handler(nil,'SPELLS_CHANGED'); assert(builds==1,'Unchanged events must not allocate more displays')
 plate.unitFrame.healthBar=nil; plate.unitFrame.Health=health -- Installed ElvUI contract.

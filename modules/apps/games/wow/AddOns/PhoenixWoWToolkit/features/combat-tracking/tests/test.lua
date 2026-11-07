@@ -16,7 +16,17 @@ assert(guardian.bars[1].effects[1].hue==190 and guardian.bars[1].effects[2].hue=
 assert(guardian.bars[1].width==65 and guardian.bars[1].height==6)
 assert(guardian.bars[1].icon==false and guardian.bars[1].label==false)
 assert(guardian.bars[1].anchorPlayer==true)
+local balance=M.Resolve(db,102)
+assert(balance.width==65 and balance.height==6 and balance.icon==false and balance.label==false,
+ 'Balance must use the same minimal defaults as Guardian')
+assert(balance.bars[1].effects[2].hue==190,'Lunar Eclipse must differ from the purple player power bar')
 assert(#M.Resolve(db,103).bars == 0, 'Feral must not inherit Guardian bars')
+local mage=M.Resolve(db,62,nil,'MAGE')
+assert(#mage.bars==0 and #mage.highlights==0,'Druid presets must not leak into other classes')
+db.classes.MAGE={bars={{name='Mage buff',enabled=true,effects={{spellID=12042,enabled=true,hue=190}}}}}
+assert(M.Resolve(db,62,nil,'MAGE').bars[1].effects[1].spellID==12042,'Allow class-specific custom tracking')
+db.specs['62']={height=8}
+assert(M.Resolve(db,62,nil,'MAGE').height==8 and M.Resolve(db,104).height==6)
 db.global.width=300; db.druid.width=310; db.specs['104']={width=320}
 assert(M.Resolve(db,104).width==320 and M.Resolve(db,102).width==310)
 db.specs['104'].width=nil; assert(M.Resolve(db,104).width==310)

@@ -2,15 +2,17 @@
 
 ## Intentions
 
-Make Druid procs and player-applied DoTs recognizable at a glance, while preserving
+Make configurable player procs and player-applied DoTs recognizable at a glance, while preserving
 threat, healing-frame indicators, secure combat boundaries and other add-ons' profiles.
 This is a prepared first client trial, **not verified combat functionality**. Do not
 expand integrations until the two-buff fallback and two-debuff combination pass below.
 
 ## Use
 
-Open `/pwt` → **General → Combat Tracking**. Enabled by default for Druids only.
-Profiles select automatically by specialization. Choose Global, Druid or specialization
+Open `/pwt` → **Combat** → **Enable combat tracking (experimental)**.
+Any class can configure its own ability/aura IDs. Druid class/spec presets are included;
+other classes start without effects, unless shared Global settings supply them.
+Profiles select automatically by specialization. Choose Global, current class or specialization
 overrides in the editor. Scalar settings inherit; editing a list replaces that list
 at the selected scope. **Reset to inherited** removes that scope's overrides, returning
 specializations to their preset plus inherited presentation settings.
@@ -34,10 +36,14 @@ rendering; an unavailable talent simply never matches. ID validation confirms th
 client recognizes a spell, **not** that it is learned or exposed as a trackable buff.
 The first editor uses explicit IDs rather than guessing cast-to-aura mappings from
 the spellbook. Every bar can override size, offsets, texture, fill opacity, icon and
-label. Guardian defaults to a 65 × 6 cyan/orange stick without icon or label, anchored
-beneath `ElvUF_Player.Power` using the existing ElvUI/ToxiUI texture. Other bars use
-the shared screen-center position. The per-bar anchor checkbox selects this behavior;
-without ElvUI the shared position is the fallback. Anchoring changes no resource bar.
+label. All preset bars default to a 65 × 6 stick without icon or label, using the existing
+ElvUI/ToxiUI texture. Lunar Eclipse is cyan; Solar Eclipse is orange, so neither
+matches the purple player power bar. ElvUI **Toggle Anchors** exposes **Phoenix
+Combat Bar 1**, **2**, etc. Initial placement is 20 units above `ElvUF_Player.Power`;
+ElvUI then owns dragging, nudging, reset and position persistence in its current
+profile. PWT size/color settings remain account-wide. Resetting PWT preferences
+does not reset ElvUI mover positions. Without ElvUI, the shared screen-center
+position is the fallback. No existing resource bar is repurposed or modified.
 Blank per-bar
 numbers inherit shared settings, except vertical offset which defaults to stacking.
 
@@ -60,7 +66,7 @@ six-digit hex override remains independent of global S/V. Empty hex restores pal
 The installed Retail client metadata is `12.1.5.70783`; installed ToxiUI is `7.6.1`
 and ElvUI's declared requirement is `15.26`. Spell catalog entries were researched,
 but the character's spellbook/talent state and actual aura matches require client
-validation. The player has observed Dream Conduit in the initial client trial;
+validation. The player has observed Dream Conduit and Balance Eclipse in client trials;
 Incarnation matching and the revised nameplate adapter still need client acceptance.
 The Guardian preset now follows Incarnation rather than the earlier hidden Answered
 Calling proposal. There are no inferred timers. Ascendant Eclipses is a passive apex
@@ -79,12 +85,12 @@ the private profile was not changed or treated as portable configuration.
   `SetIcon`, `SetSpellName` and `SetDurationBar`. Blizzard owns aura assignment,
   visibility, duration objects and progress. No `UNIT_AURA` handler, aura scanner,
   visibility query, secret-value comparison, secure input hook or combat polling.
-- `Feature.lua`: Druid/spec lifecycle, queued configuration, public nameplate anchors,
+- `Feature.lua`: class/spec lifecycle, queued configuration, public nameplate anchors,
   recycled nameplate displays and diagnostics. Unchanged configuration events do
   not allocate displays. Explicit changed configurations create a fresh tree; WoW
   retains frame allocations until reload, so repeatedly applying different layouts
   is not a steady-state performance benchmark.
-- `Options.lua`: feature-owned editor using the toolkit's existing native canvas.
+- `Options.lua`: feature-owned editor in the toolkit's native Combat tab.
   No core framework or Nix deployment changes are required.
 
 Native slots accept identity filters but expose only predefined sort comparators.
@@ -106,8 +112,9 @@ access restrictions or infer state through hooks.
 
 ToxiUI's native cooldown viewer integration already owns its layout, gradients and
 class/power bar choices. Its gradient is class-wide, not per-effect priority. PWT
-reads the existing ElvUI texture/font where available, without replacing that theme
-or modifying ToxiUI's database. The native viewer remains usable independently;
+reads the existing ElvUI texture/font and registers persistent ordinary anchor
+holders using `E:CreateMover` / `EnableMover` / `DisableMover`. Only its own mover
+registrations are changed. It does not replace the theme or edit ToxiUI settings. The native viewer remains usable independently;
 disable PWT's duplicate proc bar if the native display already suffices.
 
 Plater documents `C_NamePlate.GetNamePlateForUnit(unit).unitFrame.healthBar` as an
@@ -160,6 +167,10 @@ After a separately authorized trial deployment, `/reload` loads this existing ad
 4. Confirm threat remains readable, target/cast/absorb indicators and clicking work,
    and Plater settings are unchanged. Try without optional providers where practical.
 5. Switch all Druid specs, then a non-Druid; verify matching presets/no foreign bars.
+   Configure a buff on the other class and confirm Global → Class → Spec inheritance.
+   In ElvUI Toggle Anchors, drag Phoenix Combat Bar 1; verify position survives
+   settings Apply, spec changes and reload. Disable tracking and confirm its mover
+   disappears while the Player Power mover remains intact.
    Reload/change character; verify lists, priorities, inheritance, hex colors and
    S/V persist. Reset an override and confirm inheritance returns.
 6. Edit/apply/disable during combat; confirm the old display remains until combat
@@ -170,6 +181,7 @@ Stop expansion if steps 1–2 fail. Remaining gaps are spellbook-to-aura discove
 verified Ascendant states, health tinting and live acceptance;
 they are not silently replaced by out-of-combat tracking.
 
-Existing explicit bar-list overrides are preserved. To adopt the revised Guardian
+The legacy Druid preferences stay at `druid`; other class overrides use
+`classes.<CLASS_TOKEN>`. Existing explicit bar-list/appearance overrides are preserved. To adopt the revised Guardian
 preset after customizing its list, select Guardian overrides and Reset to inherited.
 This also resets other Guardian overrides; saved global and Druid settings remain.
