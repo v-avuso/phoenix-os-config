@@ -1,8 +1,8 @@
 -- Executes installed, unmodified Dialogue UI source. Graphics and game APIs are doubles.
 local root, upstream = assert(arg[1]), assert(arg[2])
 local toc = assert(io.open(upstream .. '/DialogueUI.toc'))
-local version = toc:read('*a'):match('## Version:%s*([^%s]+)'); toc:close()
-assert(version == '1.0.7', 'This investigation targets the installed Dialogue UI 1.0.7')
+local version = toc:read('*a'):match('## Version:%s*([^\r\n]+)'); toc:close()
+assert(version == '1.0.7' or version == '1.0.7 b', 'This investigation targets the installed Dialogue UI 1.0.7')
 unpack = table.unpack or unpack
 local function noop() end
 local frames, timers, combat = {}, {}, false
@@ -181,7 +181,7 @@ if arg[3] then
     manager.CreateComparisonItem=TooltipComparisonManager.CreateComparisonItem
     TooltipComparisonManager=manager
 end
-C_AddOns = { IsAddOnLoaded=function() return true end, GetAddOnMetadata=function() return '1.0.7' end }
+C_AddOns = { IsAddOnLoaded=function() return true end, GetAddOnMetadata=function() return version end }
 Enum = { TooltipDataType={Item=0}, TooltipComparisonMethod={Single=0,WithBothHands=1,WithBagMainHandItem=2,WithBagOffHandItem=3} }
 InCombatLockdown=function() return combat end
 GetInventoryItemLink=noop
@@ -193,10 +193,13 @@ local T = { RegisterFeature=function(self,feature) self.feature=feature end }
 for _, name in ipairs({'Comparison','DialogueUI','Preview','Style','Feature'}) do
     assert(loadfile(root..'/features/universal-item-tooltips/'..name..'.lua'))('PhoenixWoWToolkit',T)
 end
-local found, reason = T.DialogueTooltip.Find('1.0.7')
+local found, reason = T.DialogueTooltip.Find(version)
 local shared=addon.SharedTooltip
 assert(found==shared and not reason and not shared.PreviewModel, 'find actual renderer before first quest hover')
 assert(not T.DialogueTooltip.Find('unknown'))
+assert(not T.DialogueTooltip.Find('1.0.7 c'), 'uninspected suffix releases still fail closed')
+assert(T.feature.defaults.framing=='native' and T.feature.defaults.appearance=='dialogueUI',
+    'fresh settings retain the installed background skin and Dialogue UI content')
 -- SetHyperlink alone bypasses item-aware processing in the original source.
 local captured
 DialogueUIAPI.AddItemTooltipProcessorExternal(function(tooltip) captured=tooltip end)
@@ -282,7 +285,7 @@ feature:Disable(); assert(not shared:IsShown() and source.alpha==0.6)
 feature:Enable(); hover()
 C_AddOns.GetAddOnMetadata=function() return 'changed' end
 source:Show(); assert(not feature.adapter.lease and source.alpha==0.6)
-C_AddOns.GetAddOnMetadata=function() return '1.0.7' end
+C_AddOns.GetAddOnMetadata=function() return version end
 hover()
 comparisonMethod=1
 source:Show(); assert(not feature.adapter.lease and source.alpha==0.6,'unproven combined weapon comparison stays native')
@@ -368,7 +371,20 @@ second:Hide()
 local updates=timers;timers={};for _,fn in ipairs(updates) do fn() end
 assert(not feature.style.states[second].active,'second comparison releases independently')
 assert(not styled.view.ShowItemComparison and not styled.view.OnEvent,'singleton comparison and event methods are never cloned')
+-- Default framing delegates owned replacement backgrounds to the active skin owner.
+local skinCalls=0
+ElvUI={{GetModule=function(_, name, silent)
+    assert(name=='Tooltip' and silent)
+    return {db={colorAlpha=0.8},SetStyle=function(_, target)
+        skinCalls=skinCalls+1; target:SetBackdrop({bgFile='provider-background'})
+    end}
+end}}
+-- ElvUI injects SetTemplate into the frame API; model that capability explicitly.
+local oldCreateFrame=CreateFrame
+CreateFrame=function(...) local result=oldCreateFrame(...);result.SetTemplate=noop;return result end
 feature.settings.framing='native';feature.style:Configure(true)
+assert(skinCalls>0,'Default replacement backgrounds use ElvUI shared tooltip styling')
+ElvUI=nil;CreateFrame=oldCreateFrame
 assert(shared.Background.shown==false and feature.style.states[shared].chrome.shown,'default frame with Dialogue UI content')
 feature.settings.appearance='native';feature.style:Configure(true)
 assert(comparison.alpha==1 and not styled.active,'default content restores native comparison pane')

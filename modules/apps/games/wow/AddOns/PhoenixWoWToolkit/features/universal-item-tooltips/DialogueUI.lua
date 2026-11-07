@@ -14,7 +14,9 @@ local function safe(frame)
 end
 
 function Dialogue.Find(version)
-    if version ~= "1.0.7" then return nil, "unverified version" end
+    if version ~= "1.0.7" and version ~= "1.0.7 b" then
+        return nil, "unverified Dialogue UI version: " .. tostring(version)
+    end
     local found
     local frame = EnumerateFrames()
     while frame do

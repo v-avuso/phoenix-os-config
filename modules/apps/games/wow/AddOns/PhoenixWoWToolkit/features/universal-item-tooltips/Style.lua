@@ -166,6 +166,15 @@ function Style:Chrome(frame, original, nativeSource)
             state.chrome:SetAllPoints(frame); state.chrome:EnableMouse(false)
             state.chrome:SetFrameLevel(math.max(0,frame:GetFrameLevel()-1))
         end
+        -- Let the installed skin owner build its own decorations on our ordinary
+        -- background frame. Never reskin the native tooltip or copy ToxiUI widgets.
+        local engine=ElvUI and ElvUI[1]
+        local provider=engine and engine.GetModule and engine:GetModule("Tooltip",true)
+        if provider and provider.db and provider.SetStyle and state.chrome.SetTemplate then
+            provider:SetStyle(state.chrome)
+            state.chrome:Show()
+            return
+        end
         local source=state.nativeSource or GameTooltip
         local native=self.states[source]
         local backdrop=native and native.backdrop or (source and source.GetBackdrop and source:GetBackdrop())

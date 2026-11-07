@@ -9,8 +9,10 @@ replace secure input. Account-wide controls under `/pwt` → **Tooltip**:
 - **Customize tooltips** enables this feature.
 - **Tooltip framing style** independently chooses Dialogue UI or Default backgrounds.
   Applied to observed native tooltips and the original Dialogue UI tooltip, including
-  its quest rewards. Default uses the available native backdrop or Blizzard fallback;
-  custom ElvUI skin widgets cannot be cloned automatically.
+  its quest rewards. **Default is the initial choice**: native tooltips keep their
+  existing skin, and replacement content delegates its background to ElvUI when
+  available (otherwise uses the native backdrop or Blizzard fallback). Existing saved
+  framing choices are preserved; select Default to adopt this on an existing account.
 - **Tooltip content style** chooses Dialogue UI or Default item text/layout. Default
   retains native information and adds compact native replacement deltas. Dialogue UI
   uses the original item renderer, including its overlapping transparent model when
@@ -222,3 +224,21 @@ buff/cooldown that still looks native, run `/pwttip`: the **PWT framing** line r
 the last frame, setter route and applied/skipped reason without recording aura text,
 unit names, IDs or coordinates. Such a runtime skip is a compatibility limit to
 investigate, not evidence that a restart or another layer adjustment is needed.
+
+## Compatibility and background ownership
+
+Dialogue UI 1.0.7 and 1.0.7 b are explicitly accepted. The four inspected tooltip and
+callback files have identical hashes in these releases. Other versions remain native
+until inspected; `/pwttip` includes the full installed version. The upstream-backed
+test reads the entire TOC version line, including suffixes, so its metadata matches
+the actual client rather than silently dropping the suffix.
+
+Default framing leaves native tooltip providers alone. For our replacement content,
+ElvUI Tooltip:SetStyle constructs the background on an owned ordinary frame, allowing
+ToxiUI's existing SetTemplate hooks to supply their own decoration. No provider methods
+are overridden. This avoids cloning skin widgets and does not change content/previews.
+The provider call has a fixture; final colors, borders and combat behavior require WoW.
+
+The optional Dialogue UI framing mode still uses the earlier observed-frame adapter;
+its reported border inconsistency is not claimed fixed by this compatibility repair.
+See research for the supported aura path before extending that mode.

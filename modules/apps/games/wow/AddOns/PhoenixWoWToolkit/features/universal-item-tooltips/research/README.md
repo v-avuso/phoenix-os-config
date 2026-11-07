@@ -211,3 +211,25 @@ at GameTooltip_SetDefaultAnchor handles alternate ordinary tooltips without gues
 names or querying aura arguments. Tests cover that flow and target-aura setters.
 Runtime diagnostics now record the exact frame/route and access-gating result; they
 must establish any remaining blocked native aura context before further changes.
+
+## Central skin ownership and secure aura styling
+
+Installed ElvUI Shared/Modules/Tooltip/Tooltip.lua exposes SetStyle for ordinary
+tooltip frames. Shared/Skins/Tooltip.lua routes SharedTooltip_SetBackdropStyle through
+that owner. Calling it on our owned replacement background composes with ToxiUI's
+metatable SetTemplate hook; copying or individually suppressing its decorations is
+unnecessary for Default framing. Native frames remain entirely provider-owned.
+
+Blizzard_AuraContainerInbound.lua exports SetTooltipTextureSlice, SetTooltipBackdrop
+and ResetTooltipStyle through secure delegates. AuraContainerUtil.SetTooltipTextureSlice
+first clears the old skin, then applies the supplied asset, slice margins and mode.
+This is the correct upstream extension point for restricted native aura backgrounds;
+ordinary frame enumeration/hooks cannot establish their coverage. ElvUI itself uses
+SetTooltipBackdrop in SetAuraButtonTooltipStyle. A future Dialogue UI aura adapter
+should compose there, restoring the active provider rather than guessing an old skin.
+It is not necessary for the requested Default background: ElvUI already owns that path.
+No secure aura styling changes were made in this repair.
+
+Primary source navigation: [Blizzard aura inbound interface](https://github.com/Gethe/wow-ui-source/blob/live/Interface/AddOns/Blizzard_AuraContainer/Blizzard_AuraContainerInbound.lua)
+and [aura styling implementation](https://github.com/Gethe/wow-ui-source/blob/live/Interface/AddOns/Blizzard_AuraContainer/Blizzard_AuraContainerUtil.lua).
+Local inspected sources in the combat research fixture supplied the evidence.

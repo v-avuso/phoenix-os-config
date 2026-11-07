@@ -36,6 +36,9 @@
   Cover raw DataTextTooltip and native aura setters: data postcalls alone do not
   establish framing coverage. Include theme-provider decorations such as ToxiUI's
   shadow/noise surfaces in suppression and restoration tests. Passing fakes never establishes the in-game visual result.
+- Version-pinned upstream fixtures must preserve the full installed metadata string,
+  including release suffixes. A truncated TOC version can pass while the live adapter
+  rejects the same installation. Inspect dependent source before accepting a new version.
 - For actual Dialogue UI tooltip reuse, read the item feature's `research/README.md`
   first. The original renderer reuse proof supersedes the assumption that absence of
   a supported global API requires a new renderer. Keep singleton ownership and

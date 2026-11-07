@@ -1,6 +1,6 @@
 local _, Toolkit = ...
 local feature = { id = "universalItemTooltips", section = "Tooltip Appearance", optionsTab = "Tooltip",
-    defaults = { enabled = true, appearance = "dialogueUI", framing = "dialogueUI",
+    defaults = { enabled = true, appearance = "dialogueUI", framing = "native",
         equippedPreviews = true, previewOverflow = true, mountSpellPreviews = true, petSummonPreviews = true },
     dependencies = { "Blizzard_SharedXMLGame", "DialogueUI" }, states = {} }
 local appearances = {
@@ -81,7 +81,7 @@ function feature:Enable()
     -- Migrate the former imitation to the real renderer without losing the chosen intent.
     if self.settings.appearance ~= "native" then self.settings.appearance = "dialogueUI" end
     self.running = true
-    self.settings.framing = self.settings.framing or "dialogueUI"
+    self.settings.framing = self.settings.framing or "native"
     if not self.adapter then
         self.adapter = Toolkit.DialogueTooltip.New()
         self.adapter.request = function(tooltip, data) self:Render(tooltip, data) end
@@ -189,6 +189,7 @@ if SlashCmdList then
         print("PWT tooltips: enabled=" .. tostring(feature.settings and feature.settings.enabled)
             .. " approach=" .. tostring(feature.settings and feature.settings.appearance))
         print("Dialogue UI: " .. (adapter and (adapter.reason or adapter.status) or "not initialized")
+            .. "; version=" .. tostring(adapter and adapter.version)
             .. "; active=" .. tostring(not not (adapter and adapter.lease)))
         if adapter then
             print("PWT renderer: renders=" .. adapter.renders .. " unchanged=" .. adapter.reuses
