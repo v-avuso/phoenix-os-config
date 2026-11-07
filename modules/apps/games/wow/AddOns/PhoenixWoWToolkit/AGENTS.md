@@ -34,7 +34,10 @@
   renderer samples native opacity. Cover native SetAction's spell/macro and opaque
   mount/pet routes; a journal setter alone does not establish action-bar coverage.
   Cover raw DataTextTooltip and native aura setters: data postcalls alone do not
-  establish framing coverage. Include theme-provider decorations such as ToxiUI's
+  establish framing coverage. When masking a native tooltip, test attached child
+  tooltips as well as embedded rows: child panels inherit the masked parent alpha.
+  Preserve provider modifier rules, panel chains and restore ownership on release.
+  Include theme-provider decorations such as ToxiUI's
   shadow/noise surfaces in suppression and restoration tests. Passing fakes never establishes the in-game visual result.
 - Version-pinned upstream fixtures must preserve the full installed metadata string,
   including release suffixes. A truncated TOC version can pass while the live adapter

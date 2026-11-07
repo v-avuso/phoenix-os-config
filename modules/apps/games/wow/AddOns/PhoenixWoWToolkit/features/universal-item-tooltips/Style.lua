@@ -19,6 +19,7 @@ local unpack = unpack or table.unpack
 
 function Style.New(adapter, settings)
     local self = setmetatable({adapter=adapter,settings=settings,states={}},Style)
+    if adapter.attachments then adapter.attachments.onObserve=function(frame) self:Observe(frame,nil) end end
     local renderer = adapter:Bind()
     if renderer then
         if renderer.Init then renderer:Init() end
@@ -80,9 +81,35 @@ function Style:RecordSkin(frame,route)
     self.skinTrace=name.." / "..route..": "..reason
 end
 
+-- Change the background only: text, models and provider colors retain their alpha.
+function Style:Opacity(frame, original)
+    if not self.enabled or not safe(frame) then return end
+    local state=self.states[frame] or {};self.states[frame]=state
+    local alpha=math.max(0,math.min(100,tonumber(self.settings.backgroundOpacity) or 95))/100
+    if original and frame.Background then
+        if state.backgroundAlpha==nil then state.backgroundAlpha=frame.Background:GetAlpha() end
+        frame.Background:SetAlpha(alpha)
+    elseif frame.SetBackdropColor and frame.GetBackdropColor then
+        if not state.opacityColor then state.opacityColor=tuple(frame,"GetBackdropColor") end
+        local color=state.opacityColor
+        if color then
+            self.settingOpacity=true
+            frame:SetBackdropColor(color[1],color[2],color[3],alpha)
+            self.settingOpacity=false
+        end
+    end
+end
+
 function Style:Restore(frame)
     local state = self.states[frame]
     if not state or not safe(frame) then return end
+    if state.opacityColor then
+        local color=state.opacityColor;state.opacityColor=nil
+        self.settingOpacity=true;frame:SetBackdropColor(unpack(color));self.settingOpacity=false
+    end
+    if state.backgroundAlpha~=nil and frame.Background then
+        frame.Background:SetAlpha(state.backgroundAlpha);state.backgroundAlpha=nil
+    end
     if state.texture then state.texture:Hide() end
     if state.chrome then state.chrome:Hide() end
     if state.owned then
@@ -137,11 +164,11 @@ end
 function Style:Chrome(frame, original, nativeSource)
     if not safe(frame) then return end
     if not self.enabled then self:Restore(frame);return end
+    local dialogue = self.settings.framing == "dialogueUI"
+    if original and dialogue then self:Restore(frame);self:Opacity(frame,true);return end
+    if not original and not dialogue then self:Restore(frame);self:Opacity(frame,false);return end
     local renderer = self.adapter.renderer
     if not renderer or not renderer.Background then return end
-    local dialogue = self.enabled and self.settings.framing == "dialogueUI"
-    if original and dialogue then self:Restore(frame); return end
-    if not original and not dialogue then self:Restore(frame); return end
     local state=self.states[frame] or {}; self.states[frame]=state
     state.nativeSource=nativeSource or state.nativeSource
     if not state.owned then
@@ -172,6 +199,7 @@ function Style:Chrome(frame, original, nativeSource)
         local provider=engine and engine.GetModule and engine:GetModule("Tooltip",true)
         if provider and provider.db and provider.SetStyle and state.chrome.SetTemplate then
             provider:SetStyle(state.chrome)
+            self:Opacity(state.chrome,false)
             state.chrome:Show()
             return
         end
@@ -183,11 +211,13 @@ function Style:Chrome(frame, original, nativeSource)
         if color then state.chrome:SetBackdropColor(unpack(color)) else state.chrome:SetBackdropColor(0.05,0.05,0.05,0.95) end
         local border=native and native.border or (source and tuple(source,"GetBackdropBorderColor"))
         if border then state.chrome:SetBackdropBorderColor(unpack(border)) end
+        self:Opacity(state.chrome,false)
         state.chrome:Show()
     else
         if not state.texture then state.texture=frame:CreateTexture(nil,"BACKGROUND",nil,7);state.texture:SetAllPoints(frame) end
         state.texture:SetTexture(renderer.Background:GetTexture())
         state.texture:SetTextureSliceMargins(32,32,32,32); state.texture:SetTextureSliceMode(1)
+        state.texture:SetAlpha((tonumber(self.settings.backgroundOpacity) or 95)/100)
         state.texture:Show()
     end
 end
@@ -332,6 +362,7 @@ function Style:Observe(source,data)
         state.queue=queue
         if source.SetBackdrop then
             hooksecurefunc(source,"SetBackdrop",function(_,info)
+                if state.opacityColor and self.enabled and not self.settingBackdrop then queue() end
                 if state.owned and self.enabled and self.settings.framing=="dialogueUI" and not self.settingBackdrop
                     and safe(source) and public(info) and (not info or not canaccessallvalues or canaccessallvalues(info)) then
                     state.backdrop=info
@@ -345,7 +376,13 @@ function Style:Observe(source,data)
             if source[entry[1]] then
                 local method,key=entry[1],entry[2]
                 hooksecurefunc(source,method,function(_,r,g,b,a)
-                    if state.owned and safe(source) and public(r) and public(g) and public(b) and public(a)
+                    if key=="color" and state.opacityColor and not self.settingOpacity
+                        and public(r) and public(g) and public(b) and public(a)
+                        and type(r)=="number" and type(g)=="number" and type(b)=="number" then
+                        state.opacityColor={r,g,b,a or 1}
+                        self:Opacity(source,false)
+                    end
+                    if state.owned and not self.settingOpacity and safe(source) and public(r) and public(g) and public(b) and public(a)
                         and type(r)=="number" and type(g)=="number" and type(b)=="number" then
                         state[key]={r,g,b,a or 1}
                     end
@@ -406,6 +443,10 @@ end
 
 function Style:Configure(enabled)
     self.enabled=enabled
+    if Toolkit.AuraTooltipBackground then
+        self.auraBackground=self.auraBackground or Toolkit.AuraTooltipBackground.New()
+        self.auraBackground:Configure(enabled,self.settings.backgroundOpacity)
+    end
     local sources={}
     for frame,state in pairs(self.states) do
         if state.watched then sources[#sources+1]=frame end

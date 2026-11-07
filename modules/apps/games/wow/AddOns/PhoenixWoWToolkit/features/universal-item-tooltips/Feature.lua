@@ -1,8 +1,8 @@
 local _, Toolkit = ...
 local feature = { id = "universalItemTooltips", section = "Tooltip Appearance", optionsTab = "Tooltip",
-    defaults = { enabled = true, appearance = "dialogueUI", framing = "native",
+    defaults = { enabled = true, appearance = "dialogueUI", framing = "native", backgroundOpacity = 95,
         equippedPreviews = true, previewOverflow = true, mountSpellPreviews = true, petSummonPreviews = true },
-    dependencies = { "Blizzard_SharedXMLGame", "DialogueUI" }, states = {} }
+    dependencies = { "Blizzard_SharedXMLGame", "Blizzard_AuraContainer", "DialogueUI", "ElvUI" }, states = {} }
 local appearances = {
     { "native", "Default" },
     { "dialogueUI", "Dialogue UI" },
@@ -149,6 +149,19 @@ function feature:RegisterSettings(panel, y)
                 function(value) self.settings.framing=value;if self.style then self.style:Configure(self.running) end;self:RefreshOwned();self:RefreshSettings() end,entry[1])
         end
     end)
+    Toolkit.Options.Text(panel,"Background opacity (%)",y-204)
+    self.opacitySlider=CreateFrame("Slider",nil,panel,"OptionsSliderTemplate")
+    self.opacitySlider:SetPoint("TOPLEFT",24,y-236);self.opacitySlider:SetSize(300,16)
+    self.opacitySlider:SetMinMaxValues(0,100);self.opacitySlider:SetValueStep(1)
+    self.opacitySlider:SetObeyStepOnDrag(true)
+    if self.opacitySlider.Low then self.opacitySlider.Low:SetText("0") end
+    if self.opacitySlider.High then self.opacitySlider.High:SetText("100") end
+    self.opacitySlider:SetScript("OnValueChanged",function(_,value)
+        if self.refreshingOpacity then return end
+        self.settings.backgroundOpacity=math.max(0,math.min(100,math.floor(value+0.5)))
+        if self.style then self.style:Configure(self.running) end
+        self:RefreshSettings()
+    end)
     local choices = {
         {"equippedPreviews", "Show equipped-item previews", "Display available appearances on equipped comparison items."},
         {"previewOverflow", "Allow creature previews to overflow", "Give large mount and pet previews more room around the tooltip."},
@@ -157,16 +170,21 @@ function feature:RegisterSettings(panel, y)
     }
     self.previewCheckboxes = {}
     for index, entry in ipairs(choices) do
-        self.previewCheckboxes[entry[1]] = Toolkit.Options.Checkbox(panel,entry[2],y-204-(index-1)*64,
+        self.previewCheckboxes[entry[1]] = Toolkit.Options.Checkbox(panel,entry[2],y-288-(index-1)*64,
             self.settings,entry[1],function()
                 if self.style then self.style:Configure(self.running) end
                 self:RefreshOwned();self:RefreshSettings()
             end,entry[3])
     end
-    return y - 464
+    return y - 548
 end
 function feature:RefreshSettings()
     if not self.checkbox then return end
+    self.refreshingOpacity=true
+    self.opacitySlider:SetValue(self.settings.backgroundOpacity or 95)
+    if self.opacitySlider.Text then self.opacitySlider.Text:SetText(tostring(self.settings.backgroundOpacity or 95).."%") end
+    self.opacitySlider:SetEnabled(self.settings.enabled and self.available)
+    self.refreshingOpacity=false
     self.checkbox:SetChecked(self.settings.enabled)
     self.checkbox:SetEnabled(self.available)
     self.dropdown:SetEnabled(self.settings.enabled and self.available)

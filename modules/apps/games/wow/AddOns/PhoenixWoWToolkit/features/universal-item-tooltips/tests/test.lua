@@ -50,6 +50,11 @@ local function frame()
     function f:RegisterEvent() end
     function f:SetPoint() end
     function f:SetWidth() end
+    function f:SetSize() end
+    function f:SetMinMaxValues() end
+    function f:SetValueStep() end
+    function f:SetObeyStepOnDrag() end
+    function f:SetValue(value) self.value=value;if self.scripts.OnValueChanged then self.scripts.OnValueChanged(self,value) end end
     function f:SetChecked(value) self.checked=value end
     function f:SetEnabled(value) self.enabled=value end
     function f:SetupMenu(fn) self.generate=fn end
@@ -84,6 +89,8 @@ feature:SetAppearance('native'); assert(#tooltip.lines==7)
 feature:SetAppearance('invalid'); assert(feature.settings.appearance=='native')
 T.Options={Text=function() end,Checkbox=frame}
 feature.available=true; feature:RegisterSettings({},0); feature:RefreshSettings()
+feature.opacitySlider.scripts.OnValueChanged(feature.opacitySlider,82.2)
+assert(feature.settings.backgroundOpacity==82 and feature.opacitySlider.value==82,'opacity slider persists a rounded percentage')
 local choices={}
 feature.dropdown.generate(nil,{CreateRadio=function(_,label,selected,choose,value) choices[value]={label=label,selected=selected,choose=choose} end})
 assert(choices.native.selected('native') and not choices.dialogueUI.selected('dialogueUI'))

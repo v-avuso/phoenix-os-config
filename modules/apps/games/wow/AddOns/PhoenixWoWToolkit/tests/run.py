@@ -30,6 +30,8 @@ for name in ('display', 'lifecycle', 'options'):
 if args.aura_source:
     subprocess.run([args.lua, str(root / 'features/combat-tracking/tests/blizzard.lua'),
                     str(root), args.aura_source], check=True)
+for name in ('attachments', 'aura-background'):
+    subprocess.run([args.lua, str(root / f'features/universal-item-tooltips/tests/{name}.lua'), str(root)], check=True)
 if args.dialogue_ui:
     subprocess.run([args.lua, str(root / 'features/universal-item-tooltips/tests/dialogue-ui.lua'),
                     str(root), args.dialogue_ui, *([args.comparison_source] if args.comparison_source else [])], check=True)

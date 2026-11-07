@@ -233,3 +233,25 @@ No secure aura styling changes were made in this repair.
 Primary source navigation: [Blizzard aura inbound interface](https://github.com/Gethe/wow-ui-source/blob/live/Interface/AddOns/Blizzard_AuraContainer/Blizzard_AuraContainerInbound.lua)
 and [aura styling implementation](https://github.com/Gethe/wow-ui-source/blob/live/Interface/AddOns/Blizzard_AuraContainer/Blizzard_AuraContainerUtil.lua).
 Local inspected sources in the combat research fixture supplied the evidence.
+
+## TSM annotations and styling ownership decision
+
+Installed TSM LibTSMWoW/Source/Service/TooltipWrapper.lua:SetTooltipItem supports both
+embedded lines and ExtraTooltip. In UI/ExtraTooltip.lua the latter creates a separate
+GameTooltip parented to the native tooltip; its Attach/Show/_OnUpdate owns visibility
+and top/bottom positioning. Masking the parent also masks these prices through alpha
+inheritance. A finished-text snapshot alone cannot preserve that surface. The bounded
+adapter therefore keeps ordinary attached tooltip panels visible/positioned through
+public frame APIs; no TSM class, pricing function or modifier setting is replaced.
+Blizzard's [frame API declaration](https://github.com/Gethe/wow-ui-source/blob/live/Interface/AddOns/Blizzard_APIDocumentationGenerated/SimpleFrameAPIDocumentation.lua)
+provides SetIgnoreParentAlpha. Secret/forbidden/protected panels are excluded.
+
+The preferred styling architecture is provider-owned native backgrounds, original
+Dialogue UI item content/previews, and a separate attachment bridge. Native aura
+backgrounds have a secure delegate, ordinary frames have the active ElvUI provider,
+and the reused Dialogue UI views have their own background surface. A universal
+frame hook cannot replace all three ownership contracts safely. The opacity change
+uses these existing paths, not per-window adapters. The optional Dialogue UI framing
+mode's earlier suppression code remains isolated in Style.lua; replacing that mode
+wholesale is deferred until a bounded in-game provider/delegate trial is accepted.
+No source copying, provider setting writes or framework migration is needed.

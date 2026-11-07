@@ -190,7 +190,7 @@ TooltipDataProcessor = { AllTypes='all', AddTooltipPostCall=function(kind,fn)
     postcalls[kind]=postcalls[kind] or {}; table.insert(postcalls[kind],fn)
 end }
 local T = { RegisterFeature=function(self,feature) self.feature=feature end }
-for _, name in ipairs({'Comparison','DialogueUI','Preview','Style','Feature'}) do
+for _, name in ipairs({'Comparison','Attachments','DialogueUI','Preview','Style','Feature'}) do
     assert(loadfile(root..'/features/universal-item-tooltips/'..name..'.lua'))('PhoenixWoWToolkit',T)
 end
 local found, reason = T.DialogueTooltip.Find(version)
@@ -223,6 +223,10 @@ local function setRows(texts)
         source.rows[#source.rows+1]={left=left,right=right}
     end
 end
+function source:AddLine(text)
+    local left,right=frame('FontString'),frame('FontString')
+    left:SetText(text);right:Hide();self.rows[#self.rows+1]={left=left,right=right}
+end
 local feature=T.feature
 feature.settings={enabled=true,appearance='dialogue'} -- Old choice migrates to the actual renderer.
 feature:Enable(); assert(feature.settings.appearance=='dialogueUI')
@@ -246,6 +250,12 @@ assert(shared.grid[1][1].font=='DUIFont_Tooltip_Large')
 assert(shared.PreviewModel.Model1.tried==300 and shared.PreviewModel.y>0)
 assert(shared:GetLeftLineText(7)=='Replace [item:equipped]')
 assert(not shared.events.TOOLTIP_DATA_UPDATE, 'native tooltip owns data refresh while leased')
+source:AddLine('Late market annotation without Show')
+local annotationTimers=timers;timers={};for _,callback in ipairs(annotationTimers) do callback() end
+drain()
+assert(shared:GetLeftLineText(6)=='Late market annotation without Show','late public AddLine annotations mirrored after final layout')
+hover()
+
 local model=shared.PreviewModel.Model1
 model.scripts.OnModelLoaded(model); assert(model.appliedCamera==70)
 local tries=model.tries
@@ -538,7 +548,15 @@ feature.style:Observe(restricted,'secret')
 assert(not feature.style.states[restricted],'restricted anchoring remains a native fallback')
 skin.oborder:SetAlpha(0.4)
 assert(skin.oborder:GetAlpha()==0,'late skin updates cannot restore a second border')
-feature.settings.framing='native';feature.style:Configure(true)
+feature.settings.framing='native';feature.settings.backgroundOpacity=95;feature.style:Configure(true)
+local _,_,_,opacity=skin:GetBackdropColor()
+assert(opacity==0.95 and skin:GetAlpha()==1,'opacity affects only background, not tooltip contents')
+skin:SetBackdropColor(0.1,0.2,0.3,0.4)
+local r,g,b,a=skin:GetBackdropColor()
+assert(r==0.1 and g==0.2 and b==0.3 and a==0.95,'late provider RGB retained while opacity remains selected')
+feature.settings.backgroundOpacity=100;feature.style:Configure(true)
+local _,_,_,opacity=skin:GetBackdropColor();assert(opacity==1,'fully opaque preference applied immediately')
+feature.settings.backgroundOpacity=95
 assert(skin.iborder:GetAlpha()==0.8 and skin.oborder:GetAlpha()==0.4,'default framing restores the native borders')
 assert(skin.NineSlice:GetAlpha()==0.7 and skin.Background:GetAlpha()==1,'default restores latest native surfaces')
 assert(skin.txSoftShadow:GetAlpha()==1 and skin.txInnerShadow:GetAlpha()==1 and skin.txInnerNoise:GetAlpha()==1,

@@ -130,7 +130,7 @@ function Dialogue.Snapshot(source, data, link, limit)
 end
 
 function Dialogue.New()
-    return setmetatable({ watched = {}, pending = {}, renders = 0, reuses = 0, releases = 0 }, Adapter)
+    return setmetatable({ attachments = Toolkit.TooltipAttachments and Toolkit.TooltipAttachments.New(), watched = {}, pending = {}, renders = 0, reuses = 0, releases = 0 }, Adapter)
 end
 
 function Adapter:Sample(lease)
@@ -174,6 +174,7 @@ function Adapter:Release(skipNativeRestore, reason)
     self:Sample(lease)
     self.releases, self.lastRelease = self.releases + 1, reason or "released"
     self.lease = nil
+    if self.attachments then self.attachments:Release() end
     if not skipNativeRestore then
         if safe(lease.source) then
             self.writing = true; lease.source:SetAlpha(lease.alpha); self.writing = false
@@ -304,6 +305,22 @@ function Adapter:Watch(source)
     local function refresh()
         local data = safe(source) and source.GetPrimaryTooltipData and source:GetPrimaryTooltipData()
         if self.request then self.request(source, data) end
+        if self.attachments and self.lease and self.lease.source==source then
+            self.attachments:Follow(source,self.renderer)
+        end
+    end
+    local queued=false
+    local function annotationChanged()
+        if queued or not self.lease or self.lease.source~=source then return end
+        queued=true
+        local lease=self.lease
+        C_Timer.After(0,function()
+            queued=false
+            if self.lease==lease then refresh() end
+        end)
+    end
+    for _,method in ipairs({"AddLine","AddDoubleLine"}) do
+        if source[method] then hooksecurefunc(source,method,annotationChanged) end
     end
     source:HookScript("OnShow", refresh)
     hooksecurefunc(source, "Show", refresh)
@@ -373,6 +390,7 @@ function Adapter:Show(source, data, link, force)
     local lease = self.lease
     self:Sample(lease)
     C_Timer.After(0.35, function() self:Sample(lease) end)
+    if self.attachments then self.attachments:Follow(source,renderer) end
     self.status = "native body rendered by Dialogue UI"
     return true
 end

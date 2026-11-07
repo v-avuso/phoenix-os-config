@@ -13,6 +13,9 @@ replace secure input. Account-wide controls under `/pwt` → **Tooltip**:
   existing skin, and replacement content delegates its background to ElvUI when
   available (otherwise uses the native backdrop or Blizzard fallback). Existing saved
   framing choices are preserved; select Default to adopt this on an existing account.
+- **Background opacity (%)** defaults to 95%; 100% is fully opaque. Only the
+  background changes, preserving text/model opacity and the current skin colors.
+  Disabling customization restores the latest provider background.
 - **Tooltip content style** chooses Dialogue UI or Default item text/layout. Default
   retains native information and adds compact native replacement deltas. Dialogue UI
   uses the original item renderer, including its overlapping transparent model when
@@ -27,7 +30,7 @@ without resetting account settings.
 ## Implementation and boundaries
 
 `Comparison.lua` delegates pairing and deltas to native C_TooltipComparison APIs.
-`DialogueUI.lua` gates internal reuse to Dialogue UI **1.0.7**, discovering its unique
+`DialogueUI.lua` gates internal reuse to Dialogue UI **1.0.7 / 1.0.7 b**, discovering its unique
 ordinary shared frame once. It leases the singleton for GameTooltip item hovers;
 Dialogue UI quest ownership takes priority. Native frames keep their original data,
 owner, processing and input, with alpha masked only after successful replacement.
@@ -242,3 +245,30 @@ The provider call has a fixture; final colors, borders and combat behavior requi
 The optional Dialogue UI framing mode still uses the earlier observed-frame adapter;
 its reported border inconsistency is not claimed fixed by this compatibility repair.
 See research for the supported aura path before extending that mode.
+
+## Third-party panels and opacity
+
+`Attachments.lua` keeps ordinary child GameTooltips (including TSM's separate market
+price panel) visible while the native parent is alpha-masked. It preserves the provider's
+show/hide and modifier behavior, original parent, and panel chains. Direct top/bottom
+attachments follow the displayed replacement; anchor, parent-alpha inheritance and
+frame layer restore on release. Protected/forbidden panels are excluded. This is not
+a private TSM hook and does not recreate its prices or read its preferences. Embedded
+AddLine/AddDoubleLine annotations are mirrored through a coalesced next-frame refresh,
+even if the provider does not call Show again. Arbitrary interactive custom widgets
+are not covered by the ordinary child-tooltip bridge.
+
+`AuraBackground.lua` uses Blizzard's shared AuraContainerInbound styling delegates
+for native aura opacity, without accessing the restricted frame. It observes the
+current provider's style and changes only its explicit center color alpha, restoring
+the latest provider style on disable. ElvUI's own styling entry point supplies the
+initial baseline; when no known baseline/color is available, native aura styling is
+left alone rather than guessed. Ordinary backgrounds remain in Style.lua.
+
+Client trial: with Default framing and Dialogue UI content, test 95% and 100% on
+bag items, comparisons, action spells, buffs and WunderBar. Confirm text/model opacity
+does not change. Hold/release TSM's configured modifier before hovering and during
+a hover; test both its embedded and separate-panel modes and changing hovered items.
+Disable PWT customization to check that native colors, panels and positions return.
+Repeat in combat and after reload. Fixtures establish data/lifecycle contracts, not
+actual TSM prices, screen fitting, GPU opacity or combat/taint acceptance.
