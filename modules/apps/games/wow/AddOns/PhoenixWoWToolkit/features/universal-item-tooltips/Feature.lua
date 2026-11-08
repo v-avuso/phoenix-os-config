@@ -99,12 +99,14 @@ function feature:Enable()
             end
         end)
         local events = CreateFrame("Frame")
+        events:RegisterEvent("MODIFIER_STATE_CHANGED")
         events:RegisterEvent("PLAYER_LOGIN")
         events:RegisterEvent("PLAYER_ENTERING_WORLD")
         events:RegisterEvent("ADDON_LOADED")
         events:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
         events:RegisterEvent("PLAYER_REGEN_ENABLED")
         events:SetScript("OnEvent", function(_, event, addon)
+            if event=="MODIFIER_STATE_CHANGED" and self.running then self.adapter:ModifierChanged() end
             if self.style and (event=="PLAYER_LOGIN" or event=="PLAYER_ENTERING_WORLD"
                 or (event=="ADDON_LOADED" and (addon=="ElvUI" or addon=="ElvUI_ToxiUI"))) then
                 self.style:WatchKnownTooltips()

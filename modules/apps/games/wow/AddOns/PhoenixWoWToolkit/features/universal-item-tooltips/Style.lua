@@ -292,6 +292,12 @@ function Style:Refresh(source)
     if not safe(source) then self:Release(source);return end
     local state=self.states[source]
     if not state then return end
+    -- Cached/native comparison paths may clear the observed data before final Show.
+    -- Read the completed pane rather than relying only on the earlier postcall.
+    if source:IsShown() and source.GetPrimaryTooltipData then
+        local latest=source:GetPrimaryTooltipData()
+        if latest and public(latest) and (not canaccessallvalues or canaccessallvalues(latest)) then state.data=latest end
+    end
     if not self.enabled or self.settings.appearance~="dialogueUI" or not source:IsShown() or not state.data then
         self:Release(source); return
     end

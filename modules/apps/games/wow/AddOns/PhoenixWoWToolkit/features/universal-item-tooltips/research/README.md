@@ -255,3 +255,12 @@ uses these existing paths, not per-window adapters. The optional Dialogue UI fra
 mode's earlier suppression code remains isolated in Style.lua; replacing that mode
 wholesale is deferred until a bounded in-game provider/delegate trial is accepted.
 No source copying, provider setting writes or framework migration is needed.
+
+Installed TSM LibTSMWoW/Source/Service/ModifierKey.lua dispatches callbacks on
+MODIFIER_STATE_CHANGED. TooltipBuilder invalidates its cache from that callback;
+cache invalidation alone does not repopulate the native tooltip already mirrored by
+Phoenix. Blizzard TooltipDataHandlerMixin:RebuildFromTooltipInfo reprocesses its
+existing native getter/metadata through the tooltip pipeline. A deferred event-driven
+rebuild composes these paths without calling private TSM pricing functions or an
+arbitrary owner's OnEnter script. Comparison refreshes likewise use the completed
+native pane rather than assume every cached show repeats a data postcall.

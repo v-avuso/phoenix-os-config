@@ -276,6 +276,23 @@ function Adapter:Place()
     self.renderer:SetPoint(anchor, source, anchor, 0, 0)
 end
 
+-- Refresh through Blizzard's existing data pipeline after all modifier listeners
+-- (including annotation cache invalidators) have received the event.
+function Adapter:ModifierChanged()
+    local lease=self.lease
+    if not lease or self.modifierQueued then return end
+    self.modifierQueued=true
+    C_Timer.After(0,function()
+        self.modifierQueued=false
+        local current=self.lease
+        local source=lease.source
+        if not current or current.source~=source or current.owner~=lease.owner or not safe(source) then return end
+        local shown,owner=source:IsShown(),source:GetOwner()
+        if not public(shown) or not shown or not public(owner) or owner~=lease.owner then return end
+        if source.RebuildFromTooltipInfo then source:RebuildFromTooltipInfo() end
+    end)
+end
+
 function Adapter:Watch(source)
     if self.watched[source] then return end
     self.watched[source] = true

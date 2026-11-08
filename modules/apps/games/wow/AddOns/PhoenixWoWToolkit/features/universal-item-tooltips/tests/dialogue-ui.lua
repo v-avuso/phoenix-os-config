@@ -243,6 +243,28 @@ end
 hover()
 assert(feature.adapter.lease and source.alpha==0 and shared:IsShown() and shared.alpha==1 and shared.showDelay == -0.25, 'global hover is immediate without changing the quest tooltip delay')
 assert(captured==shared and shared:GetLeftLineText(5)=='Late ElvUI annotation', 'actual renderer preserves late native text')
+local oldRebuild=source.RebuildFromTooltipInfo
+local held,rebuilds=false,0
+function source:RebuildFromTooltipInfo()
+    rebuilds=rebuilds+1
+    hover()
+    if held then self:AddLine('TSM modifier market price') end
+end
+held=true;feature.adapter:ModifierChanged();feature.adapter:ModifierChanged()
+local modifierTimers=timers;timers={};for _,callback in ipairs(modifierTimers) do callback() end
+local annotationTimers=timers;timers={};for _,callback in ipairs(annotationTimers) do callback() end
+drain()
+assert(rebuilds==1 and shared:GetLeftLineText(6)=='TSM modifier market price','modifier changes refresh annotations in place and coalesce without rehover')
+held=false;feature.adapter:ModifierChanged()
+local modifierTimers=timers;timers={};for _,callback in ipairs(modifierTimers) do callback() end
+drain()
+assert(rebuilds==2 and shared:GetLeftLineText(6)~='TSM modifier market price','releasing modifier removes conditional annotations')
+feature.adapter:ModifierChanged();source:Hide()
+local modifierTimers=timers;timers={};for _,callback in ipairs(modifierTimers) do callback() end
+assert(rebuilds==2,'pending modifier refresh cannot revive a departed hover')
+source.RebuildFromTooltipInfo=oldRebuild
+hover()
+
 assert(shared.grid[5][1].color[2]==1 and shared.grid[5][1].color[1]==0)
 assert(shared:GetLeftLineText(4):find('42 coins',1,true),'semantic native price row survives the mirror')
 assert(shared.Background.texture=='DialogueUI-owned/TooltipBackground-Temp.png')
@@ -354,6 +376,11 @@ comparison:Show()
 local pending=timers;timers={};for _,fn in ipairs(pending) do fn() end
 drain()
 local styled=feature.style.states[comparison]
+
+comparison.scripts.OnTooltipCleared(comparison)
+comparison.primaryData=getData('item:equipped');comparison.primaryData.type=0
+feature.style:Refresh(comparison)
+assert(styled.active,'cached vendor comparison recovers final native data after clear without a new data postcall')
 assert(styled and styled.view and styled.active and comparison.alpha==0,'comparison tooltip gets a separate actual base renderer')
 assert(styled.view.PreviewModel.Model1.frameBuffer,'owned previews isolate 3D rendering in a framebuffer')
 assert(styled.view.PreviewModel and styled.view.PreviewModel~=shared.PreviewModel

@@ -272,3 +272,20 @@ a hover; test both its embedded and separate-panel modes and changing hovered it
 Disable PWT customization to check that native colors, panels and positions return.
 Repeat in combat and after reload. Fixtures establish data/lifecycle contracts, not
 actual TSM prices, screen fitting, GPU opacity or combat/taint acceptance.
+
+## Stationary modifier and comparison refreshes
+
+While a native item tooltip is leased, MODIFIER_STATE_CHANGED schedules one native
+RebuildFromTooltipInfo pass after event delivery. This lets annotation providers
+(including TSM's modifier cache invalidation) react before the finished rows/panels
+are displayed. Press/release works without moving the mouse; repeated same-frame
+events coalesce, and hidden/changed owners are skipped. No polling or modifier
+settings/CVar changes are used.
+
+Comparison views read final native tooltip data during their queued refresh. This
+recovers cached panes whose observed data was cleared without a new data postcall;
+it does not force Blizzard to show a comparison when its own policy/data omit one.
+Client acceptance: vendor equipment with normal comparison settings, Shift changes
+while stationary, ring/trinket pairs, uncached items and rapid vendor-page changes.
+Check TSM's configured modifier on bags and vendors, both pressed before hovering
+and during a hover; test release, combat and leaving before the queued pass.
