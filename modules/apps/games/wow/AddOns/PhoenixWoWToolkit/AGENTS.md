@@ -28,6 +28,8 @@
   text with stale content, and camera application after asynchronous model loading.
   Include inventory-style hide/clear/rebuild/show in one frame as well as genuine
   leaves; a stable bank hover does not exercise inventory refresh ownership.
+  Queued annotation refreshes must also respect current native visibility: a late
+  AddLine followed by Hide must not cancel release or resurrect the replacement.
   Include stale/frozen frame dimensions and cached/internal Show/SetShown calls:
   suppression cannot depend on an observed size delta or propagate a masked source's
   alpha to its replacement. Exercise item/summon ownership transitions before another

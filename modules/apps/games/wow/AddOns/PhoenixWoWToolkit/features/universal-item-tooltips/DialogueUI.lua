@@ -303,6 +303,8 @@ function Adapter:Watch(source)
     end)
     -- Every Show refresh is observable, including Show on an already-visible tooltip.
     local function refresh()
+        local shown=safe(source) and source:IsShown()
+        if not public(shown) or not shown then return end
         local data = safe(source) and source.GetPrimaryTooltipData and source:GetPrimaryTooltipData()
         if self.request then self.request(source, data) end
         if self.attachments and self.lease and self.lease.source==source then

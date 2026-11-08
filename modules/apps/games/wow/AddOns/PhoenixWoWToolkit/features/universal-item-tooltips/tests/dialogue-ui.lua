@@ -260,6 +260,11 @@ local sameFrameTimers=timers;timers={};for _,callback in ipairs(sameFrameTimers)
 drain()
 assert(shared:GetLeftLineText(7)=='Second market update','same-frame native Show cannot discard a later annotation')
 hover()
+source:AddLine('Annotation immediately before leaving');source:Hide()
+local leaveTimers=timers;timers={};for _,callback in ipairs(leaveTimers) do callback() end
+drain()
+assert(not feature.adapter.lease and not shared:IsShown(),'queued annotations cannot resurrect a tooltip after leaving its owner')
+hover()
 
 local model=shared.PreviewModel.Model1
 model.scripts.OnModelLoaded(model); assert(model.appliedCamera==70)
