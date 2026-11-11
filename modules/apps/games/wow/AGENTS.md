@@ -13,6 +13,8 @@
   Keep the 05:00 Europe/Berlin timer dedicated to package updates, never settings.
   Scheduled runs must skip successfully when WoW is running, retain bounded retries
   and notify only on terminal failure. Preserve the single shared update lock.
+  Give each client an independent network budget and attempt both after one fails:
+  a large Retail voiceover download otherwise starves Forever updates.
   For slow unchanged GitHub releases, inspect HTTP range behavior before adding
   concurrency: a 501 suffix-range response can trigger full voiceover ZIP downloads.
   Keep timeout cancellation confined to network work, never native file/DB writes.

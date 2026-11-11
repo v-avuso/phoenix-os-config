@@ -35,6 +35,7 @@ class SystemdRuntimeTests(unittest.TestCase):
             runner.write_text("set -euo pipefail\n"
                               "pgrep() { return 1; }\n"
                               "sleep() { :; }\n"
+                              "wow_sync_forever() { :; }\nwow_manifest=fixture\ninstawow() { return 0; }\n"
                               f"wow_sync() {{ echo attempt >> {shlex.quote(str(attempts))}; return 23; }}\n"
                               f"source {shlex.quote(str(HELPER))}\n")
             shell = subprocess.check_output(["sh", "-c", "command -v bash"], text=True).strip()
@@ -72,6 +73,7 @@ class SystemdRuntimeTests(unittest.TestCase):
                     attempts.unlink(missing_ok=True)
                 runner.write_text("set -euo pipefail\n"
                                   "pgrep() { return 1; }\nsleep() { :; }\n"
+                                  "wow_sync_forever() { :; }\nwow_manifest=fixture\ninstawow() { return 0; }\n"
                                   f"wow_sync() {{ echo attempt >> {shlex.quote(str(attempts))}; return 23; }}\n"
                                   f"source {shlex.quote(str(HELPER))}\n")
                 result = ctl("start", names[0], check=False)

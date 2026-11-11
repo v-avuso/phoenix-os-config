@@ -329,7 +329,9 @@ ZIP checks use bounded byte ranges instead of downloading entire voiceover packs
 
 Instawow owns [wow-addons.json](wow-addons.json); deploy edits before `sync` uses the changed manifest.
 Its **05:00 Europe/Berlin** persistent timer, terminal-only notification and
-WoW-running skips remain. Retries share the five-minute network budget. Close WoW before interactive writes; do not launch during updates.
+WoW-running skips remain. Each client has its own five-minute network budget,
+including retries; a failure in one does not prevent attempting the other. Close
+WoW before interactive writes; do not launch during updates.
 
 **Next WowUp scan:** reconcile the twelve BtWQuests records and ten voice-pack records listed above.
 For BtWQuests, when discovered,

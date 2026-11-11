@@ -243,8 +243,9 @@ non-ignored packages individually with WoW closed. Neither manager should touch 
 
 The instawow user timer remains **05:00 Europe/Berlin**, `Persistent=true`, with a
 single shared flock, terminal-only notification and safe WoW-running skips. It
-updates only its database/manifest packages. Retries share a 300-second network
-budget; the 60-second retry remains when time permits, while 300/900-second waits
+updates only its database/manifest packages. Each client receives an independent
+300-second network budget including retries; a failure for either still allows
+the other to run and triggers the terminal notification. The 60-second retry remains when time permits, while 300/900-second waits
 no longer extend a timed-out batch. File extraction/database writes are not killed
 by the network deadline; local sync, lock waits and safe writes can extend runtime.
 

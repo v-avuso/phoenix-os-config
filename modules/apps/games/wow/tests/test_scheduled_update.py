@@ -56,17 +56,22 @@ source "$1"
     def test_success_stops_after_one_attempt(self):
         result, events = self.run_update()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(events, ["sync", "update:phoenix-retail", "forever-sync", "update:phoenix-forever"])
+        self.assertEqual(events, ["forever-sync", "update:phoenix-forever", "sync", "update:phoenix-retail"])
 
     def test_transient_sync_failure_retries_whole_sequence(self):
         result, events = self.run_update(sync_failures=1)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(events, ["sync", "sleep:60", "sync", "update:phoenix-retail", "forever-sync", "update:phoenix-forever"])
+        self.assertEqual(events, ["forever-sync", "update:phoenix-forever", "sync", "sleep:60", "sync", "update:phoenix-retail"])
 
     def test_terminal_failure_preserves_status_and_bounds_batch_retries(self):
         result, events = self.run_update(update_failures=4)
         self.assertEqual(result.returncode, 23, result.stderr)
-        self.assertEqual(events, ["sync", "update:phoenix-retail", "sleep:60", "sync", "update:phoenix-retail"])
+        self.assertEqual(events, ["forever-sync", "update:phoenix-forever", "sleep:60", "forever-sync", "update:phoenix-forever", "sync", "update:phoenix-retail", "sleep:60", "sync", "update:phoenix-retail"])
+
+    def test_one_client_failure_does_not_skip_the_other(self):
+        result, events = self.run_update(update_failures=2)
+        self.assertEqual(result.returncode, 23)
+        self.assertIn("update:phoenix-retail", events)
 
     def test_running_game_skips_without_mutation(self):
         result, events = self.run_update(guards="0")
@@ -76,17 +81,17 @@ source "$1"
     def test_game_started_during_sync_skips_update(self):
         result, events = self.run_update(guards="1 0")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(events, ["sync"])
+        self.assertEqual(events, ["forever-sync"])
 
-    def test_game_started_after_retail_update_skips_forever(self):
+    def test_game_started_after_forever_update_skips_retail(self):
         result, events = self.run_update(guards="1 1 0")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(events, ["sync", "update:phoenix-retail"])
+        self.assertEqual(events, ["forever-sync", "update:phoenix-forever"])
 
     def test_game_started_during_retry_delay_skips_next_attempt(self):
-        result, events = self.run_update(sync_failures=1, guards="1 0")
+        result, events = self.run_update(update_failures=1, guards="1 1 0")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(events, ["sync", "sleep:60"])
+        self.assertEqual(events, ["forever-sync", "update:phoenix-forever", "sleep:60"])
 
     @unittest.skipUnless(sys.platform == "linux", "native Linux comm detection")
     def test_native_process_name_is_detected(self):

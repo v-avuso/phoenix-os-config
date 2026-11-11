@@ -28,43 +28,39 @@ wow_check_or_skip() {
   fi
 }
 
-status=1
-started=$SECONDS
-for delay in 0 60 300 900; do
-  if (( SECONDS - started + delay >= 300 )); then
-    echo 'Scheduled WoW add-on network budget exhausted; no further batch retry.' >&2
-    break
-  fi
-  if (( delay > 0 )); then
-    echo "Retrying scheduled WoW add-on update in $delay seconds." >&2
-    sleep "$delay"
-  fi
-  wow_check_or_skip
-  if wow_sync; then
-    # A launch during sync cannot be made atomic with an external game launcher;
-    # recheck before update, and never terminate or restart game processes.
+wow_update_profile() {
+  local profile=$1 status=1 started=$SECONDS delay INSTAWOW_NETWORK_TIMEOUT=300
+  export INSTAWOW_NETWORK_TIMEOUT
+  for delay in 0 60 300 900; do
+    if (( SECONDS - started + delay >= 300 )); then
+      echo "Scheduled WoW $profile network budget exhausted; no further batch retry." >&2
+      break
+    fi
+    if (( delay > 0 )); then
+      echo "Retrying scheduled WoW $profile add-on update in $delay seconds." >&2
+      sleep "$delay"
+    fi
     wow_check_or_skip
-    if INSTAWOW_NETWORK_TIMEOUT=$((300 - (SECONDS - started))) instawow -v -p phoenix-retail update; then
+    if { if [[ $profile == phoenix-forever ]]; then wow_sync_forever "$wow_manifest"; else wow_sync; fi; }; then
       wow_check_or_skip
-      if wow_sync_forever "$wow_manifest"; then
-        wow_check_or_skip
-        if (( SECONDS - started >= 300 )); then
-          echo 'Scheduled WoW add-on network budget exhausted before Forever update.' >&2
-          status=1
-        elif INSTAWOW_NETWORK_TIMEOUT=$((300 - (SECONDS - started))) instawow -v -p phoenix-forever update; then
-          exit 0
-        else
-          status=$?
-        fi
+      if (( SECONDS - started >= 300 )); then
+        status=1
+      elif INSTAWOW_NETWORK_TIMEOUT=$((300 - (SECONDS - started))) instawow -v -p "$profile" update; then
+        return 0
       else
         status=$?
       fi
     else
       status=$?
     fi
-  else
-    status=$?
-  fi
-  echo "Scheduled WoW add-on update failed (status $status)." >&2
-done
-exit "$status"
+    echo "Scheduled WoW $profile add-on update failed (status $status)." >&2
+  done
+  return "$status"
+}
+
+# Each client gets an independent bounded budget and is attempted even if the
+# other fails; retain a failure for the existing terminal notification.
+result=0
+wow_update_profile phoenix-forever || result=$?
+wow_update_profile phoenix-retail || result=$?
+exit "$result"
