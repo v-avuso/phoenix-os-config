@@ -6,6 +6,38 @@ Use the shared Retail manifest for Forever when a source can select a compatible
 release. Preserve independent add-on folders, package databases and WowUp ownership.
 Source resolution is evidence of a matching release, not proof of in-game behavior.
 
+## Follow-up source checks (2026-11-11)
+
+- [TomTom](https://www.curseforge.com/wow/addons/tomtom) and
+  [GTFO](https://www.curseforge.com/wow/addons/gtfo) publish shared Retail/Forever
+  archives. A disposable Forever profile installed their WoWInterface releases
+  v4.4.1-release and 6.12.3 without credentials. The extracted TomTom TOC declares
+  interface 16001 and GTFO contains a 16001 Camelot TOC. This is package evidence,
+  not an in-game test. The configured WoWInterface resolver does not validate the
+  flavour of future downloads, so the daily Forever sync still excludes them.
+- [BtWQuests](https://www.curseforge.com/wow/addons/btw-quests/files/9547866)
+  has a distinct Forever v2.70.0-forever release with Forever quest data. Its
+  WoWInterface Retail source returns a different, Retail-only release; use the
+  Forever release through WowUp-CF if desired. No account/API key was added.
+- [KeystoneLoot](https://www.wowinterface.com/downloads/info26597-KeystoneLoot.html)
+  describes Retail Mythic+ and related loot, so it is not an obvious Forever fit.
+  The twelve skipped BtWQuests expansion/prologue packages likewise describe later
+  expansions. Their absence should not be interpreted as a broken core package.
+- GatherMate2 itself is installed. Its optional pre-collected data and Routes
+  remain unresolved for Forever; [SimpleRoutes for GatherMate2](https://www.curseforge.com/wow/addons/simpleroutes-for-gathermate2)
+  is a distinct Forever-targeted alternative, not a verified replacement or an
+  installed package. Krowi's Achievement Filter, SavedInstances and Mount Journal
+  Enhanced have no matching release in the original source check; whether those
+  features matter in Forever is a player decision.
+
+WowUp-CF 2.24.1 added [Forever support](https://github.com/WowUp/WowUp.CF/releases/tag/v2.24.1);
+the installed 2.22.0 predates it, so an upgrade and client test are needed before
+relying on WowUp for Forever. A newer version can potentially manage TomTom, GTFO
+and BtWQuests there independently of their Retail InstaWoW records. If WowUp
+discovers any Forever packages owned by InstaWoW,
+set those records to Ignore / Auto Update off before package writes. Do not assume
+that the selected manager has been configured or that add-ons work in game.
+
 ## Resolution snapshot (2026-11-11)
 
 The pinned InstaWoW 7.3.0 was run with a disposable Forever profile and existing
@@ -71,7 +103,8 @@ add-on has no Forever release on another source or that it can never work:
 - `github:derfloh205/CraftSim`
 - `github:myu-westfall/MyusKnowledgePointsTracker`
 
-The following WoWInterface sources were **not checked** (15). The pinned resolver
+The following WoWInterface sources were **not checked by this resolver probe** (15).
+See the follow-up above for subsequent TomTom, GTFO, BtWQuests and KeystoneLoot checks. The pinned resolver
 always returns the Retail download and cannot reliably select Forever files, so the
 Forever sync excludes this source until a verified alternative is available:
 
