@@ -6,8 +6,9 @@ Preserve the existing Retail installation, private settings and instawow ownersh
 updaters now have different responsibilities: the desired instawow set is **68 packages** in
 [`wow-addons.json`](wow-addons.json), including the original 58 and ten official English expansion voice packs.
 The post-game removal workflow reduces the installed set from 69 to 68.
-WowUp-CF is installed from locked Nixpkgs **2.22.0**, with only `wowup-cf` added to the existing
-unfree allowlist. No custom AppImage wrapper or lock update was added.
+WowUp-CF comes from the already-locked Nixpkgs unstable input (currently **2.24.1**)
+for Forever support; that input permits only `wowup-cf` as unfree. It follows normal
+input updates without a custom AppImage wrapper or lock update in this change.
 
 **WowUp-CF owns sixteen packages** installed by the operator. Its `addons.json` and actual folders
 were audited read-only: existing instawow rows are ignored with auto-update off; all sixteen CF rows

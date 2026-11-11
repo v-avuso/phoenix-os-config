@@ -1,9 +1,10 @@
-# InstaWoW's WoWInterface resolver always returns Retail files, regardless of
-# profile. Other sources use the Forever profile's native flavour selection.
+# WoWInterface returns Retail files regardless of profile. TomTom's current
+# shared archive supports Forever; retain this narrow, explicitly accepted
+# exception and recheck if its author changes packaging.
 wow_sync_forever() {
   local manifest=$1 addon installed output status
   while IFS= read -r addon; do
-    if [[ $addon == wowi:* ]]; then
+    if [[ $addon == wowi:* && $addon != wowi:7032 ]]; then
       echo "Forever: skipping $addon (WoWInterface cannot select Forever files)"
       continue
     fi

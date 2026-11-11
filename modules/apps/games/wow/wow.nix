@@ -1,5 +1,6 @@
 {
   config,
+  inputs,
   lib,
   pkgs,
   user,
@@ -8,6 +9,11 @@
 let
   addonDir = config.phoenix.wow.retailAddonDirectory;
   foreverAddonDir = config.phoenix.wow.foreverAddonDirectory;
+  wowUp =
+    (import inputs.nixpkgs-unstable {
+      system = pkgs.stdenv.hostPlatform.system;
+      config.allowUnfreePredicate = package: lib.getName package == "wowup-cf";
+    }).wowup-cf;
   toolkit = pkgs.runCommand "phoenix-wow-toolkit" { } ''
     mkdir -p "$out"
     cp -r ${./AddOns/PhoenixWoWToolkit} "$out/PhoenixWoWToolkit"
@@ -79,18 +85,20 @@ let
       addon_dir = addonDir;
     }
   );
-  foreverProfileBaseline = pkgs.writeText "instawow-forever-profile.json" (builtins.toJSON {
-    profile = "phoenix-forever";
-    addon_dir = foreverAddonDir;
-    flavour_override = "forever_classic";
-  });
+  foreverProfileBaseline = pkgs.writeText "instawow-forever-profile.json" (
+    builtins.toJSON {
+      profile = "phoenix-forever";
+      addon_dir = foreverAddonDir;
+      flavour_override = "forever_classic";
+    }
+  );
   # Preserve upstream metadata while selecting the verified native backend.
   wowUpDesktop = pkgs.runCommand "wowup-cf-wayland-desktop" { } ''
     mkdir -p "$out"
-    cp ${pkgs.wowup-cf}/share/applications/wowup-cf.desktop "$out/wowup-cf.desktop"
+    cp ${wowUp}/share/applications/wowup-cf.desktop "$out/wowup-cf.desktop"
     substituteInPlace "$out/wowup-cf.desktop" \
       --replace-fail 'Exec=wowup-cf --no-sandbox %U' \
-      'Exec=${pkgs.wowup-cf}/bin/wowup-cf --no-sandbox --ozone-platform=wayland %U'
+      'Exec=${wowUp}/bin/wowup-cf --no-sandbox --ozone-platform=wayland %U'
   '';
   settingsWriter = import ../../../../home/mutable-json-settings { inherit pkgs; };
   click = pkgs.python3.pkgs.click.overridePythonAttrs {
@@ -210,7 +218,7 @@ in
     system.build.phoenixWowToolkit = toolkit;
     nixpkgs.config.allowUnfreePackages = [ "wowup-cf" ];
     environment.systemPackages = [
-      pkgs.wowup-cf
+      wowUp
       instawow
       wowAddons
       tsmApp

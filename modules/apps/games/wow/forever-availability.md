@@ -13,8 +13,10 @@ Source resolution is evidence of a matching release, not proof of in-game behavi
   archives. A disposable Forever profile installed their WoWInterface releases
   v4.4.1-release and 6.12.3 without credentials. The extracted TomTom TOC declares
   interface 16001 and GTFO contains a 16001 Camelot TOC. This is package evidence,
-  not an in-game test. The configured WoWInterface resolver does not validate the
-  flavour of future downloads, so the daily Forever sync still excludes them.
+  not an in-game test. The daily sync includes TomTom as a narrow exception based
+  on its shared archive; the WoWInterface resolver does not validate future
+  downloads, so a future packaging change may require intervention. GTFO remains
+  excluded pending a decision about its usefulness.
 - [BtWQuests](https://www.curseforge.com/wow/addons/btw-quests/files/9547866)
   has a distinct Forever v2.70.0-forever release with Forever quest data. Its
   WoWInterface Retail source returns a different, Retail-only release; use the
@@ -30,10 +32,10 @@ Source resolution is evidence of a matching release, not proof of in-game behavi
   Enhanced have no matching release in the original source check; whether those
   features matter in Forever is a player decision.
 
-WowUp-CF 2.24.1 added [Forever support](https://github.com/WowUp/WowUp.CF/releases/tag/v2.24.1);
-the installed 2.22.0 predates it, so an upgrade and client test are needed before
-relying on WowUp for Forever. A newer version can potentially manage TomTom, GTFO
-and BtWQuests there independently of their Retail InstaWoW records. If WowUp
+WowUp-CF 2.24.1 added [Forever support](https://github.com/WowUp/WowUp.CF/releases/tag/v2.24.1).
+The Nix configuration uses this release from locked unstable Nixpkgs, but actual
+Forever client discovery and package selection still need a player check. It may
+manage GTFO and BtWQuests there independently of their Retail InstaWoW records. If WowUp
 discovers any Forever packages owned by InstaWoW,
 set those records to Ignore / Auto Update off before package writes. Do not assume
 that the selected manager has been configured or that add-ons work in game.
@@ -104,9 +106,9 @@ add-on has no Forever release on another source or that it can never work:
 - `github:myu-westfall/MyusKnowledgePointsTracker`
 
 The following WoWInterface sources were **not checked by this resolver probe** (15).
-See the follow-up above for subsequent TomTom, GTFO, BtWQuests and KeystoneLoot checks. The pinned resolver
-always returns the Retail download and cannot reliably select Forever files, so the
-Forever sync excludes this source until a verified alternative is available:
+See the follow-up above for subsequent TomTom, GTFO, BtWQuests and KeystoneLoot
+checks. The resolver returns the Retail download and cannot select Forever files;
+only TomTom is admitted to sync as a verified shared-archive exception:
 
 - TomTom (`wowi:7032`)
 - BtWQuests (`wowi:24680`)

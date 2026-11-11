@@ -23,8 +23,10 @@ Forever uses the same `wow-addons.json` manifest through a separate
 `phoenix-forever` InstaWoW profile and AddOns directory. The daily updater syncs
 and updates both profiles under the same lock, skipping while WoW is running.
 `wow-addons sync-forever` installs missing supported packages on demand; run it
-only while WoW is closed. WoWInterface entries are skipped because its resolver
-does not reliably select Forever downloads; GitHub entries without a matching
+only while WoW is closed. TomTom is the one WoWInterface exception: its verified
+shared Retail archive includes Forever support, and its updates assume the author
+continues publishing a shared archive. Other WoWInterface entries are skipped
+because its resolver does not select by client; GitHub entries without a matching
 Forever release are skipped and retried on later syncs. Other failures remain
 errors. See [Forever availability](forever-availability.md) for the initial
 resolution results and Toolkit limitation. Release matching does not prove
