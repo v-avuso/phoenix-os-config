@@ -21,7 +21,7 @@ status=${statuses[$i]:-${statuses[-1]}}
 echo $((i+1)) > "$TEST_ROOT/guard-index"
 exit "$status"''',
                 "sleep": 'echo "sleep:$1" >> "$TEST_ROOT/events"',
-                "instawow": '''echo update >> "$TEST_ROOT/events"
+                "instawow": '''echo "update:$3" >> "$TEST_ROOT/events"
 i=$(cat "$TEST_ROOT/update-index" 2>/dev/null || echo 0)
 echo $((i+1)) > "$TEST_ROOT/update-index"
 (( i >= UPDATE_FAILURES )) || exit 23''',
@@ -39,6 +39,8 @@ wow_sync() {
   echo $((i+1)) > "$TEST_ROOT/sync-index"
   (( i >= SYNC_FAILURES )) || return 17
 }
+wow_sync_forever() { echo forever-sync >> "$TEST_ROOT/events"; }
+wow_manifest=fixture
 source "$1"
 '''
             result = subprocess.run(
@@ -54,17 +56,17 @@ source "$1"
     def test_success_stops_after_one_attempt(self):
         result, events = self.run_update()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(events, ["sync", "update"])
+        self.assertEqual(events, ["sync", "update:phoenix-retail", "forever-sync", "update:phoenix-forever"])
 
     def test_transient_sync_failure_retries_whole_sequence(self):
         result, events = self.run_update(sync_failures=1)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(events, ["sync", "sleep:60", "sync", "update"])
+        self.assertEqual(events, ["sync", "sleep:60", "sync", "update:phoenix-retail", "forever-sync", "update:phoenix-forever"])
 
     def test_terminal_failure_preserves_status_and_bounds_batch_retries(self):
         result, events = self.run_update(update_failures=4)
         self.assertEqual(result.returncode, 23, result.stderr)
-        self.assertEqual(events, ["sync", "update", "sleep:60", "sync", "update"])
+        self.assertEqual(events, ["sync", "update:phoenix-retail", "sleep:60", "sync", "update:phoenix-retail"])
 
     def test_running_game_skips_without_mutation(self):
         result, events = self.run_update(guards="0")
@@ -75,6 +77,11 @@ source "$1"
         result, events = self.run_update(guards="1 0")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(events, ["sync"])
+
+    def test_game_started_after_retail_update_skips_forever(self):
+        result, events = self.run_update(guards="1 1 0")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(events, ["sync", "update:phoenix-retail"])
 
     def test_game_started_during_retry_delay_skips_next_attempt(self):
         result, events = self.run_update(sync_failures=1, guards="1 0")

@@ -59,6 +59,7 @@ class SystemdRuntimeTests(unittest.TestCase):
                         "set -euo pipefail\n"
                         f"pgrep() {{ return {guard}; }}\n"
                         "sleep() { :; }\ninstawow() { return 0; }\n"
+                        "wow_sync_forever() { :; }\nwow_manifest=fixture\n"
                         "wow_sync() { local count=0; "
                         f"if [[ -f {attempts} ]]; then count=$(wc -l < {attempts}); fi; "
                         f"echo attempt >> {attempts}; (( count >= {failures} )) || return 23; }}\n"

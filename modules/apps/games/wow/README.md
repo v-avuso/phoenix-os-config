@@ -19,6 +19,18 @@ Development and local tests do not modify game files or restart the client.
 
 ## Current setup
 
+Forever uses the same `wow-addons.json` manifest through a separate
+`phoenix-forever` InstaWoW profile and AddOns directory. The daily updater syncs
+and updates both profiles under the same lock, skipping while WoW is running.
+`wow-addons sync-forever` installs missing supported packages on demand; run it
+only while WoW is closed. WoWInterface entries are skipped because its resolver
+does not reliably select Forever downloads; GitHub entries without a matching
+Forever release are skipped and retried on later syncs. Other failures remain
+errors. See [Forever availability](forever-availability.md) for the initial
+resolution results and Toolkit limitation. Release matching does not prove
+in-game compatibility. WowUp-managed packages remain separate; if WowUp scans
+Forever, mark InstaWoW-owned packages Ignore with Auto Update off before writes.
+
 **70 desired instawow packages + 16 WowUp-CF packages.** The original ElvUI/ToxiUI profile,
 bindings, casting settings and private WTF files are preserved. The user has completed ToxiUI's in-game installer and customization;
 this addon batch preserves those current settings and does not launch WoW.

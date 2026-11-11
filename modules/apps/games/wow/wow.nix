@@ -7,6 +7,7 @@
 }:
 let
   addonDir = config.phoenix.wow.retailAddonDirectory;
+  foreverAddonDir = config.phoenix.wow.foreverAddonDirectory;
   toolkit = pkgs.runCommand "phoenix-wow-toolkit" { } ''
     mkdir -p "$out"
     cp -r ${./AddOns/PhoenixWoWToolkit} "$out/PhoenixWoWToolkit"
@@ -78,6 +79,11 @@ let
       addon_dir = addonDir;
     }
   );
+  foreverProfileBaseline = pkgs.writeText "instawow-forever-profile.json" (builtins.toJSON {
+    profile = "phoenix-forever";
+    addon_dir = foreverAddonDir;
+    flavour_override = "forever_classic";
+  });
   # Preserve upstream metadata while selecting the verified native backend.
   wowUpDesktop = pkgs.runCommand "wowup-cf-wayland-desktop" { } ''
     mkdir -p "$out"
@@ -168,9 +174,13 @@ let
           fi
         done < <(jq -r '.[]' ${./wow-addons.json})
       }
+      ${builtins.readFile ./forever-sync.sh}
       if [[ "''${1:-}" == sync ]]; then
         wow_sync
+      elif [[ "''${1:-}" == sync-forever ]]; then
+        wow_sync_forever ${./wow-addons.json}
       elif [[ "''${1:-}" == scheduled-update ]]; then
+        wow_manifest=${./wow-addons.json}
         ${builtins.readFile ./scheduled-update.sh}
       else
         exec instawow -v -p phoenix-retail "$@"
@@ -184,6 +194,11 @@ in
       type = lib.types.strMatching "/.+";
       default = "${user.homeDirectory}/Games/battlenet/drive_c/Program Files (x86)/World of Warcraft/_retail_/Interface/AddOns";
       description = "Existing WoW Retail AddOns directory shared by toolkit deployment and instawow; never created by toolkit activation.";
+    };
+    foreverAddonDirectory = lib.mkOption {
+      type = lib.types.strMatching "/.+";
+      default = "${user.homeDirectory}/Games/battlenet/drive_c/Program Files (x86)/World of Warcraft/_forever_/Interface/AddOns";
+      description = "Existing WoW Forever AddOns directory for its separate InstaWoW profile.";
     };
     toolkit.enable = lib.mkOption {
       type = lib.types.bool;
@@ -227,10 +242,11 @@ in
       # existing writer to migrate the old store symlink without touching its DB.
       home.activation.wowProfile = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
         ${settingsWriter} reassert ${profileBaseline} "${user.homeDirectory}/.config/instawow/profiles/phoenix-retail/config.json" object
+        ${settingsWriter} reassert ${foreverProfileBaseline} "${user.homeDirectory}/.config/instawow/profiles/phoenix-forever/config.json" object
       '';
       systemd.user.services.wow-addons-update = {
         Unit = {
-          Description = "Update managed WoW Retail add-ons";
+          Description = "Update managed WoW Retail and Forever add-ons";
           OnFailure = [ "wow-addons-update-notify.service" ];
         };
         Service = {
@@ -250,6 +266,7 @@ in
           StateDirectoryMode = "0700";
           BindPaths = [
             "\"${addonDir}\""
+            "\"${foreverAddonDir}\""
             "%h/.config/instawow"
             "%h/.cache/instawow"
             "%h/.local/state/instawow"
@@ -257,6 +274,7 @@ in
           ];
           ReadWritePaths = [
             "\"${addonDir}\""
+            "\"${foreverAddonDir}\""
             "%h/.config/instawow"
             "%h/.cache/instawow"
             "%h/.local/state/instawow"

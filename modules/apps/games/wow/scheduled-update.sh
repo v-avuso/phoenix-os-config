@@ -45,7 +45,20 @@ for delay in 0 60 300 900; do
     # recheck before update, and never terminate or restart game processes.
     wow_check_or_skip
     if INSTAWOW_NETWORK_TIMEOUT=$((300 - (SECONDS - started))) instawow -v -p phoenix-retail update; then
-      exit 0
+      wow_check_or_skip
+      if wow_sync_forever "$wow_manifest"; then
+        wow_check_or_skip
+        if (( SECONDS - started >= 300 )); then
+          echo 'Scheduled WoW add-on network budget exhausted before Forever update.' >&2
+          status=1
+        elif INSTAWOW_NETWORK_TIMEOUT=$((300 - (SECONDS - started))) instawow -v -p phoenix-forever update; then
+          exit 0
+        else
+          status=$?
+        fi
+      else
+        status=$?
+      fi
     else
       status=$?
     fi
