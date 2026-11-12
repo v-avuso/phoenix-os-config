@@ -11,9 +11,11 @@ function feature:Apply()
     local wp, db = _G.WoWPro, _G.WoWProDB
     local bar = wp and wp.ButtonBar
     if db and db.profile and db.profile.buttonbar == false and bar
-        and type(bar.IsShown) == 'function' and bar:IsShown()
         and type(wp.HideAndSeek) == 'function' then
         wp:HideAndSeek(bar, 'buttonbar', false)
+        -- Match WoW-Pro's own settings callback, including its layout refresh.
+        if type(wp.MainFrameLayout) == 'function' then wp.MainFrameLayout() end
+        if type(wp.RowSizeSet) == 'function' then wp.RowSizeSet() end
     end
 end
 
@@ -25,8 +27,24 @@ function feature:Schedule()
     end
 end
 
-function feature:Enable() self.running = true; self:Schedule() end
-function feature:Disable() self.running = false end
+local receiver = {}
+function feature:Enable()
+    self.running = true
+    local ace = LibStub and LibStub('AceEvent-3.0', true)
+    if ace and not self.listening then
+        ace:Embed(receiver)
+        receiver:RegisterMessage('WoWPro_PostLoadGuide', function()
+            -- WoW-Pro completes its own layout after sending this message.
+            C_Timer.After(0, function() feature:Apply() end)
+        end)
+        self.listening = true
+    end
+    self:Schedule()
+end
+function feature:Disable()
+    self.running = false
+    if self.listening then receiver:UnregisterMessage('WoWPro_PostLoadGuide'); self.listening = false end
+end
 
 local events = CreateFrame('Frame')
 events:RegisterEvent('PLAYER_ENTERING_WORLD')

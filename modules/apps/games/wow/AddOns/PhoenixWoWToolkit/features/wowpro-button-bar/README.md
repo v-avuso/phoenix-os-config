@@ -9,9 +9,10 @@ the user wants the bar visible or change unrelated WoW-Pro settings.
 ## Behavior and validation
 
 `/pwt` → **Extensions** → **Fix hidden WoW-Pro button bar** defaults on. When
-WoW-Pro's profile explicitly disables its bar and the bar is shown, the feature
-asks WoW-Pro's `HideAndSeek` method to hide it. It checks on activation, world entry,
-twice during WoW-Pro's delayed startup, and after combat. It never changes frames
+WoW-Pro's profile explicitly disables its bar, the feature asks WoW-Pro's
+`HideAndSeek` method to hide it and applies the same layout refresh as WoW-Pro's
+settings callback. It checks on activation, world entry, after WoW-Pro's guide-load
+message, twice during delayed startup, and after combat. It never changes frames
 in combat, polls continuously, or forces the bar hidden when WoW-Pro's setting is on.
 Disabling this fix stops future reconciliation without changing the user's preference.
 
