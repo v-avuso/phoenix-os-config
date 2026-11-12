@@ -292,15 +292,18 @@ Do not update AppHelper's mutable `AppData.lua` independently. Linux is
 [officially unsupported](https://support.tradeskillmaster.com/en_US/tsm-desktop-application/can-i-run-the-tsm-desktop-application-on-linux);
 the community client below is provided with that limitation.
 
-`tsm-app.nix` pins [exceptionptr/tsm-app-linux](https://github.com/exceptionptr/tsm-app-linux/tree/60ad454b7187c3d2f1e4df36352b2af0fade02a6)
-1.1.16 by revision and archive hash, reusing its official additive overlay against
+`tsm-app.nix` pins [exceptionptr/tsm-app-linux](https://github.com/exceptionptr/tsm-app-linux/tree/1908e34930f742a3a9ce754faf4e1839431fff3a)
+2.0.2 by revision and archive hash, reusing its official additive overlay against
 our locked Nixpkgs. This avoids a second Qt/Python closure and changes no flake lock.
+This source pin is updated manually; the Phoenix system updater does not track it.
 The overlay supplies APScheduler 4 because the app needs its prerelease API.
 `tsm-startup.patch` adds only a per-launch tray override, preserving native config;
 upstream's hardcoded `/usr/bin` desktop command is corrected to `wow-tsm`.
-The native app already implements single-instance protection, tray operation and
-SIGTERM cleanup. It offers AppHelper installation and automatically updates installed
-TSM addons from its API; instawow must not manage either TSM addon once it owns them.
+The native app implements single-instance protection, tray operation and SIGTERM
+cleanup. Version 2 requires a new browser sign-in, migrates locally followed realms
+to the TSM account, supports Forever, and receives auction and add-on updates over
+the new upstream backend. It can update installed TSM addons in each detected client;
+instawow and WowUp must not manage either TSM addon once it owns them.
 The direct instawow `curse:tradeskill-master_apphelper` dry-run failed with
 **access token missing**; catalogue fuzzy matches were unrelated helpers.
 
@@ -315,7 +318,7 @@ UID, and observes all that user's Retail/Classic clients. It does not distinguis
 Wine prefixes. A shared runtime flock preserves foreground process ownership;
 native single-instance protection also handles a direct `tsm-app` invocation.
 There is no recurring AI work: the idle watcher sleeps two seconds between local
-process checks. Native companion sync stays at its upstream five-minute interval.
+process checks. The companion receives updates through its upstream push connection.
 The service has no autostart target and is triggered only by this Battle.net entry.
 
 Desktop notifications are disabled with native `notifications_enabled = false` in

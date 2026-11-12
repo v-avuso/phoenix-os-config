@@ -20,4 +20,4 @@
 +        if not minimized:
              self.show()
          self._realm_vm.load_snapshot()
-         self._realm_vm.refresh_all()
+         self._realm_vm.load_realm_tree()
