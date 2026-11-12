@@ -34,6 +34,8 @@ may require a client restart. A restart cannot expose an undeployed package.
 
 ## Features
 
+- [WoW-Pro button bar](features/wowpro-button-bar/README.md): respect WoW-Pro's hidden-bar preference after initialization.
+
 - [ElvUI hold-to-cast](features/elvui-hold-to-cast/README.md): opt-in Forever binding adapter for supported ElvUI bars; in-game acceptance remains.
 
 - [Objective Tracker](features/objective-tracker/README.md): hide the global header and independently make section buttons invisible but clickable.

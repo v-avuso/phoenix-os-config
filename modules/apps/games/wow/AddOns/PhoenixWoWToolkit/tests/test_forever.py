@@ -31,6 +31,7 @@ class ForeverManifestTests(unittest.TestCase):
             'features/combat-tracking/Feature.lua',
             'features/combat-tracking/Options.lua',
             'features/elvui-hold-to-cast/Feature.lua',
+            'features/wowpro-button-bar/Feature.lua',
         ])
         for filename in files:
             self.assertTrue((ROOT / filename).is_file())

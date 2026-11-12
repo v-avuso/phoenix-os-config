@@ -4,7 +4,7 @@
 ## Author: Phoenix
 ## Version: 0.2.0
 ## SavedVariables: PhoenixWoWToolkitDB
-## OptionalDeps: OPie, DialogueUI, Blizzard_AuraContainer, ElvUI, ElvUI_ToxiUI, Plater
+## OptionalDeps: OPie, DialogueUI, Blizzard_AuraContainer, ElvUI, ElvUI_ToxiUI, Plater, WoWPro
 
 Core.lua
 Options.lua
@@ -23,3 +23,4 @@ features/combat-tracking/Model.lua
 features/combat-tracking/Display.lua
 features/combat-tracking/Feature.lua
 features/combat-tracking/Options.lua
+features/wowpro-button-bar/Feature.lua

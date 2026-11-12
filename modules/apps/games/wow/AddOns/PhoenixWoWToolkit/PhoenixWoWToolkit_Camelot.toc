@@ -4,7 +4,7 @@
 ## Author: Phoenix
 ## Version: 0.2.0
 ## SavedVariables: PhoenixWoWToolkitDB
-## OptionalDeps: OPie, DialogueUI, Blizzard_AuraContainer, ElvUI, HoldToCastFix
+## OptionalDeps: OPie, DialogueUI, Blizzard_AuraContainer, ElvUI, HoldToCastFix, WoWPro
 
 Core.lua
 Options.lua
@@ -24,3 +24,4 @@ features/combat-tracking/Display.lua
 features/combat-tracking/Feature.lua
 features/combat-tracking/Options.lua
 features/elvui-hold-to-cast/Feature.lua
+features/wowpro-button-bar/Feature.lua
