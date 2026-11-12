@@ -23,6 +23,7 @@ local function widget(kind)
  function w:HighlightText() end
  function w:GetText() return self.text end
  function w:SetChecked(v) self.checked=v end
+ function w:SetEnabled(v) self.enabled=v end
  function w:SetupMenu(fn) self.menu=fn end
  function w:OverrideText() end
  function w:CreateFontString()
@@ -47,6 +48,9 @@ T.scroll={GetVerticalScroll=function() return 500 end,SetVerticalScroll=function
 function T:BuildOptions() widgets={}; F:RegisterSettings(panel,0) end
 assert(loadfile(root..'/features/combat-tracking/Options.lua'))('PWT',T)
 T:BuildOptions()
+F.available=false; F.reason='Required aura API unavailable'; F:RefreshSettings()
+assert(not F.enableCheckbox.enabled and F.statusLabel.text==F.reason)
+F.available=true; F:RefreshSettings()
 local function find(kind,text)
  for _,w in ipairs(widgets) do if w.kind==kind and (w.text==text or w.label==text) then return w end end
  error('Missing '..kind..': '..text)

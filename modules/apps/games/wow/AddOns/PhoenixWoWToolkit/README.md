@@ -18,9 +18,13 @@ options; **Tooltip** contains appearance, preview and comparison options; **Comb
 contains configurable combat indicators and class/spec presets. Preferences live in WoW-owned
 `PhoenixWoWToolkitDB.features.<id>`; removing the add-on does not delete them.
 
-Retail loads the Retail features listed below. Forever loads the shared core and
-the opt-in ElvUI hold-to-cast feature; other features require compatibility checks.
-Empty pages say that no options are available yet.
+Retail loads the Retail features listed below. Forever loads the objective tracker,
+tooltip features, experimental Combat Tracking and the opt-in ElvUI hold-to-cast
+feature. Combat Tracking and OPie Visual Delay default off in Forever. Combat probes
+for the native AuraSlot API; its Retail Druid presets and live behavior are not
+verified there. OPie is pinned to version 8.10.2 and the checked client interfaces.
+Empty pages say that no options are available.
+Forever behavior still requires in-game acceptance.
 
 The PhoenixOS deployment adapter lives outside this directory. It installs an
 immutable Nix-store package, not a live checkout link. Editing this source therefore

@@ -223,9 +223,13 @@ function F:RegisterSettings(panel,y)
 end
 
 function F:RefreshSettings()
-    if self.enableCheckbox then self.enableCheckbox:SetChecked(self.settings.enabled) end
+    if self.enableCheckbox then
+        self.enableCheckbox:SetChecked(self.settings.enabled)
+        self.enableCheckbox:SetEnabled(self.available ~= false)
+    end
     if self.statusLabel then
-        self.statusLabel:SetText(self.pending and 'Changes queued until combat ends.'
+        self.statusLabel:SetText(self.available == false and (self.reason or 'Combat tracking is unavailable on this client.')
+            or self.pending and 'Changes queued until combat ends.'
             or 'Save fields with Enter. Apply changes when ready. /pwtcombat shows diagnostics.')
     end
 end

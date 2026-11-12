@@ -21,8 +21,10 @@ ring is already visible takes effect on its next opening, without hiding it mid-
 
 ## Exact source boundary
 
-Inspected the installed **OPie 8.10.2**, Retail interface **120105**. Both are runtime
-compatibility gates. Source paths below are relative to installed `AddOns/OPie`:
+Inspected installed **OPie 8.10.2** on Retail and Forever; interfaces **120105** and
+**16001** are runtime compatibility gates. The Forever option defaults off until a
+live trial establishes rendering, protected actions and combat behavior. Source paths
+below are relative to installed `AddOns/OPie`:
 
 | Location | Evidence and integration |
 |---|---|

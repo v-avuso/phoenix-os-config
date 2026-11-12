@@ -6,6 +6,8 @@ Make configurable player procs and player-applied DoTs recognizable at a glance,
 threat, healing-frame indicators, secure combat boundaries and other add-ons' profiles.
 This is a prepared first client trial, **not verified combat functionality**. Do not
 expand integrations until the two-buff fallback and two-debuff combination pass below.
+Forever exposes the relevant native API but requires its own in-game trial; the
+feature defaults off there and Retail Druid presets are not verified for Forever.
 
 ## Use
 

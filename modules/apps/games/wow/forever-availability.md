@@ -126,7 +126,8 @@ only TomTom is admitted to sync as a verified shared-archive exception:
 - GTFO (`wowi:17996`)
 - KeystoneLoot (`wowi:26597`)
 
-Phoenix WoW Toolkit's Forever manifest includes its shared foundation and opt-in
-ElvUI hold-to-cast adapter. Its other Retail features are not loaded there until
-individually checked and ported. In-game testing remains necessary. WowUp-owned
+Phoenix WoW Toolkit's Forever manifest includes its objective tracker, tooltip
+features, experimental opt-in combat tracking and OPie visual delay, and the
+ElvUI hold-to-cast adapter. In-game testing remains
+necessary. WowUp-owned
 packages are managed separately and are not included in this audit.

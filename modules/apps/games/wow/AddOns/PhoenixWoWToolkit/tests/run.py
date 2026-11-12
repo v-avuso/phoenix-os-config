@@ -19,6 +19,7 @@ subprocess.run([sys.executable, str(root / 'tests/test_forever.py')], check=True
 subprocess.run([args.lua, str(root / 'tests/core.lua'), str(root), 'empty'], check=True)
 subprocess.run([args.lua, str(root / 'tests/core.lua'), str(root), 'extensions'], check=True)
 subprocess.run([args.lua, str(root / 'tests/core.lua'), str(root)], check=True)
+subprocess.run([args.lua, str(root / 'tests/forever-load.lua'), str(root)], check=True)
 for fixture in sorted(root.glob('features/*/tests/test.lua')):
     extra = []
     if fixture.parents[1].name == 'opie-visual-delay':

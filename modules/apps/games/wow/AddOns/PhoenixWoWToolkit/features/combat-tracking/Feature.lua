@@ -1,6 +1,7 @@
 local _, Toolkit = ...
 local M,D = Toolkit.CombatTracking,Toolkit.CombatTracking.Display
-local feature = {id='combatTracking',section='Combat Tracking',optionsTab='Combat',defaults={enabled=true},
+local forever = WOW_PROJECT_CAMELOT and WOW_PROJECT_ID == WOW_PROJECT_CAMELOT
+local feature = {id='combatTracking',section='Combat Tracking',optionsTab='Combat',defaults={enabled=not forever},
     dependencies={'Blizzard_AuraContainer','Plater','ElvUI','ElvUI_ToxiUI'}}
 M.feature=feature
 Toolkit:RegisterFeature(feature)
@@ -17,6 +18,7 @@ end
 function feature:Spec()
     local getSpec=C_SpecializationInfo and C_SpecializationInfo.GetSpecialization or GetSpecialization
     local getInfo=C_SpecializationInfo and C_SpecializationInfo.GetSpecializationInfo or GetSpecializationInfo
+    if not getSpec or not getInfo then return 0 end
     local index=getSpec()
     return index and getInfo(index) or 0
 end

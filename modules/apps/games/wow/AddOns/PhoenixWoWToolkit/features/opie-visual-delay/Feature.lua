@@ -1,9 +1,10 @@
 local _, Toolkit = ...
+local forever = WOW_PROJECT_CAMELOT and WOW_PROJECT_ID == WOW_PROJECT_CAMELOT
 local feature = {
     id = "opieVisualDelay",
     section = "OPie Visual Delay",
     dependencies = { "OPie" },
-    defaults = { enabled = true, delayMs = 50, fadeMs = 100 },
+    defaults = { enabled = not forever, delayMs = 50, fadeMs = 100 },
 }
 
 local function milliseconds(value, fallback)
@@ -21,8 +22,9 @@ function feature:GetAvailability(dependencies)
     if dependencies.opieVersion ~= "8.10.2" then
         return false, "Unverified OPie version: " .. (dependencies.opieVersion or "unknown")
     end
-    if not GetBuildInfo or select(4, GetBuildInfo()) ~= 120105 then
-        return false, "Unverified Retail client interface"
+    local interface = GetBuildInfo and select(4, GetBuildInfo())
+    if interface ~= 120105 and interface ~= 16001 then
+        return false, "Unverified client interface"
     end
     self.view, self.reason = Toolkit.OPieDelay.Find()
     if self.view and self.gate then

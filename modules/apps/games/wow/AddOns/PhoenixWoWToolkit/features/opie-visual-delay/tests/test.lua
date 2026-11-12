@@ -343,6 +343,8 @@ assert(not feature.available and not gate.enabled and not gate.hidden and not fe
 assert(PhoenixWoWToolkitDB.features.opieVisualDelay.delayMs == 50)
 GetBuildInfo = function() return '12.2', '', '', 120200 end
 assert(not feature:GetAvailability({ opieLoaded = true, opieVersion = '8.10.2' }))
+GetBuildInfo = function() return '1.60.1', '', '', 16001 end
+assert(feature:GetAvailability({ opieLoaded = true, opieVersion = '8.10.2' }), 'Forever should accept the verified renderer')
 print('Actual OPie 8.10.2 renderer + notification: tap/hold/flick updates, stale timers, nested switches, animations, tooltip ownership, disable, 0/1000 ms and cancellable fade-in passed')
 print('Settings, numeric validation, version/client gating and missing/ambiguous/protected structure checks passed')
 print('NOT TESTED: actual protected-action execution, GPU frame presentation, combat lockdown or taint in WoW')
