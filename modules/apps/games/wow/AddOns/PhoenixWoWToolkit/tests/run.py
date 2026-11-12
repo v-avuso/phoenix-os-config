@@ -3,6 +3,7 @@ import argparse
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--lua', default=shutil.which('lua'))
@@ -14,6 +15,8 @@ args = parser.parse_args()
 if not args.lua:
     parser.error('Lua is required: use --lua /path/to/lua')
 root = Path(__file__).resolve().parents[1]
+subprocess.run([sys.executable, str(root / 'tests/test_forever.py')], check=True)
+subprocess.run([args.lua, str(root / 'tests/core.lua'), str(root), 'empty'], check=True)
 subprocess.run([args.lua, str(root / 'tests/core.lua'), str(root)], check=True)
 for fixture in sorted(root.glob('features/*/tests/test.lua')):
     extra = []

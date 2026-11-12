@@ -230,6 +230,7 @@ in
       phoenix.gameWindows.extraClasses = [ "wow.exe" ];
       home.activation.wowToolkit = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
         run ${toolkitDeploy}/bin/phoenix-wow-toolkit-deploy ${lib.escapeShellArg addonDir} ${lib.optionalString config.phoenix.wow.toolkit.enable "${toolkit}/PhoenixWoWToolkit"}
+        run ${toolkitDeploy}/bin/phoenix-wow-toolkit-deploy ${lib.escapeShellArg foreverAddonDir} ${lib.optionalString config.phoenix.wow.toolkit.enable "${toolkit}/PhoenixWoWToolkit"}
       '';
       home.activation.tsmNotifications = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
         ${pkgs.python3}/bin/python3 ${./disable-tsm-notifications.py} "${user.homeDirectory}/.config/tsm-app/config.toml"

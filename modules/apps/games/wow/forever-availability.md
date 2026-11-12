@@ -126,6 +126,7 @@ only TomTom is admitted to sync as a verified shared-archive exception:
 - GTFO (`wowi:17996`)
 - KeystoneLoot (`wowi:26597`)
 
-Phoenix WoW Toolkit remains Retail-only: its TOC targets Retail, and feature APIs and
-settings need a Forever compatibility review. Porting and in-game testing are follow-up
-work. WowUp-owned packages are managed separately and are not included in this audit.
+Phoenix WoW Toolkit has a Forever manifest for its shared foundation, but its Retail
+features are not loaded there until individually checked and ported. In-game testing
+remains necessary. WowUp-owned packages are managed separately and are not included
+in this audit.

@@ -1,4 +1,4 @@
-# Standalone Retail add-on guidance
+# Standalone add-on guidance
 
 ## Intentions and boundaries
 
@@ -9,6 +9,8 @@
   future extracted repository. Preserve the installed `PhoenixWoWToolkit` folder/TOC.
 - Preserve feature IDs and SavedVariables keys across file moves. Use the public
   versioned registration API described in README; avoid core feature-name switches.
+- Forever uses its Camelot TOC; list features there only after checking their client
+  compatibility, since Retail feature and Settings APIs may not be available.
 - Prefer native APIs and maintained upstream extension points. OPie is a separately
   authorized, version-pinned internal adapter; that authorization does not extend
   private hooks to unrelated add-ons. Never copy third-party proprietary code/assets.

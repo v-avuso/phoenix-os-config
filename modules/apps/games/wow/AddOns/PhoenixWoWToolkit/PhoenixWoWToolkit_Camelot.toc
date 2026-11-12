@@ -1,0 +1,9 @@
+## Interface: 16001
+## Title: Phoenix WoW Toolkit
+## Notes: Shared foundation for Forever quality-of-life features.
+## Author: Phoenix
+## Version: 0.2.0
+## SavedVariables: PhoenixWoWToolkitDB
+
+Core.lua
+Options.lua

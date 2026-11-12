@@ -38,6 +38,16 @@ SlashCmdList = {}
 local toolkit = {}
 assert(loadfile(source .. '/Core.lua'))('PhoenixWoWToolkit', toolkit)
 assert(loadfile(source .. '/Options.lua'))('PhoenixWoWToolkit', toolkit)
+if arg[2] == 'empty' then
+    frames[1].scripts.OnEvent(frames[1], 'ADDON_LOADED', 'PhoenixWoWToolkit')
+    assert(toolkit.initialized and #toolkit.features == 0)
+    assert(type(PhoenixWoWToolkitDB.features) == 'table')
+    category.panel.OnRefresh()
+    assert(SLASH_PHOENIXWOWTOOLKIT1 == '/pwt')
+    SlashCmdList.PHOENIXWOWTOOLKIT()
+    print('Core: empty feature set initializes and opens settings')
+    return
+end
 local function feature(id, section)
     local f = { id = id, section = section, defaults = { enabled = true }, starts = 0, stops = 0 }
     function f:GetAvailability() return true end

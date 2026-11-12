@@ -5,7 +5,7 @@ and TOC retain `PhoenixWoWToolkit`; source feature directories use lowercase keb
 
 ## Intentions
 
-Small independently configurable Retail features share initialization, account-wide
+Small independently configurable features share initialization, account-wide
 preferences and one native Settings page. Keep implementation, research, tests and
 manual acceptance with their feature so this directory can become its own repository.
 Preserve other add-ons, user profiles, bindings and secure input authority.
@@ -17,6 +17,10 @@ Copy or symlink this directory as `Interface/AddOns/PhoenixWoWToolkit`. `/pwt` o
 options; **Tooltip** contains appearance, preview and comparison options; **Combat**
 contains configurable combat indicators and class/spec presets. Preferences live in WoW-owned
 `PhoenixWoWToolkitDB.features.<id>`; removing the add-on does not delete them.
+
+Retail loads the features listed below. Forever loads the shared core and Settings
+foundation only; its pages are empty until features are individually checked and added.
+The ElvUI hold-to-cast workaround is not implemented.
 
 The PhoenixOS deployment adapter lives outside this directory. It installs an
 immutable Nix-store package, not a live checkout link. Editing this source therefore
@@ -48,6 +52,8 @@ may require a client restart. A restart cannot expose an undeployed package.
 - `features/<name>/`: the complete feature, including `Feature.lua`, helpers, README
   and `tests/`. List runtime Lua files in deterministic order in the TOC. Test files
   are never loaded by WoW. Tests requiring upstream code receive an explicit source path.
+- `PhoenixWoWToolkit_Camelot.toc`: Forever's separate client manifest. Add only
+  features verified for Forever; shared features may appear in both manifests.
 - `tests/`: core tests and the standalone runner, independent of PhoenixOS tooling.
 
 The bundle remains one physical add-on: this preserves the working SavedVariables

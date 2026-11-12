@@ -6,11 +6,12 @@
 `AddOns/PhoenixWoWToolkit`; code, docs and tests can move together to another repository.
 `/pwt` opens the shared native Settings page. Features own their options and modules.
 
-`phoenix.wow.retailAddonDirectory` in `wow.nix` is the single Retail AddOns path
-setting, shared with instawow. Home Manager installs a single immutable Nix-store
-symlink only when that directory already exists. Existing name collisions and other
-add-ons are preserved; disabling `phoenix.wow.toolkit.enable` removes only its owned
-link. Disable and deploy before removing the whole module or moving the destination.
+The Retail and Forever AddOns paths in `wow.nix` are shared with InstaWoW. Home
+Manager installs an immutable Nix-store symlink into each existing directory.
+Existing name collisions and other add-ons are preserved; disabling
+`phoenix.wow.toolkit.enable` removes only its owned links. Disable and deploy before
+removing the whole module or moving a destination. Forever currently loads the
+Toolkit foundation without the Retail features; those require compatibility work.
 
 Editing sources does not update the installed store package. Deploy first; then
 `/reload` can load changes to an already-discovered add-on. A new physical add-on may
