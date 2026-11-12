@@ -4,6 +4,8 @@
 ## Author: Phoenix
 ## Version: 0.2.0
 ## SavedVariables: PhoenixWoWToolkitDB
+## OptionalDeps: ElvUI, HoldToCastFix
 
 Core.lua
 Options.lua
+features/elvui-hold-to-cast/Feature.lua

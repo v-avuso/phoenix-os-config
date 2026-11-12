@@ -1,6 +1,6 @@
 local _, Toolkit = ...
 Toolkit.Options = {}
-local tabs = {"General", "Tooltip", "Combat"}
+local tabs = {"General", "Tooltip", "Combat", "Extensions"}
 local function featureTab(feature)
     for _, name in ipairs(tabs) do if feature.optionsTab == name then return name end end
     return "General"
@@ -72,6 +72,10 @@ function Toolkit:BuildOptions()
             for _, feature in ipairs(groups[section]) do y = feature:RegisterSettings(content, y) end
             y = y - 20
         end
+        if #order == 0 then
+            self.Options.Text(content, "No options available yet.", y)
+            y = y - 28
+        end
         content:SetHeight(math.max(1, -y))
     end
     self:SelectOptionsTab(self.selectedOptionsTab or "General")
@@ -95,6 +99,13 @@ function Toolkit:CreateOptions()
     self.scroll = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
     self.scroll:SetPoint("TOPLEFT", 0, -80)
     self.scroll:SetPoint("BOTTOMRIGHT", -32, 16)
+    local hasGeneral = false
+    for _, feature in ipairs(self.features) do
+        if featureTab(feature) == "General" then hasGeneral = true; break end
+    end
+    if not hasGeneral and #self.features > 0 then
+        self.selectedOptionsTab = featureTab(self.features[1])
+    end
     local function refresh()
         if self.optionsDirty then self:BuildOptions() end
         for _, feature in ipairs(self.features) do feature:RefreshSettings() end

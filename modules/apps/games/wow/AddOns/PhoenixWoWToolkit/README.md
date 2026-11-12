@@ -18,9 +18,9 @@ options; **Tooltip** contains appearance, preview and comparison options; **Comb
 contains configurable combat indicators and class/spec presets. Preferences live in WoW-owned
 `PhoenixWoWToolkitDB.features.<id>`; removing the add-on does not delete them.
 
-Retail loads the features listed below. Forever loads the shared core and Settings
-foundation only; its pages are empty until features are individually checked and added.
-The ElvUI hold-to-cast workaround is not implemented.
+Retail loads the Retail features listed below. Forever loads the shared core and
+the opt-in ElvUI hold-to-cast feature; other features require compatibility checks.
+Empty pages say that no options are available yet.
 
 The PhoenixOS deployment adapter lives outside this directory. It installs an
 immutable Nix-store package, not a live checkout link. Editing this source therefore
@@ -29,6 +29,8 @@ already-discovered add-on's Lua/TOC, but discovering a newly installed physical 
 may require a client restart. A restart cannot expose an undeployed package.
 
 ## Features
+
+- [ElvUI hold-to-cast](features/elvui-hold-to-cast/README.md): opt-in Forever binding adapter for supported ElvUI bars; in-game acceptance remains.
 
 - [Objective Tracker](features/objective-tracker/README.md): hide the global header and independently make section buttons invisible but clickable.
 
@@ -44,8 +46,8 @@ may require a client restart. A restart cannot expose an undeployed package.
 
 - `Core.lua`: versioned feature registration, saved preferences, lifecycle, dependency
   refresh and `/pwt`. It knows no OPie, tracker or tooltip implementation details.
-- `Options.lua`: a scrollable native Settings canvas with General, Tooltip and Combat pages.
-  Features may set `optionsTab = "Tooltip"` or `"Combat"`; omitted/unknown values use General.
+- `Options.lua`: a scrollable native Settings canvas with General, Tooltip, Combat and Extensions pages.
+  Features may set `optionsTab` to one of those names; omitted/unknown values use General.
   Each section has one heading; contributors on the same page share named sections. Checkbox descriptions use a
   smaller indented font beneath their labels. Compatibility/implementation essays
   belong in module docs, not in the player's settings flow.

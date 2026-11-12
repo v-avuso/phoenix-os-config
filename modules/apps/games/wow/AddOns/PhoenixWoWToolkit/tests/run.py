@@ -17,6 +17,7 @@ if not args.lua:
 root = Path(__file__).resolve().parents[1]
 subprocess.run([sys.executable, str(root / 'tests/test_forever.py')], check=True)
 subprocess.run([args.lua, str(root / 'tests/core.lua'), str(root), 'empty'], check=True)
+subprocess.run([args.lua, str(root / 'tests/core.lua'), str(root), 'extensions'], check=True)
 subprocess.run([args.lua, str(root / 'tests/core.lua'), str(root)], check=True)
 for fixture in sorted(root.glob('features/*/tests/test.lua')):
     extra = []

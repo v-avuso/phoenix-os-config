@@ -10,8 +10,9 @@ The Retail and Forever AddOns paths in `wow.nix` are shared with InstaWoW. Home
 Manager installs an immutable Nix-store symlink into each existing directory.
 Existing name collisions and other add-ons are preserved; disabling
 `phoenix.wow.toolkit.enable` removes only its owned links. Disable and deploy before
-removing the whole module or moving a destination. Forever currently loads the
-Toolkit foundation without the Retail features; those require compatibility work.
+removing the whole module or moving a destination. Forever loads the Toolkit
+foundation and its opt-in ElvUI hold-to-cast adapter; other Retail features require
+compatibility work.
 
 Editing sources does not update the installed store package. Deploy first; then
 `/reload` can load changes to an already-discovered add-on. A new physical add-on may

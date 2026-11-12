@@ -13,7 +13,7 @@ class ForeverManifestTests(unittest.TestCase):
         self.assertIn('## SavedVariables: PhoenixWoWToolkitDB', retail)
         self.assertIn('## SavedVariables: PhoenixWoWToolkitDB', forever)
         files = [line for line in forever if line and not line.startswith('#')]
-        self.assertEqual(files, ['Core.lua', 'Options.lua'])
+        self.assertEqual(files, ['Core.lua', 'Options.lua', 'features/elvui-hold-to-cast/Feature.lua'])
         for filename in files:
             self.assertTrue((ROOT / filename).is_file())
 

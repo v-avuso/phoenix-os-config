@@ -57,6 +57,15 @@ local function feature(id, section)
     function f:RefreshSettings() end
     return toolkit:RegisterFeature(f)
 end
+if arg[2] == 'extensions' then
+    local f = feature('extension', 'ElvUI'); f.optionsTab = 'Extensions'
+    frames[1].scripts.OnEvent(frames[1], 'ADDON_LOADED', 'PhoenixWoWToolkit')
+    assert(toolkit.selectedOptionsTab == 'Extensions')
+    assert(toolkit.content.labels[1].text == 'ElvUI')
+    assert(toolkit.contents.General.labels[1].text == 'No options available yet.')
+    print('Core: extension-only settings select the populated tab')
+    return
+end
 local a = feature('a', 'Shared section')
 PhoenixWoWToolkitDB = { features = { a = { enabled = false }, unrelated = { value = 7 } } }
 frames[1].scripts.OnEvent(frames[1], 'ADDON_LOADED', 'PhoenixWoWToolkit')
@@ -80,6 +89,10 @@ category.panel.OnRefresh()
 toolkit.tabButtons.Combat.scripts.OnClick()
 assert(toolkit.content==toolkit.contents.Combat and toolkit.contents.General.hidden)
 assert(toolkit.content.labels[1].text=='Combat Tracking')
+local extension=feature('extension','ElvUI'); extension.optionsTab='Extensions'
+category.panel.OnRefresh()
+toolkit.tabButtons.Extensions.scripts.OnClick()
+assert(toolkit.content.labels[1].text=='ElvUI')
 a.settings.enabled = true; toolkit:RefreshFeatures()
 b.settings.enabled = false; toolkit:RefreshFeatures()
 assert(a.active and not b.active and a.starts == 1 and b.stops == 1)
