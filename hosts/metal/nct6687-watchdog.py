@@ -181,10 +181,21 @@ def expire_lease(hwmon: Path) -> None:
         if time.monotonic() >= deadline:
             raise NotReady("kernel firmware fallback did not complete within 10s")
         time.sleep(FALLBACK_POLL_SECONDS)
-    for channel in MANAGED_CHANNELS:
-        mode = read(hwmon / f"pwm{channel.removeprefix('fan')}_enable")
-        if mode != FIRMWARE_MODE:
+    # The driver caches pwm_enable for up to one second and watchdog expiry
+    # does not invalidate that cache. Wait for actual firmware-mode readback.
+    while True:
+        pending = None
+        for channel in MANAGED_CHANNELS:
+            mode = read(hwmon / f"pwm{channel.removeprefix('fan')}_enable")
+            if mode != FIRMWARE_MODE:
+                pending = (channel, mode)
+                break
+        if pending is None:
+            return
+        if time.monotonic() >= deadline:
+            channel, mode = pending
             raise NotReady(f"fallback completed but {channel} mode is {mode!r}, expected '2'")
+        time.sleep(FALLBACK_POLL_SECONDS)
 
 
 def arm_lease(hwmon: Path) -> None:

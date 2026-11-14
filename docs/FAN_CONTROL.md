@@ -48,12 +48,14 @@ disarmed and firmware retains control.
 
 A required `phoenix-nct6687-sleep.service` runs before `sleep.target`. It stops
 the keeper, requests a one-second kernel-watchdog expiry, waits for the driver
-value to transition from 1 to 0, and verifies that fan1-fan6 returned to
-firmware mode. The driver restores the saved PWM settings/curves as part of
-that expiry. If fallback cannot be confirmed, the required unit fails and
+value to transition from 1 to 0, and waits for fan1-fan6 to read back in
+firmware mode. The driver restores the saved PWM settings and curves on expiry,
+but caches mode readings for up to one second. If fallback cannot be confirmed,
+the required unit fails and
 blocks suspend/hibernate. This leaves no old lease to expire after resume.
 
-When sleep ends, the lifecycle unit queues a non-blocking keeper start.
+When sleep ends or preparation fails, the lifecycle unit queues a non-blocking
+keeper start.
 CoolerControl 4.3.1 normally reinitializes devices and reapplies saved settings
 on resume when `apply_on_boot` is enabled. The keeper verifies the resulting
 ownership; if firmware mode remains, it confirms fallback and invokes the same

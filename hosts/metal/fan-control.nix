@@ -278,7 +278,8 @@ in
         Type = "oneshot";
         RemainAfterExit = true;
         ExecStart = "${watchdogSleepPrepare}";
-        ExecStop = "${pkgs.systemd}/bin/systemctl --no-block start phoenix-nct6687-watchdog.service";
+        # ExecStopPost also runs when preparation fails, unlike ExecStop.
+        ExecStopPost = "${pkgs.systemd}/bin/systemctl --no-block start phoenix-nct6687-watchdog.service";
       };
     };
 
