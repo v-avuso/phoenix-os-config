@@ -86,7 +86,7 @@ in
     xdg.desktopEntries.codex-desktop = {
       name = "ChatGPT Community (Native)";
       comment = "Direct host access; use ChatGPT Community (Sandboxed) for contained engineering";
-      exec = "env NIXOS_OZONE_WL=1 BAMF_DESKTOP_FILE_HINT=/run/current-system/sw/share/applications/codex-desktop.desktop CHROME_DESKTOP=codex-desktop.desktop codex-desktop %u";
+      exec = "${pkgs.systemd}/bin/systemd-run --user --scope --quiet -- env NIXOS_OZONE_WL=1 BAMF_DESKTOP_FILE_HINT=/run/current-system/sw/share/applications/codex-desktop.desktop CHROME_DESKTOP=codex-desktop.desktop codex-desktop %u";
       icon = "codex-desktop";
       terminal = false;
       type = "Application";
@@ -102,7 +102,7 @@ in
       };
       actions."new-window" = {
         name = "New Window";
-        exec = "env NIXOS_OZONE_WL=1 BAMF_DESKTOP_FILE_HINT=/run/current-system/sw/share/applications/codex-desktop.desktop CHROME_DESKTOP=codex-desktop.desktop CODEX_MULTI_LAUNCH=1 codex-desktop --new-instance";
+        exec = "${pkgs.systemd}/bin/systemd-run --user --scope --quiet -- env NIXOS_OZONE_WL=1 BAMF_DESKTOP_FILE_HINT=/run/current-system/sw/share/applications/codex-desktop.desktop CHROME_DESKTOP=codex-desktop.desktop CODEX_MULTI_LAUNCH=1 codex-desktop --new-instance";
       };
     };
   };

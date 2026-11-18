@@ -254,7 +254,7 @@ in
       xdg.desktopEntries.codex-desktop-sandboxed = {
         name = "ChatGPT Community (Sandboxed)";
         comment = if cfg.gui.sharedState.enable then "Shared Codex GUI state, OpenShell agents and independently reviewed deployment" else "Private GUI state, OpenShell agents and independently reviewed deployment";
-        exec = "${launcher}/bin/codex-desktop-sandboxed %u";
+        exec = "${pkgs.systemd}/bin/systemd-run --user --scope --quiet -- ${launcher}/bin/codex-desktop-sandboxed %u";
         icon = "codex-desktop";
         terminal = false;
         type = "Application";

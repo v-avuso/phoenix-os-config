@@ -75,7 +75,7 @@ let
     name = "net.lutris.battlenet-1";
     desktopName = "Battle.net";
     icon = "lutris_battlenet";
-    exec = "${battleNet}/bin/wow-battlenet";
+    exec = "${pkgs.systemd}/bin/systemd-run --user --scope --quiet -- ${battleNet}/bin/wow-battlenet";
     categories = [ "Game" ];
     terminal = false;
   };
