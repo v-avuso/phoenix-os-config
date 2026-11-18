@@ -14,7 +14,7 @@ local function safe(frame)
 end
 
 function Dialogue.Find(version)
-    if version ~= "1.0.7" and version ~= "1.0.7 b" then
+    if version ~= "1.0.7" and version ~= "1.0.7 b" and version ~= "1.0.7 c" then
         return nil, "unverified Dialogue UI version: " .. tostring(version)
     end
     local found

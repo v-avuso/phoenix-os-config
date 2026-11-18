@@ -30,7 +30,7 @@ without resetting account settings.
 ## Implementation and boundaries
 
 `Comparison.lua` delegates pairing and deltas to native C_TooltipComparison APIs.
-`DialogueUI.lua` gates internal reuse to Dialogue UI **1.0.7 / 1.0.7 b**, discovering its unique
+`DialogueUI.lua` gates internal reuse to Dialogue UI **1.0.7, 1.0.7 b, and 1.0.7 c**, discovering its unique
 ordinary shared frame once. It leases the singleton for GameTooltip item hovers;
 Dialogue UI quest ownership takes priority. Native frames keep their original data,
 owner, processing and input, with alpha masked only after successful replacement.
@@ -230,8 +230,9 @@ investigate, not evidence that a restart or another layer adjustment is needed.
 
 ## Compatibility and background ownership
 
-Dialogue UI 1.0.7 and 1.0.7 b are explicitly accepted. The four inspected tooltip and
-callback files have identical hashes in these releases. Other versions remain native
+Dialogue UI 1.0.7, 1.0.7 b, and 1.0.7 c are explicitly accepted. The four inspected tooltip and
+callback files have identical hashes in 1.0.7 and 1.0.7 b. The installed 1.0.7 c
+renderer passes the source-backed preview, comparison, and ownership checks. Other versions remain native
 until inspected; `/pwttip` includes the full installed version. The upstream-backed
 test reads the entire TOC version line, including suffixes, so its metadata matches
 the actual client rather than silently dropping the suffix.

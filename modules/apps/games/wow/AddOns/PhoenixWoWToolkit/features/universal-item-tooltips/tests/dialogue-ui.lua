@@ -2,7 +2,7 @@
 local root, upstream = assert(arg[1]), assert(arg[2])
 local toc = assert(io.open(upstream .. '/DialogueUI.toc'))
 local version = toc:read('*a'):match('## Version:%s*([^\r\n]+)'); toc:close()
-assert(version == '1.0.7' or version == '1.0.7 b', 'This investigation targets the installed Dialogue UI 1.0.7')
+assert(version == '1.0.7' or version == '1.0.7 b' or version == '1.0.7 c', 'This investigation targets the installed Dialogue UI 1.0.7')
 unpack = table.unpack or unpack
 local function noop() end
 local frames, timers, combat = {}, {}, false
@@ -197,7 +197,7 @@ local found, reason = T.DialogueTooltip.Find(version)
 local shared=addon.SharedTooltip
 assert(found==shared and not reason and not shared.PreviewModel, 'find actual renderer before first quest hover')
 assert(not T.DialogueTooltip.Find('unknown'))
-assert(not T.DialogueTooltip.Find('1.0.7 c'), 'uninspected suffix releases still fail closed')
+assert(not T.DialogueTooltip.Find('1.0.7 unverified'), 'uninspected suffix releases still fail closed')
 assert(T.feature.defaults.framing=='native' and T.feature.defaults.appearance=='dialogueUI',
     'fresh settings retain the installed background skin and Dialogue UI content')
 -- SetHyperlink alone bypasses item-aware processing in the original source.
