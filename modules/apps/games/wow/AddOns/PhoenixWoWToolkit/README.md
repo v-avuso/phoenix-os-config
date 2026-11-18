@@ -10,6 +10,12 @@ preferences and one native Settings page. Keep implementation, research, tests a
 manual acceptance with their feature so this directory can become its own repository.
 Preserve other add-ons, user profiles, bindings and secure input authority.
 
+Optional integrations should keep working through dependency updates whenever the
+capabilities they use still work. If an integration cannot initialize or render
+safely, preserve the native UI and unrelated features, restore any Toolkit-owned
+changes, and make the failure diagnosable. Document any exact version requirement
+with the compatibility or safety constraint that requires it.
+
 ## Install and use
 
 Copy or symlink this directory as `Interface/AddOns/PhoenixWoWToolkit`. `/pwt` opens

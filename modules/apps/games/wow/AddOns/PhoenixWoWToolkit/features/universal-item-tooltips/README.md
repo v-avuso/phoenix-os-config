@@ -237,6 +237,14 @@ until inspected; `/pwttip` includes the full installed version. The upstream-bac
 test reads the entire TOC version line, including suffixes, so its metadata matches
 the actual client rather than silently dropping the suffix.
 
+The intended compatibility strategy is to discover the renderer across releases,
+verify the interfaces used for rendering and ownership, and keep the installed
+version in `/pwttip` for diagnosis. Keep native tooltips visible until the relevant
+replacement is ready. If initialization or rendering fails, release Toolkit
+ownership and restore native visibility and attachments. Cover an unfamiliar
+compatible version, missing capabilities, and an error after partial setup before
+retiring the current allowlist.
+
 Default framing leaves native tooltip providers alone. For our replacement content,
 ElvUI Tooltip:SetStyle constructs the background on an owned ordinary frame, allowing
 ToxiUI's existing SetTemplate hooks to supply their own decoration. No provider methods

@@ -14,6 +14,14 @@
 - Prefer native APIs and maintained upstream extension points. OPie is a separately
   authorized, version-pinned internal adapter; that authorization does not extend
   private hooks to unrelated add-ons. Never copy third-party proprietary code/assets.
+- Keep integrations working across dependency updates when the interfaces they use
+  still work. Validate the capabilities and behavior each integration relies on;
+  use release strings for diagnostics. Pin an exact version only when a concrete
+  compatibility or safety constraint cannot be checked reliably at runtime, and
+  document that constraint at the adapter.
+- Keep the native path usable until the optional integration succeeds. On an
+  incompatible interface or runtime failure, restore owned UI state, disable only
+  the affected integration, and expose the reason in its diagnostic.
 - Gate permanent hooks when disabled and restore only owned visual state. Do not
   alter secure input, bindings, protected attributes or global CVars for cosmetics.
   Skip forbidden/secret inputs rather than attempting to bypass their boundaries.
@@ -43,9 +51,9 @@
   Preserve provider modifier rules, panel chains and restore ownership on release.
   Include theme-provider decorations such as ToxiUI's
   shadow/noise surfaces in suppression and restoration tests. Passing fakes never establishes the in-game visual result.
-- Version-pinned upstream fixtures must preserve the full installed metadata string,
-  including release suffixes. A truncated TOC version can pass while the live adapter
-  rejects the same installation. Inspect dependent source before accepting a new version.
+- Test a compatible dependency with unfamiliar metadata, a missing required
+  capability, and failure after partial setup. Verify native fallback and cleanup.
+  Upstream fixtures must preserve full installed metadata, including release suffixes.
 - For actual Dialogue UI tooltip reuse, read the item feature's `research/README.md`
   first. The original renderer reuse proof supersedes the assumption that absence of
   a supported global API requires a new renderer. Keep singleton ownership and
