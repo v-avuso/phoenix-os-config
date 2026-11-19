@@ -263,7 +263,7 @@ class UpdateDenied(ValueError):
         self.nodes = result.get('affectedInputNodes', [])
 
 
-def controller(config, c, home, tree, commit, base, profile, source_base=None):
+def controller(config, c, home, tree, commit, base, profile, source_base=None, *, reviewed_update=False):
     preflight = None
     if config.get('authorizationPolicy'):
         spec = importlib.util.spec_from_file_location('phoenix_authorization', config['authorizationLibrary'])
@@ -285,7 +285,10 @@ def controller(config, c, home, tree, commit, base, profile, source_base=None):
     request = dict(files=files, modes=modes, commit=commit, target=config['target'], action='update', progress=True,
                    expectedBase=base, expectedProfile=profile, task='phoenix-updater',
                    reason='Automatically update supported stable system and selected fresh applications; respect explicit holds and preserve runtime state')
-    if source_base is not None: request['updateBase'] = source_base
+    if reviewed_update:
+        request['reviewUpdate'] = True
+    elif source_base is not None:
+        request['updateBase'] = source_base
     if preflight is not None: request['preflightId'] = preflight['id']
     body = json.dumps(request).encode() + b'\n'
     if len(body) > c.WIRE_LIMIT:
@@ -383,7 +386,8 @@ def run(config, c):
         cleanup_branches(config, c, home)
     inventory = c._commit_inventory(config['git'], repo, home, head)
     source_base = next((source for source in approved if inventory == c._inventory(Path(source))), None)
-    if source_base is None:
+    reviewed_update = source_base is None
+    if reviewed_update and not config.get('reviewCommittedChanges', False):
         return {'status': 'deferred', 'reason': 'main is not the active or staged reviewed source'}
     if c._status_paths(config['git'], repo, home) & ALLOWED:
         return {'status': 'deferred', 'reason': 'updater-owned file has local changes'}
@@ -497,8 +501,12 @@ def run(config, c):
         # Recheck policy/HEAD immediately before asking the protected controller.
         if c.git(config['git'], repo, home, 'rev-parse', 'HEAD').decode().strip() != head or c._status_paths(config['git'], repo, home) & paths:
             return dict(status='deferred', reason='checkout changed', candidate=commit, branch=branch)
-        progress('Submitting candidate for automatic authorization and build')
-        result = controller(config, c, home, tree, commit, base, profile, source_base)
+        if reviewed_update:
+            progress('Submitting candidate for protected security review and build')
+            result = controller(config, c, home, tree, commit, base, profile, reviewed_update=True)
+        else:
+            progress('Submitting candidate for automatic authorization and build')
+            result = controller(config, c, home, tree, commit, base, profile, source_base)
 
         try:
             progress('Publishing staged update to the source branch')

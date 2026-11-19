@@ -31,6 +31,7 @@ let
     authorizationPolicy = toString config.system.build.phoenixAuthorizationPolicy;
     repo = user.repoDirectory;
     inherit (cfg) sourceBranch cleanupBranches;
+    reviewCommittedChanges = config.services.phoenixDeployment.securityReview.enable;
     state = "/var/lib/phoenix-updates";
     policyFile = "config/updates.json";
     candidateScript = toString (pkgs.replaceVars ./candidate.py {
@@ -53,7 +54,7 @@ let
   runner = pkgs.writeText "phoenix-update-runner.py" (builtins.readFile ./runner.py);
   notifyFailure = pkgs.writeShellScript "phoenix-updates-notify-failure" ''
     exec ${pkgs.libnotify}/bin/notify-send --app-name=Phoenix \
-      --urgency=normal "Phoenix update check failed" \
+      --urgency=normal "Phoenix update needs attention" \
       "An update needs attention. See the phoenix-updates journal."
   '';
   userUid = config.users.users.${user.name}.uid;
@@ -134,7 +135,7 @@ in
     };
 
     systemd.services.phoenix-updates-notify = mkIf cfg.enable {
-      description = "Notify the desktop user about a failed Phoenix update check";
+      description = "Notify the desktop user about a Phoenix update that needs attention";
       serviceConfig = {
         Type = "oneshot";
         User = user.name;

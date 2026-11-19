@@ -329,6 +329,32 @@ else:
         self.assertEqual(self.git('show','--format=','--name-only','HEAD').strip().splitlines(),
                          ['config/updates.json','flake.lock'])
 
+    def test_committed_changes_request_review_without_including_local_edits(self):
+        self.setup_pipeline(hold=True)
+        self.config['reviewCommittedChanges'] = True
+        note = self.repo / 'user-note'
+        note.write_text('committed')
+        self.git('add', 'user-note')
+        self.git('commit', '-qm', 'pending configuration')
+        note.write_text('local edits')
+        self.git('add', 'user-note')
+        head = self.git('rev-parse', 'HEAD').strip()
+
+        def reviewed(config, c, home, tree, commit, base, profile, *, reviewed_update):
+            self.assertTrue(reviewed_update)
+            self.assertEqual((tree / 'user-note').read_text(), 'committed')
+            self.assertEqual(self.git('rev-parse', 'HEAD').strip(), head)
+            return dict(ok=True, action='update', source='/reviewed/source')
+
+        with patch.object(runner, 'revision', return_value='2' * 40), \
+             patch.object(runner, 'community', return_value='26.930.31730'), \
+             patch.object(runner, 'fetch', side_effect=self.public_fetch), \
+             patch.object(runner, 'controller', side_effect=reviewed):
+            self.assertEqual(runner.run(self.config, candidate)['status'], 'staged')
+        self.assertEqual(self.git('rev-parse', 'HEAD^').strip(), head)
+        self.assertEqual(note.read_text(), 'local edits')
+        self.assertEqual(self.git('diff', '--cached', '--name-only').strip(), 'user-note')
+
     def test_different_checked_out_branch_defers_before_network(self):
         self.setup_pipeline()
         self.git('checkout','-qb','feature')

@@ -2,12 +2,12 @@
 
 ## Intentions
 
-- Refresh supported package sources without AI cost or interactive approval.
+- Refresh supported package sources without routine AI cost or interactive approval.
 - Preserve unrelated work and enforce exact source/build binding before boot staging.
 - Keep progress visible and failures diagnosable without unbounded logs or retries.
 
 The runner prepares committed `main` dependency updates from the supported fixed
-publishers. It defers when the branch/source baseline or owned local files diverge.
+publishers. It defers when the checked-out branch differs or updater-owned files have local edits.
 The protected controller validates publisher policy and immutable baseline/profile,
 builds the submitted source and binds the resulting closure before boot staging.
 The runner sends the exact matching installed source as `updateBase`; the
@@ -16,7 +16,12 @@ entire candidate against that source. This handles human `test` deployments that
 advance runtime while leaving an older next-boot profile. Legacy clients without
 the selector retain next-boot validation. Both installed identities are rechecked
 before staging; a caller-supplied arbitrary store source is never an update base.
-Routine updates invoke neither AI review nor graphical operator authentication.
+Routine updates from a matching baseline invoke neither AI review nor graphical
+operator authentication. If neither installed source matches committed main,
+the runner requests protected review of the frozen update candidate when security
+review is enabled. The existing checkpoint, bounded reviewer and policy/toolchain
+continuity checks apply before boot staging. A denial or reviewer error prevents
+staging and appears in the update result.
 An installed source may still contain manually deployed changes awaiting review.
 Distribution updates can advance that source without approving those changes:
 the controller preserves existing security checkpoints and publishes no new

@@ -1334,6 +1334,28 @@ class DeploymentTests(unittest.TestCase):
                                              exactReuse=True, injectedFailure=True, stubFallbackBound=True)
                     return
                 decision = 'approve'
+                if identity_version == 2:
+                    reviewed_update = dict(request, action='update', reviewUpdate=True,
+                                           expectedBase=str(baseline), expectedProfile=str(profile))
+                    reviewed_update['files'] = dict(request['files'], **{'flake.lock': '{"updated": true}'})
+                    before = activation.call_count
+                    decision = 'deny'
+                    with self.assertRaises(deploy.DeploymentDenied):
+                        deploy.process(config, reviewed_update, 1000, 22)
+                    self.assertEqual(activation.call_count, before)
+                    config['modelReviewEnabled'] = False
+                    config['authorizationPolicy'] = deploy.authorization.default_policy(False, 1000, 1000)
+                    with self.assertRaises(deploy.DeploymentFailure) as failure:
+                        deploy.process(config, reviewed_update, 1000, 22)
+                    self.assertEqual(failure.exception.code, 'security-approval-required')
+                    self.assertEqual(activation.call_count, before)
+                    config['modelReviewEnabled'] = True
+                    config['authorizationPolicy'] = deploy.authorization.default_policy(True, 1000, 1000)
+                    decision = 'approve'
+                    self.assertTrue(deploy.process(config, reviewed_update, 1000, 22)['ok'])
+                    binding = activation.call_args.args[1]
+                    self.assertEqual(binding['action'], 'update')
+                    self.assertEqual((Path(binding['source']) / 'flake.lock').read_text(), '{"updated": true}')
                 request['files']['flake.nix'] = request['files']['flake.nix'].replace(
                     'changed = true;', 'changed = true; extra = true;')
                 self.assertTrue(deploy.process(config, request, 1000, 22)['ok'])

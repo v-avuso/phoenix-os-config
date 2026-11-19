@@ -37,7 +37,7 @@ Review-OFF systems retain their existing native operator deployment behavior.
 
 ### Distribution updates
 
-The existing deterministic source validator remains the sole automatic path. It
+The deterministic source validator remains the model-free update path. It
 allows only its established publisher/lock changes and satisfied hold removals;
 custom configuration, helper, policy or controller changes remain rejected. It
 checks against the same exact installed active or staged source selected by the
@@ -150,6 +150,7 @@ selection, denial/forgery/error/state-change rejection and review → publicatio
 activation ordering. `tests/agent-deployment.py` covers the gate through production
 automatic and explicit deployment paths, including source validator → toolchain
 receipt → activation recheck with distinct caller/updater UIDs, active/staged
-predecessors and retention of one record. No model calls are added to updates. These offline fixtures do not establish
+predecessors and retention of one record. Catch-up updates from committed source
+that differs from both installed sources use the existing bounded deployment review. These offline fixtures do not establish
 native Polkit UX, protected live reviewer access or real activation continuity;
 those require the separately authorized installation/acceptance run.

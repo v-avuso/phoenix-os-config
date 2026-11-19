@@ -83,6 +83,10 @@ def request_valid(request, target, reservations=False):
             raise ValueError('update source selector requires update action')
         store_path(request['updateBase'], 'source')
         expected |= {'updateBase'}
+    if 'reviewUpdate' in request:
+        if request.get('action') != 'update' or request['reviewUpdate'] is not True or 'updateBase' in request:
+            raise ValueError('reviewed update cannot select a routine update baseline')
+        expected |= {'reviewUpdate'}
     if 'progress' in request:
         if request.get('action') != 'update' or request['progress'] is not True:
             raise ValueError('unsupported progress request')
@@ -416,10 +420,15 @@ def process(config, request, uid, pid, operator=False):
 
 def process_inner(config, request, uid, pid, state):
     request_valid(request, config['target'], bool(config.get('reservations')))
-    review_required = request['action'] != 'update' and config.get('modelReviewEnabled', True)
+    reviewed_update = request.get('reviewUpdate', False)
+    if reviewed_update and not (config.get('modelReviewEnabled', False) and config.get('securityReviewState')):
+        raise DeploymentFailure('review', 'security-approval-required')
+    routine_update = request['action'] == 'update' and not reviewed_update
+    review_required = not routine_update and config.get('modelReviewEnabled', True)
     progress = config.get('_updateProgress', lambda _text: None)
     if request['action'] == 'update':
-        progress('Phoenix update: Validating immutable source and publisher policy\n')
+        progress('Phoenix update: Freezing candidate for security review\n' if reviewed_update else
+                 'Phoenix update: Validating immutable source and publisher policy\n')
     state['stage'] = 'freeze'
     review = load_review(config)
     reason_hash = hashlib.sha256(request['reason'].strip().encode()).hexdigest()
@@ -454,7 +463,7 @@ def process_inner(config, request, uid, pid, state):
         store_path(profile, 'closure')
         profile_source = str((Path(profile) / 'etc/phoenix-agent/activated-source').resolve(strict=True))
         store_path(profile_source, 'source')
-        if request['action'] == 'update':
+        if routine_update:
             state['stage'] = 'routine-policy'
             update_spec = importlib.util.spec_from_file_location('routine_update', config['routineUpdateScript'])
             update = importlib.util.module_from_spec(update_spec)
@@ -547,7 +556,7 @@ def process_inner(config, request, uid, pid, state):
         update_security = None
         update_predecessor = None
         update_installed_base = None
-        if (request['action'] == 'update' and config.get('modelReviewEnabled', True)
+        if (routine_update and config.get('modelReviewEnabled', True)
                 and config.get('securityReviewState')):
             candidate_security = load_security(config)
             if candidate_security.identity_version(config) == 2:
@@ -607,6 +616,8 @@ def process_inner(config, request, uid, pid, state):
             except security.ApprovalBaselineRequired:
                 raise DeploymentFailure('baseline', 'approved-checkpoint-required') from None
         if review_required and not checkpoint:
+            if reviewed_update:
+                progress('Phoenix update: Reviewing committed configuration and update candidate\n')
             binding['reviewBase'] = context_base
             work = temporary / 'review'
             work.mkdir(mode=0o700)
