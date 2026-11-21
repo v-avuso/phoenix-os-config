@@ -292,17 +292,19 @@ Do not update AppHelper's mutable `AppData.lua` independently. Linux is
 [officially unsupported](https://support.tradeskillmaster.com/en_US/tsm-desktop-application/can-i-run-the-tsm-desktop-application-on-linux);
 the community client below is provided with that limitation.
 
-`tsm-app.nix` pins [exceptionptr/tsm-app-linux](https://github.com/exceptionptr/tsm-app-linux/tree/1908e34930f742a3a9ce754faf4e1839431fff3a)
-2.0.2 by revision and archive hash, reusing its official additive overlay against
+`tsm-app.nix` pins [exceptionptr/tsm-app-linux](https://github.com/exceptionptr/tsm-app-linux/tree/d4f787414908d0ff53000538a6fa618755bfeb00)
+2.2.1 by revision and archive hash, reusing its official additive overlay against
 our locked Nixpkgs. This avoids a second Qt/Python closure and changes no flake lock.
 This source pin is updated manually; the Phoenix system updater does not track it.
 The overlay supplies APScheduler 4 because the app needs its prerelease API.
 `tsm-startup.patch` adds only a per-launch tray override, preserving native config;
 upstream's hardcoded `/usr/bin` desktop command is corrected to `wow-tsm`.
 The native app implements single-instance protection, tray operation and SIGTERM
-cleanup. Version 2 requires a new browser sign-in, migrates locally followed realms
-to the TSM account, supports Forever, and receives auction and add-on updates over
-the new upstream backend. It can update installed TSM addons in each detected client;
+cleanup. The client uses embedded QtWebEngine sign-in, follows realms through
+the TSM account, supports Forever, and receives auction and add-on updates from
+TSM. AuctionDB status and age are separate indicators. Realm data turns red at
+six hours, while regional stats can remain green for up to 26 hours. The client
+can update installed TSM addons in each detected client;
 instawow and WowUp must not manage either TSM addon once it owns them.
 The direct instawow `curse:tradeskill-master_apphelper` dry-run failed with
 **access token missing**; catalogue fuzzy matches were unrelated helpers.
