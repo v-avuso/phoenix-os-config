@@ -27,6 +27,9 @@
 - When replacing a Lutris launcher, manage its existing `xdg.dataFile` path:
   `xdg.desktopEntries` alone installs a package entry that the local file shadows.
   Verify the installed desktop file's Exec after activation, not just the package.
+- Preserve Battle.net-triggered TSM startup and WoW-exit cleanup when replacing
+  the companion. Bind cleanup to the managed user service so updater relaunches
+  can change PID while manual instances remain independent.
 - After package/source changes, test the actual current catalogue (`quest` search),
   official release resolution, isolated installation, and managed sync/list/update.
   An enum-only release fix does not establish catalogue compatibility. Prefer a

@@ -291,8 +291,14 @@ only when absent, then uses Nixpkgs’ `appimage-run`. TSM’s own updater repla
 writable copy. Phoenix rebuilds leave that copy intact. A disposable trial confirmed
 that the vendor updater replaced 1.0.14 with a byte-identical copy of 1.0.15.
 
-The official app runs independently of the Battle.net launcher so it can keep
-syncing and handle updates. The migration retains the community app’s data and
+The Battle.net desktop entry starts the `wow-tsm-session` user service. A shared
+runtime lock preserves a manually started instance. The watcher checks current-user
+WoW and Battle.net processes every two seconds. It allows two minutes for Battle.net
+startup and one minute for the game handoff after Battle.net closes. systemd stops
+the service’s entire control group when the watcher exits, including updater
+replacements that stay in that group. Other Lutris entry points do not start the service.
+
+The migration retains the community app’s data and
 settings and leaves the WoW installation and SavedVariables in place. Sign in
 using the official app’s own login flow. Community desktop-only settings and data
 are not imported. The old community package can be recovered from a prior generation.

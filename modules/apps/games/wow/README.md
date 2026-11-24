@@ -84,8 +84,10 @@ CraftSim **27.0.7** is installed as `github:derfloh205/CraftSim`, including the 
 use TSM prices; no crafting settings or WTF files were changed. If WowUp discovers
 **CraftSim**, set **Ignore / Auto Update off** before allowing it to update packages.
 
-**TSM Desktop App** launches TradeSkillMaster’s official Linux client. Open it
-separately from Battle.net and leave it running to sync AuctionDB. On first launch,
+The **Battle.net** menu starts TradeSkillMaster’s official Linux client. TSM
+keeps syncing if Battle.net exits while WoW is running, and closes shortly
+after WoW exits. You can also open **TSM Desktop App** separately to sync outside
+the game. That instance stays open when WoW closes. On first launch,
 sign in with your TSM account and check that the app detects the existing Lutris
 installation. If needed, select this WoW base directory:
 

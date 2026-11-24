@@ -56,12 +56,19 @@ let
     categories = [ "Game" ];
     terminal = false;
   };
+  tsmSession = pkgs.writeShellApplication {
+    name = "wow-tsm-session";
+    runtimeInputs = [ tsmApp pkgs.util-linux pkgs.procps pkgs.coreutils ];
+    text = builtins.readFile ./tsm-session.sh;
+  };
   battleNet = pkgs.writeShellApplication {
     name = "wow-battlenet";
     runtimeInputs = [
       pkgs.lutris-free
+      pkgs.systemd
     ];
     text = ''
+      systemctl --user start --no-block wow-tsm-session.service || true
       exec env LUTRIS_SKIP_INIT=1 lutris lutris:rungameid/1
     '';
   };
@@ -231,6 +238,14 @@ in
       xdg.dataFile."applications/net.lutris.battlenet-1.desktop".source =
         "${battleNetDesktop}/share/applications/net.lutris.battlenet-1.desktop";
       xdg.dataFile."applications/wowup-cf.desktop".source = "${wowUpDesktop}/wowup-cf.desktop";
+      systemd.user.services.wow-tsm-session = {
+        Unit.Description = "TSM companion for the Battle.net / WoW session";
+        Service = {
+          ExecStart = "${tsmSession}/bin/wow-tsm-session";
+          KillMode = "control-group";
+          TimeoutStopSec = 15;
+        };
+      };
       # Native OAuth configuration also rewrites the selected profile. Reuse the
       # existing writer to migrate the old store symlink without touching its DB.
       home.activation.wowProfile = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
