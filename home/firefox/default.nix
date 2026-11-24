@@ -8,6 +8,20 @@
 let
   addons = inputs.firefox-addons.packages.${pkgs.stdenv.hostPlatform.system};
 
+  # Aloud is absent from the locked Firefox add-on set.
+  aloud = inputs.firefox-addons.lib.${pkgs.stdenv.hostPlatform.system}.buildFirefoxXpiAddon {
+    pname = "aloud";
+    version = "1.0.4";
+    addonId = "aloud@souj.dev";
+    url = "https://addons.mozilla.org/firefox/downloads/file/5243082/aloud_natural_text_to_speech-1.0.4.xpi";
+    sha256 = "e75672a2f1b1a7729af801ac2723b2f743fcf97a85248d16def9e4dd2dc9b0da";
+    meta = {
+      description = "Local neural text-to-speech for Firefox";
+      homepage = "https://github.com/smailoujaoura/aloud";
+      license = lib.licenses.gpl3Plus;
+    };
+  };
+
   alUrlShortener = "https://raw.githubusercontent.com/DandelionSprout/adfilt/master/LegitimateURLShortener.txt";
 
   trustedOrigins = [
@@ -59,6 +73,7 @@ let
 
   # Keep this small. Every extension adds privileged code + fingerprint surface.
   hardenedExtensions = with addons; [
+    aloud
     ublock-origin
     keepassxc-browser
     leechblock-ng
@@ -70,6 +85,11 @@ let
   ];
 
   compatExtensions = hardenedExtensions;
+
+  aloudWebGpuSettings = {
+    "dom.webgpu.enabled" = lib.mkForce true;
+    "dom.webgpu.workers.enabled" = lib.mkForce true;
+  };
 
   # Keep site-specific styles in separate files, then combine them for Firefox.
   userContentCss = builtins.concatStringsSep "\n" (
@@ -280,6 +300,7 @@ in
       Cookies.Allow = trustedOrigins;
 
       ExtensionSettings = {
+        "aloud@souj.dev".default_area = "menupanel";
         "keepassxc-browser@keepassxc.org".default_area = "navbar";
         "uBlock0@raymondhill.net".default_area = "navbar";
         "addon@darkreader.org".default_area = "menupanel";
@@ -306,16 +327,19 @@ in
         id = 0;
         name = "hardened";
         isDefault = true;
-        settings = sessionRestoreSettings // {
-          "browser.sessionstore.max_windows_undo" = 10;
-        };
+        settings =
+          sessionRestoreSettings
+          // aloudWebGpuSettings
+          // {
+            "browser.sessionstore.max_windows_undo" = 10;
+          };
       };
 
       compat = mkArkenfoxProfile {
         id = 1;
         name = "compat";
         extensions = compatExtensions;
-        settings = compatRelaxations // ephemeralSettings // sessionRestoreSettings;
+        settings = compatRelaxations // ephemeralSettings // sessionRestoreSettings // aloudWebGpuSettings;
       };
 
       clean = mkCleanEphemeralProfile {
