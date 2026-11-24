@@ -46,28 +46,22 @@ let
         notify-send --app-name="TSM" "TSM is already running" "Open TSM from its system tray icon."
         exit 0
       fi
-      export PHOENIX_TSM_START_MINIMIZED=0
       exec tsm-app "$@"
     '';
   };
-  tsmSession = pkgs.writeShellApplication {
-    name = "wow-tsm-session";
-    runtimeInputs = [
-      tsmApp
-      pkgs.util-linux
-      pkgs.procps
-      pkgs.coreutils
-    ];
-    text = builtins.readFile ./tsm-session.sh;
+  tsmDesktop = pkgs.makeDesktopItem {
+    name = "tsm-app";
+    desktopName = "TSM Desktop App";
+    exec = "${tsmForeground}/bin/wow-tsm";
+    categories = [ "Game" ];
+    terminal = false;
   };
   battleNet = pkgs.writeShellApplication {
     name = "wow-battlenet";
     runtimeInputs = [
-      pkgs.systemd
       pkgs.lutris-free
     ];
     text = ''
-      systemctl --user start --no-block wow-tsm-session.service
       exec env LUTRIS_SKIP_INIT=1 lutris lutris:rungameid/1
     '';
   };
@@ -223,6 +217,7 @@ in
       wowAddons
       tsmApp
       tsmForeground
+      tsmDesktop
       battleNet
     ];
     home-manager.users.${user.name} = { lib, ... }: {
@@ -232,21 +227,10 @@ in
         run ${toolkitDeploy}/bin/phoenix-wow-toolkit-deploy ${lib.escapeShellArg addonDir} ${lib.optionalString config.phoenix.wow.toolkit.enable "${toolkit}/PhoenixWoWToolkit"}
         run ${toolkitDeploy}/bin/phoenix-wow-toolkit-deploy ${lib.escapeShellArg foreverAddonDir} ${lib.optionalString config.phoenix.wow.toolkit.enable "${toolkit}/PhoenixWoWToolkit"}
       '';
-      home.activation.tsmNotifications = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-        ${pkgs.python3}/bin/python3 ${./disable-tsm-notifications.py} "${user.homeDirectory}/.config/tsm-app/config.toml"
-      '';
       # Preserve the existing Lutris entry and its ID; HM backs up the old file.
       xdg.dataFile."applications/net.lutris.battlenet-1.desktop".source =
         "${battleNetDesktop}/share/applications/net.lutris.battlenet-1.desktop";
       xdg.dataFile."applications/wowup-cf.desktop".source = "${wowUpDesktop}/wowup-cf.desktop";
-      systemd.user.services.wow-tsm-session = {
-        Unit.Description = "TSM companion for the Battle.net / WoW session";
-        Service = {
-          ExecStart = "${tsmSession}/bin/wow-tsm-session";
-          KillMode = "control-group";
-          TimeoutStopSec = 15;
-        };
-      };
       # Native OAuth configuration also rewrites the selected profile. Reuse the
       # existing writer to migrate the old store symlink without touching its DB.
       home.activation.wowProfile = lib.hm.dag.entryAfter [ "writeBoundary" ] ''

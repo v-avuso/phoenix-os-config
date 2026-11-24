@@ -1,19 +1,29 @@
 { pkgs }:
 let
-  # Reuse upstream's overlay without adding/updating any repository flake inputs.
-  source = builtins.fetchTarball {
-    url = "https://github.com/exceptionptr/tsm-app-linux/archive/d4f787414908d0ff53000538a6fa618755bfeb00.tar.gz";
-    sha256 = "15wqszaqhqqxwlgvph0rz7s300kklpb2a7fwp2svjxd463s9shgb";
-  };
-  upstream = (import "${source}/flake.nix").outputs {
-    self = source;
-    nixpkgs = null;
+  # Initial install only. Subsequent releases are installed by TSM's updater.
+  appImage = pkgs.fetchurl {
+    url = "https://tsm-desktop-app-builds-production.nyc3.cdn.digitaloceanspaces.com/versions/1.0.15/TradeSkillMaster.AppImage";
+    name = "TradeSkillMaster-1.0.15.AppImage";
+    sha256 = "1v2y2mlq7wmrpn85kdrjgqn4kn4x3fbgs328ih3w18si7s0ik2yj";
   };
 in
-((pkgs.extend upstream.overlays.default).tsm-app).overrideAttrs (old: {
-  patches = (old.patches or [ ]) ++ [ ./tsm-startup.patch ];
-  postInstall = old.postInstall + ''
-    substituteInPlace $out/share/applications/tsm-app.desktop \
-      --replace-fail 'Exec=/usr/bin/tsm-app' 'Exec=wow-tsm'
+pkgs.writeShellApplication {
+  name = "tsm-app";
+  runtimeInputs = [ pkgs.appimage-run pkgs.coreutils ];
+  text = ''
+    installDir="''${XDG_DATA_HOME:-$HOME/.local/share}/tradeskillmaster-appimage"
+    executable="$installDir/TradeSkillMaster.AppImage"
+    if [[ ! -e "$executable" ]]; then
+      (umask 077; mkdir -p -- "$installDir")
+      staging=$(mktemp -- "$installDir/.install.XXXXXXXX")
+      trap 'rm -f -- "$staging"' EXIT
+      install -m 700 -- ${appImage} "$staging"
+      # Publish only a complete copy and preserve any existing installation.
+      ln -T -- "$staging" "$executable" || [[ -x "$executable" ]]
+      rm -f -- "$staging"
+      trap - EXIT
+    fi
+    export APPIMAGE_EXTRACT_AND_RUN=1
+    exec appimage-run "$executable" "$@"
   '';
-})
+}

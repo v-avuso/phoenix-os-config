@@ -281,83 +281,29 @@ preference store was left untouched; the README records this remaining manual st
 
 ## TSM and configuration ownership
 
-The main TSM addon is installed; WowUp currently has Auto Update off but **Ignore is
-not yet enabled**. Before the first companion sync, transfer update ownership by
-ignoring both TSM and AppHelper in WowUp. No account setup or price-data sync has
-been performed by this task.
-The [official companion](https://support.tradeskillmaster.com/tsm-desktop-application/how-do-i-set-up-the-tsm-desktop-application)
-normally owns both TSM and AppHelper and writes price data. Before companion takeover,
-ignore **both** in other updaters, per [official guidance](https://support.tradeskillmaster.com/how-do-i-fix-an-error-about-appdatalua-being-empty).
-Do not update AppHelper's mutable `AppData.lua` independently. Linux is
-[officially unsupported](https://support.tradeskillmaster.com/en_US/tsm-desktop-application/can-i-run-the-tsm-desktop-application-on-linux);
-the community client below is provided with that limitation.
+The [official Linux companion](https://tradeskillmaster.com/download/) owns AuctionDB
+data and can update TradeSkillMaster and TradeSkillMaster_AppHelper. Ignore both
+in other addon managers. Keep AppHelper’s generated `AppData.lua` under TSM’s control.
 
-`tsm-app.nix` pins [exceptionptr/tsm-app-linux](https://github.com/exceptionptr/tsm-app-linux/tree/d4f787414908d0ff53000538a6fa618755bfeb00)
-2.2.1 by revision and archive hash, reusing its official additive overlay against
-our locked Nixpkgs. This avoids a second Qt/Python closure and changes no flake lock.
-This source pin is updated manually; the Phoenix system updater does not track it.
-The overlay supplies APScheduler 4 because the app needs its prerelease API.
-`tsm-startup.patch` adds only a per-launch tray override, preserving native config;
-upstream's hardcoded `/usr/bin` desktop command is corrected to `wow-tsm`.
-The native app implements single-instance protection, tray operation and SIGTERM
-cleanup. The client uses embedded QtWebEngine sign-in, follows realms through
-the TSM account, supports Forever, and receives auction and add-on updates from
-TSM. AuctionDB status and age are separate indicators. Realm data turns red at
-six hours, while regional stats can remain green for up to 26 hours. The client
-can update installed TSM addons in each detected client;
-instawow and WowUp must not manage either TSM addon once it owns them.
-The direct instawow `curse:tradeskill-master_apphelper` dry-run failed with
-**access token missing**; catalogue fuzzy matches were unrelated helpers.
+`tsm-app.nix` pins the official 1.0.15 AppImage as a first-launch installer. The
+launcher copies it into `${XDG_DATA_HOME:-$HOME/.local/share}/tradeskillmaster-appimage`
+only when absent, then uses Nixpkgs’ `appimage-run`. TSM’s own updater replaces the
+writable copy. Phoenix rebuilds leave that copy intact. A disposable trial confirmed
+that the vendor updater replaced 1.0.14 with a byte-identical copy of 1.0.15.
 
-`wow.nix` retains the existing Lutris desktop ID and game URI; Home Manager backs up
-the previous user-created desktop entry. A user service keeps the watcher independent
-of launcher exit. The desktop item is linked through `xdg.dataFile` at the original
-local path: a profile-only `xdg.desktopEntries` item would be shadowed by Lutris's
-existing user file. The service constrains cleanup to its own child/cgroup, independent
-of the launcher. `tsm-session.sh`
-uses the existing updater's WoW executable-name pattern, restricted to the current
-UID, and observes all that user's Retail/Classic clients. It does not distinguish
-Wine prefixes. A shared runtime flock preserves foreground process ownership;
-native single-instance protection also handles a direct `tsm-app` invocation.
-There is no recurring AI work: the idle watcher sleeps two seconds between local
-process checks. The companion receives updates through its upstream push connection.
-The service has no autostart target and is triggered only by this Battle.net entry.
-
-Desktop notifications are disabled with native `notifications_enabled = false` in
-`~/.config/tsm-app/config.toml`. The app's central notification method checks this
-master switch before sending tray/OS notifications, including periodic data updates.
-Home Manager's `tsmNotifications` activation uses `disable-tsm-notifications.py` to
-change only this key, validate preserved TOML values, and retain a private one-time
-`.before-notifications` backup. The config stays writable for native settings.
-The current process caches settings; the preference takes effect on its next launch.
-
-Polling is deliberate: two-second local process checks keep the watcher simple
-across Battle.net's indirect Wine launch and independent exit. An exit notifier
-could avoid repeated queries, but would need to discover and track the relevant
-game processes across that handoff; the added lifecycle complexity is not justified
-by the accepted delay. The watcher sleeps between checks and sends SIGTERM once
-all matching WoW processes disappear. Polling contributes up to roughly two seconds
-to detection, not a fixed five-to-ten-second shutdown timer. A game process can
-outlive its visible window, and TSM then needs its own graceful cleanup time.
-The player confirmed automatic startup and shutdown, observing about five to ten
-seconds after closing WoW; the individual contributions have not been measured.
+The official app runs independently of the Battle.net launcher so it can keep
+syncing and handle updates. The migration retains the community app’s data and
+settings and leaves the WoW installation and SavedVariables in place. Sign in
+using the official app’s own login flow. Community desktop-only settings and data
+are not imported. The old community package can be recovered from a prior generation.
 
 CraftSim uses `github:derfloh205/CraftSim` (official release **27.0.7**), supplying
 only `CraftSim`. Its release TOC requires built-in `Blizzard_Professions` and optionally
 integrates with existing TSM/Syndicator. Catalogue, release dry-run and isolated
 installation succeeded before the managed installation. The desired manifest now
 contains **69** packages. Newly discovered WowUp rows must remain Ignore / Auto Update
-off; existing WowUp metadata was not edited. AppHelper installation, TSM account/realm
-setup and first sync are player steps; automatic game lifecycle behavior has been
-confirmed by the player as described above.
+off; existing WowUp metadata was not edited. Official TSM sign-in and first sync are player steps.
 
-Verification: the `metal-4tb` system build, flake evaluation, all 14 focused fixtures
-(including the isolated user-systemd updater test), and the packaged TSM `--self-test`
-on Wayland passed. The sandbox cannot access the host Wayland socket; the self-test
-was therefore run through supported sandbox escalation. No real game or companion
-account session was started. The upstream full PySide6 closure adds Qt modules and
-Clang/Shiboken dependencies (Clang alone about 864 MiB); using the overlay shares
-existing dependencies but does not eliminate that runtime closure cost.
 
 ElvUI/ToxiUI owns layout, bars, bags, nameplates, repairs/selling and current bindings. Syndicator is
 the preferred inventory backend/search, without replacing bags; Altoholic/DataStore remains omitted.
