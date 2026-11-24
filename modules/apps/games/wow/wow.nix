@@ -37,16 +37,14 @@ let
     name = "wow-tsm";
     runtimeInputs = [
       tsmApp
-      pkgs.util-linux
       pkgs.libnotify
     ];
     text = ''
-      exec 8>"$XDG_RUNTIME_DIR/phoenix-tsm.lock"
-      if ! flock -n 8; then
+      tsm-app "$@" || {
+        status=$?
+        if [[ "$status" != 75 ]]; then exit "$status"; fi
         notify-send --app-name="TSM" "TSM is already running" "Open TSM from its system tray icon."
-        exit 0
-      fi
-      exec tsm-app "$@"
+      }
     '';
   };
   tsmDesktop = pkgs.makeDesktopItem {
@@ -58,7 +56,7 @@ let
   };
   tsmSession = pkgs.writeShellApplication {
     name = "wow-tsm-session";
-    runtimeInputs = [ tsmApp pkgs.util-linux pkgs.procps pkgs.coreutils ];
+    runtimeInputs = [ tsmApp pkgs.procps pkgs.coreutils ];
     text = builtins.readFile ./tsm-session.sh;
   };
   battleNet = pkgs.writeShellApplication {

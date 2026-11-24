@@ -9,7 +9,7 @@ let
 in
 pkgs.writeShellApplication {
   name = "tsm-app";
-  runtimeInputs = [ pkgs.appimage-run pkgs.coreutils ];
+  runtimeInputs = [ pkgs.appimage-run pkgs.coreutils pkgs.util-linux ];
   text = ''
     installDir="''${XDG_DATA_HOME:-$HOME/.local/share}/tradeskillmaster-appimage"
     executable="$installDir/TradeSkillMaster.AppImage"
@@ -24,6 +24,9 @@ pkgs.writeShellApplication {
       trap - EXIT
     fi
     export APPIMAGE_EXTRACT_AND_RUN=1
-    exec appimage-run "$executable" "$@"
+    # The launcher holds the lock only while the app runs. Keep the lock FD
+    # out of Electron's descendants so they cannot leave a stale lock.
+    exec flock --nonblock --close --conflict-exit-code 75 \
+      "$XDG_RUNTIME_DIR/phoenix-tsm.lock" appimage-run "$executable" "$@"
   '';
 }

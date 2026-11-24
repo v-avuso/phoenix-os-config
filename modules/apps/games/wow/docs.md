@@ -291,10 +291,11 @@ only when absent, then uses Nixpkgs’ `appimage-run`. TSM’s own updater repla
 writable copy. Phoenix rebuilds leave that copy intact. A disposable trial confirmed
 that the vendor updater replaced 1.0.14 with a byte-identical copy of 1.0.15.
 
-The Battle.net desktop entry starts the `wow-tsm-session` user service. A shared
-runtime lock preserves a manually started instance. The watcher checks current-user
-WoW and Battle.net processes every two seconds. It allows two minutes for Battle.net
-startup and one minute for the game handoff after Battle.net closes. systemd stops
+The Battle.net desktop entry starts the `wow-tsm-session` user service. The app
+launcher owns the shared runtime lock while TSM runs. If TSM quits early, the
+watcher keeps monitoring WoW and the app can be opened manually. The watcher checks
+current-user WoW and Battle.net processes every two seconds. It allows two minutes
+for Battle.net startup and four minutes for the game handoff after Battle.net closes. systemd stops
 the service’s entire control group when the watcher exits, including updater
 replacements that stay in that group. Other Lutris entry points do not start the service.
 

@@ -1,5 +1,4 @@
 """Exercise the game lifetime independently of the original app process."""
-import fcntl
 import os
 from pathlib import Path
 import subprocess
@@ -10,7 +9,7 @@ HELPER = Path(__file__).resolve().parents[1] / "tsm-session.sh"
 
 
 class TsmSessionTests(unittest.TestCase):
-    def run_session(self, snapshots, locked=False):
+    def run_session(self, snapshots):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             # The initial launcher exits as it would when handing off an update.
@@ -31,28 +30,25 @@ sleep() { wait; i=$((i + 1)); }
 trap 'wait || true; printf "%s" "$i" > "$XDG_RUNTIME_DIR/tick"' EXIT
 source "$1"
 '''
-            with (root / "phoenix-tsm.lock").open("w") as lock:
-                if locked:
-                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                result = subprocess.run(
-                    ["bash", "-c", harness, "fixture", str(HELPER)],
-                    env={**os.environ, "PATH": f"{root}:{os.environ['PATH']}",
-                         "XDG_RUNTIME_DIR": directory, "SNAPSHOTS": snapshots},
-                    capture_output=True, text=True, timeout=10,
-                )
+            result = subprocess.run(
+                ["bash", "-c", harness, "fixture", str(HELPER)],
+                env={**os.environ, "PATH": f"{root}:{os.environ['PATH']}",
+                     "XDG_RUNTIME_DIR": directory, "SNAPSHOTS": snapshots},
+                capture_output=True, text=True, timeout=10,
+            )
             return result.returncode, (root / "tick").read_text(), (root / "launched").exists()
 
     def test_game_lifetime_survives_initial_app_exit(self):
         self.assertEqual(self.run_session("bbwww-"), (0, "5", True))
 
     def test_cancelled_launcher_times_out(self):
-        self.assertEqual(self.run_session("bb-"), (0, "31", True))
+        self.assertEqual(self.run_session("bb-"), (0, "121", True))
 
     def test_no_launcher_start_times_out(self):
         self.assertEqual(self.run_session("-"), (0, "59", True))
 
-    def test_manual_instance_lock_is_preserved(self):
-        self.assertEqual(self.run_session("w-", locked=True), (0, "0", False))
+    def test_delayed_game_start_after_battle_net_closes(self):
+        self.assertEqual(self.run_session("b" + "-" * 106 + "w-"), (0, "108", True))
 
     def test_process_query_error_ends_session(self):
         self.assertEqual(self.run_session("e"), (2, "0", True))

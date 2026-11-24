@@ -30,6 +30,8 @@
 - Preserve Battle.net-triggered TSM startup and WoW-exit cleanup when replacing
   the companion. Bind cleanup to the managed user service so updater relaunches
   can change PID while manual instances remain independent.
+  Keep the single-instance lock in the app launcher. Check manual reopening
+  after quitting TSM during WoW, when the watcher is still active.
 - After package/source changes, test the actual current catalogue (`quest` search),
   official release resolution, isolated installation, and managed sync/list/update.
   An enum-only release fix does not establish catalogue compatibility. Prefer a

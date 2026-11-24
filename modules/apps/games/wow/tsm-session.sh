@@ -1,12 +1,9 @@
 # Embedded in a systemd user service, independent of the Lutris/Battle.net PID.
-# Both launch routes use this lock; never adopt/kill a foreground-owned instance.
-exec 8>"$XDG_RUNTIME_DIR/phoenix-tsm.lock"
-flock -n 8 || exit 0
 # systemd owns all descendants, including a replacement started by the updater.
 tsm-app &
 
 # Allow Battle.net two minutes to start. While it is open, wait indefinitely
-# for Play; after it exits, allow a minute for Wine's game startup handoff.
+# for Play; allow four minutes for Wine's game startup handoff after it exits.
 remaining=120
 seen_wow=0
 while true; do
@@ -17,7 +14,7 @@ while true; do
     (( status == 1 )) || exit "$status"
     (( seen_wow == 0 )) || exit 0
     if pgrep -u "$(id -u)" -i -x 'Battle\.net\.exe' >/dev/null; then
-      remaining=60
+      remaining=240
     else
       status=$?
       (( status == 1 )) || exit "$status"
