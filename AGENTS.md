@@ -28,6 +28,12 @@
 
 ## Local review and integration
 
+- Use scoped Conventional Commit subjects for every commit, for example
+  `fix(wow): preserve hidden quick actions`. Include a body with
+  `Problem:`, `Intent:`, `Approach:`, and `Validation:` paragraphs. Record
+  checks actually run and any remaining validation. Apply the same format
+  when amending or rewording commits.
+
 - This solo-maintainer project reviews and merges local branches into `main`.
   A request for a PR/change proposal means a local review unless the operator
   explicitly requests GitHub publication. Do not create GitHub PRs or push task

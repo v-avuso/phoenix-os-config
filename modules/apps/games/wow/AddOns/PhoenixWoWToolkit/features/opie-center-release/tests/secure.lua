@@ -1,9 +1,16 @@
 -- Run the actual patched restricted snippets under a small Lua frame simulation.
-local file = assert(io.open(arg[1], "rb"))
+local file = assert(io.open(arg[1] .. "/OPieCore.lua", "rb"))
 local core = file:read("*a")
 file:close()
+file = assert(io.open(arg[1] .. "/Libs/ActionBook/ActionBook.lua", "rb"))
+local book = file:read("*a")
+file:close()
+local collect = assert(load(assert(book:match(
+    'core:SetAttribute%("GetCollectionContent", %[%[.-%z\n(.-)\n%]%]%)')),
+    "GetCollectionContent", "t", _ENV))
 
-local function snippet(name)
+local function snippet(name, source)
+    local core = source or core
     local equals, start = core:match(name .. " = %[(=*)%[.-\0\n()")
     local finish = assert(core:find("]" .. equals .. "]", start, true))
     return assert(load(core:sub(start, finish - 1), name, "t", _ENV))
@@ -25,12 +32,13 @@ emptyTable, visitedSlices, ORL_StoredCA = {}, {}, {}
 pmode_RotationModeMap = {}
 ALL_MODIFIERS, BUTTON_NAMEKEY_MAP, bindOverrides = "", {}, {}
 ORL_RingData = {
-    {action=10, name="trial", PrimaryAction="use", CenterAction=true, centerReleaseAction=99,
+    {action=10, name="trial", PrimaryAction="use", CenterAction=false,
      scale=1, ofsx=0, ofsy=0, ofsDeg=0, RightAction="close"},
     {action=20, name="stock", PrimaryAction="use", CenterAction=true, OpprotunisticCA=true,
      scale=1, ofsx=0, ofsy=0, ofsDeg=0, RightAction="close"},
 }
 ORL_KnownCollections = {}
+PhoenixHideActive = true
 ORL_CloseActiveRing = function()
     activeRing, AIP_VirtualKey, AIP_Action = nil, nil, nil
 end
@@ -43,7 +51,10 @@ owner = {
     SetAttribute = function(_, key, value) attributes[key] = value end,
 }
 self, sizeSq = owner, 10000
-KR, RW = {RunAttribute=noop}, {GetAttribute=noop}
+local function evaluate(_, key, condition)
+    if key == "EvaluateCmdOptions" then return condition end
+end
+KR, RW = {RunAttribute=evaluate}, {GetAttribute=noop}
 AB = {
     RunAttribute = function(_, key, id)
         if key == "UseAction" then
@@ -51,10 +62,36 @@ AB = {
             return "macro " .. id
         end
         assert(key == "GetCollectionContent")
-        local rows = {}
-        for i=1,8 do rows[i] = ("\n%d %d %d token%d_%d %d"):format(id, i, id+i, id, i, id == 10 and 7 or 5) end
-        if id == 20 then rows[9] = "\n20 0 98 stockOnOpen 7" end
-        return table.concat(rows)
+        local savedCollections, savedMetadata = collections, metadata
+        collections, tokens, metadata = {}, {}, {}
+        local entries, names = {}, {}
+        collections[id], tokens[id] = entries, names
+        for i=1,8 do
+            entries[i], names[i] = id+i, ("token%d_%d"):format(id, i)
+            metadata["prMode-" .. names[i]] = id == 10 and 7 or 5
+        end
+        actConditionals, tokConditionals = {}, {}
+        if id == 10 then
+            entries[9], names[9] = 99, "hidden"
+            entries[10], names[10] = 97, "laterHidden"
+            entries[11], names[11] = 96, "ordinaryHidden"
+            entries[12], names[12] = 95, "inactiveHidden"
+            entries[13], names[13] = 94, "blockedHidden"
+            metadata["prMode-hidden"], metadata["prMode-laterHidden"] = 5, 5
+            metadata["prMode-ordinaryHidden"], metadata["prMode-inactiveHidden"] = 5, 7
+            metadata["prMode-blockedHidden"], actConditionals[94] = 5, "hide"
+            tokConditionals.hidden, tokConditionals.laterHidden = "hide-active", "hide-active"
+            tokConditionals.ordinaryHidden, tokConditionals.inactiveHidden = "hide", "hide-active"
+            tokConditionals.blockedHidden = "hide-active"
+        else
+            metadata["openAction-" .. id] = 98
+            metadata["openToken-" .. id] = "stockOnOpen"
+            metadata["prMode-stockOnOpen"] = 7
+        end
+        outCount, onStack, colStack, idxStack, ecStack, etStack = {}, {}, {}, {}, {}, {}
+        local rows, openAction, hiddenAction, hiddenToken = collect(id)
+        collections, metadata = savedCollections, savedMetadata
+        return rows, openAction, hiddenAction, hiddenToken
     end,
 }
 
@@ -91,4 +128,24 @@ open("r2")
 assert(used[10] == 98 and #openCollection == 8)
 ORL_OnClick("r2", false)
 assert(used[11] == 21 and #used == 11)
-print("OPie secure snippet simulation passed")
+PhoenixHideActive = false
+open("r1")
+assert(#openCollection == 8 and not openCollection[-2])
+ORL_OnClick("r1", false)
+assert(#used == 11)
+print("OPie hide-active collection and secure release simulation passed")
+
+local editor = assert(io.open(arg[1] .. "/UI/Options/RingEdit.lua", "rb"))
+local editorSource = editor:read("*a")
+editor:close()
+local normalize = assert(editorSource:match("(local shTrim = .-)\n\t\tslice.show ="))
+local function edit(value)
+    local sliceDetail = {showConditional = {SetText = noop}}
+    return assert(load("local sh, sliceDetail = ...\n" .. normalize .. "\nreturn sh"))(value, sliceDetail)
+end
+assert(edit("hide-active") == "hide-active")
+assert(edit("hide-active;") == "hide-active;")
+assert(edit("hide") == "hide")
+assert(edit("show") == "show")
+assert(edit("combat") == "[combat]")
+print("OPie visibility editor normalization passed")

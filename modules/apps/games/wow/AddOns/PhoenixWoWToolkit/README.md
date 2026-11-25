@@ -47,6 +47,7 @@ may require a client restart. A restart cannot expose an undeployed package.
 - [Objective Tracker](features/objective-tracker/README.md): hide the global header and independently make section buttons invisible but clickable.
 
 - [OPie Visual Delay](features/opie-visual-delay/README.md): experimental version-pinned visual delay, without intentional action latency. Local proof passes; client/combat acceptance remains.
+- [OPie hidden quick actions](features/opie-center-release/README.md): opt-in slices with `hide-active`, using a private local OPie adapter.
 
 - [Item Tooltips](features/universal-item-tooltips/README.md): choose the current UI with compact replacement deltas or Dialogue UI's actual renderer and overlapping 3D preview; preserves item information and annotations.
 

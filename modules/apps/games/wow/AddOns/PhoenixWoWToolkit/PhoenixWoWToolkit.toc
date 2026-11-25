@@ -11,6 +11,7 @@ Options.lua
 features/objective-tracker/Feature.lua
 features/opie-visual-delay/Renderer.lua
 features/opie-visual-delay/Feature.lua
+features/opie-center-release/Feature.lua
 features/universal-item-tooltips/Comparison.lua
 features/universal-item-tooltips/Attachments.lua
 features/universal-item-tooltips/DialogueUI.lua
