@@ -35,7 +35,7 @@ resolution results and Toolkit limitation. Release matching does not prove
 in-game compatibility. WowUp-managed packages remain separate; if WowUp scans
 Forever, mark InstaWoW-owned packages Ignore with Auto Update off before writes.
 
-**70 desired instawow packages + 16 WowUp-CF packages.** The original ElvUI/ToxiUI profile,
+**72 desired instawow packages + 16 WowUp-CF packages.** The original ElvUI/ToxiUI profile,
 bindings, casting settings and private WTF files are preserved. The user has completed ToxiUI's in-game installer and customization;
 this addon batch preserves those current settings and does not launch WoW.
 **No addon-specific configuration overrides, new ToxiUI profiles or action-bar bindings have been
@@ -54,6 +54,23 @@ The **12 newer BtWQuests package records** may need discovery and Ignore reconci
 individual folders: after cleanup, 84 packages supply 151 AddOns folders, including bundled modules. Do not
 reinstall or adopt either manager's packages in the other. The ten new English voice packs below
 are also instawow-owned and must be ignored if WowUp discovers them.
+
+## SimulationCraft and Voidcore prompts
+
+SimulationCraft and RollAway use public GitHub releases through instawow.
+Use `/simc` to export your character for simulation. If WowUp discovers either
+add-on, set **Ignore** and turn **Auto Update** off.
+
+On each max-level character, open `/raw` and enable **Prey**, **all Delves**,
+and the raid-wide **Raid Finder** and **Normal** auto-pass options. Clear
+individual raid-boss selections and leave **Heroic** and **Mythic** unchecked.
+Leave **all Dungeons** and every individual dungeon unchecked, then manually
+pass keys below +10. Spending a Voidcore requires a manual roll.
+
+Open `/raw features` and disable unrelated features, including group-loot
+history auto-close, which is enabled by default, and any enabled legacy
+auto-roll, invite, quest, repair, or combat-logging automation. Repeat the
+feature check for each RollAway profile in use.
 
 ## Crafting and TSM companion
 

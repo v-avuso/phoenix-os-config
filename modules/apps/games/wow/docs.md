@@ -398,6 +398,26 @@ DBM-Party-Forever is correctly excluded from Retail. Fifteen CF-owned rows cover
 with no overlap with active instawow ownership. New BtW modules remain unregistered in WowUp until scan.
 WTF, GitHub credential configuration and WowUp metadata stayed byte-identical.
 
+## SimulationCraft and RollAway
+
+The installed instawow Retail resolver's dry run selected
+[SimulationCraft 12.1.5-05](https://github.com/simulationcraft/simc-addon/releases/tag/12.1.5-05)
+and [RollAway 3.1.9](https://github.com/Nightwalker559/RollAway/releases/tag/3.1.9)
+from GitHub. Both release ZIPs passed archive checks and declare Retail
+interface 120105. Existing GitHub authentication is sufficient.
+
+RollAway owns Voidcore auto-pass. Its released `Modules/AutoPass.lua` matches
+dungeons by map ID and clicks the bonus prompt's Pass button. Individual
+raid-boss selections can pass a boss independently of raid difficulty, so use
+the raid-wide LFR and Normal options. These selections are per character and
+are excluded from profile exports.
+[iAutoPassBonusRoll](https://www.curseforge.com/wow/addons/iautopassbonusroll)
+offers a broad keystone toggle and per-dungeon toggles.
+[Bonus Roll Auto Pass](https://www.curseforge.com/wow/addons/bonus-roll-auto-pass)
+offers all-dungeon and per-dungeon switches. A +10 cutoff is unavailable in
+RollAway and undocumented in these alternatives. The README records the
+in-game setup with dungeon auto-pass disabled.
+
 Core, Midnight, Dragonflight and TWW are intact. Retail module installation does not establish quest
 accuracy in game. NixOS build/manifest sync checks apply to the deployed desired set; no layout,
 keybindings, settings, gameplay or account configuration was changed. No WoW launch occurred.
